@@ -1,0 +1,17 @@
+# Forex Copier Server Configuration
+
+[server]
+# Server host and port
+host = "0.0.0.0"
+port = 8080
+
+[database]
+# SQLite database URL
+url = "sqlite://forex_copier.db?mode=rwc"
+
+[zeromq]
+# ZeroMQ port configuration
+receiver_port = 5555      # Port for receiving trade signals from MT4/MT5 EAs
+sender_port = 5556        # Port for sending trade signals to slave accounts
+config_sender_port = 5557 # Port for sending configuration updates
+timeout_seconds = 30      # Connection timeout in seconds

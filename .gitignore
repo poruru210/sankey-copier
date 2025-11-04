@@ -1,0 +1,38 @@
+# Rust
+rust-server/target/
+rust-server/**/*.rs.bk
+rust-server/Cargo.lock
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Node.js / Web UI
+web-ui/node_modules/
+web-ui/dist/
+web-ui/.vite/
+web-ui/package-lock.json
+web-ui/yarn.lock
+
+# MQL compiled files
+*.ex4
+*.ex5
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local

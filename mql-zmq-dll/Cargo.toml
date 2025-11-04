@@ -1,0 +1,12 @@
+[package]
+name = "forex_copier_zmq"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "forex_copier_zmq"
+crate-type = ["cdylib"]
+
+[dependencies]
+zmq = "0.10"
+once_cell = "1.19"
