@@ -58,20 +58,32 @@ cargo run --release
 
 ### 2. WebUIのセットアップ
 
+**新しいWeb UI (Next.js 16 + Intlayer 多言語対応)**
+
 ```bash
 cd web-ui
 
-# 依存関係のインストール
-npm install
+# 依存関係のインストール (pnpm推奨)
+pnpm install
 
 # 開発サーバーの起動
-npm run dev
+pnpm dev
 
 # 本番ビルド
-npm run build
+pnpm build
+pnpm start
 ```
 
 開発サーバー: `http://localhost:5173`
+
+**特徴:**
+- **多言語対応**: 英語と日本語に対応（Intlayer使用）
+- **Next.js 16**: 最新のReactフレームワーク
+- **TypeScript**: 完全な型サポート
+- **Tailwind CSS**: モダンなUI
+- **WebSocket**: リアルタイム更新
+
+詳細は [web-ui/README.md](web-ui/README.md) を参照してください。
 
 ### 3. MT4/MT5 EAのインストール
 

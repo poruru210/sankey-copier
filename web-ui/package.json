@@ -1,24 +1,43 @@
 {
   "name": "forex-copier-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "next dev -p 5173",
+    "build": "next build",
+    "start": "next start -p 5173",
+    "lint": "next lint",
+    "intlayer:push": "intlayer push",
+    "intlayer:pull": "intlayer pull"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@intlayer/api": "7.0.5",
+    "@intlayer/cli": "7.0.5",
+    "@intlayer/config": "7.0.5",
+    "@intlayer/core": "7.0.5",
+    "@intlayer/dictionaries-entry": "7.0.5",
+    "@intlayer/webpack": "7.0.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "intlayer": "^7.0.5",
+    "lucide-react": "^0.468.0",
+    "next": "^16.0.1",
+    "next-intlayer": "^7.0.5",
+    "next-themes": "^0.4.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-intlayer": "7.0.5",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^16.0.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "vite": "^6.0.3"
+    "typescript": "^5.7.2"
   }
 }

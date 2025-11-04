@@ -21,7 +21,8 @@ impl Database {
                 lot_multiplier REAL,
                 reverse_trade BOOLEAN NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(master_account, slave_account)
             )
             "#,
         )
@@ -217,26 +218,44 @@ impl Database {
     }
 
     pub async fn save_copy_settings(&self, settings: &CopySettings) -> Result<i32> {
-        let result = sqlx::query(
-            "INSERT INTO copy_settings (enabled, master_account, slave_account, lot_multiplier, reverse_trade)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-                enabled = excluded.enabled,
-                master_account = excluded.master_account,
-                slave_account = excluded.slave_account,
-                lot_multiplier = excluded.lot_multiplier,
-                reverse_trade = excluded.reverse_trade,
-                updated_at = CURRENT_TIMESTAMP"
-        )
-        .bind(settings.enabled)
-        .bind(&settings.master_account)
-        .bind(&settings.slave_account)
-        .bind(settings.lot_multiplier)
-        .bind(settings.reverse_trade)
-        .execute(&self.pool)
-        .await?;
+        let id = if settings.id == 0 {
+            // New record - INSERT
+            let result = sqlx::query(
+                "INSERT INTO copy_settings (enabled, master_account, slave_account, lot_multiplier, reverse_trade)
+                 VALUES (?, ?, ?, ?, ?)"
+            )
+            .bind(settings.enabled)
+            .bind(&settings.master_account)
+            .bind(&settings.slave_account)
+            .bind(settings.lot_multiplier)
+            .bind(settings.reverse_trade)
+            .execute(&self.pool)
+            .await?;
 
-        let id = result.last_insert_rowid() as i32;
+            result.last_insert_rowid() as i32
+        } else {
+            // Existing record - UPDATE
+            sqlx::query(
+                "UPDATE copy_settings SET
+                    enabled = ?,
+                    master_account = ?,
+                    slave_account = ?,
+                    lot_multiplier = ?,
+                    reverse_trade = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?"
+            )
+            .bind(settings.enabled)
+            .bind(&settings.master_account)
+            .bind(&settings.slave_account)
+            .bind(settings.lot_multiplier)
+            .bind(settings.reverse_trade)
+            .bind(settings.id)
+            .execute(&self.pool)
+            .await?;
+
+            settings.id
+        };
 
         // Clear and insert symbol mappings
         sqlx::query("DELETE FROM symbol_mappings WHERE setting_id = ?")
@@ -253,15 +272,15 @@ impl Database {
                 .await?;
         }
 
-        // Save filters
+        // Clear and insert filters
+        sqlx::query("DELETE FROM trade_filters WHERE setting_id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
         sqlx::query(
             "INSERT INTO trade_filters (setting_id, allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(setting_id) DO UPDATE SET
-                allowed_symbols = excluded.allowed_symbols,
-                blocked_symbols = excluded.blocked_symbols,
-                allowed_magic_numbers = excluded.allowed_magic_numbers,
-                blocked_magic_numbers = excluded.blocked_magic_numbers"
+             VALUES (?, ?, ?, ?, ?)"
         )
         .bind(id)
         .bind(serde_json::to_string(&settings.filters.allowed_symbols)?)

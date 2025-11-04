@@ -150,8 +150,17 @@ async fn create_settings(
             Ok(Json(ApiResponse::success(id)))
         }
         Err(e) => {
-            tracing::error!("Failed to create settings: {}", e);
-            Ok(Json(ApiResponse::error(e.to_string())))
+            let error_msg = e.to_string();
+            tracing::error!("Failed to create settings: {}", error_msg);
+
+            // Check for duplicate entry error
+            let user_friendly_msg = if error_msg.contains("UNIQUE constraint failed") {
+                "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
+            } else {
+                error_msg
+            };
+
+            Ok(Json(ApiResponse::error(user_friendly_msg)))
         }
     }
 }
@@ -175,8 +184,17 @@ async fn update_settings(
             Ok(Json(ApiResponse::success(())))
         }
         Err(e) => {
-            tracing::error!("Failed to update settings: {}", e);
-            Ok(Json(ApiResponse::error(e.to_string())))
+            let error_msg = e.to_string();
+            tracing::error!("Failed to update settings: {}", error_msg);
+
+            // Check for duplicate entry error
+            let user_friendly_msg = if error_msg.contains("UNIQUE constraint failed") {
+                "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
+            } else {
+                error_msg
+            };
+
+            Ok(Json(ApiResponse::error(user_friendly_msg)))
         }
     }
 }
