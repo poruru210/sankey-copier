@@ -40,12 +40,23 @@ function App() {
   const fetchConnections = async () => {
     try {
       const response = await fetch('/api/connections')
+
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`)
+      }
+
       const data = await response.json()
       if (data.success) {
         setConnections(data.data || [])
       }
     } catch (err) {
-      console.error('Failed to fetch connections:', err)
+      // Distinguish between network errors and other errors
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        console.error('Cannot connect to server - is rust-server running?')
+      } else {
+        console.error('Failed to fetch connections:', err)
+      }
     }
   }
 
@@ -54,6 +65,12 @@ function App() {
     try {
       setLoading(true)
       const response = await fetch('/api/settings')
+
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`)
+      }
+
       const data = await response.json()
 
       if (data.success) {
@@ -63,7 +80,17 @@ function App() {
         setError(data.error || 'Failed to load settings')
       }
     } catch (err) {
-      setError('Failed to connect to server: ' + err.message)
+      // Provide user-friendly error messages
+      if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('Failed to fetch'))) {
+        setError('サーバーに接続できません。Rust Serverが起動しているか確認してください。')
+      } else if (err.message.includes('JSON')) {
+        setError('サーバーからの応答が不正です。Rust Serverが正しく起動していない可能性があります。')
+      } else if (err.message.includes('500') || err.message.includes('502') || err.message.includes('503')) {
+        setError('サーバーに接続できません。Rust Serverが起動しているか確認してください。（プロキシエラー）')
+      } else {
+        setError('サーバーとの通信中にエラーが発生しました: ' + err.message)
+      }
+      console.error('Failed to fetch settings:', err)
     } finally {
       setLoading(false)
     }
