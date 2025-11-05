@@ -36,3 +36,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Kiri MCP Server
+.kiri/
+var/
