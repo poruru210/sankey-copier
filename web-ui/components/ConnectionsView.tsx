@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -11,6 +11,10 @@ import {
   useSVGConnections,
 } from '@/hooks/connections';
 import { AccountCard } from '@/components/connections';
+import { SettingsDialog } from '@/components/SettingsDialog';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { Plus, RefreshCw } from 'lucide-react';
 
 // Layout constants - Responsive
 // Mobile: Single column (vertical stack)
@@ -33,8 +37,14 @@ export function ConnectionsView({
   connections,
   settings,
   onToggle,
+  onCreate,
+  onUpdate,
+  onDelete,
 }: ConnectionsViewProps) {
   const content = useIntlayer('connections-view');
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSettings, setEditingSettings] = useState<CopySettings | null>(null);
 
   // Use custom hooks for account data management
   const {
@@ -83,6 +93,39 @@ export function ConnectionsView({
     onToggle,
   });
 
+  // Handle settings dialog
+  const handleOpenDialog = () => {
+    setEditingSettings(null);
+    setDialogOpen(true);
+  };
+
+  const handleSaveSettings = async (data: CreateSettingsRequest | CopySettings) => {
+    try {
+      if ('id' in data) {
+        // Update existing settings
+        await onUpdate(data.id, data);
+        toast({
+          title: content.settingsUpdated,
+          description: `${data.master_account} → ${data.slave_account}`,
+        });
+      } else {
+        // Create new settings
+        await onCreate(data);
+        toast({
+          title: content.settingsCreated,
+          description: `${data.master_account} → ${data.slave_account}`,
+        });
+      }
+      setDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: content.saveFailed,
+        description: error instanceof Error ? error.message : content.unknownError,
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Auto-select first source on mobile
   useEffect(() => {
     if (isMobile && sourceAccounts.length > 0 && !selectedSourceId) {
@@ -130,6 +173,28 @@ export function ConnectionsView({
 
   return (
     <div className="relative">
+      {/* Action Bar */}
+      <div className="mb-6 flex justify-between items-center">
+        <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {content.refresh}
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleOpenDialog}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {content.createNewLink}
+          </Button>
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto relative">
         <svg
           id="connection-svg"
@@ -236,6 +301,16 @@ export function ConnectionsView({
           </div>
         </div>
       </div>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSave={handleSaveSettings}
+        initialData={editingSettings}
+        connections={connections}
+        existingSettings={settings}
+      />
     </div>
   );
 }

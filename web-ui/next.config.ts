@@ -2,6 +2,14 @@ import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
 const nextConfig: NextConfig = {
+  // Allow external network access during development
+  // Specify the actual IP address of your network interface
+  allowedDevOrigins: [
+    'http://10.5.0.2:5173',
+    'http://localhost:5173',
+    '10.5.0.2:5173',
+    '10.5.0.2',
+  ],
   async rewrites() {
     return [
       {

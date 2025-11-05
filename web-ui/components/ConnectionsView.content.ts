@@ -211,6 +211,34 @@ const connectionsViewContent = {
       en: '-- Please select --',
       ja: '-- 選択してください --',
     }),
+    tradingConnections: t({
+      en: 'Trading Connections',
+      ja: '取引接続',
+    }),
+    refresh: t({
+      en: 'Refresh',
+      ja: '更新',
+    }),
+    createNewLink: t({
+      en: 'Create New Link',
+      ja: '新しい紐づけを作成',
+    }),
+    settingsCreated: t({
+      en: 'Link created successfully',
+      ja: '紐づけを作成しました',
+    }),
+    settingsUpdated: t({
+      en: 'Settings updated successfully',
+      ja: '設定を更新しました',
+    }),
+    saveFailed: t({
+      en: 'Failed to save',
+      ja: '保存に失敗しました',
+    }),
+    unknownError: t({
+      en: 'An unknown error occurred',
+      ja: '不明なエラーが発生しました',
+    }),
   },
 } satisfies DeclarationContent;
 

@@ -14,10 +14,12 @@ const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="fixed inset-0 bg-black/50"
+        className="fixed inset-0 bg-black/50 pointer-events-auto"
         onClick={() => onOpenChange(false)}
       />
-      {children}
+      <div className="relative pointer-events-auto">
+        {children}
+      </div>
     </div>
   );
 };
@@ -27,9 +29,10 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
     <div
       ref={ref}
       className={cn(
-        'relative z-50 w-full max-w-lg bg-background p-6 shadow-lg rounded-lg border',
+        'relative z-50 w-full max-w-lg bg-background p-6 shadow-lg rounded-lg border pointer-events-auto',
         className
       )}
+      onClick={(e) => e.stopPropagation()}
       {...props}
     >
       {children}

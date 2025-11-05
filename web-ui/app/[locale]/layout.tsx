@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { IntlayerClientProvider } from 'next-intlayer';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { Toaster } from '@/components/ui/toaster';
 import '../globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -31,6 +32,7 @@ export default async function RootLayout({
         >
           <IntlayerClientProvider locale={locale}>
             {children}
+            <Toaster />
           </IntlayerClientProvider>
         </ThemeProvider>
       </body>
