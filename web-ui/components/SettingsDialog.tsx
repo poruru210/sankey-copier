@@ -49,6 +49,8 @@ export function SettingsDialog({
     circularReference: String(content.validationCircularReference?.value ?? content.validationCircularReference),
   }), [content]);
 
+  // No longer needed - render content directly with .value
+
   const [formData, setFormData] = useState({
     master_account: '',
     slave_account: '',
@@ -116,7 +118,7 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{initialData ? content.editTitle : content.createTitle}</DialogTitle>
+          <DialogTitle>{initialData ? content.editTitle.value : content.createTitle.value}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
@@ -125,10 +127,10 @@ export function SettingsDialog({
               <div className="space-y-1">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <span className="text-lg">📤</span>
-                  {content.masterAccountLabel}
+                  {content.masterAccountLabel.value}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {content.masterAccountDescription}
+                  {content.masterAccountDescription.value}
                 </p>
               </div>
               <SimpleAccountSelector
@@ -146,10 +148,10 @@ export function SettingsDialog({
               <div className="space-y-1">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <span className="text-lg">📥</span>
-                  {content.slaveAccountLabel}
+                  {content.slaveAccountLabel.value}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {content.slaveAccountDescription}
+                  {content.slaveAccountDescription.value}
                 </p>
               </div>
               <SimpleAccountSelector
@@ -169,7 +171,7 @@ export function SettingsDialog({
                   <AlertCircle className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                      {content.errorTitle}
+                      {content.errorTitle.value}
                     </h3>
                     <ul className="mt-2 text-sm text-red-700 dark:text-red-300 list-disc list-inside space-y-1">
                       {validation.errors.map((error, index) => (
@@ -187,7 +189,7 @@ export function SettingsDialog({
                   <AlertTriangle className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                      {content.warningTitle}
+                      {content.warningTitle.value}
                     </h3>
                     <ul className="mt-2 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside space-y-1">
                       {validation.warnings.map((warning, index) => (
@@ -204,14 +206,14 @@ export function SettingsDialog({
               <div className="space-y-1">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <span className="text-lg">⚙️</span>
-                  {content.copySettingsLabel}
+                  {content.copySettingsLabel.value}
                 </h3>
               </div>
 
               {/* Lot Multiplier */}
               <div>
                 <Label htmlFor="lot_multiplier">
-                  {content.lotMultiplier}
+                  {content.lotMultiplier.value}
                   <span className="text-red-500 ml-1">*</span>
                 </Label>
                 <Input
@@ -225,7 +227,7 @@ export function SettingsDialog({
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {content.lotMultiplierDescription}
+                  {content.lotMultiplierDescription.value}
                 </p>
               </div>
 
@@ -239,7 +241,7 @@ export function SettingsDialog({
                   }
                 />
                 <Label htmlFor="reverse_trade" className="cursor-pointer">
-                  {content.reverseTrade} - {content.reverseDescription}
+                  {content.reverseTrade.value} - {content.reverseDescription.value}
                 </Label>
               </div>
             </div>
@@ -247,10 +249,10 @@ export function SettingsDialog({
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {content.cancel}
+              {content.cancel.value}
             </Button>
             <Button type="submit" disabled={!validation.isValid}>
-              {initialData ? content.save : content.saveAndEnable}
+              {initialData ? content.save.value : content.saveAndEnable.value}
             </Button>
           </DialogFooter>
         </form>
