@@ -15,9 +15,29 @@ const settingsDialogContent = {
       en: 'Master Account ID',
       ja: 'マスターアカウントID',
     }),
+    masterAccountLabel: t({
+      en: 'Master Account (Copy From)',
+      ja: 'マスター口座（コピー元）',
+    }),
+    masterAccountDescription: t({
+      en: 'Account to copy trades from',
+      ja: 'トレードをコピーする元の口座',
+    }),
     slaveAccount: t({
       en: 'Receiver Account ID',
       ja: 'レシーバーアカウントID',
+    }),
+    slaveAccountLabel: t({
+      en: 'Slave Account (Copy To)',
+      ja: 'スレーブ口座（コピー先）',
+    }),
+    slaveAccountDescription: t({
+      en: 'Account to copy trades to',
+      ja: 'トレードをコピーする先の口座',
+    }),
+    copySettingsLabel: t({
+      en: 'Copy Settings',
+      ja: 'コピー設定',
     }),
     lotMultiplier: t({
       en: 'Lot Multiplier',
@@ -158,6 +178,36 @@ const settingsDialogContent = {
     validationCircularReference: t({
       en: 'Potential circular reference: Connection {slave} → {master} already exists (not recommended)',
       ja: '循環参照の可能性があります: {slave} → {master}の接続が既に存在します（推奨されません）',
+    }),
+    // Account details labels
+    positionsLabel: t({
+      en: 'Positions',
+      ja: 'ポジション',
+    }),
+    lastUpdateLabel: t({
+      en: 'Last update',
+      ja: '最終更新',
+    }),
+    lastConnectionLabel: t({
+      en: 'Last connection',
+      ja: '最終接続',
+    }),
+    // Relative time labels
+    timeAgoSeconds: t({
+      en: '{0} sec ago',
+      ja: '{0}秒前',
+    }),
+    timeAgoMinutes: t({
+      en: '{0} min ago',
+      ja: '{0}分前',
+    }),
+    timeAgoHours: t({
+      en: '{0} hour ago',
+      ja: '{0}時間前',
+    }),
+    timeAgoDays: t({
+      en: '{0} day ago',
+      ja: '{0}日前',
     }),
   },
 } satisfies DeclarationContent;

@@ -119,26 +119,48 @@ export function SettingsDialog({
           <DialogTitle>{initialData ? content.editTitle : content.createTitle}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Master Account Selection */}
-            <SimpleAccountSelector
-              label={content.masterAccount}
-              value={formData.master_account}
-              onChange={handleMasterChange}
-              connections={connections}
-              filterType="Master"
-              required
-            />
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <span className="text-lg">📤</span>
+                  {content.masterAccountLabel}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {content.masterAccountDescription}
+                </p>
+              </div>
+              <SimpleAccountSelector
+                label=""
+                value={formData.master_account}
+                onChange={handleMasterChange}
+                connections={connections}
+                filterType="Master"
+                required
+              />
+            </div>
 
             {/* Slave Account Selection */}
-            <SimpleAccountSelector
-              label={content.slaveAccount}
-              value={formData.slave_account}
-              onChange={handleSlaveChange}
-              connections={connections}
-              filterType="Slave"
-              required
-            />
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <span className="text-lg">📥</span>
+                  {content.slaveAccountLabel}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {content.slaveAccountDescription}
+                </p>
+              </div>
+              <SimpleAccountSelector
+                label=""
+                value={formData.slave_account}
+                onChange={handleSlaveChange}
+                connections={connections}
+                filterType="Slave"
+                required
+              />
+            </div>
 
             {/* Validation Messages */}
             {validation.errors.length > 0 && (
@@ -177,39 +199,49 @@ export function SettingsDialog({
               </div>
             )}
 
-            {/* Lot Multiplier */}
-            <div>
-              <Label htmlFor="lot_multiplier">
-                {content.lotMultiplier}
-                <span className="text-red-500 ml-1">*</span>
-              </Label>
-              <Input
-                id="lot_multiplier"
-                type="number"
-                step="0.01"
-                min="0.01"
-                max="100"
-                value={formData.lot_multiplier}
-                onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 1.0 })}
-                required
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {content.lotMultiplierDescription}
-              </p>
-            </div>
+            {/* Copy Settings Section */}
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <span className="text-lg">⚙️</span>
+                  {content.copySettingsLabel}
+                </h3>
+              </div>
 
-            {/* Reverse Trade */}
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="reverse_trade"
-                checked={formData.reverse_trade}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, reverse_trade: checked as boolean })
-                }
-              />
-              <Label htmlFor="reverse_trade" className="cursor-pointer">
-                {content.reverseTrade} - {content.reverseDescription}
-              </Label>
+              {/* Lot Multiplier */}
+              <div>
+                <Label htmlFor="lot_multiplier">
+                  {content.lotMultiplier}
+                  <span className="text-red-500 ml-1">*</span>
+                </Label>
+                <Input
+                  id="lot_multiplier"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="100"
+                  value={formData.lot_multiplier}
+                  onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 1.0 })}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {content.lotMultiplierDescription}
+                </p>
+              </div>
+
+              {/* Reverse Trade */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="reverse_trade"
+                  checked={formData.reverse_trade}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, reverse_trade: checked as boolean })
+                  }
+                />
+                <Label htmlFor="reverse_trade" className="cursor-pointer">
+                  {content.reverseTrade} - {content.reverseDescription}
+                </Label>
+              </div>
             </div>
           </div>
 

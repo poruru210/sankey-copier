@@ -67,7 +67,8 @@
       "Bash(python add_dummy_data.py:*)",
       "Bash(python:*)",
       "Bash(start http://localhost:5173/ja)",
-      "Bash(start http://localhost:5173)"
+      "Bash(start http://localhost:5173)",
+      "Bash(start http://localhost:5173/en)"
     ],
     "deny": [],
     "ask": []

@@ -36,6 +36,7 @@ export interface EaConnection {
   last_heartbeat: string;
   status: 'Online' | 'Offline' | 'Timeout';
   connected_at: string;
+  open_positions?: number; // Number of currently open positions
   // Legacy fields for backwards compatibility
   role?: 'master' | 'slave';
   is_online?: boolean;

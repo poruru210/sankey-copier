@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Label } from '@/components/ui/label';
+import { formatRelativeTime } from '@/lib/time-utils';
 import type { EaConnection } from '@/types';
 
 interface SimpleAccountSelectorProps {
@@ -37,6 +38,12 @@ export function SimpleAccountSelector({
     offlineAccounts: String(content.offlineAccounts?.value ?? content.offlineAccounts),
     noConnectedMasterAccounts: String(content.noConnectedMasterAccounts?.value ?? content.noConnectedMasterAccounts),
     noConnectedSlaveAccounts: String(content.noConnectedSlaveAccounts?.value ?? content.noConnectedSlaveAccounts),
+    positionsLabel: String(content.positionsLabel?.value ?? content.positionsLabel),
+    lastConnectionLabel: String(content.lastConnectionLabel?.value ?? content.lastConnectionLabel),
+    timeAgoSeconds: String(content.timeAgoSeconds?.value ?? content.timeAgoSeconds),
+    timeAgoMinutes: String(content.timeAgoMinutes?.value ?? content.timeAgoMinutes),
+    timeAgoHours: String(content.timeAgoHours?.value ?? content.timeAgoHours),
+    timeAgoDays: String(content.timeAgoDays?.value ?? content.timeAgoDays),
   }), [content]);
 
   // Filter connections by type if specified
@@ -71,12 +78,43 @@ export function SimpleAccountSelector({
 
   // Format account display
   const formatAccountDisplay = (conn: EaConnection) => {
+    const emoji = getStatusEmoji(conn.status);
     const balance = conn.balance.toLocaleString('en-US', {
       style: 'currency',
       currency: conn.currency,
       maximumFractionDigits: 0,
     });
-    return `${getStatusEmoji(conn.status)} ${conn.account_id} - ${balance}`;
+
+    if (conn.status === 'Offline') {
+      // Offline: Show warning icon and last connection time
+      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
+        secondsAgo: strings.timeAgoSeconds,
+        minutesAgo: strings.timeAgoMinutes,
+        hoursAgo: strings.timeAgoHours,
+        daysAgo: strings.timeAgoDays,
+      });
+      return `${emoji} ${conn.account_id} ⚠️ - ${strings.lastConnectionLabel}: ${relativeTime}`;
+    } else {
+      // Online or Timeout: Show balance, positions, and last update
+      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
+        secondsAgo: strings.timeAgoSeconds,
+        minutesAgo: strings.timeAgoMinutes,
+        hoursAgo: strings.timeAgoHours,
+        daysAgo: strings.timeAgoDays,
+      });
+
+      const parts = [`${emoji} ${conn.account_id} - ${balance}`];
+
+      // Add positions if available
+      if (conn.open_positions !== undefined) {
+        parts.push(`${strings.positionsLabel}: ${conn.open_positions}`);
+      }
+
+      // Add last update time
+      parts.push(relativeTime);
+
+      return parts.join(' | ');
+    }
   };
 
   // Get default placeholder based on filter type

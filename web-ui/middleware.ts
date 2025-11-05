@@ -1,4 +1,4 @@
-export { intlayerProxy as proxy } from 'next-intlayer/proxy';
+export { intlayerMiddleware as middleware } from 'next-intlayer/middleware';
 
 export const config = {
   matcher:
