@@ -68,7 +68,10 @@
       "Bash(python:*)",
       "Bash(start http://localhost:5173/ja)",
       "Bash(start http://localhost:5173)",
-      "Bash(start http://localhost:5173/en)"
+      "Bash(start http://localhost:5173/en)",
+      "WebSearch",
+      "WebFetch(domain:intlayer.org)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
