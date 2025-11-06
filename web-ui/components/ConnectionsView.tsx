@@ -260,7 +260,7 @@ export function ConnectionsView({
 
         {/* Filter Indicator */}
         {selectedMaster !== 'all' && selectedMasterName && (
-          <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border">
+          <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
               <span className="text-sm text-muted-foreground">{selectedMasterName}</span>
@@ -320,6 +320,7 @@ export function ConnectionsView({
                     <div
                       key={account.id}
                       ref={registerSourceRef(account.id)}
+                      className="animate-in fade-in duration-300"
                     >
                       <AccountCard
                         account={account}
@@ -359,7 +360,11 @@ export function ConnectionsView({
                   const accountSettings = getAccountSettings(account.id, 'receiver');
 
                   return (
-                    <div key={account.id} ref={registerReceiverRef(account.id)}>
+                    <div
+                      key={account.id}
+                      ref={registerReceiverRef(account.id)}
+                      className="animate-in fade-in duration-300"
+                    >
                       <AccountCard
                         account={account}
                         connection={connection}

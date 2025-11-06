@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef, KeyboardEvent } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { cn } from '@/lib/utils';
 import type { CopySettings, EaConnection } from '@/types';
@@ -29,6 +29,7 @@ export function MasterAccountSidebar({
   className,
 }: MasterAccountSidebarProps) {
   const content = useIntlayer('master-account-sidebar');
+  const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Aggregate master accounts from connections
   const masterAccounts = useMemo(() => {
@@ -56,6 +57,27 @@ export function MasterAccountSidebar({
     return settings.filter((s) => s.enabled).length;
   }, [settings]);
 
+  // Handle keyboard navigation
+  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>, currentId: string) => {
+    const allIds = ['all', ...masterAccounts.map((m) => m.id)];
+    const currentIndex = allIds.indexOf(currentId);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % allIds.length;
+      const nextId = allIds[nextIndex];
+      buttonRefs.current.get(nextId)?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = currentIndex === 0 ? allIds.length - 1 : currentIndex - 1;
+      const prevId = allIds[prevIndex];
+      buttonRefs.current.get(prevId)?.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelectMaster(currentId as string | 'all');
+    }
+  };
+
   return (
     <nav
       className={cn(
@@ -75,11 +97,14 @@ export function MasterAccountSidebar({
       <div className="flex-1 overflow-y-auto">
         {/* All Accounts Option */}
         <button
+          ref={(el) => el && buttonRefs.current.set('all', el)}
           onClick={() => onSelectMaster('all')}
+          onKeyDown={(e) => handleKeyDown(e, 'all')}
           className={cn(
-            'w-full px-4 py-3 text-left transition-colors',
+            'w-full px-4 py-3 text-left transition-all duration-200',
             'hover:bg-accent hover:text-accent-foreground',
             'flex items-center justify-between gap-2',
+            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
             selectedMaster === 'all' && 'bg-accent text-accent-foreground font-medium'
           )}
           role="radio"
@@ -108,11 +133,14 @@ export function MasterAccountSidebar({
             {masterAccounts.map((master) => (
               <button
                 key={master.id}
+                ref={(el) => el && buttonRefs.current.set(master.id, el)}
                 onClick={() => onSelectMaster(master.id)}
+                onKeyDown={(e) => handleKeyDown(e, master.id)}
                 className={cn(
-                  'w-full px-4 py-3 text-left transition-colors',
-                  'hover:bg-accent hover:text-accent-foreground',
+                  'w-full px-4 py-3 text-left transition-all duration-200',
+                  'hover:bg-accent hover:text-accent-foreground hover:scale-[1.02]',
                   'flex items-center gap-2',
+                  'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
                   selectedMaster === master.id &&
                     'bg-accent text-accent-foreground font-medium border-l-2 border-primary'
                 )}
@@ -123,8 +151,8 @@ export function MasterAccountSidebar({
                 {/* Status Indicator */}
                 <div
                   className={cn(
-                    'w-2 h-2 rounded-full flex-shrink-0',
-                    master.isOnline ? 'bg-green-500' : 'bg-gray-400'
+                    'w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-200',
+                    master.isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
                   )}
                   aria-hidden="true"
                 />

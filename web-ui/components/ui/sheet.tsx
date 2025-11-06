@@ -30,7 +30,7 @@ const Sheet: React.FC<SheetProps> = ({ open, onOpenChange, children, side = 'lef
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity pointer-events-auto"
+        className="fixed inset-0 bg-black/50 transition-opacity duration-300 animate-in fade-in pointer-events-auto"
         onClick={() => onOpenChange(false)}
         aria-hidden="true"
       />
