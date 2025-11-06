@@ -11,6 +11,8 @@ interface AccountCardProps {
   accountSettings: CopySettings[];
   onToggle: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
+  onEditSetting?: (setting: CopySettings) => void;
+  onDeleteSetting?: (setting: CopySettings) => void;
   type: 'source' | 'receiver';
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -52,6 +54,8 @@ export const AccountCard = React.memo(
     accountSettings,
     onToggle,
     onToggleEnabled,
+    onEditSetting,
+    onDeleteSetting,
     type,
     onMouseEnter,
     onMouseLeave,
@@ -92,7 +96,10 @@ export const AccountCard = React.memo(
             account={account}
             onToggle={onToggle}
             onToggleEnabled={onToggleEnabled}
-            settingsLabel={content.settings}
+            settingsLabel={String(content.settings)}
+            accountSettings={accountSettings}
+            onEditSetting={onEditSetting}
+            onDeleteSetting={onDeleteSetting}
           />
 
           {/* Card Body - Expands on click */}

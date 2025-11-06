@@ -99,6 +99,29 @@ export function ConnectionsView({
     setDialogOpen(true);
   };
 
+  const handleEditSetting = (setting: CopySettings) => {
+    setEditingSettings(setting);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteSetting = async (setting: CopySettings) => {
+    if (window.confirm(`Delete setting: ${setting.master_account} → ${setting.slave_account}?`)) {
+      try {
+        await onDelete(setting.id);
+        toast({
+          title: content.settingsDeleted,
+          description: `${setting.master_account} → ${setting.slave_account}`,
+        });
+      } catch (error) {
+        toast({
+          title: content.deleteFailed,
+          description: error instanceof Error ? error.message : content.unknownError,
+          variant: 'destructive',
+        });
+      }
+    }
+  };
+
   const handleSaveSettings = async (data: CreateSettingsRequest | CopySettings) => {
     try {
       if ('id' in data) {
@@ -246,6 +269,8 @@ export function ConnectionsView({
                         accountSettings={accountSettings}
                         onToggle={() => toggleSourceExpand(account.id)}
                         onToggleEnabled={(enabled) => toggleSourceEnabled(account.id, enabled)}
+                        onEditSetting={handleEditSetting}
+                        onDeleteSetting={handleDeleteSetting}
                         type="source"
                         onMouseEnter={() => !isMobile && setHoveredSource(account.id)}
                         onMouseLeave={() => !isMobile && setHoveredSource(null)}
@@ -283,6 +308,8 @@ export function ConnectionsView({
                         accountSettings={accountSettings}
                         onToggle={() => toggleReceiverExpand(account.id)}
                         onToggleEnabled={(enabled) => toggleReceiverEnabled(account.id, enabled)}
+                        onEditSetting={handleEditSetting}
+                        onDeleteSetting={handleDeleteSetting}
                         type="receiver"
                         onMouseEnter={() => setHoveredReceiver(account.id)}
                         onMouseLeave={() => setHoveredReceiver(null)}

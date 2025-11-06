@@ -132,6 +132,78 @@ impl Database {
         }
     }
 
+    /// Get enabled copy settings for a specific slave account
+    /// Used in Phase 2 for registration-triggered CONFIG distribution
+    pub async fn get_settings_for_slave(&self, slave_account: &str) -> Result<Option<CopySettings>> {
+        let row = sqlx::query(
+            "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
+             FROM copy_settings WHERE slave_account = ? AND enabled = 1 LIMIT 1"
+        )
+        .bind(slave_account)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let setting_id: i32 = row.get("id");
+
+            // Get symbol mappings
+            let mappings = sqlx::query_as::<_, (String, String)>(
+                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?"
+            )
+            .bind(setting_id)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|(source, target)| SymbolMapping {
+                source_symbol: source,
+                target_symbol: target,
+            })
+            .collect();
+
+            // Get filters
+            let filter_row = sqlx::query(
+                "SELECT allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers
+                 FROM trade_filters WHERE setting_id = ?"
+            )
+            .bind(setting_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            let filters = if let Some(f) = filter_row {
+                TradeFilters {
+                    allowed_symbols: f.get::<Option<String>, _>("allowed_symbols")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
+                    blocked_symbols: f.get::<Option<String>, _>("blocked_symbols")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
+                    allowed_magic_numbers: f.get::<Option<String>, _>("allowed_magic_numbers")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
+                    blocked_magic_numbers: f.get::<Option<String>, _>("blocked_magic_numbers")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
+                }
+            } else {
+                TradeFilters {
+                    allowed_symbols: None,
+                    blocked_symbols: None,
+                    allowed_magic_numbers: None,
+                    blocked_magic_numbers: None,
+                }
+            };
+
+            Ok(Some(CopySettings {
+                id: row.get("id"),
+                enabled: row.get("enabled"),
+                master_account: row.get("master_account"),
+                slave_account: row.get("slave_account"),
+                lot_multiplier: row.get("lot_multiplier"),
+                reverse_trade: row.get("reverse_trade"),
+                symbol_mappings: mappings,
+                filters,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
         // Fetch all copy_settings
         let settings_rows = sqlx::query(
