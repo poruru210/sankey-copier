@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, KeyboardEvent } from 'react';
+import { useMemo, useRef, useCallback, KeyboardEvent } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { cn } from '@/lib/utils';
 import type { CopySettings, EaConnection } from '@/types';
@@ -57,8 +57,8 @@ export function MasterAccountSidebar({
     return settings.filter((s) => s.enabled).length;
   }, [settings]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>, currentId: string) => {
+  // Handle keyboard navigation - Memoized for performance
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLButtonElement>, currentId: string) => {
     const allIds = ['all', ...masterAccounts.map((m) => m.id)];
     const currentIndex = allIds.indexOf(currentId);
 
@@ -76,7 +76,7 @@ export function MasterAccountSidebar({
       e.preventDefault();
       onSelectMaster(currentId as string | 'all');
     }
-  };
+  }, [masterAccounts, onSelectMaster]);
 
   return (
     <nav

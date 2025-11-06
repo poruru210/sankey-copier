@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -10,6 +10,7 @@ import {
   useAccountRefs,
   useSVGConnections,
 } from '@/hooks/connections';
+import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { AccountCard } from '@/components/connections';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { MasterAccountSidebarContainer } from '@/components/MasterAccountSidebarContainer';
@@ -47,7 +48,6 @@ export function ConnectionsView({
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSettings, setEditingSettings] = useState<CopySettings | null>(null);
-  const [selectedMaster, setSelectedMaster] = useState<string | 'all'>('all');
 
   // Use custom hooks for account data management
   const {
@@ -96,45 +96,32 @@ export function ConnectionsView({
     onToggle,
   });
 
-  // Filter accounts based on selected master
-  const visibleSourceAccounts = useMemo(() => {
-    if (selectedMaster === 'all') return sourceAccounts;
-    return sourceAccounts.filter((acc) => acc.id === selectedMaster);
-  }, [selectedMaster, sourceAccounts]);
+  // Use custom hook for master account filtering
+  const {
+    selectedMaster,
+    setSelectedMaster,
+    visibleSourceAccounts,
+    visibleReceiverAccounts,
+    selectedMasterName,
+  } = useMasterFilter({
+    connections,
+    settings,
+    sourceAccounts,
+    receiverAccounts,
+  });
 
-  const visibleReceiverAccounts = useMemo(() => {
-    if (selectedMaster === 'all') return receiverAccounts;
-    return receiverAccounts.filter((acc) =>
-      settings.some(
-        (s) =>
-          s.master_account === selectedMaster &&
-          s.slave_account === acc.id &&
-          s.enabled
-      )
-    );
-  }, [selectedMaster, receiverAccounts, settings]);
-
-  // Get selected master account name
-  const selectedMasterName = useMemo(() => {
-    if (selectedMaster === 'all') return null;
-    const masterConnection = connections.find(
-      (conn) => conn.account_id === selectedMaster && conn.ea_type === 'Master'
-    );
-    return masterConnection?.account_name || selectedMaster;
-  }, [selectedMaster, connections]);
-
-  // Handle settings dialog
-  const handleOpenDialog = () => {
+  // Handle settings dialog - Memoized for performance
+  const handleOpenDialog = useCallback(() => {
     setEditingSettings(null);
     setDialogOpen(true);
-  };
+  }, []);
 
-  const handleEditSetting = (setting: CopySettings) => {
+  const handleEditSetting = useCallback((setting: CopySettings) => {
     setEditingSettings(setting);
     setDialogOpen(true);
-  };
+  }, []);
 
-  const handleDeleteSetting = async (setting: CopySettings) => {
+  const handleDeleteSetting = useCallback(async (setting: CopySettings) => {
     if (window.confirm(`Delete setting: ${setting.master_account} → ${setting.slave_account}?`)) {
       try {
         await onDelete(setting.id);
@@ -150,9 +137,9 @@ export function ConnectionsView({
         });
       }
     }
-  };
+  }, [onDelete, toast, content.settingsDeleted, content.deleteFailed, content.unknownError]);
 
-  const handleSaveSettings = async (data: CreateSettingsRequest | CopySettings) => {
+  const handleSaveSettings = useCallback(async (data: CreateSettingsRequest | CopySettings) => {
     try {
       if ('id' in data) {
         // Update existing settings
@@ -177,7 +164,7 @@ export function ConnectionsView({
         variant: 'destructive',
       });
     }
-  };
+  }, [onCreate, onUpdate, toast, content.settingsCreated, content.settingsUpdated, content.saveFailed, content.unknownError]);
 
   // Auto-select first source on mobile
   useEffect(() => {
