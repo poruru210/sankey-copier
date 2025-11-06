@@ -12,6 +12,7 @@ import {
 } from '@/hooks/connections';
 import { AccountCard } from '@/components/connections';
 import { SettingsDialog } from '@/components/SettingsDialog';
+import { MasterAccountSidebarContainer } from '@/components/MasterAccountSidebarContainer';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, RefreshCw } from 'lucide-react';
@@ -42,9 +43,11 @@ export function ConnectionsView({
   onDelete,
 }: ConnectionsViewProps) {
   const content = useIntlayer('connections-view');
+  const sidebarContent = useIntlayer('master-account-sidebar');
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSettings, setEditingSettings] = useState<CopySettings | null>(null);
+  const [selectedMaster, setSelectedMaster] = useState<string | 'all'>('all');
 
   // Use custom hooks for account data management
   const {
@@ -92,6 +95,33 @@ export function ConnectionsView({
     setReceiverAccounts,
     onToggle,
   });
+
+  // Filter accounts based on selected master
+  const visibleSourceAccounts = useMemo(() => {
+    if (selectedMaster === 'all') return sourceAccounts;
+    return sourceAccounts.filter((acc) => acc.id === selectedMaster);
+  }, [selectedMaster, sourceAccounts]);
+
+  const visibleReceiverAccounts = useMemo(() => {
+    if (selectedMaster === 'all') return receiverAccounts;
+    return receiverAccounts.filter((acc) =>
+      settings.some(
+        (s) =>
+          s.master_account === selectedMaster &&
+          s.slave_account === acc.id &&
+          s.enabled
+      )
+    );
+  }, [selectedMaster, receiverAccounts, settings]);
+
+  // Get selected master account name
+  const selectedMasterName = useMemo(() => {
+    if (selectedMaster === 'all') return null;
+    const masterConnection = connections.find(
+      (conn) => conn.account_id === selectedMaster && conn.ea_type === 'Master'
+    );
+    return masterConnection?.account_name || selectedMaster;
+  }, [selectedMaster, connections]);
 
   // Handle settings dialog
   const handleOpenDialog = () => {
@@ -158,8 +188,8 @@ export function ConnectionsView({
 
   // Use custom hook for SVG connection drawing
   useSVGConnections({
-    sourceAccounts,
-    receiverAccounts,
+    sourceAccounts: visibleSourceAccounts,
+    receiverAccounts: visibleReceiverAccounts,
     sourceRefs,
     receiverRefs,
     hoveredSourceId: isMobile ? selectedSourceId : hoveredSourceId,
@@ -195,28 +225,56 @@ export function ConnectionsView({
   );
 
   return (
-    <div className="relative">
-      {/* Action Bar */}
-      <div className="mb-6 flex justify-between items-center">
-        <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.location.reload()}
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            {content.refresh}
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleOpenDialog}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            {content.createNewLink}
-          </Button>
+    <div className="relative flex gap-6">
+      {/* Sidebar */}
+      <MasterAccountSidebarContainer
+        connections={connections}
+        settings={settings}
+        selectedMaster={selectedMaster}
+        onSelectMaster={setSelectedMaster}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 min-w-0">
+        {/* Action Bar */}
+        <div className="mb-6 flex justify-between items-center">
+          <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {content.refresh}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleOpenDialog}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {content.createNewLink}
+            </Button>
+          </div>
         </div>
-      </div>
+
+        {/* Filter Indicator */}
+        {selectedMaster !== 'all' && selectedMasterName && (
+          <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
+              <span className="text-sm text-muted-foreground">{selectedMasterName}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedMaster('all')}
+              className="h-auto px-2 py-1"
+            >
+              {sidebarContent.clearFilter}
+            </Button>
+          </div>
+        )}
 
       <div className="max-w-7xl mx-auto relative">
         <svg
@@ -235,11 +293,11 @@ export function ConnectionsView({
               </label>
               <select
                 id="source-select"
-                value={selectedSourceId || sourceAccounts[0]?.id || ''}
+                value={selectedSourceId || visibleSourceAccounts[0]?.id || ''}
                 onChange={(e) => handleSourceTap(e.target.value)}
                 className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {sourceAccounts.map((account) => (
+                {visibleSourceAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
@@ -253,7 +311,7 @@ export function ConnectionsView({
             {/* Left Column: Source Accounts */}
             <div className={ACCOUNT_LIST_WRAPPER}>
               <div className={ACCOUNT_LIST}>
-                {sourceAccounts.map((account) => {
+                {visibleSourceAccounts.map((account) => {
                   const isHighlighted = isAccountHighlighted(account.id, 'source');
                   const connection = getAccountConnection(account.id);
                   const accountSettings = getAccountSettings(account.id, 'source');
@@ -295,7 +353,7 @@ export function ConnectionsView({
             {/* Right Column: Receiver Accounts */}
             <div className={ACCOUNT_LIST_WRAPPER}>
               <div className={ACCOUNT_LIST}>
-                {receiverAccounts.map((account) => {
+                {visibleReceiverAccounts.map((account) => {
                   const isHighlighted = isAccountHighlighted(account.id, 'receiver');
                   const connection = getAccountConnection(account.id);
                   const accountSettings = getAccountSettings(account.id, 'receiver');
@@ -329,15 +387,16 @@ export function ConnectionsView({
         </div>
       </div>
 
-      {/* Settings Dialog */}
-      <SettingsDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSave={handleSaveSettings}
-        initialData={editingSettings}
-        connections={connections}
-        existingSettings={settings}
-      />
+        {/* Settings Dialog */}
+        <SettingsDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSave={handleSaveSettings}
+          initialData={editingSettings}
+          connections={connections}
+          existingSettings={settings}
+        />
+      </div>
     </div>
   );
 }
