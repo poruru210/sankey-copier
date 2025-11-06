@@ -19,7 +19,7 @@ use connection_manager::ConnectionManager;
 use db::Database;
 use engine::CopyEngine;
 use message_handler::MessageHandler;
-use zeromq::{ZmqMessage, ZmqSender, ZmqServer, ZmqConfigSender};
+use zeromq::{ZmqMessage, ZmqSender, ZmqServer, ZmqConfigPublisher};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -71,8 +71,8 @@ async fn main() -> Result<()> {
     // Initialize ZeroMQ sender (PUB socket)
     let zmq_sender = Arc::new(ZmqSender::new(&config.zmq_sender_address())?);
 
-    // Initialize ZeroMQ config sender (PUB socket)
-    let zmq_config_sender = Arc::new(ZmqConfigSender::new(&config.zmq_config_sender_address())?);
+    // Initialize ZeroMQ config sender (PUB socket with MessagePack)
+    let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(&config.zmq_config_sender_address())?);
 
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());

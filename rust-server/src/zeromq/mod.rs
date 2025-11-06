@@ -1,8 +1,12 @@
+mod config_publisher;
+
 use anyhow::{Result, Context};
 use serde::Serialize;
 use tokio::sync::mpsc;
 use std::sync::Arc;
 use crate::models::{TradeSignal, MessageType, ConfigMessage};
+
+pub use config_publisher::ZmqConfigPublisher;
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),
@@ -133,7 +137,13 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
                         if let Err(e) = socket.send(&message, 0) {
                             tracing::error!("Failed to send ZMQ message: {}", e);
                         } else {
-                            tracing::debug!("Sent message to topic '{}'", msg.topic);
+                            tracing::debug!(
+                                "Sent message to topic '{}': {} bytes (topic: {} bytes, payload: {} bytes)",
+                                msg.topic,
+                                message.len(),
+                                msg.topic.len() + 1, // +1 for space
+                                json.len()
+                            );
                         }
                     }
                     Err(e) => {

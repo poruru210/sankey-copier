@@ -13,7 +13,7 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     models::{CopySettings, EaConnection, ConfigMessage},
-    zeromq::ZmqConfigSender,
+    zeromq::ZmqConfigPublisher,
 };
 
 #[derive(Clone)]
@@ -22,7 +22,7 @@ pub struct AppState {
     pub tx: broadcast::Sender<String>,
     pub settings_cache: Arc<RwLock<Vec<CopySettings>>>,
     pub connection_manager: Arc<ConnectionManager>,
-    pub config_sender: Arc<ZmqConfigSender>,
+    pub config_sender: Arc<ZmqConfigPublisher>,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -45,15 +45,23 @@ async fn refresh_settings_cache(state: &AppState) {
 }
 
 /// Send configuration message to slave EA
+///
+/// CopySettingsから完全な設定情報を含むConfigMessageを生成し、
+/// ZeroMQ経由でSlaveEAに送信します。
 async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
-    let config = ConfigMessage {
-        account_id: settings.slave_account.clone(),
-        master_account: settings.master_account.clone(),
-        trade_group_id: settings.master_account.clone(),
-        timestamp: chrono::Utc::now(),
-    };
+    // From<CopySettings>トレイトを使用して変換
+    let config: ConfigMessage = settings.clone().into();
+
     if let Err(e) = state.config_sender.send_config(&config).await {
-        tracing::error!("Failed to send config message: {}", e);
+        tracing::error!("Failed to send config message to {}: {}", settings.slave_account, e);
+    } else {
+        tracing::info!(
+            "Sent full config to EA: {} (master: {}, enabled: {}, lot_mult: {:?})",
+            settings.slave_account,
+            settings.master_account,
+            settings.enabled,
+            settings.lot_multiplier
+        );
     }
 }
 

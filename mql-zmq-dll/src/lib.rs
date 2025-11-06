@@ -1,7 +1,20 @@
+mod msgpack;
+
 use once_cell::sync::Lazy;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Mutex;
+
+// Re-export MessagePack functions
+pub use msgpack::{
+    msgpack_parse,
+    config_get_string,
+    config_get_double,
+    config_get_bool,
+    config_get_int,
+    config_free,
+    msgpack_free_string,
+};
 
 // ZeroMQ socket types
 pub const ZMQ_PUSH: i32 = 8;

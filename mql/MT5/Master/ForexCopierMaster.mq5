@@ -22,11 +22,11 @@
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
-input string   AccountID = "MASTER_001";
 input ulong    MagicFilter = 0;
 input int      ScanInterval = 100;
 
 //--- Global variables
+string      AccountID;                  // Auto-generated from broker + account number
 int         g_zmq_context = -1;
 int         g_zmq_socket = -1;
 ulong       g_tracked_positions[];
@@ -39,6 +39,19 @@ datetime    g_last_heartbeat = 0;
 int OnInit()
 {
    Print("=== ForexCopier Master EA (MT5) Starting ===");
+
+   // Auto-generate AccountID from broker name and account number
+   string broker = AccountInfoString(ACCOUNT_COMPANY);
+   long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
+
+   // Replace spaces and special characters with underscores
+   StringReplace(broker, " ", "_");
+   StringReplace(broker, ".", "_");
+   StringReplace(broker, "-", "_");
+
+   // Format: broker_accountnumber
+   AccountID = broker + "_" + IntegerToString(account_number);
+   Print("Auto-generated AccountID: ", AccountID);
 
    g_zmq_context = zmq_context_create();
    if(g_zmq_context < 0)
