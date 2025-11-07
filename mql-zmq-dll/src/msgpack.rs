@@ -115,7 +115,7 @@ pub struct TradeSignalMessage {
 /// This function is unsafe because it dereferences raw pointers.
 /// The returned handle must be freed with `config_free()`.
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_parse(
+pub unsafe extern "C" fn parse_message(
     data: *const u8,
     data_len: i32,
 ) -> *mut ConfigMessage {
@@ -304,7 +304,7 @@ pub unsafe extern "C" fn config_get_int(
 /// - `ptr` was returned by `msgpack_deserialize_config`
 /// - `ptr` is only freed once
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         drop(CString::from_raw(ptr));
     }
@@ -322,7 +322,7 @@ static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> = LazyLock::new(|| Mutex::new(
 /// Returns the length of serialized data (or 0 on error).
 /// The serialized data is stored in an internal buffer accessible via msgpack_get_buffer().
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_serialize_register(
+pub unsafe extern "C" fn serialize_register(
     message_type: *const u16,
     account_id: *const u16,
     ea_type: *const u16,
@@ -365,7 +365,7 @@ pub unsafe extern "C" fn msgpack_serialize_register(
 
 /// Serialize an UnregisterMessage to MessagePack
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_serialize_unregister(
+pub unsafe extern "C" fn serialize_unregister(
     message_type: *const u16,
     account_id: *const u16,
     timestamp: *const u16,
@@ -388,7 +388,7 @@ pub unsafe extern "C" fn msgpack_serialize_unregister(
 
 /// Serialize a HeartbeatMessage to MessagePack
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_serialize_heartbeat(
+pub unsafe extern "C" fn serialize_heartbeat(
     message_type: *const u16,
     account_id: *const u16,
     balance: f64,
@@ -417,7 +417,7 @@ pub unsafe extern "C" fn msgpack_serialize_heartbeat(
 
 /// Serialize a TradeSignalMessage to MessagePack
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_serialize_trade_signal(
+pub unsafe extern "C" fn serialize_trade_signal(
     action: *const u16,
     ticket: i64,
     symbol: *const u16,
@@ -462,7 +462,7 @@ pub unsafe extern "C" fn msgpack_serialize_trade_signal(
 /// The returned pointer is valid until the next serialization call.
 /// The caller must copy the data before the next call.
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_get_buffer() -> *const u8 {
+pub unsafe extern "C" fn get_serialized_buffer() -> *const u8 {
     let buffer = SERIALIZE_BUFFER.lock().unwrap();
     buffer.as_ptr()
 }
@@ -478,7 +478,7 @@ pub unsafe extern "C" fn msgpack_get_buffer() -> *const u8 {
 /// # Safety
 /// Destination pointer must be valid and have at least max_len bytes available.
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_copy_buffer(dest: *mut u8, max_len: i32) -> i32 {
+pub unsafe extern "C" fn copy_serialized_buffer(dest: *mut u8, max_len: i32) -> i32 {
     if dest.is_null() || max_len <= 0 {
         return 0;
     }
@@ -497,7 +497,7 @@ pub unsafe extern "C" fn msgpack_copy_buffer(dest: *mut u8, max_len: i32) -> i32
 
 /// Parse a TradeSignalMessage from MessagePack data
 #[no_mangle]
-pub unsafe extern "C" fn msgpack_parse_trade_signal(
+pub unsafe extern "C" fn parse_trade_signal(
     data: *const u8,
     data_len: i32,
 ) -> *mut TradeSignalMessage {

@@ -208,7 +208,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    Print("=== Processing Configuration Message ===");
 
    // Parse MessagePack once and get a handle to the config structure
-   HANDLE_TYPE config_handle = msgpack_parse(msgpack_data, data_len);
+   HANDLE_TYPE config_handle = parse_message(msgpack_data, data_len);
    if(config_handle == 0)
    {
       Print("ERROR: Failed to parse MessagePack config");

@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "forex_copier_zmq"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]  # cdylib for DLL, rlib for Rust dependency
 
 [dependencies]
 zmq = "0.10"

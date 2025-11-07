@@ -1,18 +1,18 @@
-mod msgpack;
+pub mod msgpack;
 
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};
 
-// Re-export MessagePack functions
+// Re-export message types for use in rust-server
 pub use msgpack::{
-    msgpack_parse,
-    config_get_string,
-    config_get_double,
-    config_get_bool,
-    config_get_int,
-    config_free,
-    msgpack_free_string,
+    RegisterMessage,
+    UnregisterMessage,
+    HeartbeatMessage,
+    TradeSignalMessage,
+    ConfigMessage,
+    SymbolMapping,
+    TradeFilters,
 };
 
 // ZeroMQ socket types

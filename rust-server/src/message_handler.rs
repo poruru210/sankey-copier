@@ -6,7 +6,7 @@ use crate::{
     db::Database,
     engine::CopyEngine,
     models::{
-        ConfigMessage, CopySettings, EaType, HeartbeatMessage, RegisterMessage,
+        ConfigMessage, CopySettings, HeartbeatMessage, RegisterMessage,
         SymbolConverter, TradeSignal, UnregisterMessage,
     },
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
@@ -57,13 +57,13 @@ impl MessageHandler {
     /// Handle EA registration
     async fn handle_register(&self, msg: RegisterMessage) {
         let account_id = msg.account_id.clone();
-        let ea_type = msg.ea_type;
-        let platform = msg.platform;
+        let ea_type = msg.ea_type.clone();
+        let platform = msg.platform.clone();
 
         self.connection_manager.register_ea(msg).await;
 
         // Phase 2: Send CONFIG to Slave EA immediately upon registration
-        if ea_type == EaType::Slave {
+        if ea_type == "Slave" {
             tracing::info!("Slave EA registered: {}, checking for existing configuration...", account_id);
 
             match self.db.get_settings_for_slave(&account_id).await {
@@ -223,10 +223,9 @@ impl MessageHandler {
 mod tests {
     use super::*;
     use crate::models::{
-        CopySettings, EaType, HeartbeatMessage, OrderType, Platform, RegisterMessage,
+        CopySettings, HeartbeatMessage, OrderType, RegisterMessage,
         TradeAction, TradeFilters, UnregisterMessage,
     };
-    use chrono::Utc;
 
     async fn create_test_handler() -> MessageHandler {
         use std::sync::atomic::{AtomicU16, Ordering};
@@ -264,6 +263,7 @@ mod tests {
 
     fn create_test_register_message() -> RegisterMessage {
         RegisterMessage {
+            message_type: "Register".to_string(),
             account_id: "TEST_001".to_string(),
             account_number: 12345,
             broker: "Test Broker".to_string(),
@@ -273,9 +273,9 @@ mod tests {
             balance: 10000.0,
             equity: 10000.0,
             leverage: 100,
-            ea_type: EaType::Master,
-            platform: Platform::MT4,
-            timestamp: Utc::now(),
+            ea_type: "Master".to_string(),
+            platform: "MT4".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
 
@@ -340,8 +340,9 @@ mod tests {
         // Then unregister
         handler
             .handle_unregister(UnregisterMessage {
+                message_type: "Unregister".to_string(),
                 account_id: account_id.clone(),
-                timestamp: Utc::now(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
             })
             .await;
 
@@ -365,11 +366,12 @@ mod tests {
 
         // Send heartbeat
         let hb_msg = HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
             account_id: account_id.clone(),
             balance: 12000.0,
             equity: 11500.0,
-            open_positions: Some(3),
-            timestamp: Utc::now(),
+            open_positions: 3,
+            timestamp: chrono::Utc::now().to_rfc3339(),
         };
         handler.handle_heartbeat(hb_msg).await;
 

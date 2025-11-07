@@ -28,7 +28,7 @@ bool SendRegistrationMessage(int zmq_context, string server_address, string acco
    }
 
    // Serialize registration message using MessagePack
-   int len = msgpack_serialize_register("Register", account_id, ea_type, platform,
+   int len = serialize_register("Register", account_id, ea_type, platform,
                                         GetAccountNumber(), GetBrokerName(), GetAccountName(),
                                         GetServerName(), GetAccountBalance(), GetAccountEquity(),
                                         GetAccountCurrency(), GetAccountLeverage(),
@@ -44,7 +44,7 @@ bool SendRegistrationMessage(int zmq_context, string server_address, string acco
    // Copy serialized data to buffer
    uchar buffer[];
    ArrayResize(buffer, len);
-   int copied = msgpack_copy_buffer(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
 
    if(copied != len)
    {
@@ -86,7 +86,7 @@ bool SendUnregistrationMessage(int zmq_context, string server_address, string ac
    }
 
    // Serialize unregistration message using MessagePack
-   int len = msgpack_serialize_unregister("Unregister", account_id,
+   int len = serialize_unregister("Unregister", account_id,
                                           FormatTimestampISO8601(TimeCurrent()));
 
    if(len <= 0)
@@ -99,7 +99,7 @@ bool SendUnregistrationMessage(int zmq_context, string server_address, string ac
    // Copy serialized data to buffer
    uchar buffer[];
    ArrayResize(buffer, len);
-   int copied = msgpack_copy_buffer(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
 
    if(copied != len)
    {
@@ -141,7 +141,7 @@ bool SendHeartbeatMessage(int zmq_context, string server_address, string account
    }
 
    // Serialize heartbeat message using MessagePack
-   int len = msgpack_serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
+   int len = serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
                                          GetAccountEquity(), GetOpenPositionsCount(),
                                          FormatTimestampISO8601(TimeCurrent()));
 
@@ -155,7 +155,7 @@ bool SendHeartbeatMessage(int zmq_context, string server_address, string account
    // Copy serialized data to buffer
    uchar buffer[];
    ArrayResize(buffer, len);
-   int copied = msgpack_copy_buffer(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
 
    if(copied != len)
    {
@@ -179,7 +179,7 @@ bool SendTradeSignal(int zmq_socket, string action, TICKET_TYPE ticket, string s
                      long magic, string comment, string account_id)
 {
    // Serialize trade signal message using MessagePack
-   int len = msgpack_serialize_trade_signal(action, (long)ticket, symbol, order_type,
+   int len = serialize_trade_signal(action, (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
                                             FormatTimestampISO8601(TimeCurrent()), account_id);
 
@@ -192,7 +192,7 @@ bool SendTradeSignal(int zmq_socket, string action, TICKET_TYPE ticket, string s
    // Copy serialized data to buffer
    uchar buffer[];
    ArrayResize(buffer, len);
-   int copied = msgpack_copy_buffer(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
 
    if(copied != len)
    {
@@ -211,7 +211,7 @@ bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
 {
    // For close signals, we send a trade signal with action="Close"
    // Only ticket, timestamp, and source_account are needed
-   int len = msgpack_serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
+   int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
                                             0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
 
    if(len <= 0)
@@ -223,7 +223,7 @@ bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
    // Copy serialized data to buffer
    uchar buffer[];
    ArrayResize(buffer, len);
-   int copied = msgpack_copy_buffer(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
 
    if(copied != len)
    {

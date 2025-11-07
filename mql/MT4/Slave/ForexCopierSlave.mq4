@@ -400,7 +400,7 @@ string ReverseOrderType(string order_type)
 void ProcessTradeSignal(uchar &data[], int data_len)
 {
    // Parse MessagePack trade signal
-   HANDLE_TYPE handle = msgpack_parse_trade_signal(data, data_len);
+   HANDLE_TYPE handle = parse_trade_signal(data, data_len);
    if(handle == 0 || handle == -1)
    {
       Print("ERROR: Failed to parse MessagePack trade signal");
