@@ -3,12 +3,13 @@ use tokio::sync::{broadcast, RwLock};
 
 use crate::{
     connection_manager::ConnectionManager,
+    db::Database,
     engine::CopyEngine,
     models::{
-        CopySettings, HeartbeatMessage, RegisterMessage, SymbolConverter,
-        TradeSignal, UnregisterMessage,
+        ConfigMessage, CopySettings, EaType, HeartbeatMessage, RegisterMessage,
+        SymbolConverter, TradeSignal, UnregisterMessage,
     },
-    zeromq::{ZmqMessage, ZmqSender},
+    zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
 };
 
 /// Handles incoming ZMQ messages and coordinates trade copying logic
@@ -18,6 +19,8 @@ pub struct MessageHandler {
     zmq_sender: Arc<ZmqSender>,
     settings_cache: Arc<RwLock<Vec<CopySettings>>>,
     broadcast_tx: broadcast::Sender<String>,
+    db: Arc<Database>,
+    config_sender: Arc<ZmqConfigPublisher>,
 }
 
 impl MessageHandler {
@@ -27,6 +30,8 @@ impl MessageHandler {
         zmq_sender: Arc<ZmqSender>,
         settings_cache: Arc<RwLock<Vec<CopySettings>>>,
         broadcast_tx: broadcast::Sender<String>,
+        db: Arc<Database>,
+        config_sender: Arc<ZmqConfigPublisher>,
     ) -> Self {
         Self {
             connection_manager,
@@ -34,6 +39,8 @@ impl MessageHandler {
             zmq_sender,
             settings_cache,
             broadcast_tx,
+            db,
+            config_sender,
         }
     }
 
@@ -54,6 +61,53 @@ impl MessageHandler {
         let platform = msg.platform;
 
         self.connection_manager.register_ea(msg).await;
+
+        // Phase 2: Send CONFIG to Slave EA immediately upon registration
+        if ea_type == EaType::Slave {
+            tracing::info!("Slave EA registered: {}, checking for existing configuration...", account_id);
+
+            match self.db.get_settings_for_slave(&account_id).await {
+                Ok(Some(settings)) => {
+                    tracing::info!(
+                        "Found existing settings for slave {}: master={}, enabled={}, lot_mult={:?}",
+                        account_id,
+                        settings.master_account,
+                        settings.enabled,
+                        settings.lot_multiplier
+                    );
+
+                    // Convert CopySettings to ConfigMessage
+                    let config: ConfigMessage = settings.into();
+
+                    // Send CONFIG via MessagePack
+                    if let Err(e) = self.config_sender.send_config(&config).await {
+                        tracing::error!(
+                            "Failed to send config to newly registered slave {}: {}",
+                            account_id,
+                            e
+                        );
+                    } else {
+                        tracing::info!(
+                            "Successfully sent CONFIG to newly registered slave: {}",
+                            account_id
+                        );
+                    }
+                }
+                Ok(None) => {
+                    tracing::info!(
+                        "No existing configuration found for slave {}. EA will wait for Web UI configuration.",
+                        account_id
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to query settings for slave {}: {}",
+                        account_id,
+                        e
+                    );
+                }
+            }
+        }
 
         // Notify WebSocket clients
         let _ = self.broadcast_tx.send(format!(
@@ -174,7 +228,7 @@ mod tests {
     };
     use chrono::Utc;
 
-    fn create_test_handler() -> MessageHandler {
+    async fn create_test_handler() -> MessageHandler {
         use std::sync::atomic::{AtomicU16, Ordering};
         static PORT_COUNTER: AtomicU16 = AtomicU16::new(7000);
 
@@ -188,12 +242,23 @@ mod tests {
         let settings_cache = Arc::new(RwLock::new(Vec::new()));
         let (broadcast_tx, _) = broadcast::channel::<String>(100);
 
+        // Create test database (in-memory)
+        let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+
+        // Create ZmqConfigPublisher for tests
+        let config_port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let config_sender = Arc::new(
+            ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", config_port)).unwrap()
+        );
+
         MessageHandler::new(
             connection_manager,
             copy_engine,
             zmq_sender,
             settings_cache,
             broadcast_tx,
+            db,
+            config_sender,
         )
     }
 
@@ -251,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_register() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let msg = create_test_register_message();
         let account_id = msg.account_id.clone();
 
@@ -265,7 +330,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_unregister() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let msg = create_test_register_message();
         let account_id = msg.account_id.clone();
 
@@ -291,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_heartbeat() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let reg_msg = create_test_register_message();
         let account_id = reg_msg.account_id.clone();
 
@@ -319,7 +384,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_trade_signal_with_matching_setting() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let signal = create_test_trade_signal();
         let settings = create_test_copy_settings();
 
@@ -335,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_trade_signal_no_matching_master() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let mut signal = create_test_trade_signal();
         signal.source_account = "OTHER_MASTER".to_string();
         let settings = create_test_copy_settings();
@@ -352,7 +417,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_trade_signal_disabled_setting() {
-        let handler = create_test_handler();
+        let handler = create_test_handler().await;
         let signal = create_test_trade_signal();
         let mut settings = create_test_copy_settings();
         settings.enabled = false;

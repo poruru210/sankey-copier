@@ -95,6 +95,8 @@ async fn main() -> Result<()> {
             zmq_sender.clone(),
             settings_cache.clone(),
             broadcast_tx.clone(),
+            db.clone(),
+            zmq_config_sender.clone(),
         );
 
         tokio::spawn(async move {
