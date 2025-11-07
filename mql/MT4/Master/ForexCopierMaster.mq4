@@ -23,11 +23,11 @@
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
-input string   AccountID = "MASTER_001";                // Master account identifier
 input int      MagicFilter = 0;                         // Magic number filter (0 = all)
 input int      ScanInterval = 100;                      // Scan interval in milliseconds
 
 //--- Global variables
+string      AccountID;                  // Auto-generated from broker + account number
 int         g_zmq_context = -1;
 int         g_zmq_socket = -1;
 int         g_tracked_orders[];
@@ -40,8 +40,21 @@ datetime    g_last_heartbeat = 0;
 int OnInit()
 {
    Print("=== ForexCopier Master EA (MT4) Starting ===");
+
+   // Auto-generate AccountID from broker name and account number
+   string broker = AccountCompany();
+   int account_number = AccountNumber();
+
+   // Replace spaces and special characters with underscores
+   StringReplace(broker, " ", "_");
+   StringReplace(broker, ".", "_");
+   StringReplace(broker, "-", "_");
+
+   // Format: broker_accountnumber
+   AccountID = broker + "_" + IntegerToString(account_number);
+   Print("Auto-generated AccountID: ", AccountID);
+
    Print("Server Address: ", ServerAddress);
-   Print("Account ID: ", AccountID);
    Print("Magic Filter: ", MagicFilter);
 
    g_zmq_context = zmq_context_create();
