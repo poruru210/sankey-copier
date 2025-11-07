@@ -82,7 +82,7 @@ export const AccountCard = React.memo(
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg ${
           isMobile ? 'flex flex-col' : 'flex'
-        } transition-all touch-manipulation w-full text-sm md:text-base ${getVisibilityClass()}`}
+        } transition-all w-full text-sm md:text-base ${getVisibilityClass()}`}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >

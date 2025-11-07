@@ -31,7 +31,7 @@ export function AccountCardHeader({
     <div>
       {/* Header row */}
       <div
-        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 ${
+        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 cursor-move ${
           account.hasError
             ? 'bg-pink-50 dark:bg-pink-900/20'
             : account.hasWarning
@@ -39,10 +39,10 @@ export function AccountCardHeader({
             : ''
         }`}
       >
-        <div className="w-6 h-6 md:w-7 md:h-7 bg-yellow-400 rounded flex items-center justify-center flex-shrink-0">
+        <div className="w-6 h-6 md:w-7 md:h-7 bg-yellow-400 rounded flex items-center justify-center flex-shrink-0 pointer-events-none">
           <Folder className="w-3 h-3 md:w-4 md:h-4 text-white" />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pointer-events-none">
           <h3 className="font-normal text-gray-900 dark:text-gray-100 text-xs md:text-sm truncate">
             {account.name}
           </h3>
