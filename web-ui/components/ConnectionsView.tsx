@@ -79,8 +79,6 @@ export function ConnectionsView({
     selectedSourceId,
     setHoveredSource,
     setHoveredReceiver,
-    handleSourceTap,
-    clearSelection,
     isAccountHighlighted,
     isMobile,
     getConnectedReceivers,
@@ -169,13 +167,6 @@ export function ConnectionsView({
       });
     }
   }, [onCreate, onUpdate, toast, content.settingsCreated, content.settingsUpdated, content.saveFailed, content.unknownError]);
-
-  // Auto-select first source on mobile
-  useEffect(() => {
-    if (isMobile && sourceAccounts.length > 0 && !selectedSourceId) {
-      handleSourceTap(sourceAccounts[0].id);
-    }
-  }, [isMobile, sourceAccounts, selectedSourceId, handleSourceTap]);
 
   // Use custom hook for SVG connection drawing
   useSVGConnections({
@@ -278,27 +269,6 @@ export function ConnectionsView({
 
         {/* Main Content */}
         <div className="relative z-10 px-4 md:px-0">
-          {/* Mobile: Source selection dropdown */}
-          {isMobile && (
-            <div className="mb-4 flex flex-col gap-2">
-              <label htmlFor="source-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {content.selectSource}
-              </label>
-              <select
-                id="source-select"
-                value={selectedSourceId || visibleSourceAccounts[0]?.id || ''}
-                onChange={(e) => handleSourceTap(e.target.value)}
-                className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {visibleSourceAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* Main Layout - Source and Receivers */}
           <div className={GRID_LAYOUT}>
             {/* Left Column: Source Accounts */}
