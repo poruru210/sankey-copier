@@ -23,17 +23,23 @@ export function BalanceSection({ connection, content }: BalanceSectionProps) {
       </div>
       <div className="h-px bg-gray-300 dark:bg-gray-600 -mt-1 mb-2"></div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        <div className="flex flex-col">
+      <div className="grid grid-cols-2 gap-x-2 md:gap-x-3 lg:gap-x-4 gap-y-1.5">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.balance}
           </span>
           <span
-            className={`font-bold text-sm ${
+            className={`font-bold text-sm truncate ${
               connection?.balance !== undefined
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-gray-400 dark:text-gray-500'
             }`}
+            title={connection?.balance !== undefined
+              ? connection.balance.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : '-'}
           >
             {connection?.balance !== undefined
               ? `${connection.balance.toLocaleString(undefined, {
@@ -43,16 +49,22 @@ export function BalanceSection({ connection, content }: BalanceSectionProps) {
               : '-'}
           </span>
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.equity}
           </span>
           <span
-            className={`font-bold text-sm ${
+            className={`font-bold text-sm truncate ${
               connection?.equity !== undefined
                 ? 'text-green-600 dark:text-green-400'
                 : 'text-gray-400 dark:text-gray-500'
             }`}
+            title={connection?.equity !== undefined
+              ? connection.equity.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : '-'}
           >
             {connection?.equity !== undefined
               ? `${connection.equity.toLocaleString(undefined, {

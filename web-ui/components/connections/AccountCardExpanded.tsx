@@ -39,8 +39,8 @@ export function AccountCardExpanded({
 }: AccountCardExpandedProps) {
   return (
     <div className="border-t border-gray-200 dark:border-gray-700">
-      <div className="px-3 py-3 bg-gray-50 dark:bg-gray-900/30">
-        <div className="space-y-3">
+      <div className="px-2 md:px-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-900/30">
+        <div className="space-y-2 md:space-y-3">
           {/* Account Info Section */}
           <AccountInfoSection
             connection={connection}

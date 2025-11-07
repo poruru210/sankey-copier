@@ -20,11 +20,11 @@ import { Plus, RefreshCw } from 'lucide-react';
 
 // Layout constants - Responsive
 // Mobile: Single column (vertical stack)
-// Tablet: Narrower middle column
+// Tablet: Narrower middle column with reduced gap
 // Desktop: Full width middle column
-const GRID_LAYOUT = 'grid grid-cols-1 gap-4 md:grid-cols-[1fr_120px_1fr] md:gap-6 lg:grid-cols-[1fr_200px_1fr]';
+const GRID_LAYOUT = 'grid grid-cols-1 gap-4 md:grid-cols-[1fr_80px_1fr] md:gap-4 lg:grid-cols-[1fr_120px_1fr] lg:gap-6';
 const ACCOUNT_LIST_WRAPPER = 'flex items-center justify-center';
-const ACCOUNT_LIST = 'space-y-4 w-full max-w-md md:max-w-none';
+const ACCOUNT_LIST = 'space-y-3 md:space-y-4 w-full max-w-md md:max-w-none';
 
 interface ConnectionsViewProps {
   connections: EaConnection[];
