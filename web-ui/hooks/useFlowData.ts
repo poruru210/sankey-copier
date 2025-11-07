@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Node, Edge } from 'reactflow';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
-import type { AccountNodeData, RelayServerNodeData } from '@/components/flow-nodes';
+import type { AccountNodeData } from '@/components/flow-nodes';
 
 interface UseFlowDataProps {
   sourceAccounts: AccountInfo[];
@@ -28,14 +28,13 @@ const NODE_WIDTH = 380;
 const NODE_HEIGHT = 120;
 const VERTICAL_SPACING = 200;
 const SOURCE_X = 0;
-const RELAY_X = 450;
-const RECEIVER_X = 900;
+const RECEIVER_X = 600; // Moved closer since no relay server
 
 // Layout constants - Mobile (vertical)
 const MOBILE_X = 0;
 const MOBILE_SOURCE_START_Y = 0;
 const MOBILE_VERTICAL_SPACING = 200;
-const MOBILE_RELAY_OFFSET = 120; // Gap between sections
+const MOBILE_SECTION_GAP = 120; // Gap between source and receiver sections
 
 /**
  * Custom hook to convert account data to React Flow nodes and edges
@@ -96,48 +95,20 @@ export function useFlowData({
       });
     });
 
-    // Calculate relay server position
-    let relayPosition;
-    if (isMobile) {
-      // Mobile: position between source and receiver sections
-      const sourceEndY = MOBILE_SOURCE_START_Y + (sourceAccounts.length - 1) * MOBILE_VERTICAL_SPACING;
-      relayPosition = {
-        x: MOBILE_X,
-        y: sourceEndY + MOBILE_RELAY_OFFSET,
-      };
-    } else {
-      // Desktop: center of all accounts
-      const totalAccounts = sourceAccounts.length + receiverAccounts.length;
-      const relayY = totalAccounts > 0
-        ? ((sourceAccounts.length - 1) * VERTICAL_SPACING +
-           (receiverAccounts.length - 1) * VERTICAL_SPACING) / 2
-        : 0;
-      relayPosition = { x: RELAY_X, y: relayY };
-    }
-
-    // Create relay server node
-    nodeList.push({
-      id: 'relay-server',
-      type: 'relayServerNode',
-      position: relayPosition,
-      data: {
-        label: 'Relay Server',
-        isMobile,
-      } as RelayServerNodeData,
-      draggable: false,
-    });
-
     // Create receiver account nodes
     receiverAccounts.forEach((account, index) => {
       const accountSettings = getAccountSettings(account.id, 'receiver');
       const connection = getAccountConnection(account.id);
       const isHighlighted = isAccountHighlighted(account.id, 'receiver');
 
-      // Mobile: vertical layout, Desktop: horizontal layout
+      // Mobile: vertical layout below source accounts, Desktop: horizontal layout
       const position = isMobile
         ? {
             x: MOBILE_X,
-            y: relayPosition.y + MOBILE_RELAY_OFFSET + index * MOBILE_VERTICAL_SPACING,
+            y: MOBILE_SOURCE_START_Y +
+               sourceAccounts.length * MOBILE_VERTICAL_SPACING +
+               MOBILE_SECTION_GAP +
+               index * MOBILE_VERTICAL_SPACING,
           }
         : { x: RECEIVER_X, y: index * VERTICAL_SPACING };
 
@@ -187,54 +158,27 @@ export function useFlowData({
   const edges = useMemo(() => {
     const edgeList: Edge[] = [];
 
-    // Create edges from source accounts to relay server
+    // Create direct edges from source accounts to receiver accounts
     settings.forEach((setting) => {
       const sourceAccount = sourceAccounts.find(
         (acc) => acc.id === setting.master_account
       );
-
-      if (!sourceAccount) return;
-
-      const isActive = setting.enabled && !sourceAccount.hasError;
-
-      // Edge from source to relay server
-      edgeList.push({
-        id: `source-${setting.master_account}-relay`,
-        source: `source-${setting.master_account}`,
-        target: 'relay-server',
-        animated: isActive,
-        style: {
-          stroke: isActive ? '#3b82f6' : '#d1d5db',
-          strokeWidth: 2,
-          strokeDasharray: isActive ? undefined : '5,5',
-        },
-        data: { setting },
-      });
-    });
-
-    // Create edges from relay server to receiver accounts
-    settings.forEach((setting) => {
       const receiverAccount = receiverAccounts.find(
         (acc) => acc.id === setting.slave_account
       );
 
-      if (!receiverAccount) return;
-
-      const sourceAccount = sourceAccounts.find(
-        (acc) => acc.id === setting.master_account
-      );
+      if (!sourceAccount || !receiverAccount) return;
 
       const isActive =
         setting.enabled &&
+        !sourceAccount.hasError &&
         !receiverAccount.hasError &&
-        !receiverAccount.hasWarning &&
-        sourceAccount &&
-        !sourceAccount.hasError;
+        !receiverAccount.hasWarning;
 
-      // Edge from relay server to receiver
+      // Direct edge from source to receiver
       edgeList.push({
-        id: `relay-receiver-${setting.slave_account}-${setting.master_account}`,
-        source: 'relay-server',
+        id: `${setting.master_account}-${setting.slave_account}`,
+        source: `source-${setting.master_account}`,
         target: `receiver-${setting.slave_account}`,
         animated: isActive,
         style: {

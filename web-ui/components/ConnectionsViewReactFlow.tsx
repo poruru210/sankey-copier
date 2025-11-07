@@ -10,7 +10,6 @@ import ReactFlow, {
   Edge,
   Node,
   ReactFlowProvider,
-  useReactFlow,
   useNodesState,
   useEdgesState,
 } from 'reactflow';
@@ -247,11 +246,11 @@ function ConnectionsViewReactFlowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
 
-  // Update edges when settings change
+  // Update edges when data changes
   useEffect(() => {
     setEdges(initialEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings]);
+  }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
 
   // Handle edge click to show connection details
   const onEdgeClick = useCallback(
@@ -285,32 +284,6 @@ function ConnectionsViewReactFlowInner({
       setHoveredReceiver(null);
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
-
-  // Get React Flow instance for programmatic control
-  const reactFlowInstance = useReactFlow();
-
-  // Center view on RelayServer node when nodes change
-  useEffect(() => {
-    if (nodes.length > 0 && reactFlowInstance) {
-      // Wait for layout to settle, then center on relay server
-      const timer = setTimeout(() => {
-        const relayNode = nodes.find(node => node.id === 'relay-server');
-        if (relayNode) {
-          // Center view on relay server node
-          reactFlowInstance.setCenter(
-            relayNode.position.x + 40, // +40 to account for node width (80px / 2)
-            relayNode.position.y + 40, // +40 to account for node height (80px / 2)
-            {
-              zoom: 0.7,
-              duration: 500,
-            }
-          );
-        }
-      }, 200);
-
-      return () => clearTimeout(timer);
-    }
-  }, [nodes.length, reactFlowInstance]); // Only trigger on nodes.length change, not full nodes array
 
   return (
     <div className="relative flex gap-6 h-full">
@@ -384,7 +357,6 @@ function ConnectionsViewReactFlowInner({
             <Controls />
             <MiniMap
               nodeColor={(node) => {
-                if (node.id === 'relay-server') return '#3b82f6';
                 if (node.id.startsWith('source-')) return '#8b5cf6';
                 return '#22c55e';
               }}
