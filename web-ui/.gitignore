@@ -37,3 +37,8 @@ next-env.d.ts
 
 # intlayer
 .intlayer
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
