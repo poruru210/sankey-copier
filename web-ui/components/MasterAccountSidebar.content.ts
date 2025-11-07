@@ -4,8 +4,8 @@ const masterAccountSidebarContent = {
   key: 'master-account-sidebar',
   content: {
     filterAccounts: t({
-      en: 'Filter Accounts',
-      ja: 'アカウントをフィルター',
+      en: 'Master Accounts',
+      ja: 'マスターアカウント',
     }),
     allAccounts: t({
       en: 'All Accounts',
