@@ -27,10 +27,17 @@ export function calculateCenterPosition(
   receiverRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
   sourceAccounts: AccountInfo[],
   receiverAccounts: AccountInfo[],
-  svgRect: DOMRect
+  svgRect: DOMRect,
+  middleColumnRef?: React.RefObject<HTMLDivElement>
 ): { centerX: number; centerY: number } {
   const isMobile = isMobileViewport();
-  const centerX = svgRect.width / 2;
+
+  // Use actual middle column position if available, otherwise fallback to center
+  let centerX = svgRect.width / 2;
+  if (!isMobile && middleColumnRef?.current) {
+    const middleRect = middleColumnRef.current.getBoundingClientRect();
+    centerX = middleRect.left - svgRect.left + middleRect.width / 2;
+  }
 
   if (isMobile) {
     // Mobile: vertical layout - find the gap between source and receiver sections

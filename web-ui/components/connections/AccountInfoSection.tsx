@@ -25,36 +25,36 @@ export function AccountInfoSection({ connection, content }: AccountInfoSectionPr
       </div>
       <div className="h-px bg-gray-300 dark:bg-gray-600 -mt-1 mb-2"></div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-        <div className="flex flex-col">
+      <div className="grid grid-cols-2 gap-x-2 md:gap-x-3 lg:gap-x-4 gap-y-1.5 text-xs">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.accountNumber}
           </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={connection?.account_number || '-'}>
             {connection?.account_number || '-'}
           </span>
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.platform}
           </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={connection?.platform || '-'}>
             {connection?.platform || '-'}
           </span>
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.broker}
           </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={connection?.broker || '-'}>
             {connection?.broker || '-'}
           </span>
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.leverage}
           </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
             {connection?.leverage ? `1:${connection.leverage}` : '-'}
           </span>
         </div>

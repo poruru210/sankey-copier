@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -20,11 +20,11 @@ import { Plus, RefreshCw } from 'lucide-react';
 
 // Layout constants - Responsive
 // Mobile: Single column (vertical stack)
-// Tablet: Narrower middle column
+// Tablet: Narrower middle column with reduced gap
 // Desktop: Full width middle column
-const GRID_LAYOUT = 'grid grid-cols-1 gap-4 md:grid-cols-[1fr_120px_1fr] md:gap-6 lg:grid-cols-[1fr_200px_1fr]';
+const GRID_LAYOUT = 'grid grid-cols-1 gap-4 md:grid-cols-[1fr_80px_1fr] md:gap-4 lg:grid-cols-[1fr_120px_1fr] lg:gap-6';
 const ACCOUNT_LIST_WRAPPER = 'flex items-center justify-center';
-const ACCOUNT_LIST = 'space-y-4 w-full max-w-md md:max-w-none';
+const ACCOUNT_LIST = 'space-y-3 md:space-y-4 w-full max-w-md md:max-w-none';
 
 interface ConnectionsViewProps {
   connections: EaConnection[];
@@ -87,6 +87,9 @@ export function ConnectionsView({
 
   // Use custom hook for refs management
   const { sourceRefs, receiverRefs, registerSourceRef, registerReceiverRef } = useAccountRefs();
+
+  // Ref for middle column to calculate accurate center position
+  const middleColumnRef = useRef<HTMLDivElement>(null);
 
   // Use custom hook for toggle operations
   const { toggleSourceEnabled, toggleReceiverEnabled } = useAccountToggle({
@@ -174,6 +177,7 @@ export function ConnectionsView({
     receiverAccounts: visibleReceiverAccounts,
     sourceRefs,
     receiverRefs,
+    middleColumnRef,
     hoveredSourceId: isMobile ? selectedSourceId : hoveredSourceId,
     hoveredReceiverId: isMobile ? null : hoveredReceiverId,
     getConnectedReceivers,
@@ -310,7 +314,7 @@ export function ConnectionsView({
             </div>
 
             {/* Middle Column: Server indicator */}
-            <div className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
+            <div ref={middleColumnRef} className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
               {/* Server icon will be drawn here by SVG */}
             </div>
 
