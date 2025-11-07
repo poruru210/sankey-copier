@@ -351,7 +351,11 @@ void RemoveTrackedOrder(int ticket)
 //+------------------------------------------------------------------+
 void SendRegisterMessage()
 {
+   // Get current timestamp in ISO 8601 format
    string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+   StringReplace(timestamp, ".", "-");
+   StringReplace(timestamp, " ", "T");
+   timestamp += "Z";
 
    string json = "{";
    json += "\"message_type\":\"Register\",";
@@ -384,7 +388,11 @@ void SendRegisterMessage()
 //+------------------------------------------------------------------+
 void SendUnregisterMessage()
 {
+   // Get current timestamp in ISO 8601 format
    string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+   StringReplace(timestamp, ".", "-");
+   StringReplace(timestamp, " ", "T");
+   timestamp += "Z";
 
    string json = "{";
    json += "\"message_type\":\"Unregister\",";
@@ -407,7 +415,12 @@ void SendUnregisterMessage()
 //+------------------------------------------------------------------+
 void SendHeartbeat()
 {
+   // Get current timestamp in ISO 8601 format
    string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+   StringReplace(timestamp, ".", "-");
+   StringReplace(timestamp, " ", "T");
+   timestamp += "Z";
+
    int open_positions = 0;
 
    // Count open positions
