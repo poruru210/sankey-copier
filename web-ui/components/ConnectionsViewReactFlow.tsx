@@ -305,7 +305,7 @@ function ConnectionsViewReactFlowInner({
         )}
 
         {/* React Flow Canvas */}
-        <div className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
+        <div className="flex-1 min-h-[800px] bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -314,9 +314,9 @@ function ConnectionsViewReactFlowInner({
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             fitView
-            minZoom={0.5}
-            maxZoom={1.5}
-            defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+            fitViewOptions={{ padding: 0.2, minZoom: 0.3, maxZoom: 1 }}
+            minZoom={0.1}
+            maxZoom={2}
             proOptions={{ hideAttribution: true }}
           >
             <Background />

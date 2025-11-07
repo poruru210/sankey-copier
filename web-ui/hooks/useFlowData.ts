@@ -24,18 +24,18 @@ interface UseFlowDataProps {
 }
 
 // Layout constants - Desktop (horizontal)
-const NODE_WIDTH = 400;
+const NODE_WIDTH = 380;
 const NODE_HEIGHT = 120;
-const VERTICAL_SPACING = 180;
-const SOURCE_X = 50;
-const RELAY_X = 550;
-const RECEIVER_X = 1050;
+const VERTICAL_SPACING = 200;
+const SOURCE_X = 0;
+const RELAY_X = 450;
+const RECEIVER_X = 900;
 
 // Layout constants - Mobile (vertical)
-const MOBILE_X = 50;
-const MOBILE_SOURCE_START_Y = 50;
-const MOBILE_VERTICAL_SPACING = 180;
-const MOBILE_RELAY_OFFSET = 100; // Gap between sections
+const MOBILE_X = 0;
+const MOBILE_SOURCE_START_Y = 0;
+const MOBILE_VERTICAL_SPACING = 200;
+const MOBILE_RELAY_OFFSET = 120; // Gap between sections
 
 /**
  * Custom hook to convert account data to React Flow nodes and edges
