@@ -33,6 +33,8 @@ interface ConnectionsViewProps {
   onCreate: (data: CreateSettingsRequest) => void;
   onUpdate: (id: number, data: CopySettings) => void;
   onDelete: (id: number) => void;
+  isMobileDrawerOpen?: boolean;
+  onCloseMobileDrawer?: () => void;
 }
 
 export function ConnectionsView({
@@ -42,6 +44,8 @@ export function ConnectionsView({
   onCreate,
   onUpdate,
   onDelete,
+  isMobileDrawerOpen,
+  onCloseMobileDrawer,
 }: ConnectionsViewProps) {
   const content = useIntlayer('connections-view');
   const sidebarContent = useIntlayer('master-account-sidebar');
@@ -219,6 +223,8 @@ export function ConnectionsView({
         settings={settings}
         selectedMaster={selectedMaster}
         onSelectMaster={setSelectedMaster}
+        isMobileDrawerOpen={isMobileDrawerOpen}
+        onCloseMobileDrawer={onCloseMobileDrawer}
       />
 
       {/* Main Content */}

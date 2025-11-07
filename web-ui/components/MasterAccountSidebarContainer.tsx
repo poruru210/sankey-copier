@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu } from 'lucide-react';
 import { MasterAccountSidebar } from './MasterAccountSidebar';
 import { Sheet, SheetContent } from './ui/sheet';
-import { Button } from './ui/button';
 import type { CopySettings, EaConnection } from '@/types';
 
 interface MasterAccountSidebarContainerProps {
@@ -12,6 +10,8 @@ interface MasterAccountSidebarContainerProps {
   settings: CopySettings[];
   selectedMaster: string | 'all';
   onSelectMaster: (masterId: string | 'all') => void;
+  isMobileDrawerOpen?: boolean;
+  onCloseMobileDrawer?: () => void;
 }
 
 export function MasterAccountSidebarContainer({
@@ -19,8 +19,9 @@ export function MasterAccountSidebarContainer({
   settings,
   selectedMaster,
   onSelectMaster,
+  isMobileDrawerOpen = false,
+  onCloseMobileDrawer,
 }: MasterAccountSidebarContainerProps) {
-  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // Detect mobile screen size
@@ -37,8 +38,8 @@ export function MasterAccountSidebarContainer({
   // Close drawer when selection changes on mobile
   const handleSelectMaster = (masterId: string | 'all') => {
     onSelectMaster(masterId);
-    if (isMobile) {
-      setIsMobileDrawerOpen(false);
+    if (isMobile && onCloseMobileDrawer) {
+      onCloseMobileDrawer();
     }
   };
 
@@ -56,33 +57,25 @@ export function MasterAccountSidebarContainer({
     );
   }
 
-  // Mobile: Hamburger button + Drawer
+  // Mobile: Drawer only (button is in Header)
   return (
-    <>
-      {/* Mobile hamburger button */}
-      <div className="mb-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsMobileDrawerOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <Menu className="h-4 w-4" />
-          <span>Filter Accounts</span>
-        </Button>
-      </div>
-
-      {/* Mobile drawer */}
-      <Sheet open={isMobileDrawerOpen} onOpenChange={setIsMobileDrawerOpen} side="left">
-        <SheetContent>
-          <MasterAccountSidebar
-            connections={connections}
-            settings={settings}
-            selectedMaster={selectedMaster}
-            onSelectMaster={handleSelectMaster}
-          />
-        </SheetContent>
-      </Sheet>
-    </>
+    <Sheet
+      open={isMobileDrawerOpen}
+      onOpenChange={(open) => {
+        if (!open && onCloseMobileDrawer) {
+          onCloseMobileDrawer();
+        }
+      }}
+      side="left"
+    >
+      <SheetContent>
+        <MasterAccountSidebar
+          connections={connections}
+          settings={settings}
+          selectedMaster={selectedMaster}
+          onSelectMaster={handleSelectMaster}
+        />
+      </SheetContent>
+    </Sheet>
   );
 }
