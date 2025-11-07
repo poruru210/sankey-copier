@@ -17,6 +17,7 @@ interface UseSVGConnectionsProps {
   receiverAccounts: AccountInfo[];
   sourceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   receiverRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+  middleColumnRef: React.RefObject<HTMLDivElement>;
   hoveredSourceId: string | null;
   hoveredReceiverId: string | null;
   getConnectedReceivers: (sourceId: string) => string[];
@@ -31,6 +32,7 @@ export function useSVGConnections({
   receiverAccounts,
   sourceRefs,
   receiverRefs,
+  middleColumnRef,
   hoveredSourceId,
   hoveredReceiverId,
   getConnectedReceivers,
@@ -53,7 +55,8 @@ export function useSVGConnections({
         receiverRefs,
         sourceAccounts,
         receiverAccounts,
-        svgRect
+        svgRect,
+        middleColumnRef
       );
 
       // Draw lines from sources to center
@@ -146,10 +149,13 @@ export function useSVGConnections({
 
     window.addEventListener('resize', handleWindowResize);
 
-    // Also observe the SVG container itself for size changes
+    // Also observe the SVG container and middle column for size changes
     const svg = document.getElementById('connection-svg') as SVGSVGElement;
     if (svg) {
       resizeObserver.observe(svg);
+    }
+    if (middleColumnRef.current) {
+      resizeObserver.observe(middleColumnRef.current);
     }
 
     return () => {

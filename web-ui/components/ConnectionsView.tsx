@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -88,6 +88,9 @@ export function ConnectionsView({
   // Use custom hook for refs management
   const { sourceRefs, receiverRefs, registerSourceRef, registerReceiverRef } = useAccountRefs();
 
+  // Ref for middle column to calculate accurate center position
+  const middleColumnRef = useRef<HTMLDivElement>(null);
+
   // Use custom hook for toggle operations
   const { toggleSourceEnabled, toggleReceiverEnabled } = useAccountToggle({
     settings,
@@ -174,6 +177,7 @@ export function ConnectionsView({
     receiverAccounts: visibleReceiverAccounts,
     sourceRefs,
     receiverRefs,
+    middleColumnRef,
     hoveredSourceId: isMobile ? selectedSourceId : hoveredSourceId,
     hoveredReceiverId: isMobile ? null : hoveredReceiverId,
     getConnectedReceivers,
@@ -310,7 +314,7 @@ export function ConnectionsView({
             </div>
 
             {/* Middle Column: Server indicator */}
-            <div className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
+            <div ref={middleColumnRef} className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
               {/* Server icon will be drawn here by SVG */}
             </div>
 
