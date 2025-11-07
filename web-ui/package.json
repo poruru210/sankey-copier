@@ -39,6 +39,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-intlayer": "7.0.7",
+    "reactflow": "^11.11.4",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {

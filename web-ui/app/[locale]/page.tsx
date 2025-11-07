@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ConnectionsView } from '@/components/ConnectionsView';
+import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
 import { ActivityLog } from '@/components/ActivityLog';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
@@ -63,7 +63,7 @@ export default function Home() {
           )}
 
           {/* Copy Connections */}
-          <ConnectionsView
+          <ConnectionsViewReactFlow
             connections={connections}
             settings={settings}
             onToggle={toggleEnabled}
