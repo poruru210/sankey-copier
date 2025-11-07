@@ -93,7 +93,8 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: true, // Enable dragging for repositioning
+        draggable: true,
+        dragHandle: '.drag-handle', // Only drag from this element
       });
     });
 
@@ -162,7 +163,8 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: true, // Enable dragging for repositioning
+        draggable: true,
+        dragHandle: '.drag-handle', // Only drag from this element
       });
     });
 

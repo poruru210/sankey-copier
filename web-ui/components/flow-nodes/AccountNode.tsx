@@ -45,17 +45,19 @@ export interface AccountNodeData {
  * Custom React Flow node for account cards
  * Wraps the existing AccountCard component with React Flow handles
  */
-export const AccountNode = memo(({ data }: NodeProps<AccountNodeData>) => {
+export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>) => {
   const { type, isMobile } = data;
 
   return (
-    <div className="account-node relative">
-      {/* Drag handle indicator */}
+    <div className="account-node">
+      {/* Drag handle indicator - NOT wrapped in noDrag so it can initiate drag */}
       <div
-        className="absolute -left-8 top-1/2 -translate-y-1/2 cursor-move opacity-30 hover:opacity-100 transition-opacity z-10 bg-gray-200 dark:bg-gray-700 rounded p-1"
+        className="drag-handle absolute -left-6 top-0 bottom-0 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
         title="Drag to reposition"
       >
-        <GripVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+        <div className="bg-gray-300/50 dark:bg-gray-600/50 hover:bg-gray-400/70 dark:hover:bg-gray-500/70 rounded px-1 py-2 transition-colors">
+          <GripVertical className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+        </div>
       </div>
 
       {/* Connection handles - position based on mobile/desktop and source/receiver type */}

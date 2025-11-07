@@ -341,8 +341,10 @@ function ConnectionsViewReactFlowInner({
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             nodesDraggable={true}
+            nodeDragThreshold={1}
             nodesConnectable={false}
             nodesFocusable={true}
+            selectNodesOnDrag={false}
             minZoom={0.1}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}
