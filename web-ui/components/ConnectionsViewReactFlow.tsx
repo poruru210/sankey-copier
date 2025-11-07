@@ -268,20 +268,21 @@ function ConnectionsViewReactFlowInner({
       const timer = setTimeout(() => {
         const relayNode = nodes.find(node => node.id === 'relay-server');
         if (relayNode) {
-          // Fit view with relay server in focus
-          reactFlowInstance.fitView({
-            padding: 0.2,
-            includeHiddenNodes: false,
-            minZoom: 0.4,
-            maxZoom: 1,
-            duration: 300,
-          });
+          // Center view on relay server node
+          reactFlowInstance.setCenter(
+            relayNode.position.x + 40, // +40 to account for node width (80px / 2)
+            relayNode.position.y + 40, // +40 to account for node height (80px / 2)
+            {
+              zoom: 0.7,
+              duration: 500,
+            }
+          );
         }
-      }, 100);
+      }, 200);
 
       return () => clearTimeout(timer);
     }
-  }, [nodes, reactFlowInstance]);
+  }, [nodes.length, reactFlowInstance]); // Only trigger on nodes.length change, not full nodes array
 
   return (
     <div className="relative flex gap-6 h-full">
@@ -339,8 +340,9 @@ function ConnectionsViewReactFlowInner({
             onEdgeClick={onEdgeClick}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
-            fitView
-            fitViewOptions={{ padding: 0.2, minZoom: 0.3, maxZoom: 1 }}
+            nodesDraggable={true}
+            nodesConnectable={false}
+            nodesFocusable={true}
             minZoom={0.1}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}

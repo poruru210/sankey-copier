@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps, NodeToolbar } from 'reactflow';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { AccountCard } from '@/components/connections/AccountCard';
+import { GripVertical } from 'lucide-react';
 
 export interface AccountNodeData {
   account: AccountInfo;
@@ -48,7 +49,15 @@ export const AccountNode = memo(({ data }: NodeProps<AccountNodeData>) => {
   const { type, isMobile } = data;
 
   return (
-    <div className="account-node">
+    <div className="account-node relative">
+      {/* Drag handle indicator */}
+      <div
+        className="absolute -left-8 top-1/2 -translate-y-1/2 cursor-move opacity-30 hover:opacity-100 transition-opacity z-10 bg-gray-200 dark:bg-gray-700 rounded p-1"
+        title="Drag to reposition"
+      >
+        <GripVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+      </div>
+
       {/* Connection handles - position based on mobile/desktop and source/receiver type */}
 
       {/* Source account handles */}
@@ -77,23 +86,25 @@ export const AccountNode = memo(({ data }: NodeProps<AccountNodeData>) => {
         </>
       )}
 
-      {/* Render the existing AccountCard component */}
-      <AccountCard
-        account={data.account}
-        connection={data.connection}
-        accountSettings={data.accountSettings}
-        onToggle={data.onToggle}
-        onToggleEnabled={data.onToggleEnabled}
-        onEditSetting={data.onEditSetting}
-        onDeleteSetting={data.onDeleteSetting}
-        type={data.type}
-        isHighlighted={data.isHighlighted}
-        hoveredSourceId={data.hoveredSourceId}
-        hoveredReceiverId={data.hoveredReceiverId}
-        selectedSourceId={data.selectedSourceId}
-        isMobile={data.isMobile}
-        content={data.content}
-      />
+      {/* Render the existing AccountCard component - wrapped in noDrag to prevent inner elements from initiating drag */}
+      <div className="noDrag">
+        <AccountCard
+          account={data.account}
+          connection={data.connection}
+          accountSettings={data.accountSettings}
+          onToggle={data.onToggle}
+          onToggleEnabled={data.onToggleEnabled}
+          onEditSetting={data.onEditSetting}
+          onDeleteSetting={data.onDeleteSetting}
+          type={data.type}
+          isHighlighted={data.isHighlighted}
+          hoveredSourceId={data.hoveredSourceId}
+          hoveredReceiverId={data.hoveredReceiverId}
+          selectedSourceId={data.selectedSourceId}
+          isMobile={data.isMobile}
+          content={data.content}
+        />
+      </div>
     </div>
   );
 });
