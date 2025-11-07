@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
 import type { AccountNodeData } from '@/components/flow-nodes';
 
@@ -200,6 +200,7 @@ export function useFlowData({
           stroke: isActive ? '#22c55e' : '#d1d5db',
           strokeWidth: 2,
           strokeDasharray: isActive ? undefined : '5,5',
+          cursor: 'pointer',
         },
         label: labelText,
         labelStyle: {

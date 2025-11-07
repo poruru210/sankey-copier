@@ -67,22 +67,21 @@ export const AccountCard = React.memo(
     content,
   }: AccountCardProps) => {
     // Determine visibility based on mobile/desktop and selection/hover state
-    const getVisibilityClass = () => {
-      if (isMobile && selectedSourceId) {
-        // Mobile: Hide unconnected accounts when a source is selected
-        return isHighlighted ? '' : 'hidden';
-      } else if (!isMobile && (hoveredSourceId || hoveredReceiverId)) {
-        // Desktop: Dim unconnected accounts when hovering
-        return isHighlighted ? 'opacity-100' : 'opacity-30';
-      }
-      return ''; // Default: Show all accounts
-    };
+    let visibilityClass = '';
+
+    if (isMobile && selectedSourceId) {
+      // Mobile: Hide unconnected accounts when a source is selected
+      visibilityClass = isHighlighted ? '' : 'hidden';
+    } else if (!isMobile && (hoveredSourceId || hoveredReceiverId)) {
+      // Desktop: Dim unconnected accounts when hovering
+      visibilityClass = isHighlighted ? 'opacity-100' : 'opacity-30';
+    }
 
     return (
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg ${
           isMobile ? 'flex flex-col' : 'flex'
-        } transition-all w-full text-sm md:text-base ${getVisibilityClass()}`}
+        } transition-all w-full text-sm md:text-base ${visibilityClass}`}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
@@ -96,10 +95,6 @@ export const AccountCard = React.memo(
             account={account}
             onToggle={onToggle}
             onToggleEnabled={onToggleEnabled}
-            settingsLabel={String(content.settings)}
-            accountSettings={accountSettings}
-            onEditSetting={onEditSetting}
-            onDeleteSetting={onDeleteSetting}
           />
 
           {/* Card Body - Expands on click */}

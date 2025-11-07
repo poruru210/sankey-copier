@@ -16,6 +16,7 @@ interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (data: CreateSettingsRequest | CopySettings) => void;
+  onDelete?: (data: CopySettings) => void;
   initialData?: CopySettings | null;
   connections: EaConnection[];
   existingSettings: CopySettings[];
@@ -25,6 +26,7 @@ export function SettingsDialog({
   open,
   onOpenChange,
   onSave,
+  onDelete,
   initialData,
   connections,
   existingSettings
@@ -114,6 +116,29 @@ export function SettingsDialog({
     onOpenChange(false);
   };
 
+  const handleDelete = () => {
+    if (initialData && onDelete) {
+      if (window.confirm(
+        `${content.deleteConfirm?.value || '接続を削除しますか？'}\n${initialData.master_account} → ${initialData.slave_account}`
+      )) {
+        onDelete(initialData);
+        onOpenChange(false);
+      }
+    }
+  };
+
+  // Split account name into broker name and account number
+  const splitAccountName = (accountName: string) => {
+    const lastUnderscoreIndex = accountName.lastIndexOf('_');
+    if (lastUnderscoreIndex === -1) {
+      return { brokerName: accountName, accountNumber: '' };
+    }
+    return {
+      brokerName: accountName.substring(0, lastUnderscoreIndex).replace(/_/g, ' '),
+      accountNumber: accountName.substring(lastUnderscoreIndex + 1),
+    };
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -122,47 +147,108 @@ export function SettingsDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
-            {/* Master Account Selection */}
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">📤</span>
-                  {content.masterAccountLabel.value}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {content.masterAccountDescription.value}
-                </p>
-              </div>
-              <SimpleAccountSelector
-                label=""
-                value={formData.master_account}
-                onChange={handleMasterChange}
-                connections={connections}
-                filterType="Master"
-                required
-              />
-            </div>
+            {/* Account Selection - Only show in create mode */}
+            {!initialData && (
+              <>
+                {/* Master Account Selection */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">📤</span>
+                      {content.masterAccountLabel.value}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {content.masterAccountDescription.value}
+                    </p>
+                  </div>
+                  <SimpleAccountSelector
+                    label=""
+                    value={formData.master_account}
+                    onChange={handleMasterChange}
+                    connections={connections}
+                    filterType="Master"
+                    required
+                  />
+                </div>
 
-            {/* Slave Account Selection */}
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">📥</span>
-                  {content.slaveAccountLabel.value}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {content.slaveAccountDescription.value}
-                </p>
-              </div>
-              <SimpleAccountSelector
-                label=""
-                value={formData.slave_account}
-                onChange={handleSlaveChange}
-                connections={connections}
-                filterType="Slave"
-                required
-              />
-            </div>
+                {/* Slave Account Selection */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">📥</span>
+                      {content.slaveAccountLabel.value}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {content.slaveAccountDescription.value}
+                    </p>
+                  </div>
+                  <SimpleAccountSelector
+                    label=""
+                    value={formData.slave_account}
+                    onChange={handleSlaveChange}
+                    connections={connections}
+                    filterType="Slave"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Account Display - Only show in edit mode */}
+            {initialData && (() => {
+              const masterAccount = splitAccountName(formData.master_account);
+              const slaveAccount = splitAccountName(formData.slave_account);
+
+              return (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">🔗</span>
+                      {content.connectionLabel?.value || '接続'}
+                    </h3>
+                  </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-3">
+                      {/* Master Account */}
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-lg">📤</span>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                            {masterAccount.brokerName}
+                          </div>
+                          {masterAccount.accountNumber && (
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {masterAccount.accountNumber}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Arrow */}
+                      <span className="text-gray-400 text-lg">→</span>
+
+                      {/* Slave Account */}
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-lg">📥</span>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                            {slaveAccount.brokerName}
+                          </div>
+                          {slaveAccount.accountNumber && (
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {slaveAccount.accountNumber}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      {content.connectionDescription?.value || 'アカウント間の紐づけは変更できません'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Validation Messages */}
             {validation.errors.length > 0 && (
@@ -248,12 +334,23 @@ export function SettingsDialog({
           </div>
 
           <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {content.cancel.value}
-            </Button>
-            <Button type="submit" disabled={!validation.isValid}>
-              {initialData ? content.save.value : content.saveAndEnable.value}
-            </Button>
+            <div className="flex w-full justify-between items-center">
+              <div>
+                {initialData && onDelete && (
+                  <Button type="button" variant="destructive" onClick={handleDelete}>
+                    {content.delete?.value || '削除'}
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  {content.cancel.value}
+                </Button>
+                <Button type="submit" disabled={!validation.isValid}>
+                  {initialData ? content.save.value : content.saveAndEnable.value}
+                </Button>
+              </div>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
