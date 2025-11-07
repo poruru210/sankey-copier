@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, Forex Copier Project"
 #property link      ""
-#property version   "1.00"
+#property version   "2.00"
 #property strict
 
 //--- Import Rust ZeroMQ DLL
@@ -15,30 +15,65 @@
    int    zmq_socket_create(int context, int socket_type);
    void   zmq_socket_destroy(int socket);
    int    zmq_socket_bind(int socket, string address);
+   int    zmq_socket_connect(int socket, string address);
    int    zmq_socket_send(int socket, string message);
    int    zmq_socket_receive(int socket, uchar &buffer[], int buffer_size);
    int    zmq_socket_subscribe_all(int socket);
-   int    zmq_socket_connect(int socket, string address);
+   int    zmq_socket_subscribe(int socket, string topic);
+   int    msgpack_parse(uchar &data[], int data_len);        // 32-bit MT4: use int for pointers
+   string config_get_string(int handle, string field_name);  // 32-bit MT4: use int for pointers
+   double config_get_double(int handle, string field_name);
+   int    config_get_bool(int handle, string field_name);
+   int    config_get_int(int handle, string field_name);
+   void   config_free(int handle);
 #import
 
 //--- ZeroMQ socket types
 #define ZMQ_PULL 7
 #define ZMQ_PUSH 8
+#define ZMQ_SUB 2
 
 //--- Input parameters
-input string   ServerAddress = "tcp://localhost:5556";  // Server ZMQ address for slaves
-input string   AccountID = "SLAVE_001";                 // Slave account identifier
-input int      Slippage = 3;                            // Maximum slippage in points
-input int      MaxRetries = 3;                          // Maximum order retries
-input bool     AllowNewOrders = true;                   // Allow opening new orders
-input bool     AllowCloseOrders = true;                 // Allow closing orders
+input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
+input string   ConfigServerAddress = "tcp://localhost:5557"; // Configuration channel
+input int      Slippage = 3;                                 // Maximum slippage in points
+input int      MaxRetries = 3;                               // Maximum order retries
+input bool     AllowNewOrders = true;                        // Allow opening new orders
+input bool     AllowCloseOrders = true;                      // Allow closing orders
 
 //--- Global variables
+string      AccountID;                  // Auto-generated from broker + account number
 int         g_zmq_context = -1;
-int         g_zmq_socket = -1;
+int         g_zmq_trade_socket = -1;    // Socket for receiving trade signals
+int         g_zmq_config_socket = -1;   // Socket for receiving configuration
 bool        g_initialized = false;
-int         g_order_map[][2]; // [master_ticket][slave_ticket]
 datetime    g_last_heartbeat = 0;
+string      g_current_master = "";      // Currently configured master account
+string      g_trade_group_id = "";      // Current trade group subscription
+
+// Order mapping: [master_ticket][slave_ticket]
+int         g_order_map[][2];
+
+//--- Configuration structures
+struct SymbolMapping {
+    string source_symbol;
+    string target_symbol;
+};
+
+struct TradeFilters {
+    string allowed_symbols[];
+    string blocked_symbols[];
+    int    allowed_magic_numbers[];
+    int    blocked_magic_numbers[];
+};
+
+//--- Extended configuration variables (from ConfigMessage)
+bool           g_config_enabled = true;          // Whether copying is enabled
+double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
+bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
+SymbolMapping  g_symbol_mappings[];              // Symbol mappings
+TradeFilters   g_filters;                        // Trade filters
+int            g_config_version = 0;             // Configuration version
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -46,8 +81,19 @@ datetime    g_last_heartbeat = 0;
 int OnInit()
 {
    Print("=== ForexCopier Slave EA (MT4) Starting ===");
-   Print("Server Address: ", ServerAddress);
-   Print("Account ID: ", AccountID);
+
+   // Auto-generate AccountID from broker name and account number
+   string broker = AccountCompany();
+   int account_number = AccountNumber();
+
+   // Replace spaces and special characters with underscores
+   StringReplace(broker, " ", "_");
+   StringReplace(broker, ".", "_");
+   StringReplace(broker, "-", "_");
+
+   // Format: broker_accountnumber
+   AccountID = broker + "_" + IntegerToString(account_number);
+   Print("Auto-generated AccountID: ", AccountID);
 
    g_zmq_context = zmq_context_create();
    if(g_zmq_context < 0)
@@ -56,25 +102,64 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   g_zmq_socket = zmq_socket_create(g_zmq_context, ZMQ_PULL);
-   if(g_zmq_socket < 0)
+   // Create trade signal socket (SUB to port 5556)
+   g_zmq_trade_socket = zmq_socket_create(g_zmq_context, ZMQ_SUB);
+   if(g_zmq_trade_socket < 0)
    {
-      Print("ERROR: Failed to create ZMQ socket");
+      Print("ERROR: Failed to create ZMQ trade socket");
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   if(zmq_socket_bind(g_zmq_socket, ServerAddress) == 0)
+   if(zmq_socket_connect(g_zmq_trade_socket, TradeServerAddress) == 0)
    {
-      Print("ERROR: Failed to bind to ", ServerAddress);
-      zmq_socket_destroy(g_zmq_socket);
+      Print("ERROR: Failed to connect to ", TradeServerAddress);
+      zmq_socket_destroy(g_zmq_trade_socket);
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   Print("Listening for signals on ", ServerAddress);
+   Print("Connected to trade channel: ", TradeServerAddress);
+
+   // Create config socket (SUB to port 5557)
+   g_zmq_config_socket = zmq_socket_create(g_zmq_context, ZMQ_SUB);
+   if(g_zmq_config_socket < 0)
+   {
+      Print("ERROR: Failed to create ZMQ config socket");
+      zmq_socket_destroy(g_zmq_trade_socket);
+      zmq_context_destroy(g_zmq_context);
+      return INIT_FAILED;
+   }
+
+   if(zmq_socket_connect(g_zmq_config_socket, ConfigServerAddress) == 0)
+   {
+      Print("ERROR: Failed to connect to ", ConfigServerAddress);
+      zmq_socket_destroy(g_zmq_config_socket);
+      zmq_socket_destroy(g_zmq_trade_socket);
+      zmq_context_destroy(g_zmq_context);
+      return INIT_FAILED;
+   }
+
+   // Subscribe to config messages for this account ID
+   if(zmq_socket_subscribe(g_zmq_config_socket, AccountID) == 0)
+   {
+      Print("ERROR: Failed to subscribe to config topic: ", AccountID);
+      zmq_socket_destroy(g_zmq_config_socket);
+      zmq_socket_destroy(g_zmq_trade_socket);
+      zmq_context_destroy(g_zmq_context);
+      return INIT_FAILED;
+   }
+
+   Print("Connected to config channel: ", ConfigServerAddress, " and subscribed to: ", AccountID);
 
    ArrayResize(g_order_map, 0);
+
+   // Initialize configuration arrays
+   ArrayResize(g_symbol_mappings, 0);
+   ArrayResize(g_filters.allowed_symbols, 0);
+   ArrayResize(g_filters.blocked_symbols, 0);
+   ArrayResize(g_filters.allowed_magic_numbers, 0);
+   ArrayResize(g_filters.blocked_magic_numbers, 0);
 
    g_initialized = true;
 
@@ -96,7 +181,8 @@ void OnDeinit(const int reason)
    // Send unregister message to server
    SendUnregisterMessage();
 
-   if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
+   if(g_zmq_config_socket >= 0) zmq_socket_destroy(g_zmq_config_socket);
+   if(g_zmq_trade_socket >= 0) zmq_socket_destroy(g_zmq_trade_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
    Print("=== ForexCopier Slave EA (MT4) Stopped ===");
@@ -117,17 +203,206 @@ void OnTick()
       g_last_heartbeat = TimeCurrent();
    }
 
-   // Try to receive message (non-blocking)
-   uchar buffer[];
-   ArrayResize(buffer, 4096);
-   int bytes = zmq_socket_receive(g_zmq_socket, buffer, 4096);
+   // Check for configuration messages (MessagePack format)
+   uchar config_buffer[];
+   ArrayResize(config_buffer, 4096);
+   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, 4096);
 
-   if(bytes > 0)
+   if(config_bytes > 0)
    {
-      string message = CharArrayToString(buffer, 0, bytes);
-      Print("Received message: ", message);
-      ProcessTradeSignal(message);
+      // Find the space separator between topic and MessagePack payload
+      int space_pos = -1;
+      for(int i = 0; i < config_bytes; i++)
+      {
+         if(config_buffer[i] == 32) // 32 = space
+         {
+            space_pos = i;
+            break;
+         }
+      }
+
+      if(space_pos > 0)
+      {
+         // Extract topic
+         string topic = CharArrayToString(config_buffer, 0, space_pos);
+
+         // Extract MessagePack payload
+         int payload_start = space_pos + 1;
+         int payload_len = config_bytes - payload_start;
+         uchar msgpack_payload[];
+         ArrayResize(msgpack_payload, payload_len);
+         ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
+
+         Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
+         ProcessConfigMessage(msgpack_payload, payload_len);
+      }
    }
+
+   // Check for trade signal messages
+   uchar trade_buffer[];
+   ArrayResize(trade_buffer, 4096);
+   int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, 4096);
+
+   if(trade_bytes > 0)
+   {
+      string trade_message = CharArrayToString(trade_buffer, 0, trade_bytes);
+
+      // PUB/SUB format: topic(trade_group_id) + space + JSON
+      int space_pos = StringFind(trade_message, " ");
+      if(space_pos > 0)
+      {
+         string topic = StringSubstr(trade_message, 0, space_pos);
+         string json = StringSubstr(trade_message, space_pos + 1);
+
+         Print("Received trade signal for topic '", topic, "': ", json);
+         ProcessTradeSignal(json);
+      }
+      else
+      {
+         // Compatibility: process as-is if no space
+         Print("Received trade: ", trade_message);
+         ProcessTradeSignal(trade_message);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if trade should be processed based on filters             |
+//+------------------------------------------------------------------+
+bool ShouldProcessTrade(string symbol, int magic_number)
+{
+   // Check if copying is enabled
+   if(!g_config_enabled)
+   {
+      Print("Trade filtering: Copying is disabled");
+      return false;
+   }
+
+   // Check allowed symbols filter
+   if(ArraySize(g_filters.allowed_symbols) > 0)
+   {
+      bool symbol_found = false;
+      for(int i = 0; i < ArraySize(g_filters.allowed_symbols); i++)
+      {
+         if(g_filters.allowed_symbols[i] == symbol)
+         {
+            symbol_found = true;
+            break;
+         }
+      }
+
+      if(!symbol_found)
+      {
+         Print("Trade filtering: Symbol ", symbol, " not in allowed list");
+         return false;
+      }
+   }
+
+   // Check blocked symbols filter
+   if(ArraySize(g_filters.blocked_symbols) > 0)
+   {
+      for(int i = 0; i < ArraySize(g_filters.blocked_symbols); i++)
+      {
+         if(g_filters.blocked_symbols[i] == symbol)
+         {
+            Print("Trade filtering: Symbol ", symbol, " is blocked");
+            return false;
+         }
+      }
+   }
+
+   // Check allowed magic numbers filter
+   if(ArraySize(g_filters.allowed_magic_numbers) > 0)
+   {
+      bool magic_found = false;
+      for(int i = 0; i < ArraySize(g_filters.allowed_magic_numbers); i++)
+      {
+         if(g_filters.allowed_magic_numbers[i] == magic_number)
+         {
+            magic_found = true;
+            break;
+         }
+      }
+
+      if(!magic_found)
+      {
+         Print("Trade filtering: Magic number ", magic_number, " not in allowed list");
+         return false;
+      }
+   }
+
+   // Check blocked magic numbers filter
+   if(ArraySize(g_filters.blocked_magic_numbers) > 0)
+   {
+      for(int i = 0; i < ArraySize(g_filters.blocked_magic_numbers); i++)
+      {
+         if(g_filters.blocked_magic_numbers[i] == magic_number)
+         {
+            Print("Trade filtering: Magic number ", magic_number, " is blocked");
+            return false;
+         }
+      }
+   }
+
+   // All checks passed
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Transform symbol using symbol mappings                           |
+//+------------------------------------------------------------------+
+string TransformSymbol(string source_symbol)
+{
+   // Check if there's a mapping for this symbol
+   for(int i = 0; i < ArraySize(g_symbol_mappings); i++)
+   {
+      if(g_symbol_mappings[i].source_symbol == source_symbol)
+      {
+         Print("Symbol transformation: ", source_symbol, " -> ", g_symbol_mappings[i].target_symbol);
+         return g_symbol_mappings[i].target_symbol;
+      }
+   }
+
+   // No mapping found, return original symbol
+   return source_symbol;
+}
+
+//+------------------------------------------------------------------+
+//| Apply lot multiplier to lot size                                |
+//+------------------------------------------------------------------+
+double TransformLotSize(double source_lots)
+{
+   double transformed = source_lots * g_config_lot_multiplier;
+   transformed = NormalizeDouble(transformed, 2);
+
+   Print("Lot transformation: ", source_lots, " * ", g_config_lot_multiplier, " = ", transformed);
+
+   return transformed;
+}
+
+//+------------------------------------------------------------------+
+//| Reverse order type if configured                                |
+//+------------------------------------------------------------------+
+string ReverseOrderType(string order_type)
+{
+   if(!g_config_reverse_trade)
+   {
+      return order_type; // No reversal
+   }
+
+   // Reverse Buy <-> Sell
+   if(order_type == "Buy")
+   {
+      Print("Order type reversed: Buy -> Sell");
+      return "Sell";
+   }
+   else if(order_type == "Sell")
+   {
+      Print("Order type reversed: Sell -> Buy");
+      return "Buy";
+   }
+
+   return order_type;
 }
 
 //+------------------------------------------------------------------+
@@ -146,14 +421,32 @@ void ProcessTradeSignal(string json)
    string tp_str = GetJsonValue(json, "take_profit");
    double stop_loss = (sl_str != "null") ? StringToDouble(sl_str) : 0;
    double take_profit = (tp_str != "null") ? StringToDouble(tp_str) : 0;
-   int magic = (int)StringToInteger(GetJsonValue(json, "magic_number"));
+
+   // Get magic number (defaults to 0 if not present)
+   string magic_str = GetJsonValue(json, "magic_number");
+   int magic = (magic_str != "") ? (int)StringToInteger(magic_str) : 0;
 
    Print("Processing ", action, " for master ticket #", master_ticket);
 
    if(action == "Open")
    {
       if(AllowNewOrders)
-         OpenOrder(master_ticket, symbol, order_type_str, lots, open_price, stop_loss, take_profit, magic);
+      {
+         // Apply filtering
+         if(!ShouldProcessTrade(symbol, magic))
+         {
+            Print("Trade filtered out: ", symbol, " magic=", magic);
+            return;
+         }
+
+         // Apply transformations
+         string transformed_symbol = TransformSymbol(symbol);
+         double transformed_lots = TransformLotSize(lots);
+         string transformed_order_type = ReverseOrderType(order_type_str);
+
+         // Open order with transformed values
+         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic);
+      }
    }
    else if(action == "Close")
    {
@@ -319,31 +612,54 @@ string GetJsonValue(string json, string key)
 
    start += StringLen(search);
 
-   // Skip whitespace and quotes
-   while(start < StringLen(json) && (StringGetCharacter(json, start) == ' ' ||
-                                     StringGetCharacter(json, start) == '"'))
-      start++;
-
-   int end = start;
-   bool in_string = false;
-
-   // Find end of value
-   while(end < StringLen(json))
+   // Skip whitespace only (not quotes)
+   int jsonLen = StringLen(json);
+   while(start < jsonLen)
    {
-      ushort ch = StringGetCharacter(json, end);
-      if(ch == '"')
-         in_string = !in_string;
-      else if(!in_string && (ch == ',' || ch == '}'))
-         break;
-      end++;
+      ushort c = StringGetCharacter(json, start);
+      if(c != 32) break;  // 32 = space
+      start++;
    }
 
-   string value = StringSubstr(json, start, end - start);
-   StringReplace(value, "\"", "");
-   StringTrimLeft(value);
-   StringTrimRight(value);
+   // Check if value starts with quote (string value)
+   ushort firstChar = StringGetCharacter(json, start);
+   bool isString = (firstChar == 34);  // 34 = double quote
 
-   return value;
+   if(isString)
+   {
+      // Skip opening quote
+      start++;
+
+      // Find closing quote
+      int end = start;
+      while(end < jsonLen)
+      {
+         ushort c = StringGetCharacter(json, end);
+         if(c == 34)  // Found closing quote
+         {
+            string value = StringSubstr(json, start, end - start);
+            return value;
+         }
+         end++;
+      }
+      return "";  // No closing quote found
+   }
+   else
+   {
+      // Non-string value: find comma or closing brace
+      int end = start;
+      while(end < jsonLen)
+      {
+         ushort c = StringGetCharacter(json, end);
+         if(c == 44 || c == 125) break;  // 44 = comma, 125 = }
+         end++;
+      }
+
+      string value = StringSubstr(json, start, end - start);
+      StringTrimLeft(value);
+      StringTrimRight(value);
+      return value;
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -383,6 +699,87 @@ void RemoveOrderMapping(int master_ticket)
          break;
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Process configuration message (MessagePack)                       |
+//+------------------------------------------------------------------+
+void ProcessConfigMessage(uchar &msgpack_data[], int data_len)
+{
+   Print("=== Processing Configuration Message ===");
+
+   // Parse MessagePack once and get a handle to the config structure
+   int config_handle = msgpack_parse(msgpack_data, data_len);  // 32-bit MT4: use int for pointer
+   if(config_handle == 0)
+   {
+      Print("ERROR: Failed to parse MessagePack config");
+      return;
+   }
+
+   // Extract fields from the parsed config using the handle
+   string new_master = config_get_string(config_handle, "master_account");
+   string new_group = config_get_string(config_handle, "trade_group_id");
+
+   if(new_master == "" || new_group == "")
+   {
+      Print("ERROR: Invalid config message received");
+      config_free(config_handle);
+      return;
+   }
+
+   // Extract extended configuration fields
+   bool new_enabled = (config_get_bool(config_handle, "enabled") == 1);
+   double new_lot_mult = config_get_double(config_handle, "lot_multiplier");
+   bool new_reverse = (config_get_bool(config_handle, "reverse_trade") == 1);
+   int new_version = config_get_int(config_handle, "config_version");
+
+   // Log configuration values
+   Print("Master Account: ", new_master);
+   Print("Trade Group ID: ", new_group);
+   Print("Enabled: ", new_enabled);
+   Print("Lot Multiplier: ", new_lot_mult);
+   Print("Reverse Trade: ", new_reverse);
+   Print("Config Version: ", new_version);
+
+   // TODO: Parse symbol mappings and filters from MessagePack
+   // For now, skip arrays until we implement array support in DLL
+   ArrayResize(g_symbol_mappings, 0);
+   ArrayResize(g_filters.allowed_symbols, 0);
+   ArrayResize(g_filters.blocked_symbols, 0);
+   ArrayResize(g_filters.allowed_magic_numbers, 0);
+   ArrayResize(g_filters.blocked_magic_numbers, 0);
+
+   // Update global configuration
+   g_config_enabled = new_enabled;
+   g_config_lot_multiplier = new_lot_mult;
+   g_config_reverse_trade = new_reverse;
+   g_config_version = new_version;
+
+   // Check if master/group changed
+   if(new_master != g_current_master || new_group != g_trade_group_id)
+   {
+      Print("Master Account: ", g_current_master, " -> ", new_master);
+      Print("Trade Group ID: ", g_trade_group_id, " -> ", new_group);
+
+      // Update master and group
+      g_current_master = new_master;
+      g_trade_group_id = new_group;
+
+      // Subscribe to new trade group
+      if(zmq_socket_subscribe(g_zmq_trade_socket, g_trade_group_id) == 0)
+      {
+         Print("ERROR: Failed to subscribe to trade group: ", g_trade_group_id);
+      }
+      else
+      {
+         Print("Successfully subscribed to trade group: ", g_trade_group_id);
+      }
+   }
+
+   // Free the config handle
+   config_free(config_handle);
+
+   Print("=== Configuration Updated ===");
 }
 
 //+------------------------------------------------------------------+
