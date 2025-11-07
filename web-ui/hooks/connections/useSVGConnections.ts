@@ -137,7 +137,26 @@ export function useSVGConnections({
       if (el) resizeObserver.observe(el);
     });
 
-    return () => resizeObserver.disconnect();
+    // Add window resize listener with debounce for better performance
+    let resizeTimeout: NodeJS.Timeout;
+    const handleWindowResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(drawLines, 100);
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+
+    // Also observe the SVG container itself for size changes
+    const svg = document.getElementById('connection-svg') as SVGSVGElement;
+    if (svg) {
+      resizeObserver.observe(svg);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+      clearTimeout(resizeTimeout);
+    };
   }, [
     sourceAccounts,
     receiverAccounts,
