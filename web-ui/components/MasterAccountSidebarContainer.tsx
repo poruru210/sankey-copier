@@ -46,7 +46,7 @@ export function MasterAccountSidebarContainer({
   // Desktop: Fixed sidebar
   if (!isMobile) {
     return (
-      <div className="w-60 flex-shrink-0">
+      <div className="w-72 flex-shrink-0">
         <MasterAccountSidebar
           connections={connections}
           settings={settings}

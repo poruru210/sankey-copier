@@ -159,8 +159,8 @@ export function MasterAccountSidebar({
 
                 {/* Account Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm truncate">{master.name}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-sm font-medium truncate">{master.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">
                     {master.isOnline ? content.online : content.offline} • {master.connectionCount}{' '}
                     {master.connectionCount !== 1 ? content.links : content.link}
                   </div>
