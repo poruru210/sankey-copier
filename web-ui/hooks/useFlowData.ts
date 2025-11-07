@@ -94,7 +94,6 @@ export function useFlowData({
           content,
         } as AccountNodeData,
         draggable: true,
-        dragHandle: '.drag-handle', // Only drag from this element
       });
     });
 
@@ -164,7 +163,6 @@ export function useFlowData({
           content,
         } as AccountNodeData,
         draggable: true,
-        dragHandle: '.drag-handle', // Only drag from this element
       });
     });
 

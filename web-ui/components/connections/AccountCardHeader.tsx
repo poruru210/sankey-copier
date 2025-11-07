@@ -47,21 +47,23 @@ export function AccountCardHeader({
             {account.name}
           </h3>
         </div>
-        <Switch
-          checked={account.isEnabled}
-          onCheckedChange={(checked) => onToggleEnabled?.(checked)}
-          className="mr-0.5 md:mr-1 scale-90 md:scale-100"
-        />
+        <div className="noDrag">
+          <Switch
+            checked={account.isEnabled}
+            onCheckedChange={(checked) => onToggleEnabled?.(checked)}
+            className="mr-0.5 md:mr-1 scale-90 md:scale-100"
+          />
+        </div>
         <button
           onClick={() => setSettingsExpanded(!settingsExpanded)}
-          className="p-2 md:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-gray-600 dark:text-gray-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+          className="noDrag p-2 md:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-gray-600 dark:text-gray-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
           title={settingsLabel}
         >
           <Settings className={`w-4 h-4 md:w-4 md:h-4 transition-transform ${settingsExpanded ? 'rotate-45' : ''}`} />
         </button>
         <button
           onClick={onToggle}
-          className="p-2 md:p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-gray-600 dark:text-gray-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+          className="noDrag p-2 md:p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-gray-600 dark:text-gray-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
         >
           <ChevronDown
             className={`w-4 h-4 transition-transform ${account.isExpanded ? 'rotate-180' : ''}`}
@@ -89,7 +91,7 @@ export function AccountCardHeader({
                   </div>
                   <button
                     onClick={() => onDeleteSetting?.(setting)}
-                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-red-600 dark:text-red-400"
+                    className="noDrag p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-red-600 dark:text-red-400"
                     title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -44,19 +44,22 @@ export interface AccountNodeData {
 /**
  * Custom React Flow node for account cards
  * Wraps the existing AccountCard component with React Flow handles
+ *
+ * Drag behavior: The entire node background is draggable EXCEPT for interactive elements
+ * which have the 'noDrag' class applied internally
  */
 export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>) => {
   const { type, isMobile } = data;
 
   return (
-    <div className="account-node">
-      {/* Drag handle indicator - NOT wrapped in noDrag so it can initiate drag */}
+    <div className="account-node relative group">
+      {/* Drag indicator - shows when hovering over draggable area */}
       <div
-        className="drag-handle absolute -left-6 top-0 bottom-0 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
+        className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none z-10"
         title="Drag to reposition"
       >
-        <div className="bg-gray-300/50 dark:bg-gray-600/50 hover:bg-gray-400/70 dark:hover:bg-gray-500/70 rounded px-1 py-2 transition-colors">
-          <GripVertical className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+        <div className="bg-blue-500 text-white rounded p-1">
+          <GripVertical className="w-4 h-4" />
         </div>
       </div>
 
@@ -88,25 +91,23 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>)
         </>
       )}
 
-      {/* Render the existing AccountCard component - wrapped in noDrag to prevent inner elements from initiating drag */}
-      <div className="noDrag">
-        <AccountCard
-          account={data.account}
-          connection={data.connection}
-          accountSettings={data.accountSettings}
-          onToggle={data.onToggle}
-          onToggleEnabled={data.onToggleEnabled}
-          onEditSetting={data.onEditSetting}
-          onDeleteSetting={data.onDeleteSetting}
-          type={data.type}
-          isHighlighted={data.isHighlighted}
-          hoveredSourceId={data.hoveredSourceId}
-          hoveredReceiverId={data.hoveredReceiverId}
-          selectedSourceId={data.selectedSourceId}
-          isMobile={data.isMobile}
-          content={data.content}
-        />
-      </div>
+      {/* Render the existing AccountCard component */}
+      <AccountCard
+        account={data.account}
+        connection={data.connection}
+        accountSettings={data.accountSettings}
+        onToggle={data.onToggle}
+        onToggleEnabled={data.onToggleEnabled}
+        onEditSetting={data.onEditSetting}
+        onDeleteSetting={data.onDeleteSetting}
+        type={data.type}
+        isHighlighted={data.isHighlighted}
+        hoveredSourceId={data.hoveredSourceId}
+        hoveredReceiverId={data.hoveredReceiverId}
+        selectedSourceId={data.selectedSourceId}
+        isMobile={data.isMobile}
+        content={data.content}
+      />
     </div>
   );
 });
