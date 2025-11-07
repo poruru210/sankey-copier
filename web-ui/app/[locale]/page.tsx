@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { ConnectionsView } from '@/components/ConnectionsView';
 import { ActivityLog } from '@/components/ActivityLog';
 import { Header } from '@/components/Header';
@@ -19,6 +20,21 @@ export default function Home() {
     deleteSetting,
   } = useForexCopier();
 
+  // Mobile drawer state for filter sidebar
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   if (loading && settings.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -34,7 +50,10 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="relative z-10">
-        <Header />
+        <Header
+          isMobile={isMobile}
+          onOpenMobileFilter={() => setIsMobileDrawerOpen(true)}
+        />
         <div className="container mx-auto p-6 max-w-[1600px]">
           {/* Error Display */}
           {error && (
@@ -51,6 +70,8 @@ export default function Home() {
             onCreate={createSetting}
             onUpdate={updateSetting}
             onDelete={deleteSetting}
+            isMobileDrawerOpen={isMobileDrawerOpen}
+            onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
           />
 
           {/* Real-time Activity */}

@@ -8,7 +8,11 @@
     "start": "next start -p 5173 -H 0.0.0.0",
     "lint": "next lint",
     "intlayer:push": "intlayer push",
-    "intlayer:pull": "intlayer pull"
+    "intlayer:pull": "intlayer pull",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@intlayer/api": "7.0.7",
@@ -38,6 +42,7 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.2",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
