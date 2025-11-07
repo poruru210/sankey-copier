@@ -52,7 +52,8 @@ export function useMasterFilter({
     const masterConnection = connections.find(
       (conn) => conn.account_id === selectedMaster && conn.ea_type === 'Master'
     );
-    return masterConnection?.account_name || selectedMaster;
+    // Use account_id if account_name is not available
+    return masterConnection ? (masterConnection.account_name || masterConnection.account_id) : selectedMaster;
   }, [selectedMaster, connections]);
 
   return {

@@ -231,19 +231,28 @@ function ConnectionsViewReactFlowInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  // Track selected master to detect filter changes
+  const [prevSelectedMaster, setPrevSelectedMaster] = useState(selectedMaster);
+
   // Update nodes when source data changes (while preserving dragged positions)
   useEffect(() => {
+    // Check if filter changed
+    const filterChanged = prevSelectedMaster !== selectedMaster;
+    if (filterChanged) {
+      setPrevSelectedMaster(selectedMaster);
+    }
+
     setNodes((currentNodes) => {
-      // When switching to 'all' accounts, reset all node positions to avoid overlap
-      if (selectedMaster === 'all') {
+      // When switching to 'all' accounts OR filter changed, reset all node positions
+      if (selectedMaster === 'all' && filterChanged) {
         return initialNodes;
       }
 
-      // Preserve positions of existing nodes
+      // Preserve positions of ALL existing nodes (even after data updates)
       const updatedNodes = initialNodes.map((newNode) => {
         const existingNode = currentNodes.find((n) => n.id === newNode.id);
         if (existingNode) {
-          // Keep the existing position if node was already there
+          // Always keep the existing position - this preserves dragged positions
           return { ...newNode, position: existingNode.position };
         }
         return newNode;
@@ -251,8 +260,24 @@ function ConnectionsViewReactFlowInner({
 
       return updatedNodes;
     });
+    // Only re-run when actual data changes, not hover states
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleSourceAccounts, visibleReceiverAccounts, settings, selectedMaster]);
+
+  // Update node data when hover state changes (without changing positions)
+  useEffect(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        const newNode = initialNodes.find((n) => n.id === node.id);
+        if (newNode) {
+          // Update only the data, preserve position and other properties
+          return { ...node, data: newNode.data };
+        }
+        return node;
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoveredSourceId, hoveredReceiverId]);
 
   // Update edges when data changes
   useEffect(() => {
@@ -398,7 +423,7 @@ function ConnectionsViewReactFlowInner({
             proOptions={{ hideAttribution: true }}
           >
             <Background />
-            <Controls />
+            <Controls className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 [&>button]:!bg-white dark:[&>button]:!bg-gray-700 [&>button]:!border-gray-300 dark:[&>button]:!border-gray-600 [&>button]:hover:!bg-gray-50 dark:[&>button]:hover:!bg-gray-600 [&>button>svg]:!fill-gray-700 dark:[&>button>svg]:!fill-gray-200" />
             <MiniMap
               nodeColor={(node) => {
                 if (node.id.startsWith('source-')) return '#8b5cf6';

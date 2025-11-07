@@ -8,6 +8,8 @@ import type { CopySettings, EaConnection } from '@/types';
 export interface MasterAccountInfo {
   id: string;
   name: string;
+  brokerName: string;
+  accountNumber: string;
   status: 'online' | 'offline';
   connectionCount: number;
   isOnline: boolean;
@@ -42,9 +44,14 @@ export function MasterAccountSidebar({
 
       const isOnline = master.status === 'Online';
 
+      // Format broker name: replace underscores with spaces
+      const brokerName = master.broker.replace(/_/g, ' ');
+
       return {
         id: master.account_id,
         name: `${master.broker} #${master.account_number}`,
+        brokerName,
+        accountNumber: master.account_number.toString(),
         status: isOnline ? 'online' : 'offline',
         connectionCount,
         isOnline,
@@ -159,8 +166,11 @@ export function MasterAccountSidebar({
 
                 {/* Account Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{master.name}</div>
+                  <div className="text-sm font-medium truncate">{master.brokerName}</div>
                   <div className="text-xs text-muted-foreground truncate">
+                    {master.accountNumber}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">
                     {master.isOnline ? content.online : content.offline} • {master.connectionCount}{' '}
                     {master.connectionCount !== 1 ? content.links : content.link}
                   </div>
