@@ -40,3 +40,4 @@ Thumbs.db
 # Kiri MCP Server
 .kiri/
 var/
+tests/__pycache__/
