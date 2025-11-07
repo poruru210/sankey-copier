@@ -138,7 +138,7 @@ export function MasterAccountSidebar({
                 onKeyDown={(e) => handleKeyDown(e, master.id)}
                 className={cn(
                   'w-full px-4 py-3 text-left transition-all duration-200',
-                  'hover:bg-accent hover:text-accent-foreground hover:scale-[1.02]',
+                  'hover:bg-accent hover:text-accent-foreground',
                   'flex items-center gap-2',
                   'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
                   selectedMaster === master.id &&
