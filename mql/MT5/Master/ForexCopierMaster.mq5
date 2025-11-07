@@ -7,18 +7,10 @@
 #property link      ""
 #property version   "1.00"
 
-//--- Import Rust ZeroMQ DLL
-#import "forex_copier_zmq.dll"
-   int    zmq_context_create();
-   void   zmq_context_destroy(int context);
-   int    zmq_socket_create(int context, int socket_type);
-   void   zmq_socket_destroy(int socket);
-   int    zmq_socket_connect(int socket, string address);
-   int    zmq_socket_send(int socket, string message);
-#import
-
-//--- ZeroMQ socket types
-#define ZMQ_PUSH 8
+//--- Include common headers
+#include <ForexCopierCommon.mqh>
+#include <ForexCopierMessages.mqh>
+#include <ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
@@ -41,16 +33,7 @@ int OnInit()
    Print("=== ForexCopier Master EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
-   string broker = AccountInfoString(ACCOUNT_COMPANY);
-   long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
-
-   // Replace spaces and special characters with underscores
-   StringReplace(broker, " ", "_");
-   StringReplace(broker, ".", "_");
-   StringReplace(broker, "-", "_");
-
-   // Format: broker_accountnumber
-   AccountID = broker + "_" + IntegerToString(account_number);
+   AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
    g_zmq_context = zmq_context_create();
@@ -80,7 +63,7 @@ int OnInit()
    g_initialized = true;
 
    // Send registration message to server
-   SendRegisterMessage();
+   SendRegistrationMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5");
 
    Print("=== ForexCopier Master EA (MT5) Initialized ===");
    return INIT_SUCCEEDED;
@@ -92,7 +75,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Send unregister message to server
-   SendUnregisterMessage();
+   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
 
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
@@ -110,7 +93,7 @@ void OnTick()
    // Send heartbeat every 30 seconds
    if(TimeCurrent() - g_last_heartbeat >= 30)
    {
-      SendHeartbeat();
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
       g_last_heartbeat = TimeCurrent();
    }
 
@@ -142,7 +125,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       // Position was closed
       if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
-         SendCloseSignal(trans.position);
+         SendPositionCloseSignal(trans.position);
       }
    }
 }
@@ -199,7 +182,7 @@ void CheckForClosedPositions()
       ulong ticket = g_tracked_positions[i];
       if(!PositionSelectByTicket(ticket))
       {
-         SendCloseSignal(ticket);
+         SendPositionCloseSignal(ticket);
          RemoveTrackedPosition(ticket);
       }
    }
@@ -220,41 +203,20 @@ void SendPositionSignal(string action, ulong ticket)
    double sl = PositionGetDouble(POSITION_SL);
    double tp = PositionGetDouble(POSITION_TP);
    long magic = PositionGetInteger(POSITION_MAGIC);
+   string comment = PositionGetString(POSITION_COMMENT);
 
-   string order_type = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+   string order_type = GetOrderTypeString((ENUM_POSITION_TYPE)type);
 
-   string json = "{";
-   json += "\"action\":\"" + action + "\",";
-   json += "\"ticket\":" + IntegerToString(ticket) + ",";
-   json += "\"symbol\":\"" + symbol + "\",";
-   json += "\"order_type\":\"" + order_type + "\",";
-   json += "\"lots\":" + DoubleToString(volume, 2) + ",";
-   json += "\"open_price\":" + DoubleToString(price, _Digits) + ",";
-   json += "\"stop_loss\":" + ((sl > 0) ? DoubleToString(sl, _Digits) : "null") + ",";
-   json += "\"take_profit\":" + ((tp > 0) ? DoubleToString(tp, _Digits) : "null") + ",";
-   json += "\"magic_number\":" + IntegerToString(magic) + ",";
-   json += "\"comment\":\"" + PositionGetString(POSITION_COMMENT) + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\",";
-   json += "\"source_account\":\"" + AccountID + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
+   SendTradeSignal(g_zmq_socket, action, ticket, symbol, order_type,
+                   volume, price, sl, tp, magic, comment, AccountID);
 }
 
 //+------------------------------------------------------------------+
 //| Send close signal                                                 |
 //+------------------------------------------------------------------+
-void SendCloseSignal(ulong ticket)
+void SendPositionCloseSignal(ulong ticket)
 {
-   string json = "{";
-   json += "\"action\":\"Close\",";
-   json += "\"ticket\":" + IntegerToString(ticket) + ",";
-   json += "\"timestamp\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\",";
-   json += "\"source_account\":\"" + AccountID + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
+   SendCloseSignal(g_zmq_socket, ticket, AccountID);
 }
 
 //+------------------------------------------------------------------+
@@ -288,81 +250,3 @@ void RemoveTrackedPosition(ulong ticket)
    }
 }
 
-//+------------------------------------------------------------------+
-//| Send registration message to server                              |
-//+------------------------------------------------------------------+
-void SendRegisterMessage()
-{
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Build JSON message
-   string json = "{";
-   json += "\"message_type\":\"Register\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"ea_type\":\"Master\",";
-   json += "\"platform\":\"MT5\",";
-   json += "\"account_number\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ",";
-   json += "\"broker\":\"" + AccountInfoString(ACCOUNT_COMPANY) + "\",";
-   json += "\"account_name\":\"" + AccountInfoString(ACCOUNT_NAME) + "\",";
-   json += "\"server\":\"" + AccountInfoString(ACCOUNT_SERVER) + "\",";
-   json += "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
-   json += "\"currency\":\"" + AccountInfoString(ACCOUNT_CURRENCY) + "\",";
-   json += "\"leverage\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LEVERAGE)) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-   Print("Registration message sent to server");
-}
-
-//+------------------------------------------------------------------+
-//| Send unregister message to server                                |
-//+------------------------------------------------------------------+
-void SendUnregisterMessage()
-{
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   string json = "{";
-   json += "\"message_type\":\"Unregister\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-   Print("Unregister message sent to server");
-}
-
-//+------------------------------------------------------------------+
-//| Send heartbeat message to server                                 |
-//+------------------------------------------------------------------+
-void SendHeartbeat()
-{
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Count open positions
-   int open_positions = PositionsTotal();
-
-   string json = "{";
-   json += "\"message_type\":\"Heartbeat\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
-   json += "\"open_positions\":" + IntegerToString(open_positions) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-}

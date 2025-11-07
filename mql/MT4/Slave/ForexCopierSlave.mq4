@@ -8,30 +8,11 @@
 #property version   "2.00"
 #property strict
 
-//--- Import Rust ZeroMQ DLL
-#import "forex_copier_zmq.dll"
-   int    zmq_context_create();
-   void   zmq_context_destroy(int context);
-   int    zmq_socket_create(int context, int socket_type);
-   void   zmq_socket_destroy(int socket);
-   int    zmq_socket_bind(int socket, string address);
-   int    zmq_socket_connect(int socket, string address);
-   int    zmq_socket_send(int socket, string message);
-   int    zmq_socket_receive(int socket, uchar &buffer[], int buffer_size);
-   int    zmq_socket_subscribe_all(int socket);
-   int    zmq_socket_subscribe(int socket, string topic);
-   int    msgpack_parse(uchar &data[], int data_len);        // 32-bit MT4: use int for pointers
-   string config_get_string(int handle, string field_name);  // 32-bit MT4: use int for pointers
-   double config_get_double(int handle, string field_name);
-   int    config_get_bool(int handle, string field_name);
-   int    config_get_int(int handle, string field_name);
-   void   config_free(int handle);
-#import
-
-//--- ZeroMQ socket types
-#define ZMQ_PULL 7
-#define ZMQ_PUSH 8
-#define ZMQ_SUB 2
+//--- Include common headers
+#include <ForexCopierCommon.mqh>
+#include <ForexCopierJson.mqh>
+#include <ForexCopierMessages.mqh>
+#include <ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel

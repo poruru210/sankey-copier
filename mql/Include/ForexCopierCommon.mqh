@@ -1,0 +1,213 @@
+//+------------------------------------------------------------------+
+//|                                        ForexCopierCommon.mqh    |
+//|                        Copyright 2025, Forex Copier Project      |
+//|                     Common definitions and utilities              |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, Forex Copier Project"
+
+//--- Platform detection and type aliases
+#ifdef __MQL5__
+   #define IS_MT5
+   #define TICKET_TYPE ulong
+   #define HANDLE_TYPE long
+#else
+   #define IS_MT4
+   #define TICKET_TYPE int
+   #define HANDLE_TYPE int
+#endif
+
+//--- ZeroMQ socket types
+#define ZMQ_PULL 7
+#define ZMQ_PUSH 8
+#define ZMQ_SUB  2
+
+//--- Import Rust ZeroMQ DLL
+#import "forex_copier_zmq.dll"
+   int    zmq_context_create();
+   void   zmq_context_destroy(int context);
+   int    zmq_socket_create(int context, int socket_type);
+   void   zmq_socket_destroy(int socket);
+   int    zmq_socket_bind(int socket, string address);
+   int    zmq_socket_connect(int socket, string address);
+   int    zmq_socket_send(int socket, string message);
+   int    zmq_socket_receive(int socket, uchar &buffer[], int buffer_size);
+   int    zmq_socket_subscribe_all(int socket);
+   int    zmq_socket_subscribe(int socket, string topic);
+
+   #ifdef IS_MT5
+      long   msgpack_parse(uchar &data[], int data_len);
+      string config_get_string(long handle, string field_name);
+      double config_get_double(long handle, string field_name);
+      int    config_get_bool(long handle, string field_name);
+      int    config_get_int(long handle, string field_name);
+      void   config_free(long handle);
+   #else
+      int    msgpack_parse(uchar &data[], int data_len);
+      string config_get_string(int handle, string field_name);
+      double config_get_double(int handle, string field_name);
+      int    config_get_bool(int handle, string field_name);
+      int    config_get_int(int handle, string field_name);
+      void   config_free(int handle);
+   #endif
+#import
+
+//--- Common structures
+struct SymbolMapping {
+    string source_symbol;
+    string target_symbol;
+};
+
+struct TradeFilters {
+    string allowed_symbols[];
+    string blocked_symbols[];
+    int    allowed_magic_numbers[];
+    int    blocked_magic_numbers[];
+};
+
+//+------------------------------------------------------------------+
+//| Generate AccountID from broker and account number                |
+//+------------------------------------------------------------------+
+string GenerateAccountID()
+{
+   #ifdef IS_MT5
+      string broker = AccountInfoString(ACCOUNT_COMPANY);
+      long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
+   #else
+      string broker = AccountCompany();
+      int account_number = AccountNumber();
+   #endif
+
+   // Replace spaces and special characters with underscores
+   StringReplace(broker, " ", "_");
+   StringReplace(broker, ".", "_");
+   StringReplace(broker, "-", "_");
+
+   // Format: broker_accountnumber
+   return broker + "_" + IntegerToString(account_number);
+}
+
+//+------------------------------------------------------------------+
+//| Format timestamp to ISO 8601 format                              |
+//+------------------------------------------------------------------+
+string FormatTimestampISO8601(datetime time)
+{
+   string timestamp = TimeToString(time, TIME_DATE | TIME_SECONDS);
+   StringReplace(timestamp, ".", "-");
+   StringReplace(timestamp, " ", "T");
+   timestamp += "Z";
+   return timestamp;
+}
+
+//+------------------------------------------------------------------+
+//| Get current positions count                                      |
+//+------------------------------------------------------------------+
+int GetOpenPositionsCount()
+{
+   #ifdef IS_MT5
+      return PositionsTotal();
+   #else
+      int count = 0;
+      for(int i = 0; i < OrdersTotal(); i++)
+      {
+         if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+            count++;
+      }
+      return count;
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account balance                                              |
+//+------------------------------------------------------------------+
+double GetAccountBalance()
+{
+   #ifdef IS_MT5
+      return AccountInfoDouble(ACCOUNT_BALANCE);
+   #else
+      return AccountBalance();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account equity                                               |
+//+------------------------------------------------------------------+
+double GetAccountEquity()
+{
+   #ifdef IS_MT5
+      return AccountInfoDouble(ACCOUNT_EQUITY);
+   #else
+      return AccountEquity();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account currency                                             |
+//+------------------------------------------------------------------+
+string GetAccountCurrency()
+{
+   #ifdef IS_MT5
+      return AccountInfoString(ACCOUNT_CURRENCY);
+   #else
+      return AccountCurrency();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account leverage                                             |
+//+------------------------------------------------------------------+
+long GetAccountLeverage()
+{
+   #ifdef IS_MT5
+      return AccountInfoInteger(ACCOUNT_LEVERAGE);
+   #else
+      return AccountLeverage();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account login number                                         |
+//+------------------------------------------------------------------+
+long GetAccountNumber()
+{
+   #ifdef IS_MT5
+      return AccountInfoInteger(ACCOUNT_LOGIN);
+   #else
+      return AccountNumber();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get broker name                                                  |
+//+------------------------------------------------------------------+
+string GetBrokerName()
+{
+   #ifdef IS_MT5
+      return AccountInfoString(ACCOUNT_COMPANY);
+   #else
+      return AccountCompany();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get account name                                                 |
+//+------------------------------------------------------------------+
+string GetAccountName()
+{
+   #ifdef IS_MT5
+      return AccountInfoString(ACCOUNT_NAME);
+   #else
+      return AccountName();
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get server name                                                  |
+//+------------------------------------------------------------------+
+string GetServerName()
+{
+   #ifdef IS_MT5
+      return AccountInfoString(ACCOUNT_SERVER);
+   #else
+      return AccountServer();
+   #endif
+}
