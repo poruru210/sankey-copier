@@ -44,7 +44,7 @@ export function MasterAccountSidebar({
 
       return {
         id: master.account_id,
-        name: master.account_name || master.account_id,
+        name: `${master.broker} #${master.account_number}`,
         status: isOnline ? 'online' : 'offline',
         connectionCount,
         isOnline,
