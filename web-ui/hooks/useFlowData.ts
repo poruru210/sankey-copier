@@ -175,6 +175,21 @@ export function useFlowData({
         !receiverAccount.hasError &&
         !receiverAccount.hasWarning;
 
+      // Build label text with copy settings
+      const labelParts: string[] = [];
+
+      // Lot multiplier
+      if (setting.lot_multiplier !== null) {
+        labelParts.push(`×${setting.lot_multiplier}`);
+      }
+
+      // Reverse trade indicator
+      if (setting.reverse_trade) {
+        labelParts.push('⇄');
+      }
+
+      const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
+
       // Direct edge from source to receiver
       edgeList.push({
         id: `${setting.master_account}-${setting.slave_account}`,
@@ -186,6 +201,17 @@ export function useFlowData({
           strokeWidth: 2,
           strokeDasharray: isActive ? undefined : '5,5',
         },
+        label: labelText,
+        labelStyle: {
+          fill: isActive ? '#16a34a' : '#6b7280',
+          fontWeight: 600,
+          fontSize: 12,
+        },
+        labelBgStyle: {
+          fill: '#ffffff',
+          fillOpacity: 0.9,
+        },
+        labelBgPadding: [8, 4] as [number, number],
         data: { setting },
       });
     });

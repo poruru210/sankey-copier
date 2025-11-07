@@ -27,6 +27,21 @@ export function AccountCardHeader({
 }: AccountCardHeaderProps) {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
 
+  // Split account name into broker name and account number
+  // Format: "Broker_Name_AccountNumber"
+  const splitAccountName = () => {
+    const lastUnderscoreIndex = account.name.lastIndexOf('_');
+    if (lastUnderscoreIndex === -1) {
+      return { brokerName: account.name, accountNumber: '' };
+    }
+    return {
+      brokerName: account.name.substring(0, lastUnderscoreIndex).replace(/_/g, ' '),
+      accountNumber: account.name.substring(lastUnderscoreIndex + 1),
+    };
+  };
+
+  const { brokerName, accountNumber } = splitAccountName();
+
   return (
     <div>
       {/* Header row - Draggable area */}
@@ -43,9 +58,14 @@ export function AccountCardHeader({
           <Folder className="w-3 h-3 md:w-4 md:h-4 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-normal text-gray-900 dark:text-gray-100 text-xs md:text-sm truncate">
-            {account.name}
-          </h3>
+          <div className="font-normal text-gray-900 dark:text-gray-100 text-xs md:text-sm truncate">
+            {brokerName}
+          </div>
+          {accountNumber && (
+            <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 truncate">
+              {accountNumber}
+            </div>
+          )}
         </div>
         <div className="noDrag">
           <Switch
