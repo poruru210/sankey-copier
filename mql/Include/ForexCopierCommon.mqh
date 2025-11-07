@@ -30,10 +30,26 @@
    int    zmq_socket_bind(int socket, string address);
    int    zmq_socket_connect(int socket, string address);
    int    zmq_socket_send(int socket, string message);
+   int    zmq_socket_send_binary(int socket, uchar &data[], int len);
    int    zmq_socket_receive(int socket, uchar &buffer[], int buffer_size);
    int    zmq_socket_subscribe_all(int socket);
    int    zmq_socket_subscribe(int socket, string topic);
 
+   // MessagePack serialization functions
+   int    msgpack_serialize_register(string message_type, string account_id, string ea_type,
+                                     string platform, long account_number, string broker,
+                                     string account_name, string server, double balance,
+                                     double equity, string currency, long leverage, string timestamp);
+   int    msgpack_serialize_unregister(string message_type, string account_id, string timestamp);
+   int    msgpack_serialize_heartbeat(string message_type, string account_id, double balance,
+                                      double equity, int open_positions, string timestamp);
+   int    msgpack_serialize_trade_signal(string action, long ticket, string symbol, string order_type,
+                                         double lots, double open_price, double stop_loss, double take_profit,
+                                         long magic_number, string comment, string timestamp, string source_account);
+   uchar* msgpack_get_buffer();
+   int    msgpack_copy_buffer(uchar &dest[], int max_len);
+
+   // Config message parsing (existing)
    #ifdef IS_MT5
       long   msgpack_parse(uchar &data[], int data_len);
       string config_get_string(long handle, string field_name);
@@ -41,6 +57,13 @@
       int    config_get_bool(long handle, string field_name);
       int    config_get_int(long handle, string field_name);
       void   config_free(long handle);
+
+      // Trade signal parsing
+      long   msgpack_parse_trade_signal(uchar &data[], int data_len);
+      string trade_signal_get_string(long handle, string field_name);
+      double trade_signal_get_double(long handle, string field_name);
+      long   trade_signal_get_int(long handle, string field_name);
+      void   trade_signal_free(long handle);
    #else
       int    msgpack_parse(uchar &data[], int data_len);
       string config_get_string(int handle, string field_name);
@@ -48,6 +71,13 @@
       int    config_get_bool(int handle, string field_name);
       int    config_get_int(int handle, string field_name);
       void   config_free(int handle);
+
+      // Trade signal parsing
+      int    msgpack_parse_trade_signal(uchar &data[], int data_len);
+      string trade_signal_get_string(int handle, string field_name);
+      double trade_signal_get_double(int handle, string field_name);
+      long   trade_signal_get_int(int handle, string field_name);
+      void   trade_signal_free(int handle);
    #endif
 #import
 

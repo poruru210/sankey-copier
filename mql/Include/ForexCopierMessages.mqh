@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, Forex Copier Project"
 
 #include "ForexCopierCommon.mqh"
-#include "ForexCopierJson.mqh"
 
 //+------------------------------------------------------------------+
 //| Send registration message to server                              |
@@ -28,24 +27,34 @@ bool SendRegistrationMessage(int zmq_context, string server_address, string acco
       return false;
    }
 
-   // Build registration message using JSON builder
-   CJsonBuilder json;
-   json.AddString("message_type", "Register");
-   json.AddString("account_id", account_id);
-   json.AddString("ea_type", ea_type);
-   json.AddString("platform", platform);
-   json.AddInteger("account_number", GetAccountNumber());
-   json.AddString("broker", GetBrokerName());
-   json.AddString("account_name", GetAccountName());
-   json.AddString("server", GetServerName());
-   json.AddNumber("balance", GetAccountBalance(), 2);
-   json.AddNumber("equity", GetAccountEquity(), 2);
-   json.AddString("currency", GetAccountCurrency());
-   json.AddInteger("leverage", GetAccountLeverage());
-   json.AddString("timestamp", FormatTimestampISO8601(TimeCurrent()));
+   // Serialize registration message using MessagePack
+   int len = msgpack_serialize_register("Register", account_id, ea_type, platform,
+                                        GetAccountNumber(), GetBrokerName(), GetAccountName(),
+                                        GetServerName(), GetAccountBalance(), GetAccountEquity(),
+                                        GetAccountCurrency(), GetAccountLeverage(),
+                                        FormatTimestampISO8601(TimeCurrent()));
 
-   string message = json.ToString();
-   bool success = (zmq_socket_send(push_socket, message) == 1);
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize registration message");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = msgpack_copy_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy registration message buffer");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Send binary MessagePack data
+   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
    if(success)
       Print("Registration message sent successfully");
@@ -76,14 +85,31 @@ bool SendUnregistrationMessage(int zmq_context, string server_address, string ac
       return false;
    }
 
-   // Build unregistration message
-   CJsonBuilder json;
-   json.AddString("message_type", "Unregister");
-   json.AddString("account_id", account_id);
-   json.AddString("timestamp", FormatTimestampISO8601(TimeCurrent()));
+   // Serialize unregistration message using MessagePack
+   int len = msgpack_serialize_unregister("Unregister", account_id,
+                                          FormatTimestampISO8601(TimeCurrent()));
 
-   string message = json.ToString();
-   bool success = (zmq_socket_send(push_socket, message) == 1);
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize unregistration message");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = msgpack_copy_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy unregistration message buffer");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Send binary MessagePack data
+   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
    if(success)
       Print("Unregistration message sent successfully");
@@ -114,17 +140,32 @@ bool SendHeartbeatMessage(int zmq_context, string server_address, string account
       return false;
    }
 
-   // Build heartbeat message
-   CJsonBuilder json;
-   json.AddString("message_type", "Heartbeat");
-   json.AddString("account_id", account_id);
-   json.AddNumber("balance", GetAccountBalance(), 2);
-   json.AddNumber("equity", GetAccountEquity(), 2);
-   json.AddInteger("open_positions", GetOpenPositionsCount());
-   json.AddString("timestamp", FormatTimestampISO8601(TimeCurrent()));
+   // Serialize heartbeat message using MessagePack
+   int len = msgpack_serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
+                                         GetAccountEquity(), GetOpenPositionsCount(),
+                                         FormatTimestampISO8601(TimeCurrent()));
 
-   string message = json.ToString();
-   bool success = (zmq_socket_send(push_socket, message) == 1);
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize heartbeat message");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = msgpack_copy_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy heartbeat message buffer");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Send binary MessagePack data
+   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
    zmq_socket_destroy(push_socket);
    return success;
@@ -137,22 +178,30 @@ bool SendTradeSignal(int zmq_socket, string action, TICKET_TYPE ticket, string s
                      string order_type, double lots, double price, double sl, double tp,
                      long magic, string comment, string account_id)
 {
-   CJsonBuilder json;
-   json.AddString("action", action);
-   json.AddInteger("ticket", (long)ticket);
-   json.AddString("symbol", symbol);
-   json.AddString("order_type", order_type);
-   json.AddNumber("lots", lots, 2);
-   json.AddNumber("open_price", price, 5);
-   json.AddNumberOrNull("stop_loss", sl, 5);
-   json.AddNumberOrNull("take_profit", tp, 5);
-   json.AddInteger("magic_number", magic);
-   json.AddString("comment", comment);
-   json.AddString("timestamp", FormatTimestampISO8601(TimeCurrent()));
-   json.AddString("source_account", account_id);
+   // Serialize trade signal message using MessagePack
+   int len = msgpack_serialize_trade_signal(action, (long)ticket, symbol, order_type,
+                                            lots, price, sl, tp, magic, comment,
+                                            FormatTimestampISO8601(TimeCurrent()), account_id);
 
-   string message = json.ToString();
-   return (zmq_socket_send(zmq_socket, message) == 1);
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize trade signal message");
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = msgpack_copy_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy trade signal message buffer");
+      return false;
+   }
+
+   // Send binary MessagePack data
+   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 }
 
 //+------------------------------------------------------------------+
@@ -160,12 +209,28 @@ bool SendTradeSignal(int zmq_socket, string action, TICKET_TYPE ticket, string s
 //+------------------------------------------------------------------+
 bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
 {
-   CJsonBuilder json;
-   json.AddString("action", "Close");
-   json.AddInteger("ticket", (long)ticket);
-   json.AddString("timestamp", FormatTimestampISO8601(TimeCurrent()));
-   json.AddString("source_account", account_id);
+   // For close signals, we send a trade signal with action="Close"
+   // Only ticket, timestamp, and source_account are needed
+   int len = msgpack_serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
+                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
 
-   string message = json.ToString();
-   return (zmq_socket_send(zmq_socket, message) == 1);
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize close signal message");
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = msgpack_copy_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy close signal message buffer");
+      return false;
+   }
+
+   // Send binary MessagePack data
+   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 }

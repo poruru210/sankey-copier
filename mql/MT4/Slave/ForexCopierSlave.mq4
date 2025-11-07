@@ -219,30 +219,38 @@ void OnTick()
       }
    }
 
-   // Check for trade signal messages
+   // Check for trade signal messages (MessagePack format)
    uchar trade_buffer[];
    ArrayResize(trade_buffer, 4096);
    int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, 4096);
 
    if(trade_bytes > 0)
    {
-      string trade_message = CharArrayToString(trade_buffer, 0, trade_bytes);
+      // PUB/SUB format: topic(trade_group_id) + space + MessagePack payload
+      int space_pos = -1;
+      for(int i = 0; i < trade_bytes; i++)
+      {
+         if(trade_buffer[i] == 32) // 32 = space
+         {
+            space_pos = i;
+            break;
+         }
+      }
 
-      // PUB/SUB format: topic(trade_group_id) + space + JSON
-      int space_pos = StringFind(trade_message, " ");
       if(space_pos > 0)
       {
-         string topic = StringSubstr(trade_message, 0, space_pos);
-         string json = StringSubstr(trade_message, space_pos + 1);
+         // Extract topic
+         string topic = CharArrayToString(trade_buffer, 0, space_pos);
 
-         Print("Received trade signal for topic '", topic, "': ", json);
-         ProcessTradeSignal(json);
-      }
-      else
-      {
-         // Compatibility: process as-is if no space
-         Print("Received trade: ", trade_message);
-         ProcessTradeSignal(trade_message);
+         // Extract MessagePack payload
+         int payload_start = space_pos + 1;
+         int payload_len = trade_bytes - payload_start;
+         uchar msgpack_payload[];
+         ArrayResize(msgpack_payload, payload_len);
+         ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
+
+         Print("Received MessagePack trade signal for topic '", topic, "' (", payload_len, " bytes)");
+         ProcessTradeSignal(msgpack_payload, payload_len);
       }
    }
 }
@@ -389,23 +397,28 @@ string ReverseOrderType(string order_type)
 //+------------------------------------------------------------------+
 //| Process incoming trade signal                                     |
 //+------------------------------------------------------------------+
-void ProcessTradeSignal(string json)
+void ProcessTradeSignal(uchar &data[], int data_len)
 {
-   // Parse JSON (simplified - in production use proper JSON parser)
-   string action = GetJsonValue(json, "action");
-   int master_ticket = (int)StringToInteger(GetJsonValue(json, "ticket"));
-   string symbol = GetJsonValue(json, "symbol");
-   string order_type_str = GetJsonValue(json, "order_type");
-   double lots = StringToDouble(GetJsonValue(json, "lots"));
-   double open_price = StringToDouble(GetJsonValue(json, "open_price"));
-   string sl_str = GetJsonValue(json, "stop_loss");
-   string tp_str = GetJsonValue(json, "take_profit");
-   double stop_loss = (sl_str != "null") ? StringToDouble(sl_str) : 0;
-   double take_profit = (tp_str != "null") ? StringToDouble(tp_str) : 0;
+   // Parse MessagePack trade signal
+   HANDLE_TYPE handle = msgpack_parse_trade_signal(data, data_len);
+   if(handle == 0 || handle == -1)
+   {
+      Print("ERROR: Failed to parse MessagePack trade signal");
+      return;
+   }
 
-   // Get magic number (defaults to 0 if not present)
-   string magic_str = GetJsonValue(json, "magic_number");
-   int magic = (magic_str != "") ? (int)StringToInteger(magic_str) : 0;
+   // Extract fields from MessagePack
+   string action = trade_signal_get_string(handle, "action");
+   long ticket_long = trade_signal_get_int(handle, "ticket");
+   int master_ticket = (int)ticket_long;
+   string symbol = trade_signal_get_string(handle, "symbol");
+   string order_type_str = trade_signal_get_string(handle, "order_type");
+   double lots = trade_signal_get_double(handle, "lots");
+   double open_price = trade_signal_get_double(handle, "open_price");
+   double stop_loss = trade_signal_get_double(handle, "stop_loss");
+   double take_profit = trade_signal_get_double(handle, "take_profit");
+   long magic_long = trade_signal_get_int(handle, "magic_number");
+   int magic = (int)magic_long;
 
    Print("Processing ", action, " for master ticket #", master_ticket);
 
@@ -417,6 +430,7 @@ void ProcessTradeSignal(string json)
          if(!ShouldProcessTrade(symbol, magic))
          {
             Print("Trade filtered out: ", symbol, " magic=", magic);
+            trade_signal_free(handle);
             return;
          }
 
@@ -438,6 +452,9 @@ void ProcessTradeSignal(string json)
    {
       ModifyOrder(master_ticket, stop_loss, take_profit);
    }
+
+   // Free the handle
+   trade_signal_free(handle);
 }
 
 //+------------------------------------------------------------------+

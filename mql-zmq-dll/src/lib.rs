@@ -1,9 +1,8 @@
 mod msgpack;
 
-use once_cell::sync::Lazy;
 use std::os::raw::c_char;
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 // Re-export MessagePack functions
 pub use msgpack::{
@@ -23,8 +22,8 @@ pub const ZMQ_PUB: i32 = 1;
 pub const ZMQ_SUB: i32 = 2;
 
 // Global storage for contexts and sockets using handles
-static CONTEXTS: Lazy<Mutex<Vec<Option<Box<zmq::Context>>>>> = Lazy::new(|| Mutex::new(Vec::new()));
-static SOCKETS: Lazy<Mutex<Vec<Option<Box<zmq::Socket>>>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static CONTEXTS: LazyLock<Mutex<Vec<Option<Box<zmq::Context>>>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static SOCKETS: LazyLock<Mutex<Vec<Option<Box<zmq::Socket>>>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Create a new ZeroMQ context
 /// Returns an integer handle to the context, or -1 on error
@@ -378,6 +377,63 @@ pub unsafe extern "C" fn zmq_socket_send(socket_handle: i32, message: *const u16
         Ok(_) => 1,
         Err(e) => {
             eprintln!("zmq_socket_send failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Send binary data through a ZeroMQ socket (for MessagePack)
+///
+/// # Parameters
+/// - socket_handle: Integer handle to a valid ZeroMQ socket
+/// - data: Pointer to the binary data to send
+/// - len: Length of the data in bytes
+///
+/// Returns 1 on success, 0 on failure
+///
+/// # Safety
+/// Data pointer must be valid and have at least len bytes
+#[no_mangle]
+pub unsafe extern "C" fn zmq_socket_send_binary(socket_handle: i32, data: *const u8, len: i32) -> i32 {
+    if socket_handle < 0 {
+        eprintln!("zmq_socket_send_binary: invalid socket handle");
+        return 0;
+    }
+
+    if data.is_null() || len <= 0 {
+        eprintln!("zmq_socket_send_binary: invalid data parameters");
+        return 0;
+    }
+
+    // Convert pointer to slice
+    let data_slice = std::slice::from_raw_parts(data, len as usize);
+
+    let sockets = match SOCKETS.lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            eprintln!("zmq_socket_send_binary: failed to lock sockets: {}", e);
+            return 0;
+        }
+    };
+
+    let sock_idx = socket_handle as usize;
+    if sock_idx >= sockets.len() {
+        eprintln!("zmq_socket_send_binary: socket handle out of range");
+        return 0;
+    }
+
+    let sock = match &sockets[sock_idx] {
+        Some(s) => s.as_ref(),
+        None => {
+            eprintln!("zmq_socket_send_binary: socket handle points to destroyed socket");
+            return 0;
+        }
+    };
+
+    match sock.send(data_slice, 0) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("zmq_socket_send_binary failed: {}", e);
             0
         }
     }

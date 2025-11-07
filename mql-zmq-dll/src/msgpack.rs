@@ -310,7 +310,7 @@ pub unsafe extern "C" fn msgpack_free_string(ptr: *mut c_char) {
 //==============================================================================
 
 // Static buffer for serialized data
-static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> = Lazy::new(|| Mutex::new(Vec::with_capacity(8192)));
+static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> = LazyLock::new(|| Mutex::new(Vec::with_capacity(8192)));
 
 /// Serialize a RegisterMessage to MessagePack
 ///
@@ -460,6 +460,34 @@ pub unsafe extern "C" fn msgpack_serialize_trade_signal(
 pub unsafe extern "C" fn msgpack_get_buffer() -> *const u8 {
     let buffer = SERIALIZE_BUFFER.lock().unwrap();
     buffer.as_ptr()
+}
+
+/// Copy the serialized MessagePack buffer to an MQL array
+///
+/// # Parameters
+/// - dest: Destination buffer provided by MQL
+/// - max_len: Maximum size of the destination buffer
+///
+/// Returns the actual number of bytes copied (or 0 if buffer is larger than max_len)
+///
+/// # Safety
+/// Destination pointer must be valid and have at least max_len bytes available.
+#[no_mangle]
+pub unsafe extern "C" fn msgpack_copy_buffer(dest: *mut u8, max_len: i32) -> i32 {
+    if dest.is_null() || max_len <= 0 {
+        return 0;
+    }
+
+    let buffer = SERIALIZE_BUFFER.lock().unwrap();
+    let len = buffer.len();
+
+    if len > max_len as usize {
+        eprintln!("msgpack_copy_buffer: buffer size {} exceeds max_len {}", len, max_len);
+        return 0;
+    }
+
+    std::ptr::copy_nonoverlapping(buffer.as_ptr(), dest, len);
+    len as i32
 }
 
 /// Parse a TradeSignalMessage from MessagePack data
