@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import ReactFlow, {
   Background,
@@ -10,6 +10,7 @@ import ReactFlow, {
   Edge,
   Node,
   ReactFlowProvider,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -256,6 +257,31 @@ function ConnectionsViewReactFlowInner({
       setHoveredReceiver(null);
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
+
+  // Get React Flow instance for programmatic control
+  const reactFlowInstance = useReactFlow();
+
+  // Center view on RelayServer node when nodes change
+  useEffect(() => {
+    if (nodes.length > 0 && reactFlowInstance) {
+      // Wait for layout to settle, then center on relay server
+      const timer = setTimeout(() => {
+        const relayNode = nodes.find(node => node.id === 'relay-server');
+        if (relayNode) {
+          // Fit view with relay server in focus
+          reactFlowInstance.fitView({
+            padding: 0.2,
+            includeHiddenNodes: false,
+            minZoom: 0.4,
+            maxZoom: 1,
+            duration: 300,
+          });
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [nodes, reactFlowInstance]);
 
   return (
     <div className="relative flex gap-6 h-full">

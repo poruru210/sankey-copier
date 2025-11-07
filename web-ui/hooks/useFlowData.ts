@@ -93,7 +93,7 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: false, // Disable dragging for now
+        draggable: true, // Enable dragging for repositioning
       });
     });
 
@@ -162,7 +162,7 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: false,
+        draggable: true, // Enable dragging for repositioning
       });
     });
 
