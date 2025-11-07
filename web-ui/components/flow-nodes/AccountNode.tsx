@@ -1,8 +1,7 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps, NodeToolbar } from 'reactflow';
+import { Handle, Position, NodeProps } from 'reactflow';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { AccountCard } from '@/components/connections/AccountCard';
-import { GripVertical } from 'lucide-react';
 
 export interface AccountNodeData {
   account: AccountInfo;
@@ -45,24 +44,14 @@ export interface AccountNodeData {
  * Custom React Flow node for account cards
  * Wraps the existing AccountCard component with React Flow handles
  *
- * Drag behavior: The entire node background is draggable EXCEPT for interactive elements
- * which have the 'noDrag' class applied internally
+ * Drag behavior: The node is draggable by clicking on the header area.
+ * Interactive elements (switches, buttons) have the 'noDrag' class to prevent dragging.
  */
 export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>) => {
   const { type, isMobile } = data;
 
   return (
-    <div className="account-node relative group">
-      {/* Drag indicator - shows when hovering over draggable area */}
-      <div
-        className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none z-10"
-        title="Drag to reposition"
-      >
-        <div className="bg-blue-500 text-white rounded p-1">
-          <GripVertical className="w-4 h-4" />
-        </div>
-      </div>
-
+    <div className="account-node relative">
       {/* Connection handles - position based on mobile/desktop and source/receiver type */}
 
       {/* Source account handles */}

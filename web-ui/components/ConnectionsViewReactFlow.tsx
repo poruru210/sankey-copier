@@ -11,6 +11,8 @@ import ReactFlow, {
   Node,
   ReactFlowProvider,
   useReactFlow,
+  useNodesState,
+  useEdgesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -205,7 +207,7 @@ function ConnectionsViewReactFlowInner({
   );
 
   // Convert account data to React Flow nodes and edges
-  const { nodes, edges } = useFlowData({
+  const { nodes: initialNodes, edges: initialEdges } = useFlowData({
     sourceAccounts: visibleSourceAccounts,
     receiverAccounts: visibleReceiverAccounts,
     settings,
@@ -224,6 +226,32 @@ function ConnectionsViewReactFlowInner({
     isMobile,
     content: accountCardContent,
   });
+
+  // Use React Flow's state management for nodes and edges
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Update nodes when source data changes (while preserving dragged positions)
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      // Preserve positions of existing nodes
+      return initialNodes.map((newNode) => {
+        const existingNode = currentNodes.find((n) => n.id === newNode.id);
+        if (existingNode) {
+          // Keep the existing position if node was already there
+          return { ...newNode, position: existingNode.position };
+        }
+        return newNode;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
+
+  // Update edges when settings change
+  useEffect(() => {
+    setEdges(initialEdges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   // Handle edge click to show connection details
   const onEdgeClick = useCallback(
@@ -336,6 +364,8 @@ function ConnectionsViewReactFlowInner({
           <ReactFlow
             nodes={nodes}
             edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
             onEdgeClick={onEdgeClick}
             onNodeMouseEnter={onNodeMouseEnter}
@@ -344,7 +374,8 @@ function ConnectionsViewReactFlowInner({
             nodeDragThreshold={1}
             nodesConnectable={false}
             nodesFocusable={true}
-            selectNodesOnDrag={false}
+            selectNodesOnDrag={true}
+            noDragClassName="noDrag"
             minZoom={0.1}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}

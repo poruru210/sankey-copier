@@ -93,7 +93,6 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: true,
       });
     });
 
@@ -162,7 +161,6 @@ export function useFlowData({
           isMobile,
           content,
         } as AccountNodeData,
-        draggable: true,
       });
     });
 
