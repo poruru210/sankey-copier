@@ -84,6 +84,22 @@ All planned phases (1-4) completed. Phase 5 (Config Acknowledgment) is available
   - Trade filtering and transformation logic
 - [mql-zmq-dll](mql-zmq-dll) - Built 32-bit version (`i686-pc-windows-msvc`)
 
+**MT4/MT5 Feature Parity Matrix**:
+
+| Feature | MT4 Master | MT5 Master | MT4 Slave | MT5 Slave |
+|---------|------------|------------|-----------|-----------|
+| AccountID Auto-gen | ✅ | ✅ | ✅ | ✅ |
+| ISO 8601 Timestamps | ✅ | ✅ | ✅ | ✅ |
+| MessagePack CONFIG Reception | N/A | N/A | ✅ | ✅ |
+| Magic Number Filtering | ✅ | ✅ | ✅ | ✅ |
+| Symbol Filtering | N/A | N/A | ✅ | ✅ |
+| Lot Multiplier | N/A | N/A | ✅ | ✅ |
+| Symbol Mapping | N/A | N/A | ✅ | ✅ |
+| Reverse Trade | N/A | N/A | ✅ | ✅ |
+| Web UI Display | ✅ | ✅ | ✅ | ✅ |
+
+**Note**: N/A indicates features not applicable to Master EAs (which send trades, not receive configurations or transform trades).
+
 **Phase 4 Status**: ✅ **Complete - MT4/MT5 feature parity achieved**
 
 ---
