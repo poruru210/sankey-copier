@@ -30,7 +30,7 @@ export function AccountInfoSection({ connection, content }: AccountInfoSectionPr
           <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wide">
             {content.accountNumber}
           </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={connection?.account_number || '-'}>
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={connection?.account_number?.toString() || '-'}>
             {connection?.account_number || '-'}
           </span>
         </div>

@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -12,8 +13,9 @@ import ReactFlow, {
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  useReactFlow,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -23,7 +25,7 @@ import {
 } from '@/hooks/connections';
 import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
-import { AccountNode, RelayServerNode } from '@/components/flow-nodes';
+import { AccountNode } from '@/components/flow-nodes/AccountNode';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { MasterAccountSidebarContainer } from '@/components/MasterAccountSidebarContainer';
 import { Button } from '@/components/ui/button';
@@ -41,11 +43,10 @@ interface ConnectionsViewReactFlowProps {
   onCloseMobileDrawer?: () => void;
 }
 
-// Define custom node types for React Flow
-const nodeTypes: NodeTypes = {
+// Define nodeTypes at module level to prevent recreation warnings
+const nodeTypes: NodeTypes = Object.freeze({
   accountNode: AccountNode,
-  relayServerNode: RelayServerNode,
-};
+});
 
 function ConnectionsViewReactFlowInner({
   connections,
@@ -233,8 +234,13 @@ function ConnectionsViewReactFlowInner({
   // Update nodes when source data changes (while preserving dragged positions)
   useEffect(() => {
     setNodes((currentNodes) => {
+      // When switching to 'all' accounts, reset all node positions to avoid overlap
+      if (selectedMaster === 'all') {
+        return initialNodes;
+      }
+
       // Preserve positions of existing nodes
-      return initialNodes.map((newNode) => {
+      const updatedNodes = initialNodes.map((newNode) => {
         const existingNode = currentNodes.find((n) => n.id === newNode.id);
         if (existingNode) {
           // Keep the existing position if node was already there
@@ -242,9 +248,11 @@ function ConnectionsViewReactFlowInner({
         }
         return newNode;
       });
+
+      return updatedNodes;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
+  }, [visibleSourceAccounts, visibleReceiverAccounts, settings, selectedMaster]);
 
   // Update edges when data changes
   useEffect(() => {
@@ -252,7 +260,7 @@ function ConnectionsViewReactFlowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
 
-  // Handle edge click to show connection details
+  // Handle edge click to edit connection
   const onEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       if (edge.data?.setting) {
@@ -285,6 +293,25 @@ function ConnectionsViewReactFlowInner({
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
 
+  // Get React Flow instance for fitView
+  const reactFlowInstance = useReactFlow();
+
+  // Center and fit view when nodes are loaded
+  useEffect(() => {
+    if (nodes.length > 0 && reactFlowInstance) {
+      // Wait for layout to settle, then fit view
+      const timer = setTimeout(() => {
+        reactFlowInstance.fitView({
+          padding: 0.2, // 20% padding around nodes
+          duration: 800, // Smooth animation
+          maxZoom: 1, // Don't zoom in too much
+        });
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [nodes.length, reactFlowInstance]);
+
   return (
     <div className="relative flex gap-6 h-full">
       {/* Sidebar */}
@@ -315,22 +342,38 @@ function ConnectionsViewReactFlowInner({
         </div>
 
         {/* Filter Indicator */}
-        {selectedMaster !== 'all' && selectedMasterName && (
-          <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
-              <span className="text-sm text-muted-foreground">{selectedMasterName}</span>
+        {selectedMaster !== 'all' && selectedMasterName && (() => {
+          // Split account name into broker and account number
+          const lastUnderscoreIndex = selectedMasterName.lastIndexOf('_');
+          const brokerName = lastUnderscoreIndex === -1
+            ? selectedMasterName
+            : selectedMasterName.substring(0, lastUnderscoreIndex).replace(/_/g, ' ');
+          const accountNumber = lastUnderscoreIndex === -1
+            ? ''
+            : selectedMasterName.substring(lastUnderscoreIndex + 1);
+
+          return (
+            <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
+                <div className="flex flex-col">
+                  <span className="text-sm text-muted-foreground font-medium">{brokerName}</span>
+                  {accountNumber && (
+                    <span className="text-xs text-muted-foreground">{accountNumber}</span>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedMaster('all')}
+                className="h-auto px-2 py-1"
+              >
+                {sidebarContent.clearFilter}
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedMaster('all')}
-              className="h-auto px-2 py-1"
-            >
-              {sidebarContent.clearFilter}
-            </Button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* React Flow Canvas */}
         <div className="flex-1 min-h-[800px] bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
@@ -347,6 +390,7 @@ function ConnectionsViewReactFlowInner({
             nodeDragThreshold={1}
             nodesConnectable={false}
             nodesFocusable={true}
+            edgesFocusable={true}
             selectNodesOnDrag={true}
             noDragClassName="noDrag"
             minZoom={0.1}
@@ -370,6 +414,7 @@ function ConnectionsViewReactFlowInner({
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           onSave={handleSaveSettings}
+          onDelete={handleDeleteSetting}
           initialData={editingSettings}
           connections={connections}
           existingSettings={settings}

@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { AccountCard } from '@/components/connections/AccountCard';
 
@@ -51,7 +51,10 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>)
   const { type, isMobile } = data;
 
   return (
-    <div className="account-node relative">
+    <div
+      className="account-node relative"
+      style={{ width: isMobile ? '100%' : '380px', maxWidth: isMobile ? '100%' : '380px' }}
+    >
       {/* Connection handles - position based on mobile/desktop and source/receiver type */}
 
       {/* Source account handles */}
