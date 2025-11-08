@@ -207,8 +207,8 @@ void SendPositionSignal(string action, ulong ticket)
 
    string order_type = GetOrderTypeString((ENUM_POSITION_TYPE)type);
 
-   SendTradeSignal(g_zmq_socket, action, ticket, symbol, order_type,
-                   volume, price, sl, tp, magic, comment, AccountID);
+   SendOpenSignal(g_zmq_socket, ticket, symbol, order_type,
+                  volume, price, sl, tp, magic, comment, AccountID);
 }
 
 //+------------------------------------------------------------------+

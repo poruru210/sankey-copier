@@ -227,9 +227,9 @@ void SendTradeSignalFromOrder(int ticket)
    }
 
    string order_type = GetOrderTypeString(OrderType());
-   SendTradeSignal(g_zmq_socket, "Open", (TICKET_TYPE)ticket, OrderSymbol(),
-                   order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
-                   OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
+   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, OrderSymbol(),
+                  order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
+                  OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
 }
 
 //+------------------------------------------------------------------+

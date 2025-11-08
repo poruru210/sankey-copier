@@ -172,14 +172,14 @@ bool SendHeartbeatMessage(int zmq_context, string server_address, string account
 }
 
 //+------------------------------------------------------------------+
-//| Send trade signal message (Master)                               |
+//| Send open position signal message (Master)                       |
 //+------------------------------------------------------------------+
-bool SendTradeSignal(int zmq_socket, string action, TICKET_TYPE ticket, string symbol,
-                     string order_type, double lots, double price, double sl, double tp,
-                     long magic, string comment, string account_id)
+bool SendOpenSignal(int zmq_socket, TICKET_TYPE ticket, string symbol,
+                    string order_type, double lots, double price, double sl, double tp,
+                    long magic, string comment, string account_id)
 {
-   // Serialize trade signal message using MessagePack
-   int len = serialize_trade_signal(action, (long)ticket, symbol, order_type,
+   // Serialize trade signal message using MessagePack (action is always "Open")
+   int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
                                             FormatTimestampISO8601(TimeCurrent()), account_id);
 
