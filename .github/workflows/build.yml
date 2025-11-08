@@ -367,6 +367,58 @@ jobs:
           # Wait for compilation to complete
           Start-Sleep -Seconds 5
 
+      - name: Search for compiled files
+        run: |
+          Write-Host "=== Searching for compiled .ex${{ matrix.version }} files ==="
+          Write-Host ""
+
+          # Search in workspace
+          Write-Host "Searching in workspace (${{ github.workspace }})..."
+          $workspaceFiles = Get-ChildItem "${{ github.workspace }}" -Recurse -Filter "*.ex${{ matrix.version }}" -ErrorAction SilentlyContinue
+          if ($workspaceFiles) {
+            $workspaceFiles | ForEach-Object {
+              Write-Host "  Found: $($_.FullName) ($($_.Length) bytes)"
+            }
+          } else {
+            Write-Host "  No .ex${{ matrix.version }} files found in workspace"
+          }
+
+          Write-Host ""
+
+          # Search in MT installation directory
+          $metaeditorPath = $env:METAEDITOR_PATH
+          if ($metaeditorPath) {
+            $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+            Write-Host "Searching in MT installation ($mtInstallDir)..."
+            $mtFiles = Get-ChildItem $mtInstallDir -Recurse -Filter "*.ex${{ matrix.version }}" -ErrorAction SilentlyContinue
+            if ($mtFiles) {
+              $mtFiles | ForEach-Object {
+                Write-Host "  Found: $($_.FullName) ($($_.Length) bytes)"
+              }
+            } else {
+              Write-Host "  No .ex${{ matrix.version }} files found in MT installation"
+            }
+          }
+
+          Write-Host ""
+          Write-Host "=== Full compilation logs ==="
+
+          # Show master compilation log
+          $masterLog = "${{ github.workspace }}\master_compile.log"
+          if (Test-Path $masterLog) {
+            Write-Host ""
+            Write-Host "Master compilation log:"
+            Get-Content $masterLog -Encoding Unicode
+          }
+
+          # Show slave compilation log
+          $slaveLog = "${{ github.workspace }}\slave_compile.log"
+          if (Test-Path $slaveLog) {
+            Write-Host ""
+            Write-Host "Slave compilation log:"
+            Get-Content $slaveLog -Encoding Unicode
+          }
+
       - name: Verify compiled files
         run: |
           Write-Host "Verifying compiled files..."
@@ -380,26 +432,19 @@ jobs:
             $size = (Get-Item $masterEx).Length
             Write-Host "✅ Master compiled: $size bytes"
           } else {
-            $errors += "Master EX file not found"
+            $errors += "Master EX file not found at: $masterEx"
           }
 
           if (Test-Path $slaveEx) {
             $size = (Get-Item $slaveEx).Length
             Write-Host "✅ Slave compiled: $size bytes"
           } else {
-            $errors += "Slave EX file not found"
+            $errors += "Slave EX file not found at: $slaveEx"
           }
 
           if ($errors.Count -gt 0) {
             Write-Host "❌ Compilation errors:"
             $errors | ForEach-Object { Write-Host "  - $_" }
-
-            # Show compilation logs
-            Get-ChildItem "${{ github.workspace }}\mql\${{ matrix.platform }}" -Recurse -Filter "*.log" | ForEach-Object {
-              Write-Host "`nLog file: $($_.FullName)"
-              Get-Content $_.FullName
-            }
-
             exit 1
           }
 
