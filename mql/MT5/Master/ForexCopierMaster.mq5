@@ -154,6 +154,7 @@ void ScanExistingPositions()
          if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
          {
             AddTrackedPosition(ticket);
+            SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
          }
       }
    }

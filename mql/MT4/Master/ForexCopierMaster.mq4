@@ -143,6 +143,7 @@ void ScanExistingOrders()
          {
             int ticket = OrderTicket();
             AddTrackedOrder(ticket);
+            SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
             Print("Tracking existing order: #", ticket);
          }
       }
