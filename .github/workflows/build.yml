@@ -319,6 +319,85 @@ jobs:
           # Save to GitHub environment for next step
           "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Install MQL standard libraries
+        run: |
+          Write-Host "=== Installing MQL${{ matrix.version }} standard libraries ==="
+
+          # Read MetaEditor path from environment
+          $metaeditorPath = $env:METAEDITOR_PATH
+
+          if (-not $metaeditorPath) {
+            Write-Host "❌ MetaEditor path not set in environment"
+            exit 1
+          }
+
+          # Determine MetaTrader installation directory
+          $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+          $mqlBaseDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}"
+          $targetIncludeDir = Join-Path $mqlBaseDir "Include"
+
+          Write-Host "MT installation directory: $mtInstallDir"
+          Write-Host "MQL base directory: $mqlBaseDir"
+          Write-Host "Target include directory: $targetIncludeDir"
+
+          # Create Include directory if it doesn't exist
+          if (-not (Test-Path $targetIncludeDir)) {
+            Write-Host "Creating Include directory..."
+            New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
+          }
+
+          # Clone MQL standard libraries from GitHub
+          $stdLibRepo = "https://github.com/MetaQuotes/MQL${{ matrix.version }}.git"
+          $tempStdLibDir = "${{ github.workspace }}\temp_mql${{ matrix.version }}_stdlib"
+
+          Write-Host "Cloning MQL${{ matrix.version }} standard libraries from $stdLibRepo..."
+          git clone --depth 1 --single-branch $stdLibRepo $tempStdLibDir
+
+          if (-not (Test-Path $tempStdLibDir)) {
+            Write-Host "❌ Failed to clone MQL${{ matrix.version }} standard libraries"
+            exit 1
+          }
+
+          # Copy Include directory from cloned repository
+          $sourceIncludeDir = Join-Path $tempStdLibDir "Include"
+
+          if (Test-Path $sourceIncludeDir) {
+            Write-Host "Copying standard library Include files..."
+            Copy-Item -Path "$sourceIncludeDir\*" -Destination $targetIncludeDir -Recurse -Force
+
+            Write-Host "✅ Standard libraries installed successfully"
+
+            # List some key files to verify
+            Write-Host ""
+            Write-Host "Verifying installed libraries (top-level directories):"
+            Get-ChildItem $targetIncludeDir -Directory | Select-Object -First 20 | ForEach-Object {
+              Write-Host "  DIR: $($_.Name)"
+            }
+
+            # For MT5, verify Trade directory specifically
+            if ("${{ matrix.version }}" -eq "5") {
+              $tradeDir = Join-Path $targetIncludeDir "Trade"
+              if (Test-Path $tradeDir) {
+                Write-Host ""
+                Write-Host "✅ Trade directory verified:"
+                Get-ChildItem $tradeDir -File | ForEach-Object {
+                  Write-Host "  - $($_.Name)"
+                }
+              } else {
+                Write-Host ""
+                Write-Host "⚠️ Trade directory not found after installation"
+              }
+            }
+          } else {
+            Write-Host "❌ Include directory not found in cloned repository: $sourceIncludeDir"
+            exit 1
+          }
+
+          # Clean up temporary directory
+          Write-Host ""
+          Write-Host "Cleaning up temporary files..."
+          Remove-Item -Path $tempStdLibDir -Recurse -Force -ErrorAction SilentlyContinue
+
       - name: Compile MQL files
         run: |
           Write-Host "Compiling ${{ matrix.platform }} files..."
