@@ -11,8 +11,6 @@
 
 //--- Include common headers
 #include <ForexCopierCommon.mqh>
-#include <ForexCopierJson.mqh>
-#include <ForexCopierMessages.mqh>
 #include <ForexCopierTrade.mqh>
 
 //--- Input parameters
