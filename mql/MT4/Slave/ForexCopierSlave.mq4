@@ -10,6 +10,7 @@
 
 //--- Include common headers
 #include <ForexCopierCommon.mqh>
+#include <ForexCopierMessages.mqh>
 #include <ForexCopierTrade.mqh>
 
 //--- Input parameters
@@ -38,19 +39,6 @@ int         g_order_map[][2];
 // Pending order mapping: [master_ticket][pending_ticket]
 int         g_pending_order_map[][2];
 
-//--- Configuration structures
-struct SymbolMapping {
-    string source_symbol;
-    string target_symbol;
-};
-
-struct TradeFilters {
-    string allowed_symbols[];
-    string blocked_symbols[];
-    int    allowed_magic_numbers[];
-    int    blocked_magic_numbers[];
-};
-
 //--- Extended configuration variables (from ConfigMessage)
 bool           g_config_enabled = true;          // Whether copying is enabled
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
@@ -67,16 +55,7 @@ int OnInit()
    Print("=== ForexCopier Slave EA (MT4) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
-   string broker = AccountCompany();
-   int account_number = AccountNumber();
-
-   // Replace spaces and special characters with underscores
-   StringReplace(broker, " ", "_");
-   StringReplace(broker, ".", "_");
-   StringReplace(broker, "-", "_");
-
-   // Format: broker_accountnumber
-   AccountID = broker + "_" + IntegerToString(account_number);
+   AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
    g_zmq_context = zmq_context_create();
@@ -149,7 +128,7 @@ int OnInit()
    g_initialized = true;
 
    // Send registration message to server
-   SendRegisterMessage();
+   SendRegistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
 
    Print("=== ForexCopier Slave EA Initialized ===");
 
@@ -164,7 +143,7 @@ void OnDeinit(const int reason)
    Print("=== ForexCopier Slave EA (MT4) Stopping ===");
 
    // Send unregister message to server
-   SendUnregisterMessage();
+   SendUnregistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
 
    if(g_zmq_config_socket >= 0) zmq_socket_destroy(g_zmq_config_socket);
    if(g_zmq_trade_socket >= 0) zmq_socket_destroy(g_zmq_trade_socket);
@@ -184,7 +163,7 @@ void OnTick()
    // Send heartbeat every 30 seconds
    if(TimeCurrent() - g_last_heartbeat >= 30)
    {
-      SendHeartbeat();
+      SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
       g_last_heartbeat = TimeCurrent();
    }
 
@@ -257,145 +236,6 @@ void OnTick()
          ProcessTradeSignal(msgpack_payload, payload_len);
       }
    }
-}
-
-//+------------------------------------------------------------------+
-//| Check if trade should be processed based on filters             |
-//+------------------------------------------------------------------+
-bool ShouldProcessTrade(string symbol, int magic_number)
-{
-   // Check if copying is enabled
-   if(!g_config_enabled)
-   {
-      Print("Trade filtering: Copying is disabled");
-      return false;
-   }
-
-   // Check allowed symbols filter
-   if(ArraySize(g_filters.allowed_symbols) > 0)
-   {
-      bool symbol_found = false;
-      for(int i = 0; i < ArraySize(g_filters.allowed_symbols); i++)
-      {
-         if(g_filters.allowed_symbols[i] == symbol)
-         {
-            symbol_found = true;
-            break;
-         }
-      }
-
-      if(!symbol_found)
-      {
-         Print("Trade filtering: Symbol ", symbol, " not in allowed list");
-         return false;
-      }
-   }
-
-   // Check blocked symbols filter
-   if(ArraySize(g_filters.blocked_symbols) > 0)
-   {
-      for(int i = 0; i < ArraySize(g_filters.blocked_symbols); i++)
-      {
-         if(g_filters.blocked_symbols[i] == symbol)
-         {
-            Print("Trade filtering: Symbol ", symbol, " is blocked");
-            return false;
-         }
-      }
-   }
-
-   // Check allowed magic numbers filter
-   if(ArraySize(g_filters.allowed_magic_numbers) > 0)
-   {
-      bool magic_found = false;
-      for(int i = 0; i < ArraySize(g_filters.allowed_magic_numbers); i++)
-      {
-         if(g_filters.allowed_magic_numbers[i] == magic_number)
-         {
-            magic_found = true;
-            break;
-         }
-      }
-
-      if(!magic_found)
-      {
-         Print("Trade filtering: Magic number ", magic_number, " not in allowed list");
-         return false;
-      }
-   }
-
-   // Check blocked magic numbers filter
-   if(ArraySize(g_filters.blocked_magic_numbers) > 0)
-   {
-      for(int i = 0; i < ArraySize(g_filters.blocked_magic_numbers); i++)
-      {
-         if(g_filters.blocked_magic_numbers[i] == magic_number)
-         {
-            Print("Trade filtering: Magic number ", magic_number, " is blocked");
-            return false;
-         }
-      }
-   }
-
-   // All checks passed
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Transform symbol using symbol mappings                           |
-//+------------------------------------------------------------------+
-string TransformSymbol(string source_symbol)
-{
-   // Check if there's a mapping for this symbol
-   for(int i = 0; i < ArraySize(g_symbol_mappings); i++)
-   {
-      if(g_symbol_mappings[i].source_symbol == source_symbol)
-      {
-         Print("Symbol transformation: ", source_symbol, " -> ", g_symbol_mappings[i].target_symbol);
-         return g_symbol_mappings[i].target_symbol;
-      }
-   }
-
-   // No mapping found, return original symbol
-   return source_symbol;
-}
-
-//+------------------------------------------------------------------+
-//| Apply lot multiplier to lot size                                |
-//+------------------------------------------------------------------+
-double TransformLotSize(double source_lots)
-{
-   double transformed = source_lots * g_config_lot_multiplier;
-   transformed = NormalizeDouble(transformed, 2);
-
-   Print("Lot transformation: ", source_lots, " * ", g_config_lot_multiplier, " = ", transformed);
-
-   return transformed;
-}
-
-//+------------------------------------------------------------------+
-//| Reverse order type if configured                                |
-//+------------------------------------------------------------------+
-string ReverseOrderType(string order_type)
-{
-   if(!g_config_reverse_trade)
-   {
-      return order_type; // No reversal
-   }
-
-   // Reverse Buy <-> Sell
-   if(order_type == "Buy")
-   {
-      Print("Order type reversed: Buy -> Sell");
-      return "Sell";
-   }
-   else if(order_type == "Sell")
-   {
-      Print("Order type reversed: Sell -> Buy");
-      return "Buy";
-   }
-
-   return order_type;
 }
 
 //+------------------------------------------------------------------+
@@ -637,68 +477,6 @@ int GetOrderType(string type_str)
 }
 
 //+------------------------------------------------------------------+
-//| Simple JSON value extractor                                       |
-//+------------------------------------------------------------------+
-string GetJsonValue(string json, string key)
-{
-   string search = "\"" + key + "\":";
-   int start = StringFind(json, search);
-   if(start == -1)
-      return "";
-
-   start += StringLen(search);
-
-   // Skip whitespace only (not quotes)
-   int jsonLen = StringLen(json);
-   while(start < jsonLen)
-   {
-      ushort c = StringGetCharacter(json, start);
-      if(c != 32) break;  // 32 = space
-      start++;
-   }
-
-   // Check if value starts with quote (string value)
-   ushort firstChar = StringGetCharacter(json, start);
-   bool isString = (firstChar == 34);  // 34 = double quote
-
-   if(isString)
-   {
-      // Skip opening quote
-      start++;
-
-      // Find closing quote
-      int end = start;
-      while(end < jsonLen)
-      {
-         ushort c = StringGetCharacter(json, end);
-         if(c == 34)  // Found closing quote
-         {
-            string value = StringSubstr(json, start, end - start);
-            return value;
-         }
-         end++;
-      }
-      return "";  // No closing quote found
-   }
-   else
-   {
-      // Non-string value: find comma or closing brace
-      int end = start;
-      while(end < jsonLen)
-      {
-         ushort c = StringGetCharacter(json, end);
-         if(c == 44 || c == 125) break;  // 44 = comma, 125 = }
-         end++;
-      }
-
-      string value = StringSubstr(json, start, end - start);
-      StringTrimLeft(value);
-      StringTrimRight(value);
-      return value;
-   }
-}
-
-//+------------------------------------------------------------------+
 //| Place pending order at original price                            |
 //+------------------------------------------------------------------+
 void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
@@ -863,218 +641,4 @@ void RemovePendingOrderMapping(int master_ticket)
          break;
       }
    }
-}
-
-//+------------------------------------------------------------------+
-//| Process configuration message (MessagePack)                       |
-//+------------------------------------------------------------------+
-void ProcessConfigMessage(uchar &msgpack_data[], int data_len)
-{
-   Print("=== Processing Configuration Message ===");
-
-   // Parse MessagePack once and get a handle to the config structure
-   int config_handle = msgpack_parse(msgpack_data, data_len);  // 32-bit MT4: use int for pointer
-   if(config_handle == 0)
-   {
-      Print("ERROR: Failed to parse MessagePack config");
-      return;
-   }
-
-   // Extract fields from the parsed config using the handle
-   string new_master = config_get_string(config_handle, "master_account");
-   string new_group = config_get_string(config_handle, "trade_group_id");
-
-   if(new_master == "" || new_group == "")
-   {
-      Print("ERROR: Invalid config message received");
-      config_free(config_handle);
-      return;
-   }
-
-   // Extract extended configuration fields
-   bool new_enabled = (config_get_bool(config_handle, "enabled") == 1);
-   double new_lot_mult = config_get_double(config_handle, "lot_multiplier");
-   bool new_reverse = (config_get_bool(config_handle, "reverse_trade") == 1);
-   int new_version = config_get_int(config_handle, "config_version");
-
-   // Log configuration values
-   Print("Master Account: ", new_master);
-   Print("Trade Group ID: ", new_group);
-   Print("Enabled: ", new_enabled);
-   Print("Lot Multiplier: ", new_lot_mult);
-   Print("Reverse Trade: ", new_reverse);
-   Print("Config Version: ", new_version);
-
-   // TODO: Parse symbol mappings and filters from MessagePack
-   // For now, skip arrays until we implement array support in DLL
-   ArrayResize(g_symbol_mappings, 0);
-   ArrayResize(g_filters.allowed_symbols, 0);
-   ArrayResize(g_filters.blocked_symbols, 0);
-   ArrayResize(g_filters.allowed_magic_numbers, 0);
-   ArrayResize(g_filters.blocked_magic_numbers, 0);
-
-   // Update global configuration
-   g_config_enabled = new_enabled;
-   g_config_lot_multiplier = new_lot_mult;
-   g_config_reverse_trade = new_reverse;
-   g_config_version = new_version;
-
-   // Check if master/group changed
-   if(new_master != g_current_master || new_group != g_trade_group_id)
-   {
-      Print("Master Account: ", g_current_master, " -> ", new_master);
-      Print("Trade Group ID: ", g_trade_group_id, " -> ", new_group);
-
-      // Update master and group
-      g_current_master = new_master;
-      g_trade_group_id = new_group;
-
-      // Subscribe to new trade group
-      if(zmq_socket_subscribe(g_zmq_trade_socket, g_trade_group_id) == 0)
-      {
-         Print("ERROR: Failed to subscribe to trade group: ", g_trade_group_id);
-      }
-      else
-      {
-         Print("Successfully subscribed to trade group: ", g_trade_group_id);
-      }
-   }
-
-   // Free the config handle
-   config_free(config_handle);
-
-   Print("=== Configuration Updated ===");
-}
-
-//+------------------------------------------------------------------+
-//| Send registration message to server                              |
-//+------------------------------------------------------------------+
-void SendRegisterMessage()
-{
-   // Create temporary PUSH socket to send registration
-   int push_socket = zmq_socket_create(g_zmq_context, ZMQ_PUSH);
-   if(push_socket < 0)
-   {
-      Print("ERROR: Failed to create registration socket");
-      return;
-   }
-
-   if(zmq_socket_connect(push_socket, "tcp://localhost:5555") == 0)
-   {
-      Print("ERROR: Failed to connect to registration server");
-      zmq_socket_destroy(push_socket);
-      return;
-   }
-
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Build JSON message
-   string json = "{";
-   json += "\"message_type\":\"Register\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"ea_type\":\"Slave\",";
-   json += "\"platform\":\"MT4\",";
-   json += "\"account_number\":" + IntegerToString(AccountNumber()) + ",";
-   json += "\"broker\":\"" + AccountCompany() + "\",";
-   json += "\"account_name\":\"" + AccountName() + "\",";
-   json += "\"server\":\"" + AccountServer() + "\",";
-   json += "\"balance\":" + DoubleToString(AccountBalance(), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountEquity(), 2) + ",";
-   json += "\"currency\":\"" + AccountCurrency() + "\",";
-   json += "\"leverage\":" + IntegerToString(AccountLeverage()) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(push_socket, json);
-   Print("Registration message sent to server");
-
-   zmq_socket_destroy(push_socket);
-}
-
-//+------------------------------------------------------------------+
-//| Send unregister message to server                                |
-//+------------------------------------------------------------------+
-void SendUnregisterMessage()
-{
-   int push_socket = zmq_socket_create(g_zmq_context, ZMQ_PUSH);
-   if(push_socket < 0)
-   {
-      Print("ERROR: Failed to create unregister socket");
-      return;
-   }
-
-   if(zmq_socket_connect(push_socket, "tcp://localhost:5555") == 0)
-   {
-      Print("ERROR: Failed to connect to registration server");
-      zmq_socket_destroy(push_socket);
-      return;
-   }
-
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   string json = "{";
-   json += "\"message_type\":\"Unregister\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(push_socket, json);
-   Print("Unregister message sent to server");
-
-   zmq_socket_destroy(push_socket);
-}
-
-//+------------------------------------------------------------------+
-//| Send heartbeat message to server                                 |
-//+------------------------------------------------------------------+
-void SendHeartbeat()
-{
-   int push_socket = zmq_socket_create(g_zmq_context, ZMQ_PUSH);
-   if(push_socket < 0)
-   {
-      Print("ERROR: Failed to create heartbeat socket");
-      return;
-   }
-
-   if(zmq_socket_connect(push_socket, "tcp://localhost:5555") == 0)
-   {
-      Print("ERROR: Failed to connect to heartbeat server");
-      zmq_socket_destroy(push_socket);
-      return;
-   }
-
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Count open positions
-   int open_positions = 0;
-   for(int i = 0; i < OrdersTotal(); i++)
-   {
-      if(OrderSelect(i, SELECT_BY_POS) && OrderSymbol() == Symbol())
-         open_positions++;
-   }
-
-   string json = "{";
-   json += "\"message_type\":\"Heartbeat\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"balance\":" + DoubleToString(AccountBalance(), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountEquity(), 2) + ",";
-   json += "\"open_positions\":" + IntegerToString(open_positions) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(push_socket, json);
-
-   zmq_socket_destroy(push_socket);
 }
