@@ -1,0 +1,79 @@
+name: Test MQL5 Download
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-download:
+    name: Test Direct MT5 Download
+    runs-on: windows-latest
+
+    steps:
+      - name: Test download.mql5.com accessibility
+        run: |
+          Write-Host "Testing download.mql5.com accessibility..."
+
+          try {
+            $response = Invoke-WebRequest `
+              -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" `
+              -Method Head `
+              -TimeoutSec 30 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+
+            Write-Host "✅ SUCCESS: HTTP Status $($response.StatusCode)"
+            Write-Host "Content-Length: $($response.Headers['Content-Length'])"
+            Write-Host "Content-Type: $($response.Headers['Content-Type'])"
+          }
+          catch {
+            Write-Host "❌ FAILED: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
+              Write-Host "Status Description: $($_.Exception.Response.StatusDescription)"
+            }
+            exit 1
+          }
+
+      - name: Attempt full download
+        run: |
+          Write-Host "Attempting full download..."
+
+          try {
+            Invoke-WebRequest `
+              -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" `
+              -OutFile "mt5setup.exe" `
+              -TimeoutSec 120 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+
+            $fileInfo = Get-Item "mt5setup.exe"
+            Write-Host "✅ Download successful!"
+            Write-Host "File size: $($fileInfo.Length) bytes"
+            Write-Host "File path: $($fileInfo.FullName)"
+          }
+          catch {
+            Write-Host "❌ Download failed: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
+              Write-Host "Status Description: $($_.Exception.Response.StatusDescription)"
+            }
+            exit 1
+          }
+
+      - name: Test alternative download methods
+        if: failure()
+        run: |
+          Write-Host "Testing alternative download method with curl..."
+
+          curl.exe -L -o mt5setup_curl.exe `
+            "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" `
+            --max-time 120 `
+            --verbose
+
+      - name: Upload downloaded file as artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mt5-installer
+          path: mt5setup.exe
+          retention-days: 1
