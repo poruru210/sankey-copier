@@ -143,10 +143,11 @@ jobs:
           ls -la web-ui/.next/ || dir web-ui\.next\ || echo ".next directory not found"
 
       - name: Upload Web UI artifacts
+        working-directory: web-ui
         uses: actions/upload-artifact@v4
         with:
           name: forex-copier-web-ui
-          path: web-ui/.next/
+          path: .next
           if-no-files-found: warn
           retention-days: 30
 
