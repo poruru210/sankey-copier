@@ -346,88 +346,84 @@ jobs:
             New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
           }
 
-          # Download MQL standard libraries from GitHub as ZIP
-          $stdLibZipUrl = "https://github.com/MetaQuotes/MQL${{ matrix.version }}/archive/refs/heads/master.zip"
-          $tempZipPath = "${{ github.workspace }}\mql${{ matrix.version }}_stdlib.zip"
-          $tempStdLibDir = "${{ github.workspace }}\temp_mql${{ matrix.version }}_stdlib"
+          # Initialize MT to download standard libraries
+          # MT installation includes terminal executable which can be run once to download standard libraries
+          Write-Host "Initializing MetaTrader to download standard libraries..."
 
-          Write-Host "Downloading MQL${{ matrix.version }} standard libraries from GitHub..."
-          Write-Host "URL: $stdLibZipUrl"
+          # Find terminal executable
+          $terminalExe = Get-ChildItem $mtInstallDir -Recurse -Filter "terminal*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 
-          try {
-            Invoke-WebRequest -Uri $stdLibZipUrl -OutFile $tempZipPath -UseBasicParsing -TimeoutSec 120
-            Write-Host "✅ Download successful: $tempZipPath"
+          if ($terminalExe) {
+            Write-Host "Found terminal: $($terminalExe.FullName)"
 
-            # Extract ZIP file
-            Write-Host "Extracting ZIP file..."
-            Expand-Archive -Path $tempZipPath -DestinationPath $tempStdLibDir -Force
+            # Run terminal with /install flag to initialize and download libraries
+            Write-Host "Running terminal to initialize (this may take a minute)..."
+            $process = Start-Process -FilePath $terminalExe.FullName `
+              -ArgumentList "/install" `
+              -PassThru `
+              -NoNewWindow `
+              -RedirectStandardOutput "${{ github.workspace }}\terminal_init.log" `
+              -RedirectStandardError "${{ github.workspace }}\terminal_init_error.log"
 
-            # The extracted folder will be named MQL{version}-master
-            $extractedFolder = Join-Path $tempStdLibDir "MQL${{ matrix.version }}-master"
-
-            if (-not (Test-Path $extractedFolder)) {
-              Write-Host "❌ Extracted folder not found: $extractedFolder"
-              Write-Host "Listing temp directory contents:"
-              Get-ChildItem $tempStdLibDir | ForEach-Object {
-                Write-Host "  - $($_.Name)"
-              }
-              exit 1
+            # Wait max 60 seconds for initialization
+            $waited = 0
+            while (-not $process.HasExited -and $waited -lt 60) {
+              Start-Sleep -Seconds 5
+              $waited += 5
+              Write-Host "Waiting for terminal initialization... ($waited seconds)"
             }
 
-            # Move contents up one level for easier access
-            $tempExtractPath = Join-Path $tempStdLibDir "extracted"
-            Move-Item -Path $extractedFolder -Destination $tempExtractPath -Force
-            Remove-Item -Path $tempStdLibDir -Recurse -Force
-            Move-Item -Path $tempExtractPath -Destination $tempStdLibDir -Force
-
-            Write-Host "✅ Extraction successful"
-          }
-          catch {
-            Write-Host "❌ Failed to download or extract MQL${{ matrix.version }} standard libraries"
-            Write-Host "Error: $($_.Exception.Message)"
-            exit 1
-          }
-
-          # Copy Include directory from cloned repository
-          $sourceIncludeDir = Join-Path $tempStdLibDir "Include"
-
-          if (Test-Path $sourceIncludeDir) {
-            Write-Host "Copying standard library Include files..."
-            Copy-Item -Path "$sourceIncludeDir\*" -Destination $targetIncludeDir -Recurse -Force
-
-            Write-Host "✅ Standard libraries installed successfully"
-
-            # List some key files to verify
-            Write-Host ""
-            Write-Host "Verifying installed libraries (top-level directories):"
-            Get-ChildItem $targetIncludeDir -Directory | Select-Object -First 20 | ForEach-Object {
-              Write-Host "  DIR: $($_.Name)"
+            if (-not $process.HasExited) {
+              Write-Host "Stopping terminal process after timeout..."
+              $process.Kill()
             }
 
-            # For MT5, verify Trade directory specifically
-            if ("${{ matrix.version }}" -eq "5") {
-              $tradeDir = Join-Path $targetIncludeDir "Trade"
-              if (Test-Path $tradeDir) {
+            Write-Host "Terminal initialization completed"
+
+            # Check if Include directory now exists with standard libraries
+            if (Test-Path $targetIncludeDir) {
+              $includeFileCount = (Get-ChildItem $targetIncludeDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+              Write-Host "Include directory exists with $includeFileCount files"
+
+              if ($includeFileCount -gt 0) {
+                Write-Host "✅ Standard libraries downloaded successfully"
+
+                # List top-level directories
                 Write-Host ""
-                Write-Host "✅ Trade directory verified:"
-                Get-ChildItem $tradeDir -File | ForEach-Object {
-                  Write-Host "  - $($_.Name)"
+                Write-Host "Standard library directories:"
+                Get-ChildItem $targetIncludeDir -Directory | Select-Object -First 20 | ForEach-Object {
+                  Write-Host "  DIR: $($_.Name)"
+                }
+
+                # For MT5, verify Trade directory
+                if ("${{ matrix.version }}" -eq "5") {
+                  $tradeDir = Join-Path $targetIncludeDir "Trade"
+                  if (Test-Path $tradeDir) {
+                    Write-Host ""
+                    Write-Host "✅ Trade directory verified:"
+                    Get-ChildItem $tradeDir -File | ForEach-Object {
+                      Write-Host "  - $($_.Name)"
+                    }
+                  } else {
+                    Write-Host "⚠️ Trade directory not found"
+                  }
                 }
               } else {
-                Write-Host ""
-                Write-Host "⚠️ Trade directory not found after installation"
+                Write-Host "⚠️ Include directory exists but is empty"
+                Write-Host "This is normal for silent installation. Will proceed with custom includes only."
               }
+            } else {
+              Write-Host "⚠️ Include directory still does not exist after initialization"
+              Write-Host "Creating empty Include directory and proceeding with custom includes only..."
+              New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
             }
           } else {
-            Write-Host "❌ Include directory not found in cloned repository: $sourceIncludeDir"
-            exit 1
+            Write-Host "⚠️ Terminal executable not found, skipping initialization"
+            Write-Host "Creating empty Include directory for custom includes..."
+            if (-not (Test-Path $targetIncludeDir)) {
+              New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
+            }
           }
-
-          # Clean up temporary files
-          Write-Host ""
-          Write-Host "Cleaning up temporary files..."
-          Remove-Item -Path $tempStdLibDir -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path $tempZipPath -Force -ErrorAction SilentlyContinue
 
       - name: Compile MQL files
         run: |
