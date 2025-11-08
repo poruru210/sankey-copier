@@ -17,7 +17,7 @@ interface UseSVGConnectionsProps {
   receiverAccounts: AccountInfo[];
   sourceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   receiverRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
-  middleColumnRef: React.RefObject<HTMLDivElement>;
+  middleColumnRef: React.RefObject<HTMLDivElement | null>;
   hoveredSourceId: string | null;
   hoveredReceiverId: string | null;
   getConnectedReceivers: (sourceId: string) => string[];
