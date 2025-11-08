@@ -218,15 +218,47 @@ jobs:
             }
 
             # Find MetaEditor
-            $metaeditors = Get-ChildItem $installPath -Recurse -Filter "metaeditor*.exe" -ErrorAction SilentlyContinue
+            # For MT4, prioritize 32-bit metaeditor.exe over metaeditor64.exe
+            # MT4 requires 32-bit compiler; MT5 uses 64-bit
+            $metaeditors = @()
 
-            if ($metaeditors) {
-              $metaeditors | ForEach-Object {
-                Write-Host "✅ Found MetaEditor: $($_.FullName)"
-                if (-not $global:METAEDITOR_PATH) {
-                  $global:METAEDITOR_PATH = $_.FullName
+            if ("${{ matrix.version }}" -eq "4") {
+              # MT4: Look for 32-bit version first
+              $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "metaeditor.exe" }
+              if ($me32) {
+                $metaeditors += $me32
+                Write-Host "Found MT4 32-bit MetaEditor: $($me32[0].FullName)"
+              }
+
+              # Fallback to 64-bit if 32-bit not found
+              if ($metaeditors.Count -eq 0) {
+                $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+                if ($me64) {
+                  $metaeditors += $me64
+                  Write-Host "⚠️ Using MT4 64-bit MetaEditor (may not support .mq4): $($me64[0].FullName)"
                 }
               }
+            } else {
+              # MT5: Use 64-bit version
+              $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+              if ($me64) {
+                $metaeditors += $me64
+                Write-Host "Found MT5 64-bit MetaEditor: $($me64[0].FullName)"
+              }
+
+              # Fallback to 32-bit if needed
+              if ($metaeditors.Count -eq 0) {
+                $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue
+                if ($me32) {
+                  $metaeditors += $me32
+                  Write-Host "Using MT5 32-bit MetaEditor: $($me32[0].FullName)"
+                }
+              }
+            }
+
+            if ($metaeditors.Count -gt 0) {
+              $global:METAEDITOR_PATH = $metaeditors[0].FullName
+              Write-Host "✅ Selected MetaEditor: $global:METAEDITOR_PATH"
             } else {
               Write-Host "⚠️ MetaEditor not found, listing all exe files..."
               Get-ChildItem $installPath -Recurse -Filter "*.exe" | ForEach-Object {
