@@ -1,17 +1,42 @@
-name: Test MQL5 Download
+name: Test MQL Download
 
 on:
   workflow_dispatch:
 
 jobs:
   test-download:
-    name: Test Direct MT5 Download
+    name: Test Direct MT4/MT5 Download
     runs-on: windows-latest
 
     steps:
-      - name: Test download.mql5.com accessibility
+      - name: Test MT4 download URL
         run: |
-          Write-Host "Testing download.mql5.com accessibility..."
+          Write-Host "=== Testing MT4 download URL ==="
+
+          try {
+            $response = Invoke-WebRequest `
+              -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe" `
+              -Method Head `
+              -TimeoutSec 30 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+
+            Write-Host "✅ MT4 URL accessible"
+            Write-Host "HTTP Status: $($response.StatusCode)"
+            Write-Host "Content-Length: $($response.Headers['Content-Length']) bytes"
+            Write-Host "Content-Type: $($response.Headers['Content-Type'])"
+          }
+          catch {
+            Write-Host "❌ MT4 URL failed: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
+            }
+          }
+
+      - name: Test MT5 download URL
+        run: |
+          Write-Host ""
+          Write-Host "=== Testing MT5 download URL ==="
 
           try {
             $response = Invoke-WebRequest `
@@ -21,22 +46,48 @@ jobs:
               -UseBasicParsing `
               -ErrorAction Stop
 
-            Write-Host "✅ SUCCESS: HTTP Status $($response.StatusCode)"
-            Write-Host "Content-Length: $($response.Headers['Content-Length'])"
+            Write-Host "✅ MT5 URL accessible"
+            Write-Host "HTTP Status: $($response.StatusCode)"
+            Write-Host "Content-Length: $($response.Headers['Content-Length']) bytes"
             Write-Host "Content-Type: $($response.Headers['Content-Type'])"
           }
           catch {
-            Write-Host "❌ FAILED: $($_.Exception.Message)"
+            Write-Host "❌ MT5 URL failed: $($_.Exception.Message)"
             if ($_.Exception.Response) {
               Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
-              Write-Host "Status Description: $($_.Exception.Response.StatusDescription)"
             }
             exit 1
           }
 
-      - name: Attempt full download
+      - name: Download MT4 installer
         run: |
-          Write-Host "Attempting full download..."
+          Write-Host ""
+          Write-Host "=== Downloading MT4 installer ==="
+
+          try {
+            Invoke-WebRequest `
+              -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe" `
+              -OutFile "mt4setup.exe" `
+              -TimeoutSec 120 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+
+            $fileInfo = Get-Item "mt4setup.exe"
+            Write-Host "✅ MT4 Download successful!"
+            Write-Host "File size: $($fileInfo.Length) bytes"
+            Write-Host "File path: $($fileInfo.FullName)"
+          }
+          catch {
+            Write-Host "❌ MT4 Download failed: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
+            }
+          }
+
+      - name: Download MT5 installer
+        run: |
+          Write-Host ""
+          Write-Host "=== Downloading MT5 installer ==="
 
           try {
             Invoke-WebRequest `
@@ -47,17 +98,60 @@ jobs:
               -ErrorAction Stop
 
             $fileInfo = Get-Item "mt5setup.exe"
-            Write-Host "✅ Download successful!"
+            Write-Host "✅ MT5 Download successful!"
             Write-Host "File size: $($fileInfo.Length) bytes"
             Write-Host "File path: $($fileInfo.FullName)"
           }
           catch {
-            Write-Host "❌ Download failed: $($_.Exception.Message)"
+            Write-Host "❌ MT5 Download failed: $($_.Exception.Message)"
             if ($_.Exception.Response) {
               Write-Host "HTTP Status: $($_.Exception.Response.StatusCode.value__)"
-              Write-Host "Status Description: $($_.Exception.Response.StatusDescription)"
             }
             exit 1
+          }
+
+      - name: Verify downloaded files
+        run: |
+          Write-Host ""
+          Write-Host "=== Verifying downloaded files ==="
+
+          if (Test-Path "mt4setup.exe") {
+            $mt4 = Get-Item "mt4setup.exe"
+            Write-Host "MT4 Setup: $($mt4.Length) bytes"
+
+            # Check file signature
+            $bytes = [System.IO.File]::ReadAllBytes("mt4setup.exe")
+            $signature = [System.Text.Encoding]::ASCII.GetString($bytes[0..1])
+            Write-Host "MT4 File signature: $signature"
+          } else {
+            Write-Host "MT4 setup not found"
+          }
+
+          if (Test-Path "mt5setup.exe") {
+            $mt5 = Get-Item "mt5setup.exe"
+            Write-Host "MT5 Setup: $($mt5.Length) bytes"
+
+            # Check file signature
+            $bytes = [System.IO.File]::ReadAllBytes("mt5setup.exe")
+            $signature = [System.Text.Encoding]::ASCII.GetString($bytes[0..1])
+            Write-Host "MT5 File signature: $signature"
+          } else {
+            Write-Host "MT5 setup not found"
+          }
+
+          # Compare file sizes
+          if ((Test-Path "mt4setup.exe") -and (Test-Path "mt5setup.exe")) {
+            $mt4Size = (Get-Item "mt4setup.exe").Length
+            $mt5Size = (Get-Item "mt5setup.exe").Length
+
+            if ($mt4Size -eq $mt5Size) {
+              Write-Host ""
+              Write-Host "⚠️ WARNING: MT4 and MT5 setup files are identical size!"
+              Write-Host "This might indicate MT4 URL redirects to MT5"
+            } else {
+              Write-Host ""
+              Write-Host "✅ MT4 and MT5 files are different sizes"
+            }
           }
 
       - name: Test alternative download methods
@@ -70,10 +164,12 @@ jobs:
             --max-time 120 `
             --verbose
 
-      - name: Upload downloaded file as artifact
+      - name: Upload downloaded installers as artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: mt5-installer
-          path: mt5setup.exe
+          name: metatrader-installers
+          path: |
+            mt4setup.exe
+            mt5setup.exe
           retention-days: 1
