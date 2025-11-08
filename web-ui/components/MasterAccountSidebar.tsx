@@ -104,7 +104,9 @@ export function MasterAccountSidebar({
       <div className="flex-1 overflow-y-auto">
         {/* All Accounts Option */}
         <button
-          ref={(el) => el && buttonRefs.current.set('all', el)}
+          ref={(el) => {
+            if (el) buttonRefs.current.set('all', el);
+          }}
           onClick={() => onSelectMaster('all')}
           onKeyDown={(e) => handleKeyDown(e, 'all')}
           className={cn(
@@ -140,7 +142,9 @@ export function MasterAccountSidebar({
             {masterAccounts.map((master) => (
               <button
                 key={master.id}
-                ref={(el) => el && buttonRefs.current.set(master.id, el)}
+                ref={(el) => {
+                  if (el) buttonRefs.current.set(master.id, el);
+                }}
                 onClick={() => onSelectMaster(master.id)}
                 onKeyDown={(e) => handleKeyDown(e, master.id)}
                 className={cn(

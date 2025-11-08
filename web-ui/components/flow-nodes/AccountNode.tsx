@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { AccountCard } from '@/components/connections/AccountCard';
 
@@ -40,6 +40,10 @@ export interface AccountNodeData {
   };
 }
 
+// Type for React Flow node with AccountNodeData
+// Use intersection with Record to satisfy Node's constraint
+export type AccountNodeType = Node<AccountNodeData & Record<string, unknown>, 'accountNode'>;
+
 /**
  * Custom React Flow node for account cards
  * Wraps the existing AccountCard component with React Flow handles
@@ -47,7 +51,7 @@ export interface AccountNodeData {
  * Drag behavior: The node is draggable by clicking on the header area.
  * Interactive elements (switches, buttons) have the 'noDrag' class to prevent dragging.
  */
-export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeData>) => {
+export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>) => {
   const { type, isMobile } = data;
 
   return (

@@ -91,7 +91,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
-        } as AccountNodeData,
+        } as AccountNodeData & Record<string, unknown>,
       });
     });
 
@@ -131,7 +131,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
-        } as AccountNodeData,
+        } as AccountNodeData & Record<string, unknown>,
       });
     });
 

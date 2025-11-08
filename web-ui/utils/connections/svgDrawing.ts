@@ -28,7 +28,7 @@ export function calculateCenterPosition(
   sourceAccounts: AccountInfo[],
   receiverAccounts: AccountInfo[],
   svgRect: DOMRect,
-  middleColumnRef?: React.RefObject<HTMLDivElement>
+  middleColumnRef?: React.RefObject<HTMLDivElement | null>
 ): { centerX: number; centerY: number } {
   const isMobile = isMobileViewport();
 

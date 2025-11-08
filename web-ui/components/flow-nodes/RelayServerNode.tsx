@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import { Server } from 'lucide-react';
 
 export interface RelayServerNodeData {
@@ -7,11 +7,14 @@ export interface RelayServerNodeData {
   isMobile?: boolean;
 }
 
+// Type for React Flow node with RelayServerNodeData
+export type RelayServerNodeType = Node<RelayServerNodeData & Record<string, unknown>, 'relayServer'>;
+
 /**
  * Custom React Flow node for the relay server
  * Displays a server icon in the center with connection handles on both sides (desktop) or top/bottom (mobile)
  */
-export const RelayServerNode = memo(({ data }: NodeProps<RelayServerNodeData>) => {
+export const RelayServerNode = memo(({ data }: NodeProps<RelayServerNodeType>) => {
   const { isMobile = false } = data;
 
   return (

@@ -44,9 +44,9 @@ interface ConnectionsViewReactFlowProps {
 }
 
 // Define nodeTypes at module level to prevent recreation warnings
-const nodeTypes: NodeTypes = Object.freeze({
+const nodeTypes = Object.freeze({
   accountNode: AccountNode,
-});
+}) as NodeTypes;
 
 function ConnectionsViewReactFlowInner({
   connections,
@@ -289,7 +289,7 @@ function ConnectionsViewReactFlowInner({
   const onEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       if (edge.data?.setting) {
-        handleEditSetting(edge.data.setting);
+        handleEditSetting(edge.data.setting as CopySettings);
       }
     },
     [handleEditSetting]

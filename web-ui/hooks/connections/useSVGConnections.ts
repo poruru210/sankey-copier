@@ -40,7 +40,7 @@ export function useSVGConnections({
 }: UseSVGConnectionsProps) {
   useEffect(() => {
     const drawLines = () => {
-      const svg = document.getElementById('connection-svg') as SVGSVGElement;
+      const svg = document.getElementById('connection-svg') as unknown as SVGSVGElement;
       if (!svg) return;
 
       // Remove existing elements
@@ -150,7 +150,7 @@ export function useSVGConnections({
     window.addEventListener('resize', handleWindowResize);
 
     // Also observe the SVG container and middle column for size changes
-    const svg = document.getElementById('connection-svg') as SVGSVGElement;
+    const svg = document.getElementById('connection-svg') as unknown as SVGSVGElement;
     if (svg) {
       resizeObserver.observe(svg);
     }

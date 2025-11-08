@@ -42,7 +42,7 @@ export function useAccountData({
   const getConnectionStatus = (accountId: string): boolean => {
     const conn = connections.find((c) => c.account_id === accountId);
     // Support both old and new formats
-    return conn?.is_online ?? (conn?.status === 'Online') ?? false;
+    return conn?.is_online ?? (conn?.status === 'Online' || false);
   };
 
   // Helper function to get account connection data

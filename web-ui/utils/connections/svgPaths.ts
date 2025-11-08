@@ -145,7 +145,7 @@ export function createRelayServerIcon(
   centerY: number,
   svgns: string
 ): SVGGElement {
-  const serverGroup = document.createElementNS(svgns, 'g');
+  const serverGroup = document.createElementNS(svgns, 'g') as SVGGElement;
   serverGroup.setAttribute('transform', `translate(${centerX - 20}, ${centerY - 20})`);
 
   // Background circle
