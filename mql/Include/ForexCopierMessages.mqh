@@ -178,14 +178,14 @@ bool SendOpenSignal(int zmq_socket, TICKET_TYPE ticket, string symbol,
                     string order_type, double lots, double price, double sl, double tp,
                     long magic, string comment, string account_id)
 {
-   // Serialize trade signal message using MessagePack (action is always "Open")
+   // Serialize open signal message using MessagePack
    int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
                                             FormatTimestampISO8601(TimeCurrent()), account_id);
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize trade signal message");
+      Print("ERROR: Failed to serialize open signal message");
       return false;
    }
 
@@ -196,7 +196,7 @@ bool SendOpenSignal(int zmq_socket, TICKET_TYPE ticket, string symbol,
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy trade signal message buffer");
+      Print("ERROR: Failed to copy open signal message buffer");
       return false;
    }
 

@@ -166,7 +166,7 @@ void CheckForNewPositions()
          if(!IsPositionTracked(ticket))
          {
             AddTrackedPosition(ticket);
-            SendPositionSignal("Open", ticket);
+            SendPositionOpenSignal(ticket);
          }
       }
    }
@@ -189,9 +189,9 @@ void CheckForClosedPositions()
 }
 
 //+------------------------------------------------------------------+
-//| Send position signal                                              |
+//| Send position open signal                                        |
 //+------------------------------------------------------------------+
-void SendPositionSignal(string action, ulong ticket)
+void SendPositionOpenSignal(ulong ticket)
 {
    if(!PositionSelectByTicket(ticket))
       return;

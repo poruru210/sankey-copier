@@ -160,7 +160,7 @@ void CheckForNewOrders()
          if(!IsOrderTracked(ticket))
          {
             AddTrackedOrder(ticket);
-            SendTradeSignalFromOrder(ticket);
+            SendOpenSignalFromOrder(ticket);
             Print("New order detected: #", ticket, " ", OrderSymbol(), " ", OrderLots(), " lots");
          }
       }
@@ -212,9 +212,9 @@ void CheckForClosedOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Send trade signal from order                                      |
+//| Send open signal from order                                      |
 //+------------------------------------------------------------------+
-void SendTradeSignalFromOrder(int ticket)
+void SendOpenSignalFromOrder(int ticket)
 {
    if(!OrderSelect(ticket, SELECT_BY_TICKET))
    {
