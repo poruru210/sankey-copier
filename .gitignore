@@ -14,6 +14,9 @@ web-ui/dist/
 web-ui/.vite/
 web-ui/package-lock.json
 web-ui/yarn.lock
+web-ui/test_*.py
+web-ui/*.png
+web-ui/debug_*.png
 
 # MQL compiled files
 *.ex4
@@ -32,10 +35,14 @@ web-ui/yarn.lock
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Environment
 .env
 .env.local
+
+# Claude Code
+.claude/settings.local.json
 
 # Kiri MCP Server
 .kiri/
