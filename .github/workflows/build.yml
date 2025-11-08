@@ -277,25 +277,31 @@ jobs:
 
           Write-Host "Using MetaEditor: $global:METAEDITOR_PATH"
 
+          # Save to GitHub environment for next step
+          "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Compile MQL files
         run: |
           Write-Host "Compiling ${{ matrix.platform }} files..."
 
+          # Read MetaEditor path from environment
+          $metaeditorPath = $env:METAEDITOR_PATH
+
           # Verify MetaEditor path
-          if (-not $global:METAEDITOR_PATH) {
-            Write-Host "❌ MetaEditor path not set"
+          if (-not $metaeditorPath) {
+            Write-Host "❌ MetaEditor path not set in environment"
             exit 1
           }
 
-          if (-not (Test-Path $global:METAEDITOR_PATH)) {
-            Write-Host "❌ MetaEditor not found at: $global:METAEDITOR_PATH"
+          if (-not (Test-Path $metaeditorPath)) {
+            Write-Host "❌ MetaEditor not found at: $metaeditorPath"
             exit 1
           }
 
-          Write-Host "Using MetaEditor: $global:METAEDITOR_PATH"
+          Write-Host "Using MetaEditor: $metaeditorPath"
 
           # Determine MetaTrader installation directory
-          $mtInstallDir = Split-Path (Split-Path $global:METAEDITOR_PATH)
+          $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
           Write-Host "MT installation directory: $mtInstallDir"
 
           # Copy include files to MetaTrader's Include directory
@@ -324,7 +330,7 @@ jobs:
 
           if (Test-Path $masterFile) {
             $logFile = "${{ github.workspace }}\master_compile.log"
-            & $global:METAEDITOR_PATH /compile:"$masterFile" /log:"$logFile"
+            & $metaeditorPath /compile:"$masterFile" /log:"$logFile"
 
             Start-Sleep -Seconds 3
 
@@ -344,7 +350,7 @@ jobs:
 
           if (Test-Path $slaveFile) {
             $logFile = "${{ github.workspace }}\slave_compile.log"
-            & $global:METAEDITOR_PATH /compile:"$slaveFile" /log:"$logFile"
+            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile"
 
             Start-Sleep -Seconds 3
 
