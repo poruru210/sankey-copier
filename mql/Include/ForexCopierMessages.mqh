@@ -10,10 +10,10 @@
 //+------------------------------------------------------------------+
 //| Send registration message to server                              |
 //+------------------------------------------------------------------+
-bool SendRegistrationMessage(int zmq_context, string server_address, string account_id, string ea_type, string platform)
+bool SendRegistrationMessage(HANDLE_TYPE zmq_context, string server_address, string account_id, string ea_type, string platform)
 {
    // Create temporary PUSH socket for registration
-   int push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
       Print("ERROR: Failed to create registration socket");
@@ -68,10 +68,10 @@ bool SendRegistrationMessage(int zmq_context, string server_address, string acco
 //+------------------------------------------------------------------+
 //| Send unregistration message to server                            |
 //+------------------------------------------------------------------+
-bool SendUnregistrationMessage(int zmq_context, string server_address, string account_id)
+bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, string account_id)
 {
    // Create temporary PUSH socket for unregistration
-   int push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
       Print("ERROR: Failed to create unregistration socket");
@@ -123,10 +123,10 @@ bool SendUnregistrationMessage(int zmq_context, string server_address, string ac
 //+------------------------------------------------------------------+
 //| Send heartbeat message to server                                 |
 //+------------------------------------------------------------------+
-bool SendHeartbeatMessage(int zmq_context, string server_address, string account_id)
+bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string account_id)
 {
    // Create temporary PUSH socket for heartbeat
-   int push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
       Print("ERROR: Failed to create heartbeat socket");
@@ -174,7 +174,7 @@ bool SendHeartbeatMessage(int zmq_context, string server_address, string account
 //+------------------------------------------------------------------+
 //| Send open position signal message (Master)                       |
 //+------------------------------------------------------------------+
-bool SendOpenSignal(int zmq_socket, TICKET_TYPE ticket, string symbol,
+bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
                     string order_type, double lots, double price, double sl, double tp,
                     long magic, string comment, string account_id)
 {
@@ -207,7 +207,7 @@ bool SendOpenSignal(int zmq_socket, TICKET_TYPE ticket, string symbol,
 //+------------------------------------------------------------------+
 //| Send close signal message (Master)                               |
 //+------------------------------------------------------------------+
-bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
+bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string account_id)
 {
    // For close signals, we send a trade signal with action="Close"
    // Only ticket, timestamp, and source_account are needed
@@ -238,7 +238,7 @@ bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
 //+------------------------------------------------------------------+
 //| Send modify signal message (Master)                             |
 //+------------------------------------------------------------------+
-bool SendModifySignal(int zmq_socket, TICKET_TYPE ticket, double sl, double tp, string account_id)
+bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, double tp, string account_id)
 {
    // For modify signals, we send a trade signal with action="Modify"
    // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
