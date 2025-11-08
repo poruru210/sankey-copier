@@ -330,7 +330,7 @@ jobs:
 
           if (Test-Path $masterFile) {
             $logFile = "${{ github.workspace }}\master_compile.log"
-            & $metaeditorPath /compile:"$masterFile" /log:"$logFile" /inc:"${{ github.workspace }}\mql"
+            & $metaeditorPath /compile:"$masterFile" /log:"$logFile"
 
             Start-Sleep -Seconds 3
 
@@ -350,7 +350,7 @@ jobs:
 
           if (Test-Path $slaveFile) {
             $logFile = "${{ github.workspace }}\slave_compile.log"
-            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile" /inc:"${{ github.workspace }}\mql"
+            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile"
 
             Start-Sleep -Seconds 3
 
