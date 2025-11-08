@@ -271,6 +271,10 @@ void SendOrderModifySignal(int ticket, double sl, double tp)
 //+------------------------------------------------------------------+
 //| Helper functions                                                  |
 //+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Check if order is already being tracked                          |
+//+------------------------------------------------------------------+
 bool IsOrderTracked(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)
@@ -281,6 +285,9 @@ bool IsOrderTracked(int ticket)
    return false;
 }
 
+//+------------------------------------------------------------------+
+//| Add order to tracking list with current SL/TP                    |
+//+------------------------------------------------------------------+
 void AddTrackedOrder(int ticket)
 {
    if(!OrderSelect(ticket, SELECT_BY_TICKET))
@@ -293,6 +300,9 @@ void AddTrackedOrder(int ticket)
    g_tracked_orders[size].tp = OrderTakeProfit();
 }
 
+//+------------------------------------------------------------------+
+//| Remove order from tracking list                                  |
+//+------------------------------------------------------------------+
 void RemoveTrackedOrder(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)

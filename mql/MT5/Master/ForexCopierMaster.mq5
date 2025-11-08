@@ -267,6 +267,10 @@ void SendPositionModifySignal(ulong ticket, double sl, double tp)
 //+------------------------------------------------------------------+
 //| Helper functions                                                  |
 //+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Check if position is already being tracked                       |
+//+------------------------------------------------------------------+
 bool IsPositionTracked(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
@@ -274,6 +278,9 @@ bool IsPositionTracked(ulong ticket)
    return false;
 }
 
+//+------------------------------------------------------------------+
+//| Add position to tracking list with current SL/TP                 |
+//+------------------------------------------------------------------+
 void AddTrackedPosition(ulong ticket)
 {
    if(!PositionSelectByTicket(ticket)) return;
@@ -285,6 +292,9 @@ void AddTrackedPosition(ulong ticket)
    g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
 }
 
+//+------------------------------------------------------------------+
+//| Remove position from tracking list                               |
+//+------------------------------------------------------------------+
 void RemoveTrackedPosition(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)

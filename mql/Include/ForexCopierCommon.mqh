@@ -136,6 +136,7 @@ string FormatTimestampISO8601(datetime time)
 //+------------------------------------------------------------------+
 //| Parse ISO 8601 timestamp to datetime                            |
 //| Format: "2025-01-15T10:30:45Z"                                  |
+//| Returns: datetime value, or 0 if parsing fails or invalid format|
 //+------------------------------------------------------------------+
 datetime ParseISO8601(string timestamp)
 {
@@ -171,6 +172,7 @@ datetime ParseISO8601(string timestamp)
 //+------------------------------------------------------------------+
 //| Extract account number from source_account string                |
 //| Example: "IC_Markets_98765" -> "98765"                          |
+//| Returns: Account number or original string if no underscore found|
 //+------------------------------------------------------------------+
 string ExtractAccountNumber(string source_account)
 {
