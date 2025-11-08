@@ -18,11 +18,19 @@ input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
 input int      MagicFilter = 0;                         // Magic number filter (0 = all)
 input int      ScanInterval = 100;                      // Scan interval in milliseconds
 
+//--- Order tracking structure
+struct OrderInfo
+{
+   int    ticket;
+   double sl;
+   double tp;
+};
+
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
 int         g_zmq_context = -1;
 int         g_zmq_socket = -1;
-int         g_tracked_orders[];
+OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 
@@ -168,11 +176,30 @@ void CheckForNewOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Check for modified orders                                         |
+//| Check for modified orders (SL/TP changes)                         |
 //+------------------------------------------------------------------+
 void CheckForModifiedOrders()
 {
-   // Placeholder for modify detection
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+   {
+      int ticket = g_tracked_orders[i].ticket;
+      if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES))
+      {
+         double current_sl = OrderStopLoss();
+         double current_tp = OrderTakeProfit();
+
+         // Check if SL or TP has changed
+         if(current_sl != g_tracked_orders[i].sl || current_tp != g_tracked_orders[i].tp)
+         {
+            // Send modify signal
+            SendOrderModifySignal(ticket, current_sl, current_tp);
+
+            // Update tracked values
+            g_tracked_orders[i].sl = current_sl;
+            g_tracked_orders[i].tp = current_tp;
+         }
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -183,7 +210,7 @@ void CheckForClosedOrders()
    // Check if any tracked order is no longer in open orders
    for(int i = ArraySize(g_tracked_orders) - 1; i >= 0; i--)
    {
-      int ticket = g_tracked_orders[i];
+      int ticket = g_tracked_orders[i].ticket;
       bool found = false;
 
       for(int j = 0; j < OrdersTotal(); j++)
@@ -233,13 +260,21 @@ void SendOpenSignalFromOrder(int ticket)
 }
 
 //+------------------------------------------------------------------+
+//| Send modify signal                                                |
+//+------------------------------------------------------------------+
+void SendOrderModifySignal(int ticket, double sl, double tp)
+{
+   SendModifySignal(g_zmq_socket, (TICKET_TYPE)ticket, sl, tp, AccountID);
+}
+
+//+------------------------------------------------------------------+
 //| Helper functions                                                  |
 //+------------------------------------------------------------------+
 bool IsOrderTracked(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)
    {
-      if(g_tracked_orders[i] == ticket)
+      if(g_tracked_orders[i].ticket == ticket)
          return true;
    }
    return false;
@@ -247,16 +282,21 @@ bool IsOrderTracked(int ticket)
 
 void AddTrackedOrder(int ticket)
 {
+   if(!OrderSelect(ticket, SELECT_BY_TICKET))
+      return;
+
    int size = ArraySize(g_tracked_orders);
    ArrayResize(g_tracked_orders, size + 1);
-   g_tracked_orders[size] = ticket;
+   g_tracked_orders[size].ticket = ticket;
+   g_tracked_orders[size].sl = OrderStopLoss();
+   g_tracked_orders[size].tp = OrderTakeProfit();
 }
 
 void RemoveTrackedOrder(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)
    {
-      if(g_tracked_orders[i] == ticket)
+      if(g_tracked_orders[i].ticket == ticket)
       {
          // Shift array elements
          for(int j = i; j < ArraySize(g_tracked_orders) - 1; j++)

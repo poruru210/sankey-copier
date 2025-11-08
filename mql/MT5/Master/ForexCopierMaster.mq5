@@ -17,13 +17,21 @@ input string   ServerAddress = "tcp://localhost:5555";
 input ulong    MagicFilter = 0;
 input int      ScanInterval = 100;
 
+//--- Position tracking structure
+struct PositionInfo
+{
+   ulong  ticket;
+   double sl;
+   double tp;
+};
+
 //--- Global variables
-string      AccountID;                  // Auto-generated from broker + account number
-int         g_zmq_context = -1;
-int         g_zmq_socket = -1;
-ulong       g_tracked_positions[];
-bool        g_initialized = false;
-datetime    g_last_heartbeat = 0;
+string        AccountID;                  // Auto-generated from broker + account number
+int           g_zmq_context = -1;
+int           g_zmq_socket = -1;
+PositionInfo  g_tracked_positions[];
+bool          g_initialized = false;
+datetime      g_last_heartbeat = 0;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -101,6 +109,7 @@ void OnTick()
    if(TimeCurrent() - last_scan > ScanInterval / 1000)
    {
       CheckForNewPositions();
+      CheckForModifiedPositions();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
    }
@@ -173,13 +182,40 @@ void CheckForNewPositions()
 }
 
 //+------------------------------------------------------------------+
+//| Check for modified positions (SL/TP changes)                      |
+//+------------------------------------------------------------------+
+void CheckForModifiedPositions()
+{
+   for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+   {
+      ulong ticket = g_tracked_positions[i].ticket;
+      if(PositionSelectByTicket(ticket))
+      {
+         double current_sl = PositionGetDouble(POSITION_SL);
+         double current_tp = PositionGetDouble(POSITION_TP);
+
+         // Check if SL or TP has changed
+         if(current_sl != g_tracked_positions[i].sl || current_tp != g_tracked_positions[i].tp)
+         {
+            // Send modify signal
+            SendPositionModifySignal(ticket, current_sl, current_tp);
+
+            // Update tracked values
+            g_tracked_positions[i].sl = current_sl;
+            g_tracked_positions[i].tp = current_tp;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Check for closed positions                                        |
 //+------------------------------------------------------------------+
 void CheckForClosedPositions()
 {
    for(int i = ArraySize(g_tracked_positions) - 1; i >= 0; i--)
    {
-      ulong ticket = g_tracked_positions[i];
+      ulong ticket = g_tracked_positions[i].ticket;
       if(!PositionSelectByTicket(ticket))
       {
          SendPositionCloseSignal(ticket);
@@ -220,27 +256,39 @@ void SendPositionCloseSignal(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
+//| Send modify signal                                                |
+//+------------------------------------------------------------------+
+void SendPositionModifySignal(ulong ticket, double sl, double tp)
+{
+   SendModifySignal(g_zmq_socket, ticket, sl, tp, AccountID);
+}
+
+//+------------------------------------------------------------------+
 //| Helper functions                                                  |
 //+------------------------------------------------------------------+
 bool IsPositionTracked(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
-      if(g_tracked_positions[i] == ticket) return true;
+      if(g_tracked_positions[i].ticket == ticket) return true;
    return false;
 }
 
 void AddTrackedPosition(ulong ticket)
 {
+   if(!PositionSelectByTicket(ticket)) return;
+
    int size = ArraySize(g_tracked_positions);
    ArrayResize(g_tracked_positions, size + 1);
-   g_tracked_positions[size] = ticket;
+   g_tracked_positions[size].ticket = ticket;
+   g_tracked_positions[size].sl = PositionGetDouble(POSITION_SL);
+   g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
 }
 
 void RemoveTrackedPosition(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
    {
-      if(g_tracked_positions[i] == ticket)
+      if(g_tracked_positions[i].ticket == ticket)
       {
          for(int j = i; j < ArraySize(g_tracked_positions) - 1; j++)
             g_tracked_positions[j] = g_tracked_positions[j + 1];

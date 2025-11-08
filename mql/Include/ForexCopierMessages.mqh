@@ -234,3 +234,34 @@ bool SendCloseSignal(int zmq_socket, TICKET_TYPE ticket, string account_id)
    // Send binary MessagePack data
    return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 }
+
+//+------------------------------------------------------------------+
+//| Send modify signal message (Master)                             |
+//+------------------------------------------------------------------+
+bool SendModifySignal(int zmq_socket, TICKET_TYPE ticket, double sl, double tp, string account_id)
+{
+   // For modify signals, we send a trade signal with action="Modify"
+   // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
+   int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
+                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
+
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to serialize modify signal message");
+      return false;
+   }
+
+   // Copy serialized data to buffer
+   uchar buffer[];
+   ArrayResize(buffer, len);
+   int copied = copy_serialized_buffer(buffer, len);
+
+   if(copied != len)
+   {
+      Print("ERROR: Failed to copy modify signal message buffer");
+      return false;
+   }
+
+   // Send binary MessagePack data
+   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
+}
