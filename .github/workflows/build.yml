@@ -127,7 +127,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: web-ui
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build Web UI
         working-directory: web-ui
@@ -164,11 +164,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Compile MQL${{ matrix.version }} files
-        uses: fx31337/mql-compile-action@master
+        uses: fx31337/mql-compile-action@v2
         with:
           path: mql/${{ matrix.platform }}
           include: mql/Include
-          mt-version: ${{ matrix.version }}
+          init-platform: true
           verbose: true
 
       - name: Prepare MQL artifacts
