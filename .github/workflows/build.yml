@@ -135,6 +135,13 @@ jobs:
           CI: false
         run: pnpm build
 
+      - name: List build output (debug)
+        run: |
+          echo "Contents of web-ui directory:"
+          ls -la web-ui/ || dir web-ui\
+          echo "Looking for .next directory:"
+          ls -la web-ui/.next/ || dir web-ui\.next\ || echo ".next directory not found"
+
       - name: Upload Web UI artifacts
         uses: actions/upload-artifact@v4
         with:
