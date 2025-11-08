@@ -346,15 +346,45 @@ jobs:
             New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
           }
 
-          # Clone MQL standard libraries from GitHub
-          $stdLibRepo = "https://github.com/MetaQuotes/MQL${{ matrix.version }}.git"
+          # Download MQL standard libraries from GitHub as ZIP
+          $stdLibZipUrl = "https://github.com/MetaQuotes/MQL${{ matrix.version }}/archive/refs/heads/master.zip"
+          $tempZipPath = "${{ github.workspace }}\mql${{ matrix.version }}_stdlib.zip"
           $tempStdLibDir = "${{ github.workspace }}\temp_mql${{ matrix.version }}_stdlib"
 
-          Write-Host "Cloning MQL${{ matrix.version }} standard libraries from $stdLibRepo..."
-          git clone --depth 1 --single-branch $stdLibRepo $tempStdLibDir
+          Write-Host "Downloading MQL${{ matrix.version }} standard libraries from GitHub..."
+          Write-Host "URL: $stdLibZipUrl"
 
-          if (-not (Test-Path $tempStdLibDir)) {
-            Write-Host "❌ Failed to clone MQL${{ matrix.version }} standard libraries"
+          try {
+            Invoke-WebRequest -Uri $stdLibZipUrl -OutFile $tempZipPath -UseBasicParsing -TimeoutSec 120
+            Write-Host "✅ Download successful: $tempZipPath"
+
+            # Extract ZIP file
+            Write-Host "Extracting ZIP file..."
+            Expand-Archive -Path $tempZipPath -DestinationPath $tempStdLibDir -Force
+
+            # The extracted folder will be named MQL{version}-master
+            $extractedFolder = Join-Path $tempStdLibDir "MQL${{ matrix.version }}-master"
+
+            if (-not (Test-Path $extractedFolder)) {
+              Write-Host "❌ Extracted folder not found: $extractedFolder"
+              Write-Host "Listing temp directory contents:"
+              Get-ChildItem $tempStdLibDir | ForEach-Object {
+                Write-Host "  - $($_.Name)"
+              }
+              exit 1
+            }
+
+            # Move contents up one level for easier access
+            $tempExtractPath = Join-Path $tempStdLibDir "extracted"
+            Move-Item -Path $extractedFolder -Destination $tempExtractPath -Force
+            Remove-Item -Path $tempStdLibDir -Recurse -Force
+            Move-Item -Path $tempExtractPath -Destination $tempStdLibDir -Force
+
+            Write-Host "✅ Extraction successful"
+          }
+          catch {
+            Write-Host "❌ Failed to download or extract MQL${{ matrix.version }} standard libraries"
+            Write-Host "Error: $($_.Exception.Message)"
             exit 1
           }
 
@@ -393,10 +423,11 @@ jobs:
             exit 1
           }
 
-          # Clean up temporary directory
+          # Clean up temporary files
           Write-Host ""
           Write-Host "Cleaning up temporary files..."
           Remove-Item -Path $tempStdLibDir -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path $tempZipPath -Force -ErrorAction SilentlyContinue
 
       - name: Compile MQL files
         run: |
