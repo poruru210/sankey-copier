@@ -33,11 +33,17 @@ datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
 
-// Order mapping: [master_ticket][slave_ticket]
-int         g_order_map[][2];
+struct OrderMapping {
+    int master_ticket;
+    int slave_ticket;
+};
+OrderMapping g_order_map[];
 
-// Pending order mapping: [master_ticket][pending_ticket]
-int         g_pending_order_map[][2];
+struct PendingOrderMapping {
+    int master_ticket;
+    int pending_ticket;
+};
+PendingOrderMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
 bool           g_config_enabled = true;          // Whether copying is enabled
@@ -558,35 +564,34 @@ void CancelPendingOrder(int master_ticket)
 //+------------------------------------------------------------------+
 void AddOrderMapping(int master_ticket, int slave_ticket)
 {
-   int size = ArrayRange(g_order_map, 0);
+   int size = ArraySize(g_order_map);
    ArrayResize(g_order_map, size + 1);
-   g_order_map[size][0] = master_ticket;
-   g_order_map[size][1] = slave_ticket;
+   g_order_map[size].master_ticket = master_ticket;
+   g_order_map[size].slave_ticket = slave_ticket;
 }
 
 int GetSlaveTicket(int master_ticket)
 {
-   for(int i = 0; i < ArrayRange(g_order_map, 0); i++)
+   for(int i = 0; i < ArraySize(g_order_map); i++)
    {
-      if(g_order_map[i][0] == master_ticket)
-         return g_order_map[i][1];
+      if(g_order_map[i].master_ticket == master_ticket)
+         return g_order_map[i].slave_ticket;
    }
    return -1;
 }
 
 void RemoveOrderMapping(int master_ticket)
 {
-   for(int i = 0; i < ArrayRange(g_order_map, 0); i++)
+   for(int i = 0; i < ArraySize(g_order_map); i++)
    {
-      if(g_order_map[i][0] == master_ticket)
+      if(g_order_map[i].master_ticket == master_ticket)
       {
          // Shift array
-         for(int j = i; j < ArrayRange(g_order_map, 0) - 1; j++)
+         for(int j = i; j < ArraySize(g_order_map) - 1; j++)
          {
-            g_order_map[j][0] = g_order_map[j + 1][0];
-            g_order_map[j][1] = g_order_map[j + 1][1];
+            g_order_map[j] = g_order_map[j + 1];
          }
-         ArrayResize(g_order_map, ArrayRange(g_order_map, 0) - 1);
+         ArrayResize(g_order_map, ArraySize(g_order_map) - 1);
          break;
       }
    }
@@ -597,35 +602,34 @@ void RemoveOrderMapping(int master_ticket)
 //+------------------------------------------------------------------+
 void AddPendingOrderMapping(int master_ticket, int pending_ticket)
 {
-   int size = ArrayRange(g_pending_order_map, 0);
+   int size = ArraySize(g_pending_order_map);
    ArrayResize(g_pending_order_map, size + 1);
-   g_pending_order_map[size][0] = master_ticket;
-   g_pending_order_map[size][1] = pending_ticket;
+   g_pending_order_map[size].master_ticket = master_ticket;
+   g_pending_order_map[size].pending_ticket = pending_ticket;
 }
 
 int GetPendingTicket(int master_ticket)
 {
-   for(int i = 0; i < ArrayRange(g_pending_order_map, 0); i++)
+   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
    {
-      if(g_pending_order_map[i][0] == master_ticket)
-         return g_pending_order_map[i][1];
+      if(g_pending_order_map[i].master_ticket == master_ticket)
+         return g_pending_order_map[i].pending_ticket;
    }
    return -1;
 }
 
 void RemovePendingOrderMapping(int master_ticket)
 {
-   for(int i = 0; i < ArrayRange(g_pending_order_map, 0); i++)
+   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
    {
-      if(g_pending_order_map[i][0] == master_ticket)
+      if(g_pending_order_map[i].master_ticket == master_ticket)
       {
          // Shift array
-         for(int j = i; j < ArrayRange(g_pending_order_map, 0) - 1; j++)
+         for(int j = i; j < ArraySize(g_pending_order_map) - 1; j++)
          {
-            g_pending_order_map[j][0] = g_pending_order_map[j + 1][0];
-            g_pending_order_map[j][1] = g_pending_order_map[j + 1][1];
+            g_pending_order_map[j] = g_pending_order_map[j + 1];
          }
-         ArrayResize(g_pending_order_map, ArrayRange(g_pending_order_map, 0) - 1);
+         ArrayResize(g_pending_order_map, ArraySize(g_pending_order_map) - 1);
          break;
       }
    }
