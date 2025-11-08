@@ -109,9 +109,9 @@ void OnTick()
    if(!g_initialized)
       return;
 
-   // Send heartbeat every 30 seconds
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
    static datetime last_heartbeat = 0;
-   if(TimeCurrent() - last_heartbeat >= 30)
+   if(TimeCurrent() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
       SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
       last_heartbeat = TimeCurrent();

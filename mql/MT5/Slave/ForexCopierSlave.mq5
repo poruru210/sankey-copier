@@ -164,8 +164,8 @@ void OnTick()
 {
    if(!g_initialized) return;
 
-   // Send heartbeat every 30 seconds
-   if(TimeCurrent() - g_last_heartbeat >= 30)
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
+   if(TimeCurrent() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
       SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
       g_last_heartbeat = TimeCurrent();
@@ -173,8 +173,8 @@ void OnTick()
 
    // Check for configuration messages (MessagePack format)
    uchar config_buffer[];
-   ArrayResize(config_buffer, 4096);
-   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, 4096);
+   ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
+   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, MESSAGE_BUFFER_SIZE);
 
    if(config_bytes > 0)
    {
@@ -182,7 +182,7 @@ void OnTick()
       int space_pos = -1;
       for(int i = 0; i < config_bytes; i++)
       {
-         if(config_buffer[i] == 32) // 32 = space
+         if(config_buffer[i] == SPACE_CHAR)
          {
             space_pos = i;
             break;
@@ -210,8 +210,8 @@ void OnTick()
 
    // Check for trade signal messages (MessagePack format)
    uchar trade_buffer[];
-   ArrayResize(trade_buffer, 4096);
-   int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, 4096);
+   ArrayResize(trade_buffer, MESSAGE_BUFFER_SIZE);
+   int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, MESSAGE_BUFFER_SIZE);
 
    if(trade_bytes > 0)
    {
@@ -219,7 +219,7 @@ void OnTick()
       int space_pos = -1;
       for(int i = 0; i < trade_bytes; i++)
       {
-         if(trade_buffer[i] == 32) // 32 = space
+         if(trade_buffer[i] == SPACE_CHAR)
          {
             space_pos = i;
             break;
@@ -341,14 +341,8 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
 
    lots = NormalizeDouble(lots, 2);
 
-   // Extract account number from source_account (e.g., "IC_Markets_98765" -> "98765")
-   string account_number = source_account;
-   int last_underscore = StringFind(source_account, "_", StringLen(source_account) - 15);
-   if(last_underscore > 0)
-      account_number = StringSubstr(source_account, last_underscore + 1);
-
-   // Build traceable comment: "M12345#98765"
-   string comment = "M" + IntegerToString(master_ticket) + "#" + account_number;
+   // Extract account number and build traceable comment: "M12345#98765"
+   string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
    g_trade.SetExpertMagicNumber(0);
    bool result = false;
@@ -454,14 +448,8 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
 
    lots = NormalizeDouble(lots, 2);
 
-   // Extract account number from source_account (e.g., "IC_Markets_98765" -> "98765")
-   string account_number = source_account;
-   int last_underscore = StringFind(source_account, "_", StringLen(source_account) - 15);
-   if(last_underscore > 0)
-      account_number = StringSubstr(source_account, last_underscore + 1);
-
-   // Build traceable comment: "P12345#98765"
-   string comment = "P" + IntegerToString(master_ticket) + "#" + account_number;
+   // Extract account number and build traceable comment: "P12345#98765"
+   string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
    g_trade.SetExpertMagicNumber(0);
 

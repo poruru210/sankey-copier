@@ -21,6 +21,11 @@
 #define ZMQ_PUSH 8
 #define ZMQ_SUB  2
 
+//--- Common constants
+#define HEARTBEAT_INTERVAL_SECONDS 30
+#define MESSAGE_BUFFER_SIZE 4096
+#define SPACE_CHAR 32
+
 //--- Import Rust ZeroMQ DLL
 #import "forex_copier_zmq.dll"
    int    zmq_context_create();
@@ -161,6 +166,23 @@ datetime ParseISO8601(string timestamp)
    dt.sec = second;
 
    return StructToTime(dt);
+}
+
+//+------------------------------------------------------------------+
+//| Extract account number from source_account string                |
+//| Example: "IC_Markets_98765" -> "98765"                          |
+//+------------------------------------------------------------------+
+string ExtractAccountNumber(string source_account)
+{
+   // Find the last underscore in the account string
+   // Assume account number is after the last underscore and up to 15 chars from end
+   int last_underscore = StringFind(source_account, "_", StringLen(source_account) - 15);
+
+   if(last_underscore > 0)
+      return StringSubstr(source_account, last_underscore + 1);
+
+   // If no underscore found, return the original string
+   return source_account;
 }
 
 //+------------------------------------------------------------------+
