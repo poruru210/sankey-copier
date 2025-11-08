@@ -302,10 +302,12 @@ jobs:
 
           # Determine MetaTrader installation directory
           $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+          $mqlBaseDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}"
           Write-Host "MT installation directory: $mtInstallDir"
+          Write-Host "MQL base directory: $mqlBaseDir"
 
           # Copy include files to MetaTrader's Include directory
-          $targetIncludeDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}\Include"
+          $targetIncludeDir = Join-Path $mqlBaseDir "Include"
           Write-Host "Target include directory: $targetIncludeDir"
 
           if (-not (Test-Path $targetIncludeDir)) {
@@ -330,7 +332,7 @@ jobs:
 
           if (Test-Path $masterFile) {
             $logFile = "${{ github.workspace }}\master_compile.log"
-            & $metaeditorPath /compile:"$masterFile" /log:"$logFile"
+            & $metaeditorPath /compile:"$masterFile" /log:"$logFile" /inc:"$mqlBaseDir"
 
             Start-Sleep -Seconds 3
 
@@ -350,7 +352,7 @@ jobs:
 
           if (Test-Path $slaveFile) {
             $logFile = "${{ github.workspace }}\slave_compile.log"
-            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile"
+            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile" /inc:"$mqlBaseDir"
 
             Start-Sleep -Seconds 3
 
