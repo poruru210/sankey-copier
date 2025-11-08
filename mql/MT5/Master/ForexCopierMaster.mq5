@@ -7,31 +7,31 @@
 #property link      ""
 #property version   "1.00"
 
-//--- Import Rust ZeroMQ DLL
-#import "forex_copier_zmq.dll"
-   int    zmq_context_create();
-   void   zmq_context_destroy(int context);
-   int    zmq_socket_create(int context, int socket_type);
-   void   zmq_socket_destroy(int socket);
-   int    zmq_socket_connect(int socket, string address);
-   int    zmq_socket_send(int socket, string message);
-#import
-
-//--- ZeroMQ socket types
-#define ZMQ_PUSH 8
+//--- Include common headers
+#include <ForexCopierCommon.mqh>
+#include <ForexCopierMessages.mqh>
+#include <ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
 input ulong    MagicFilter = 0;
 input int      ScanInterval = 100;
 
+//--- Position tracking structure
+struct PositionInfo
+{
+   ulong  ticket;
+   double sl;
+   double tp;
+};
+
 //--- Global variables
-string      AccountID;                  // Auto-generated from broker + account number
-int         g_zmq_context = -1;
-int         g_zmq_socket = -1;
-ulong       g_tracked_positions[];
-bool        g_initialized = false;
-datetime    g_last_heartbeat = 0;
+string        AccountID;                  // Auto-generated from broker + account number
+int           g_zmq_context = -1;
+int           g_zmq_socket = -1;
+PositionInfo  g_tracked_positions[];
+bool          g_initialized = false;
+datetime      g_last_heartbeat = 0;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -41,16 +41,7 @@ int OnInit()
    Print("=== ForexCopier Master EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
-   string broker = AccountInfoString(ACCOUNT_COMPANY);
-   long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
-
-   // Replace spaces and special characters with underscores
-   StringReplace(broker, " ", "_");
-   StringReplace(broker, ".", "_");
-   StringReplace(broker, "-", "_");
-
-   // Format: broker_accountnumber
-   AccountID = broker + "_" + IntegerToString(account_number);
+   AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
    g_zmq_context = zmq_context_create();
@@ -80,7 +71,7 @@ int OnInit()
    g_initialized = true;
 
    // Send registration message to server
-   SendRegisterMessage();
+   SendRegistrationMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5");
 
    Print("=== ForexCopier Master EA (MT5) Initialized ===");
    return INIT_SUCCEEDED;
@@ -92,7 +83,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Send unregister message to server
-   SendUnregisterMessage();
+   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
 
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
@@ -107,10 +98,10 @@ void OnTick()
 {
    if(!g_initialized) return;
 
-   // Send heartbeat every 30 seconds
-   if(TimeCurrent() - g_last_heartbeat >= 30)
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
+   if(TimeCurrent() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
-      SendHeartbeat();
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
       g_last_heartbeat = TimeCurrent();
    }
 
@@ -118,6 +109,7 @@ void OnTick()
    if(TimeCurrent() - last_scan > ScanInterval / 1000)
    {
       CheckForNewPositions();
+      CheckForModifiedPositions();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
    }
@@ -142,7 +134,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       // Position was closed
       if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
-         SendCloseSignal(trans.position);
+         SendPositionCloseSignal(trans.position);
       }
    }
 }
@@ -162,6 +154,7 @@ void ScanExistingPositions()
          if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
          {
             AddTrackedPosition(ticket);
+            SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
          }
       }
    }
@@ -183,7 +176,34 @@ void CheckForNewPositions()
          if(!IsPositionTracked(ticket))
          {
             AddTrackedPosition(ticket);
-            SendPositionSignal("Open", ticket);
+            SendPositionOpenSignal(ticket);
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check for modified positions (SL/TP changes)                      |
+//+------------------------------------------------------------------+
+void CheckForModifiedPositions()
+{
+   for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+   {
+      ulong ticket = g_tracked_positions[i].ticket;
+      if(PositionSelectByTicket(ticket))
+      {
+         double current_sl = PositionGetDouble(POSITION_SL);
+         double current_tp = PositionGetDouble(POSITION_TP);
+
+         // Check if SL or TP has changed
+         if(current_sl != g_tracked_positions[i].sl || current_tp != g_tracked_positions[i].tp)
+         {
+            // Send modify signal
+            SendPositionModifySignal(ticket, current_sl, current_tp);
+
+            // Update tracked values
+            g_tracked_positions[i].sl = current_sl;
+            g_tracked_positions[i].tp = current_tp;
          }
       }
    }
@@ -196,19 +216,19 @@ void CheckForClosedPositions()
 {
    for(int i = ArraySize(g_tracked_positions) - 1; i >= 0; i--)
    {
-      ulong ticket = g_tracked_positions[i];
+      ulong ticket = g_tracked_positions[i].ticket;
       if(!PositionSelectByTicket(ticket))
       {
-         SendCloseSignal(ticket);
+         SendPositionCloseSignal(ticket);
          RemoveTrackedPosition(ticket);
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Send position signal                                              |
+//| Send position open signal                                        |
 //+------------------------------------------------------------------+
-void SendPositionSignal(string action, ulong ticket)
+void SendPositionOpenSignal(ulong ticket)
 {
    if(!PositionSelectByTicket(ticket))
       return;
@@ -220,65 +240,66 @@ void SendPositionSignal(string action, ulong ticket)
    double sl = PositionGetDouble(POSITION_SL);
    double tp = PositionGetDouble(POSITION_TP);
    long magic = PositionGetInteger(POSITION_MAGIC);
+   string comment = PositionGetString(POSITION_COMMENT);
 
-   string order_type = (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+   string order_type = GetOrderTypeString((ENUM_POSITION_TYPE)type);
 
-   string json = "{";
-   json += "\"action\":\"" + action + "\",";
-   json += "\"ticket\":" + IntegerToString(ticket) + ",";
-   json += "\"symbol\":\"" + symbol + "\",";
-   json += "\"order_type\":\"" + order_type + "\",";
-   json += "\"lots\":" + DoubleToString(volume, 2) + ",";
-   json += "\"open_price\":" + DoubleToString(price, _Digits) + ",";
-   json += "\"stop_loss\":" + ((sl > 0) ? DoubleToString(sl, _Digits) : "null") + ",";
-   json += "\"take_profit\":" + ((tp > 0) ? DoubleToString(tp, _Digits) : "null") + ",";
-   json += "\"magic_number\":" + IntegerToString(magic) + ",";
-   json += "\"comment\":\"" + PositionGetString(POSITION_COMMENT) + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\",";
-   json += "\"source_account\":\"" + AccountID + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
+   SendOpenSignal(g_zmq_socket, ticket, symbol, order_type,
+                  volume, price, sl, tp, magic, comment, AccountID);
 }
 
 //+------------------------------------------------------------------+
 //| Send close signal                                                 |
 //+------------------------------------------------------------------+
-void SendCloseSignal(ulong ticket)
+void SendPositionCloseSignal(ulong ticket)
 {
-   string json = "{";
-   json += "\"action\":\"Close\",";
-   json += "\"ticket\":" + IntegerToString(ticket) + ",";
-   json += "\"timestamp\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\",";
-   json += "\"source_account\":\"" + AccountID + "\"";
-   json += "}";
+   SendCloseSignal(g_zmq_socket, ticket, AccountID);
+}
 
-   zmq_socket_send(g_zmq_socket, json);
+//+------------------------------------------------------------------+
+//| Send modify signal                                                |
+//+------------------------------------------------------------------+
+void SendPositionModifySignal(ulong ticket, double sl, double tp)
+{
+   SendModifySignal(g_zmq_socket, ticket, sl, tp, AccountID);
 }
 
 //+------------------------------------------------------------------+
 //| Helper functions                                                  |
 //+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Check if position is already being tracked                       |
+//+------------------------------------------------------------------+
 bool IsPositionTracked(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
-      if(g_tracked_positions[i] == ticket) return true;
+      if(g_tracked_positions[i].ticket == ticket) return true;
    return false;
 }
 
+//+------------------------------------------------------------------+
+//| Add position to tracking list with current SL/TP                 |
+//+------------------------------------------------------------------+
 void AddTrackedPosition(ulong ticket)
 {
+   if(!PositionSelectByTicket(ticket)) return;
+
    int size = ArraySize(g_tracked_positions);
    ArrayResize(g_tracked_positions, size + 1);
-   g_tracked_positions[size] = ticket;
+   g_tracked_positions[size].ticket = ticket;
+   g_tracked_positions[size].sl = PositionGetDouble(POSITION_SL);
+   g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
 }
 
+//+------------------------------------------------------------------+
+//| Remove position from tracking list                               |
+//+------------------------------------------------------------------+
 void RemoveTrackedPosition(ulong ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
    {
-      if(g_tracked_positions[i] == ticket)
+      if(g_tracked_positions[i].ticket == ticket)
       {
          for(int j = i; j < ArraySize(g_tracked_positions) - 1; j++)
             g_tracked_positions[j] = g_tracked_positions[j + 1];
@@ -288,81 +309,3 @@ void RemoveTrackedPosition(ulong ticket)
    }
 }
 
-//+------------------------------------------------------------------+
-//| Send registration message to server                              |
-//+------------------------------------------------------------------+
-void SendRegisterMessage()
-{
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Build JSON message
-   string json = "{";
-   json += "\"message_type\":\"Register\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"ea_type\":\"Master\",";
-   json += "\"platform\":\"MT5\",";
-   json += "\"account_number\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ",";
-   json += "\"broker\":\"" + AccountInfoString(ACCOUNT_COMPANY) + "\",";
-   json += "\"account_name\":\"" + AccountInfoString(ACCOUNT_NAME) + "\",";
-   json += "\"server\":\"" + AccountInfoString(ACCOUNT_SERVER) + "\",";
-   json += "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
-   json += "\"currency\":\"" + AccountInfoString(ACCOUNT_CURRENCY) + "\",";
-   json += "\"leverage\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LEVERAGE)) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-   Print("Registration message sent to server");
-}
-
-//+------------------------------------------------------------------+
-//| Send unregister message to server                                |
-//+------------------------------------------------------------------+
-void SendUnregisterMessage()
-{
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   string json = "{";
-   json += "\"message_type\":\"Unregister\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-   Print("Unregister message sent to server");
-}
-
-//+------------------------------------------------------------------+
-//| Send heartbeat message to server                                 |
-//+------------------------------------------------------------------+
-void SendHeartbeat()
-{
-   // Get current timestamp
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   // Count open positions
-   int open_positions = PositionsTotal();
-
-   string json = "{";
-   json += "\"message_type\":\"Heartbeat\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
-   json += "\"open_positions\":" + IntegerToString(open_positions) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   zmq_socket_send(g_zmq_socket, json);
-}

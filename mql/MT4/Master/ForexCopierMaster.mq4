@@ -8,29 +8,29 @@
 #property version   "1.00"
 #property strict
 
-//--- Import Rust ZeroMQ DLL
-#import "forex_copier_zmq.dll"
-   int    zmq_context_create();
-   void   zmq_context_destroy(int context);
-   int    zmq_socket_create(int context, int socket_type);
-   void   zmq_socket_destroy(int socket);
-   int    zmq_socket_connect(int socket, string address);
-   int    zmq_socket_send(int socket, string message);
-#import
-
-//--- ZeroMQ socket types
-#define ZMQ_PUSH 8
+//--- Include common headers
+#include <ForexCopierCommon.mqh>
+#include <ForexCopierMessages.mqh>
+#include <ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
 input int      MagicFilter = 0;                         // Magic number filter (0 = all)
 input int      ScanInterval = 100;                      // Scan interval in milliseconds
 
+//--- Order tracking structure
+struct OrderInfo
+{
+   int    ticket;
+   double sl;
+   double tp;
+};
+
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
 int         g_zmq_context = -1;
 int         g_zmq_socket = -1;
-int         g_tracked_orders[];
+OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 
@@ -42,16 +42,7 @@ int OnInit()
    Print("=== ForexCopier Master EA (MT4) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
-   string broker = AccountCompany();
-   int account_number = AccountNumber();
-
-   // Replace spaces and special characters with underscores
-   StringReplace(broker, " ", "_");
-   StringReplace(broker, ".", "_");
-   StringReplace(broker, "-", "_");
-
-   // Format: broker_accountnumber
-   AccountID = broker + "_" + IntegerToString(account_number);
+   AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
    Print("Server Address: ", ServerAddress);
@@ -83,7 +74,7 @@ int OnInit()
    Print("Connected to server successfully");
 
    // Send registration message
-   SendRegisterMessage();
+   SendRegistrationMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4");
 
    // Scan existing orders
    ScanExistingOrders();
@@ -102,7 +93,7 @@ void OnDeinit(const int reason)
    Print("=== ForexCopier Master EA (MT4) Stopping ===");
 
    // Send unregister message
-   SendUnregisterMessage();
+   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
 
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
@@ -118,11 +109,11 @@ void OnTick()
    if(!g_initialized)
       return;
 
-   // Send heartbeat every 30 seconds
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
    static datetime last_heartbeat = 0;
-   if(TimeCurrent() - last_heartbeat >= 30)
+   if(TimeCurrent() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
-      SendHeartbeat();
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
       last_heartbeat = TimeCurrent();
    }
 
@@ -152,6 +143,7 @@ void ScanExistingOrders()
          {
             int ticket = OrderTicket();
             AddTrackedOrder(ticket);
+            SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
             Print("Tracking existing order: #", ticket);
          }
       }
@@ -177,7 +169,7 @@ void CheckForNewOrders()
          if(!IsOrderTracked(ticket))
          {
             AddTrackedOrder(ticket);
-            SendTradeSignal("Open", ticket);
+            SendOpenSignalFromOrder(ticket);
             Print("New order detected: #", ticket, " ", OrderSymbol(), " ", OrderLots(), " lots");
          }
       }
@@ -185,22 +177,27 @@ void CheckForNewOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Check for modified orders                                         |
+//| Check for modified orders (SL/TP changes)                         |
 //+------------------------------------------------------------------+
 void CheckForModifiedOrders()
 {
-   for(int i = 0; i < OrdersTotal(); i++)
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      int ticket = g_tracked_orders[i].ticket;
+      if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES))
       {
-         int ticket = OrderTicket();
+         double current_sl = OrderStopLoss();
+         double current_tp = OrderTakeProfit();
 
-         if(IsOrderTracked(ticket))
+         // Check if SL or TP has changed
+         if(current_sl != g_tracked_orders[i].sl || current_tp != g_tracked_orders[i].tp)
          {
-            // Check if SL/TP modified (simplified check)
-            // In production, you'd want to track previous values
-            // For now, we'll send a modify signal
-            // SendTradeSignal("Modify", ticket);
+            // Send modify signal
+            SendOrderModifySignal(ticket, current_sl, current_tp);
+
+            // Update tracked values
+            g_tracked_orders[i].sl = current_sl;
+            g_tracked_orders[i].tp = current_tp;
          }
       }
    }
@@ -214,7 +211,7 @@ void CheckForClosedOrders()
    // Check if any tracked order is no longer in open orders
    for(int i = ArraySize(g_tracked_orders) - 1; i >= 0; i--)
    {
-      int ticket = g_tracked_orders[i];
+      int ticket = g_tracked_orders[i].ticket;
       bool found = false;
 
       for(int j = 0; j < OrdersTotal(); j++)
@@ -234,7 +231,7 @@ void CheckForClosedOrders()
          // Order was closed
          if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
          {
-            SendTradeSignal("Close", ticket);
+            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, AccountID);
             RemoveTrackedOrder(ticket);
             Print("Order closed: #", ticket);
          }
@@ -243,9 +240,9 @@ void CheckForClosedOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Send trade signal to server                                       |
+//| Send open signal from order                                      |
 //+------------------------------------------------------------------+
-void SendTradeSignal(string action, int ticket)
+void SendOpenSignalFromOrder(int ticket)
 {
    if(!OrderSelect(ticket, SELECT_BY_TICKET))
    {
@@ -258,82 +255,59 @@ void SendTradeSignal(string action, int ticket)
    }
 
    string order_type = GetOrderTypeString(OrderType());
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-
-   // Build JSON message
-   string json = "{";
-   json += "\"action\":\"" + action + "\",";
-   json += "\"ticket\":" + IntegerToString(ticket) + ",";
-   json += "\"symbol\":\"" + OrderSymbol() + "\",";
-   json += "\"order_type\":\"" + order_type + "\",";
-   json += "\"lots\":" + DoubleToString(OrderLots(), 2) + ",";
-   json += "\"open_price\":" + DoubleToString(OrderOpenPrice(), 5) + ",";
-   json += "\"stop_loss\":" + (OrderStopLoss() > 0 ? DoubleToString(OrderStopLoss(), 5) : "null") + ",";
-   json += "\"take_profit\":" + (OrderTakeProfit() > 0 ? DoubleToString(OrderTakeProfit(), 5) : "null") + ",";
-   json += "\"magic_number\":" + IntegerToString(OrderMagicNumber()) + ",";
-   json += "\"comment\":\"" + OrderComment() + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\",";
-   json += "\"source_account\":\"" + AccountID + "\"";
-   json += "}";
-
-   if(zmq_socket_send(g_zmq_socket, json) == 1)
-   {
-      Print("Sent ", action, " signal for order #", ticket);
-   }
-   else
-   {
-      Print("ERROR: Failed to send signal for order #", ticket);
-   }
+   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, OrderSymbol(),
+                  order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
+                  OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
 }
 
 //+------------------------------------------------------------------+
-//| Get order type as string                                          |
+//| Send modify signal                                                |
 //+------------------------------------------------------------------+
-string GetOrderTypeString(int type)
+void SendOrderModifySignal(int ticket, double sl, double tp)
 {
-   switch(type)
-   {
-      case OP_BUY:       return "Buy";
-      case OP_SELL:      return "Sell";
-      case OP_BUYLIMIT:  return "BuyLimit";
-      case OP_SELLLIMIT: return "SellLimit";
-      case OP_BUYSTOP:   return "BuyStop";
-      case OP_SELLSTOP:  return "SellStop";
-      default:           return "Unknown";
-   }
+   SendModifySignal(g_zmq_socket, (TICKET_TYPE)ticket, sl, tp, AccountID);
 }
 
 //+------------------------------------------------------------------+
-//| Check if order is tracked                                         |
+//| Helper functions                                                  |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Check if order is already being tracked                          |
 //+------------------------------------------------------------------+
 bool IsOrderTracked(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)
    {
-      if(g_tracked_orders[i] == ticket)
+      if(g_tracked_orders[i].ticket == ticket)
          return true;
    }
    return false;
 }
 
 //+------------------------------------------------------------------+
-//| Add order to tracking list                                        |
+//| Add order to tracking list with current SL/TP                    |
 //+------------------------------------------------------------------+
 void AddTrackedOrder(int ticket)
 {
+   if(!OrderSelect(ticket, SELECT_BY_TICKET))
+      return;
+
    int size = ArraySize(g_tracked_orders);
    ArrayResize(g_tracked_orders, size + 1);
-   g_tracked_orders[size] = ticket;
+   g_tracked_orders[size].ticket = ticket;
+   g_tracked_orders[size].sl = OrderStopLoss();
+   g_tracked_orders[size].tp = OrderTakeProfit();
 }
 
 //+------------------------------------------------------------------+
-//| Remove order from tracking list                                   |
+//| Remove order from tracking list                                  |
 //+------------------------------------------------------------------+
 void RemoveTrackedOrder(int ticket)
 {
    for(int i = 0; i < ArraySize(g_tracked_orders); i++)
    {
-      if(g_tracked_orders[i] == ticket)
+      if(g_tracked_orders[i].ticket == ticket)
       {
          // Shift array elements
          for(int j = i; j < ArraySize(g_tracked_orders) - 1; j++)
@@ -343,110 +317,5 @@ void RemoveTrackedOrder(int ticket)
          ArrayResize(g_tracked_orders, ArraySize(g_tracked_orders) - 1);
          break;
       }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Send EA registration message                                      |
-//+------------------------------------------------------------------+
-void SendRegisterMessage()
-{
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   string json = "{";
-   json += "\"message_type\":\"Register\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"ea_type\":\"Master\",";
-   json += "\"platform\":\"MT4\",";
-   json += "\"account_number\":" + IntegerToString(AccountNumber()) + ",";
-   json += "\"broker\":\"" + AccountCompany() + "\",";
-   json += "\"account_name\":\"" + AccountName() + "\",";
-   json += "\"server\":\"" + AccountServer() + "\",";
-   json += "\"balance\":" + DoubleToString(AccountBalance(), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountEquity(), 2) + ",";
-   json += "\"currency\":\"" + AccountCurrency() + "\",";
-   json += "\"leverage\":" + IntegerToString(AccountLeverage()) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   if(zmq_socket_send(g_zmq_socket, json) == 1)
-   {
-      Print("EA Registration sent successfully");
-   }
-   else
-   {
-      Print("ERROR: Failed to send registration message");
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Send unregistration message                                       |
-//+------------------------------------------------------------------+
-void SendUnregisterMessage()
-{
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   string json = "{";
-   json += "\"message_type\":\"Unregister\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   if(zmq_socket_send(g_zmq_socket, json) == 1)
-   {
-      Print("Unregistration sent successfully");
-   }
-   else
-   {
-      Print("ERROR: Failed to send unregistration message");
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Send heartbeat message                                            |
-//+------------------------------------------------------------------+
-void SendHeartbeat()
-{
-   // Get current timestamp in ISO 8601 format
-   string timestamp = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-   StringReplace(timestamp, ".", "-");
-   StringReplace(timestamp, " ", "T");
-   timestamp += "Z";
-
-   int open_positions = 0;
-
-   // Count open positions
-   for(int i = 0; i < OrdersTotal(); i++)
-   {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-      {
-         open_positions++;
-      }
-   }
-
-   string json = "{";
-   json += "\"message_type\":\"Heartbeat\",";
-   json += "\"account_id\":\"" + AccountID + "\",";
-   json += "\"balance\":" + DoubleToString(AccountBalance(), 2) + ",";
-   json += "\"equity\":" + DoubleToString(AccountEquity(), 2) + ",";
-   json += "\"open_positions\":" + IntegerToString(open_positions) + ",";
-   json += "\"timestamp\":\"" + timestamp + "\"";
-   json += "}";
-
-   if(zmq_socket_send(g_zmq_socket, json) == 1)
-   {
-      // Silent success (don't clutter logs)
-   }
-   else
-   {
-      Print("ERROR: Failed to send heartbeat");
    }
 }

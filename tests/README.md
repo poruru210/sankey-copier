@@ -1,122 +1,141 @@
-# E2E Testing for Forex Copier
+# Integration Tests
 
-## 概要
+This directory contains integration tests for the Forex Copier MessagePack implementation.
 
-このディレクトリには、Forex Copierシステムの統合テスト（E2Eテスト）が含まれています。
+## Test Structure
 
-## テストシナリオ
+- `test_messagepack.py` - MessagePack serialization/deserialization tests
+- `test_zmq_communication.py` - ZeroMQ communication pattern tests
 
-`e2e_test.py` は以下のシナリオをテストします:
+## Prerequisites
 
-1. **Master EA登録**: Master EAがサーバーに登録される
-2. **Slave EA登録**: Slave EAがサーバーに登録される
-3. **接続確認**: 両方のEAが正しく接続されているか確認
-4. **設定作成と配信**:
-   - Web-UIから設定を作成
-   - Slaveが設定メッセージを受信
-   - 設定内容が正しいか検証
-5. **トレードシグナル配信**:
-   - Masterからトレードシグナルを送信
-   - Slaveがシグナルを受信
-   - シグナル内容が正しいか検証
-
-## セットアップ
-
-### 1. Python依存関係のインストール
+Install Python dependencies:
 
 ```bash
-cd tests
 pip install -r requirements.txt
 ```
 
-### 2. Rust Serverの起動
+## Running Tests
 
-別のターミナルで:
+### Run all tests:
+```bash
+pytest -v
+```
+
+### Run specific test file:
+```bash
+pytest test_messagepack.py -v
+pytest test_zmq_communication.py -v
+```
+
+### Run specific test:
+```bash
+pytest test_messagepack.py::TestMessagePackSerialization::test_register_message -v
+```
+
+### Run with output:
+```bash
+pytest -v -s
+```
+
+## Test Coverage
+
+### MessagePack Serialization Tests (`test_messagepack.py`)
+
+Tests MessagePack format compatibility:
+- ✓ Register message serialization
+- ✓ Unregister message serialization
+- ✓ Heartbeat message serialization
+- ✓ Trade signal (Open/Close/Modify) serialization
+- ✓ Config message serialization
+- ✓ Optional field omission
+- ✓ Binary format verification
+- ✓ Cross-language compatibility
+
+### ZeroMQ Communication Tests (`test_zmq_communication.py`)
+
+Tests ZeroMQ communication patterns:
+- ✓ PUSH/PULL pattern (registration messages)
+- ✓ PUB/SUB pattern with topic filtering (trade signals, config)
+- ✓ Multiple subscribers
+- ✓ Non-blocking receive
+- ✓ Continuous heartbeat sending
+- ✓ Concurrent communication
+- ✓ Large message handling
+
+## Rust Unit Tests
+
+Run Rust unit tests:
 
 ```bash
-cd rust-server
-cargo run --release
+cd ../mql-zmq-dll
+cargo test
 ```
 
-サーバーが起動するのを待ちます（ポート: 8080, 5555, 5556, 5557）
+### Rust Test Coverage
 
-## テスト実行
+- ✓ RegisterMessage serialization/deserialization
+- ✓ UnregisterMessage serialization/deserialization
+- ✓ HeartbeatMessage serialization/deserialization
+- ✓ TradeSignalMessage serialization/deserialization
+- ✓ Close action minimal fields
+- ✓ ConfigMessage serialization/deserialization
+- ✓ MessagePack size optimization (optional fields)
+- ✓ Thread-safe buffer usage
+
+## Testing 32-bit vs 64-bit
+
+The Rust DLL supports both 32-bit (MT4) and 64-bit (MT5) platforms:
+
+### Build for 32-bit (MT4):
+```bash
+cd ../mql-zmq-dll
+cargo build --release --target i686-pc-windows-msvc
+cargo test --target i686-pc-windows-msvc
+```
+
+### Build for 64-bit (MT5):
+```bash
+cd ../mql-zmq-dll
+cargo build --release --target x86_64-pc-windows-msvc
+cargo test --target x86_64-pc-windows-msvc
+```
+
+## Continuous Integration
+
+Tests can be integrated into CI/CD pipelines:
+
+```yaml
+# Example GitHub Actions workflow
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install -r tests/requirements.txt
+      - run: pytest tests/ -v
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cd mql-zmq-dll && cargo test
+```
+
+## Troubleshooting
+
+### Port conflicts
+If tests fail due to port conflicts, the test framework automatically assigns different ports to each test. If issues persist, check for processes using ports 15555-15563:
 
 ```bash
-cd tests
-python e2e_test.py
+netstat -ano | grep "15555"
 ```
 
-## 期待される出力
+### ZeroMQ socket cleanup
+Tests automatically cleanup sockets in `teardown_method()`. If tests hang, ensure no zombie processes are holding sockets open.
 
-テストが成功すると、以下のような出力が表示されます:
-
-```
-============================================================
-  Forex Copier E2E Test
-============================================================
-
-=== Step 1: Register Master EA ===
-  Sent: {...}
-✓ Master EA registered
-
-=== Step 2: Register Slave EA ===
-  Sent: {...}
-✓ Slave EA registered
-
-=== Step 3: Verify Connections ===
-  Connections: {...}
-✓ Master EA (MASTER_001) is connected
-✓ Slave EA (SLAVE_001) is connected
-
-=== Step 4: Create Copy Settings (triggers config message) ===
-  Response: {...}
-✓ Copy settings created (ID: 1)
-  Listening for config messages on topic 'SLAVE_001'...
-  Received raw: SLAVE_001 {...}
-  Parsed config: {...}
-✓ Slave received config message
-✓ Config message verified
-
-=== Step 5: Send Trade Signal and Verify Reception ===
-  Listening for trade signals on topic 'MASTER_001'...
-  Sent: {...}
-✓ Trade signal sent from Master
-  Received raw: MASTER_001 {...}
-  Parsed signal: {...}
-✓ Slave received trade signal
-✓ Trade signal verified
-
-============================================================
-  ALL E2E TESTS PASSED!
-============================================================
-```
-
-## トラブルシューティング
-
-### サーバーに接続できない
-
-- Rust Serverが起動しているか確認
-- ポート 8080, 5555, 5556, 5557 が使用可能か確認
-
-### タイムアウトエラー
-
-- Serverのログを確認
-- ZeroMQの接続が正しく確立されているか確認
-
-### メッセージが受信されない
-
-- Serverのログでメッセージ送信を確認
-- ZeroMQのトピックが正しいか確認（MASTER_001, SLAVE_001）
-
-## 追加テスト
-
-将来的に追加できるテストシナリオ:
-
-- [ ] 複数Slaveへの同時配信
-- [ ] Lot multiplier適用の検証
-- [ ] Reverse trade機能の検証
-- [ ] Symbol mapping機能の検証
-- [ ] フィルター機能（allowed/blocked symbols）の検証
-- [ ] 設定の更新と再配信
-- [ ] EA接続タイムアウト処理
+### MessagePack compatibility
+All tests verify that data can be serialized in Python and would be compatible with Rust/MQL deserialization (and vice versa).

@@ -2,6 +2,12 @@ mod connection;
 
 pub use connection::*;
 
+// Re-export shared types from DLL
+pub use forex_copier_zmq::{
+    SymbolMapping,
+    TradeFilters,
+};
+
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
@@ -48,20 +54,6 @@ pub struct CopySettings {
     pub reverse_trade: bool,
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SymbolMapping {
-    pub source_symbol: String,
-    pub target_symbol: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeFilters {
-    pub allowed_symbols: Option<Vec<String>>,
-    pub blocked_symbols: Option<Vec<String>>,
-    pub allowed_magic_numbers: Option<Vec<i32>>,
-    pub blocked_magic_numbers: Option<Vec<i32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

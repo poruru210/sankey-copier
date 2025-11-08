@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+// Re-export shared message types from DLL
+pub use forex_copier_zmq::{RegisterMessage, UnregisterMessage, HeartbeatMessage};
+
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EaConnection {
@@ -14,7 +17,7 @@ pub struct EaConnection {
     pub balance: f64,
     pub equity: f64,
     pub currency: String,
-    pub leverage: i32,
+    pub leverage: i64,
     pub last_heartbeat: DateTime<Utc>,
     pub status: ConnectionStatus,
     pub connected_at: DateTime<Utc>,
@@ -28,11 +31,31 @@ pub enum EaType {
     Slave,
 }
 
+impl EaType {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Master" => Some(EaType::Master),
+            "Slave" => Some(EaType::Slave),
+            _ => None,
+        }
+    }
+}
+
 /// プラットフォームの種類
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Platform {
     MT4,
     MT5,
+}
+
+impl Platform {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "MT4" => Some(Platform::MT4),
+            "MT5" => Some(Platform::MT5),
+            _ => None,
+        }
+    }
 }
 
 /// 接続状態
@@ -44,41 +67,14 @@ pub enum ConnectionStatus {
     Timeout,
 }
 
-/// メッセージタイプ
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "message_type")]
-pub enum MessageType {
-    Register(RegisterMessage),
-    Unregister(UnregisterMessage),
-    Heartbeat(HeartbeatMessage),
-    TradeSignal(crate::models::TradeSignal),
-}
-
-/// EA登録メッセージ
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterMessage {
-    pub account_id: String,
-    pub ea_type: EaType,
-    pub platform: Platform,
-    pub account_number: i64,
-    pub broker: String,
-    pub account_name: String,
-    pub server: String,
-    pub balance: f64,
-    pub equity: f64,
-    pub currency: String,
-    pub leverage: i32,
-    #[serde(default = "chrono::Utc::now")]
-    pub timestamp: DateTime<Utc>,
-}
-
+/// Convert shared RegisterMessage to EaConnection
 impl From<RegisterMessage> for EaConnection {
     fn from(msg: RegisterMessage) -> Self {
         let now = Utc::now();
         Self {
             account_id: msg.account_id,
-            ea_type: msg.ea_type,
-            platform: msg.platform,
+            ea_type: EaType::from_str(&msg.ea_type).unwrap_or(EaType::Master),
+            platform: Platform::from_str(&msg.platform).unwrap_or(Platform::MT5),
             account_number: msg.account_number,
             broker: msg.broker,
             account_name: msg.account_name,
@@ -94,68 +90,17 @@ impl From<RegisterMessage> for EaConnection {
     }
 }
 
-/// EA登録解除メッセージ
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnregisterMessage {
-    pub account_id: String,
-    #[serde(default = "chrono::Utc::now")]
-    pub timestamp: DateTime<Utc>,
-}
+// Re-export ConfigMessage from DLL
+pub use forex_copier_zmq::ConfigMessage;
 
-/// Heartbeatメッセージ
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HeartbeatMessage {
-    pub account_id: String,
-    pub balance: f64,
-    pub equity: f64,
-    pub open_positions: Option<i32>,
-    #[serde(default = "chrono::Utc::now")]
-    pub timestamp: DateTime<Utc>,
-}
-
-/// 設定配信メッセージ
-///
-/// SlaveEAに完全な設定情報を配信するためのメッセージ。
-/// CopySettingsの全フィールドを含み、EA側でフィルタリングと変換を実行可能にします。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfigMessage {
-    // 既存のフィールド
-    pub account_id: String,
-    pub master_account: String,
-    pub trade_group_id: String,
-    #[serde(default = "chrono::Utc::now")]
-    pub timestamp: DateTime<Utc>,
-
-    // 新規追加: 完全な設定情報
-    /// コピーが有効かどうか
-    pub enabled: bool,
-
-    /// ロット倍率（nullの場合は1.0として扱う）
-    pub lot_multiplier: Option<f64>,
-
-    /// トレードを反転するか（Buy→Sell, Sell→Buy）
-    pub reverse_trade: bool,
-
-    /// シンボルマッピング（元シンボル → 変換後シンボル）
-    pub symbol_mappings: Vec<crate::models::SymbolMapping>,
-
-    /// トレードフィルター
-    pub filters: crate::models::TradeFilters,
-
-    /// 設定バージョン（将来の互換性のため）
-    pub config_version: u32,
-}
-
+/// Convert CopySettings to ConfigMessage
 impl From<crate::models::CopySettings> for ConfigMessage {
     fn from(settings: crate::models::CopySettings) -> Self {
         Self {
-            // 既存のフィールド
             account_id: settings.slave_account.clone(),
             master_account: settings.master_account.clone(),
             trade_group_id: settings.master_account, // master_accountと同じ
-            timestamp: chrono::Utc::now(),
-
-            // 新しいフィールド
+            timestamp: chrono::Utc::now().to_rfc3339(),
             enabled: settings.enabled,
             lot_multiplier: settings.lot_multiplier,
             reverse_trade: settings.reverse_trade,
@@ -241,7 +186,7 @@ mod tests {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
             trade_group_id: "MASTER_001".to_string(),
-            timestamp: chrono::Utc::now(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
             enabled: true,
             lot_multiplier: Some(2.0),
             reverse_trade: false,
@@ -255,20 +200,10 @@ mod tests {
             config_version: 1,
         };
 
-        let json = serde_json::to_string(&config).unwrap();
-
-        // Verify JSON contains all key fields
-        assert!(json.contains("\"account_id\""));
-        assert!(json.contains("\"master_account\""));
-        assert!(json.contains("\"enabled\""));
-        assert!(json.contains("\"lot_multiplier\""));
-        assert!(json.contains("\"reverse_trade\""));
-        assert!(json.contains("\"symbol_mappings\""));
-        assert!(json.contains("\"filters\""));
-        assert!(json.contains("\"config_version\""));
+        let msgpack = rmp_serde::to_vec_named(&config).unwrap();
 
         // Verify deserialization works
-        let deserialized: ConfigMessage = serde_json::from_str(&json).unwrap();
+        let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.account_id, "TEST_001");
         assert_eq!(deserialized.enabled, true);
         assert_eq!(deserialized.config_version, 1);
@@ -293,14 +228,13 @@ mod tests {
         };
 
         let config: ConfigMessage = settings.into();
-        let json = serde_json::to_string(&config).unwrap();
+        let msgpack = rmp_serde::to_vec_named(&config).unwrap();
 
         // Verify null handling
         assert_eq!(config.lot_multiplier, None);
-        assert!(json.contains("\"lot_multiplier\":null"));
 
         // Verify deserialization handles nulls
-        let deserialized: ConfigMessage = serde_json::from_str(&json).unwrap();
+        let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.lot_multiplier, None);
     }
 }

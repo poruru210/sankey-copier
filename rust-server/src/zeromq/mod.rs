@@ -1,18 +1,25 @@
 mod config_publisher;
 
 use anyhow::{Result, Context};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
 use std::sync::Arc;
-use crate::models::{TradeSignal, MessageType, ConfigMessage};
+use crate::models::{TradeSignal, ConfigMessage, RegisterMessage, UnregisterMessage, HeartbeatMessage};
 
 pub use config_publisher::ZmqConfigPublisher;
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),
-    Register(crate::models::RegisterMessage),
-    Unregister(crate::models::UnregisterMessage),
-    Heartbeat(crate::models::HeartbeatMessage),
+    Register(RegisterMessage),
+    Unregister(UnregisterMessage),
+    Heartbeat(HeartbeatMessage),
+}
+
+/// Helper struct to determine message type from MessagePack data
+#[derive(Debug, Deserialize)]
+struct MessageTypeDiscriminator {
+    message_type: Option<String>,
+    action: Option<String>,
 }
 
 pub struct ZmqServer {
@@ -45,46 +52,75 @@ impl ZmqServer {
             loop {
                 match socket.recv_bytes(0) {
                     Ok(bytes) => {
-                        // まずMessageTypeとして解析を試みる
-                        match serde_json::from_slice::<MessageType>(&bytes) {
-                            Ok(msg_type) => {
-                                let zmq_msg = match msg_type {
-                                    MessageType::Register(reg) => {
-                                        tracing::debug!("Received Register message: {:?}", reg);
-                                        ZmqMessage::Register(reg)
-                                    }
-                                    MessageType::Unregister(unreg) => {
-                                        tracing::debug!("Received Unregister message: {:?}", unreg);
-                                        ZmqMessage::Unregister(unreg)
-                                    }
-                                    MessageType::Heartbeat(hb) => {
-                                        tracing::debug!("Received Heartbeat message from: {}", hb.account_id);
-                                        ZmqMessage::Heartbeat(hb)
-                                    }
-                                    MessageType::TradeSignal(signal) => {
-                                        tracing::debug!("Received TradeSignal: {:?}", signal);
-                                        ZmqMessage::TradeSignal(signal)
-                                    }
-                                };
-
-                                if let Err(e) = tx.send(zmq_msg) {
-                                    tracing::error!("Failed to send message to channel: {}", e);
-                                }
-                            }
-                            Err(_) => {
-                                // 後方互換性: message_typeフィールドがない古いTradeSignal形式にフォールバック
-                                match serde_json::from_slice::<TradeSignal>(&bytes) {
-                                    Ok(signal) => {
-                                        tracing::debug!("Received legacy TradeSignal: {:?}", signal);
-                                        if let Err(e) = tx.send(ZmqMessage::TradeSignal(signal)) {
-                                            tracing::error!("Failed to send signal to channel: {}", e);
+                        // First, peek at the message to determine its type
+                        match rmp_serde::from_slice::<MessageTypeDiscriminator>(&bytes) {
+                            Ok(discriminator) => {
+                                // Check message_type field first
+                                if let Some(msg_type) = discriminator.message_type {
+                                    match msg_type.as_str() {
+                                        "Register" => {
+                                            match rmp_serde::from_slice::<RegisterMessage>(&bytes) {
+                                                Ok(reg) => {
+                                                    tracing::debug!("Received Register message: {:?}", reg);
+                                                    if let Err(e) = tx.send(ZmqMessage::Register(reg)) {
+                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("Failed to deserialize Register message: {}", e);
+                                                }
+                                            }
+                                        }
+                                        "Unregister" => {
+                                            match rmp_serde::from_slice::<UnregisterMessage>(&bytes) {
+                                                Ok(unreg) => {
+                                                    tracing::debug!("Received Unregister message: {:?}", unreg);
+                                                    if let Err(e) = tx.send(ZmqMessage::Unregister(unreg)) {
+                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("Failed to deserialize Unregister message: {}", e);
+                                                }
+                                            }
+                                        }
+                                        "Heartbeat" => {
+                                            match rmp_serde::from_slice::<HeartbeatMessage>(&bytes) {
+                                                Ok(hb) => {
+                                                    tracing::debug!("Received Heartbeat message from: {}", hb.account_id);
+                                                    if let Err(e) = tx.send(ZmqMessage::Heartbeat(hb)) {
+                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("Failed to deserialize Heartbeat message: {}", e);
+                                                }
+                                            }
+                                        }
+                                        _ => {
+                                            tracing::warn!("Unknown message_type: {}", msg_type);
                                         }
                                     }
-                                    Err(e) => {
-                                        tracing::error!("Failed to deserialize message: {}", e);
-                                        tracing::debug!("Raw message: {}", String::from_utf8_lossy(&bytes));
+                                } else if discriminator.action.is_some() {
+                                    // Message has 'action' field - it's a TradeSignal
+                                    match rmp_serde::from_slice::<TradeSignal>(&bytes) {
+                                        Ok(signal) => {
+                                            tracing::debug!("Received TradeSignal: {:?}", signal);
+                                            if let Err(e) = tx.send(ZmqMessage::TradeSignal(signal)) {
+                                                tracing::error!("Failed to send signal to channel: {}", e);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to deserialize TradeSignal: {}", e);
+                                        }
                                     }
+                                } else {
+                                    tracing::error!("Message has neither message_type nor action field");
                                 }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to deserialize message discriminator: {}", e);
+                                tracing::debug!("Raw message bytes (first 100): {:?}", &bytes[..bytes.len().min(100)]);
                             }
                         }
                     }
@@ -127,12 +163,12 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
         tokio::task::spawn_blocking(move || {
             while let Some(msg) = rx.blocking_recv() {
                 // PUB/SUBパターンでは、トピックをメッセージの先頭に付加
-                match serde_json::to_vec(&msg.payload) {
-                    Ok(json) => {
+                match rmp_serde::to_vec_named(&msg.payload) {
+                    Ok(msgpack) => {
                         // トピック + スペース + メッセージ
                         let mut message = msg.topic.as_bytes().to_vec();
                         message.push(b' '); // スペースで区切る
-                        message.extend_from_slice(&json);
+                        message.extend_from_slice(&msgpack);
 
                         if let Err(e) = socket.send(&message, 0) {
                             tracing::error!("Failed to send ZMQ message: {}", e);
@@ -142,7 +178,7 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
                                 msg.topic,
                                 message.len(),
                                 msg.topic.len() + 1, // +1 for space
-                                json.len()
+                                msgpack.len()
                             );
                         }
                     }
