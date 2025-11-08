@@ -129,6 +129,41 @@ string FormatTimestampISO8601(datetime time)
 }
 
 //+------------------------------------------------------------------+
+//| Parse ISO 8601 timestamp to datetime                            |
+//| Format: "2025-01-15T10:30:45Z"                                  |
+//+------------------------------------------------------------------+
+datetime ParseISO8601(string timestamp)
+{
+   // Remove 'Z' suffix if present
+   string ts = timestamp;
+   StringReplace(ts, "Z", "");
+
+   // Replace 'T' with space for parsing
+   StringReplace(ts, "T", " ");
+
+   // Parse components: "2025-01-15 10:30:45"
+   if(StringLen(ts) < 19) return 0;
+
+   int year = (int)StringToInteger(StringSubstr(ts, 0, 4));
+   int month = (int)StringToInteger(StringSubstr(ts, 5, 2));
+   int day = (int)StringToInteger(StringSubstr(ts, 8, 2));
+   int hour = (int)StringToInteger(StringSubstr(ts, 11, 2));
+   int minute = (int)StringToInteger(StringSubstr(ts, 14, 2));
+   int second = (int)StringToInteger(StringSubstr(ts, 17, 2));
+
+   // Construct datetime
+   MqlDateTime dt;
+   dt.year = year;
+   dt.mon = month;
+   dt.day = day;
+   dt.hour = hour;
+   dt.min = minute;
+   dt.sec = second;
+
+   return StructToTime(dt);
+}
+
+//+------------------------------------------------------------------+
 //| Get current positions count                                      |
 //+------------------------------------------------------------------+
 int GetOpenPositionsCount()

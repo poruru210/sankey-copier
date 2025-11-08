@@ -19,6 +19,8 @@ input int      Slippage = 3;                                 // Maximum slippage
 input int      MaxRetries = 3;                               // Maximum order retries
 input bool     AllowNewOrders = true;                        // Allow opening new orders
 input bool     AllowCloseOrders = true;                      // Allow closing orders
+input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
+input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
@@ -32,6 +34,9 @@ string      g_trade_group_id = "";      // Current trade group subscription
 
 // Order mapping: [master_ticket][slave_ticket]
 int         g_order_map[][2];
+
+// Pending order mapping: [master_ticket][pending_ticket]
+int         g_pending_order_map[][2];
 
 //--- Configuration structures
 struct SymbolMapping {
@@ -132,6 +137,7 @@ int OnInit()
    Print("Connected to config channel: ", ConfigServerAddress, " and subscribed to: ", AccountID);
 
    ArrayResize(g_order_map, 0);
+   ArrayResize(g_pending_order_map, 0);
 
    // Initialize configuration arrays
    ArrayResize(g_symbol_mappings, 0);
@@ -417,6 +423,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    double take_profit = trade_signal_get_double(handle, "take_profit");
    long magic_long = trade_signal_get_int(handle, "magic_number");
    int magic = (int)magic_long;
+   string timestamp = trade_signal_get_string(handle, "timestamp");
 
    Print("Processing ", action, " for master ticket #", master_ticket);
 
@@ -438,13 +445,16 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          string transformed_order_type = ReverseOrderType(order_type_str);
 
          // Open order with transformed values
-         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic);
+         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp);
       }
    }
    else if(action == "Close")
    {
       if(AllowCloseOrders)
+      {
          CloseOrder(master_ticket);
+         CancelPendingOrder(master_ticket);  // Also cancel any pending orders
+      }
    }
    else if(action == "Modify")
    {
@@ -459,7 +469,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open new order                                                    |
 //+------------------------------------------------------------------+
 void OpenOrder(int master_ticket, string symbol, string order_type_str, double lots,
-               double price, double sl, double tp, int magic)
+               double price, double sl, double tp, int magic, string timestamp)
 {
    // Check if already copied
    int slave_ticket = GetSlaveTicket(master_ticket);
@@ -467,6 +477,26 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
    {
       Print("Order already copied: master #", master_ticket, " -> slave #", slave_ticket);
       return;
+   }
+
+   // Check signal delay
+   datetime signal_time = ParseISO8601(timestamp);
+   datetime current_time = TimeCurrent();
+   int delay_ms = (int)((current_time - signal_time) * 1000);
+
+   if(delay_ms > MaxSignalDelayMs)
+   {
+      if(!UsePendingOrderForDelayed)
+      {
+         Print("Signal too old (", delay_ms, "ms > ", MaxSignalDelayMs, "ms). Skipping master #", master_ticket);
+         return;
+      }
+      else
+      {
+         Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
+         PlacePendingOrder(master_ticket, symbol, order_type_str, lots, price, sl, tp, magic);
+         return;
+      }
    }
 
    int order_type = GetOrderType(order_type_str);
@@ -659,6 +689,86 @@ string GetJsonValue(string json, string key)
 }
 
 //+------------------------------------------------------------------+
+//| Place pending order at original price                            |
+//+------------------------------------------------------------------+
+void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
+                       double lots, double price, double sl, double tp, int magic)
+{
+   // Check if pending order already exists
+   if(GetPendingTicket(master_ticket) > 0)
+   {
+      Print("Pending order already exists for master #", master_ticket);
+      return;
+   }
+
+   int base_order_type = GetOrderType(order_type_str);
+   if(base_order_type == -1)
+   {
+      Print("ERROR: Invalid order type: ", order_type_str);
+      return;
+   }
+
+   // Convert to pending order type
+   RefreshRates();
+   int pending_type;
+
+   if(base_order_type == OP_BUY)
+   {
+      double current_price = Ask;
+      pending_type = (price < current_price) ? OP_BUYLIMIT : OP_BUYSTOP;
+   }
+   else if(base_order_type == OP_SELL)
+   {
+      double current_price = Bid;
+      pending_type = (price > current_price) ? OP_SELLLIMIT : OP_SELLSTOP;
+   }
+   else
+   {
+      Print("ERROR: Cannot create pending order for type: ", order_type_str);
+      return;
+   }
+
+   // Normalize values
+   lots = NormalizeDouble(lots, 2);
+   price = NormalizeDouble(price, Digits);
+   sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
+   tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
+
+   int ticket = OrderSend(symbol, pending_type, lots, price, Slippage, sl, tp,
+                          "Pending from #" + IntegerToString(master_ticket), magic, 0, clrBlue);
+
+   if(ticket > 0)
+   {
+      Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
+      AddPendingOrderMapping(master_ticket, ticket);
+   }
+   else
+   {
+      Print("Failed to place pending order for master #", master_ticket, " Error: ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Cancel pending order                                              |
+//+------------------------------------------------------------------+
+void CancelPendingOrder(int master_ticket)
+{
+   int pending_ticket = GetPendingTicket(master_ticket);
+   if(pending_ticket <= 0)
+      return;
+
+   if(OrderDelete(pending_ticket))
+   {
+      Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
+      RemovePendingOrderMapping(master_ticket);
+   }
+   else
+   {
+      Print("Failed to cancel pending order #", pending_ticket, " Error: ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Order mapping functions                                           |
 //+------------------------------------------------------------------+
 void AddOrderMapping(int master_ticket, int slave_ticket)
@@ -692,6 +802,45 @@ void RemoveOrderMapping(int master_ticket)
             g_order_map[j][1] = g_order_map[j + 1][1];
          }
          ArrayResize(g_order_map, ArrayRange(g_order_map, 0) - 1);
+         break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Pending order mapping functions                                   |
+//+------------------------------------------------------------------+
+void AddPendingOrderMapping(int master_ticket, int pending_ticket)
+{
+   int size = ArrayRange(g_pending_order_map, 0);
+   ArrayResize(g_pending_order_map, size + 1);
+   g_pending_order_map[size][0] = master_ticket;
+   g_pending_order_map[size][1] = pending_ticket;
+}
+
+int GetPendingTicket(int master_ticket)
+{
+   for(int i = 0; i < ArrayRange(g_pending_order_map, 0); i++)
+   {
+      if(g_pending_order_map[i][0] == master_ticket)
+         return g_pending_order_map[i][1];
+   }
+   return -1;
+}
+
+void RemovePendingOrderMapping(int master_ticket)
+{
+   for(int i = 0; i < ArrayRange(g_pending_order_map, 0); i++)
+   {
+      if(g_pending_order_map[i][0] == master_ticket)
+      {
+         // Shift array
+         for(int j = i; j < ArrayRange(g_pending_order_map, 0) - 1; j++)
+         {
+            g_pending_order_map[j][0] = g_pending_order_map[j + 1][0];
+            g_pending_order_map[j][1] = g_pending_order_map[j + 1][1];
+         }
+         ArrayResize(g_pending_order_map, ArrayRange(g_pending_order_map, 0) - 1);
          break;
       }
    }

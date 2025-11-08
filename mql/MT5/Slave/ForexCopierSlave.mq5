@@ -20,6 +20,8 @@ input int      Slippage = 3;
 input int      MaxRetries = 3;
 input bool     AllowNewOrders = true;
 input bool     AllowCloseOrders = true;
+input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
+input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
@@ -37,6 +39,12 @@ struct OrderMapping {
     ulong slave_ticket;
 };
 OrderMapping g_order_map[];
+
+struct PendingOrderMapping {
+    ulong master_ticket;
+    ulong pending_ticket;
+};
+PendingOrderMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
 bool           g_config_enabled = true;          // Whether copying is enabled
@@ -119,6 +127,7 @@ int OnInit()
    g_trade.SetTypeFilling(ORDER_FILLING_IOC);
 
    ArrayResize(g_order_map, 0);
+   ArrayResize(g_pending_order_map, 0);
 
    // Initialize configuration arrays
    ArrayResize(g_symbol_mappings, 0);
@@ -260,6 +269,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    double tp = trade_signal_get_double(handle, "take_profit");
    long magic_long = trade_signal_get_int(handle, "magic_number");
    int magic_number = (int)magic_long;
+   string timestamp = trade_signal_get_string(handle, "timestamp");
 
    if(action == "Open" && AllowNewOrders)
    {
@@ -277,11 +287,12 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       string transformed_order_type = ReverseOrderType(order_type_str, g_config_reverse_trade);
 
       // Open position with transformed values
-      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, sl, tp);
+      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp);
    }
    else if(action == "Close" && AllowCloseOrders)
    {
       ClosePosition(master_ticket);
+      CancelPendingOrder(master_ticket);  // Also cancel any pending orders
    }
    else if(action == "Modify")
    {
@@ -296,12 +307,32 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open position                                                     |
 //+------------------------------------------------------------------+
 void OpenPosition(ulong master_ticket, string symbol, string type_str,
-                  double lots, double sl, double tp)
+                  double lots, double price, double sl, double tp, string timestamp)
 {
    if(GetSlaveTicket(master_ticket) > 0)
    {
       Print("Already copied master #", master_ticket);
       return;
+   }
+
+   // Check signal delay
+   datetime signal_time = ParseISO8601(timestamp);
+   datetime current_time = TimeCurrent();
+   int delay_ms = (int)((current_time - signal_time) * 1000);
+
+   if(delay_ms > MaxSignalDelayMs)
+   {
+      if(!UsePendingOrderForDelayed)
+      {
+         Print("Signal too old (", delay_ms, "ms > ", MaxSignalDelayMs, "ms). Skipping master #", master_ticket);
+         return;
+      }
+      else
+      {
+         Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
+         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp);
+         return;
+      }
    }
 
    ENUM_ORDER_TYPE order_type = GetOrderTypeEnum(type_str);
@@ -322,7 +353,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
       if(result)
       {
          ulong ticket = g_trade.ResultOrder();
-         Print("Position opened: #", ticket, " from master #", master_ticket);
+         Print("Position opened: #", ticket, " from master #", master_ticket, " (delay: ", delay_ms, "ms)");
          AddOrderMapping(master_ticket, ticket);
          break;
       }
@@ -381,6 +412,75 @@ void ModifyPosition(ulong master_ticket, double sl, double tp)
 }
 
 //+------------------------------------------------------------------+
+//| Place pending order at original price                            |
+//+------------------------------------------------------------------+
+void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
+                       double lots, double price, double sl, double tp)
+{
+   // Check if pending order already exists
+   if(GetPendingTicket(master_ticket) > 0)
+   {
+      Print("Pending order already exists for master #", master_ticket);
+      return;
+   }
+
+   ENUM_ORDER_TYPE order_type = GetOrderTypeEnum(type_str);
+   if((int)order_type == -1) return;
+
+   // Convert to pending order type
+   ENUM_ORDER_TYPE pending_type;
+   double current_price;
+
+   if(order_type == ORDER_TYPE_BUY)
+   {
+      current_price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+      pending_type = (price < current_price) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_BUY_STOP;
+   }
+   else
+   {
+      current_price = SymbolInfoDouble(symbol, SYMBOL_BID);
+      pending_type = (price > current_price) ? ORDER_TYPE_SELL_LIMIT : ORDER_TYPE_SELL_STOP;
+   }
+
+   lots = NormalizeDouble(lots, 2);
+   g_trade.SetExpertMagicNumber(0);
+
+   bool result = g_trade.OrderOpen(symbol, pending_type, lots, 0, price, sl, tp,
+                                    ORDER_TIME_GTC, 0, "Pending from #" + IntegerToString(master_ticket));
+
+   if(result)
+   {
+      ulong ticket = g_trade.ResultOrder();
+      Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
+      AddPendingOrderMapping(master_ticket, ticket);
+   }
+   else
+   {
+      Print("Failed to place pending order for master #", master_ticket);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Cancel pending order                                              |
+//+------------------------------------------------------------------+
+void CancelPendingOrder(ulong master_ticket)
+{
+   ulong pending_ticket = GetPendingTicket(master_ticket);
+   if(pending_ticket == 0)
+      return;
+
+   if(g_trade.OrderDelete(pending_ticket))
+   {
+      Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
+      RemovePendingOrderMapping(master_ticket);
+   }
+   else
+   {
+      Print("Failed to cancel pending order #", pending_ticket);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Order mapping helpers                                             |
 //+------------------------------------------------------------------+
 void AddOrderMapping(ulong master, ulong slave)
@@ -408,6 +508,39 @@ void RemoveOrderMapping(ulong master)
          for(int j = i; j < ArraySize(g_order_map) - 1; j++)
             g_order_map[j] = g_order_map[j + 1];
          ArrayResize(g_order_map, ArraySize(g_order_map) - 1);
+         break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Pending order mapping helpers                                     |
+//+------------------------------------------------------------------+
+void AddPendingOrderMapping(ulong master, ulong pending)
+{
+   int size = ArraySize(g_pending_order_map);
+   ArrayResize(g_pending_order_map, size + 1);
+   g_pending_order_map[size].master_ticket = master;
+   g_pending_order_map[size].pending_ticket = pending;
+}
+
+ulong GetPendingTicket(ulong master)
+{
+   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
+      if(g_pending_order_map[i].master_ticket == master)
+         return g_pending_order_map[i].pending_ticket;
+   return 0;
+}
+
+void RemovePendingOrderMapping(ulong master)
+{
+   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
+   {
+      if(g_pending_order_map[i].master_ticket == master)
+      {
+         for(int j = i; j < ArraySize(g_pending_order_map) - 1; j++)
+            g_pending_order_map[j] = g_pending_order_map[j + 1];
+         ArrayResize(g_pending_order_map, ArraySize(g_pending_order_map) - 1);
          break;
       }
    }
