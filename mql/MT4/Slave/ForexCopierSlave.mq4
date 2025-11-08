@@ -513,8 +513,14 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
-   // Build traceable comment: "M#12345|broker_acc|120ms"
-   string comment = "M#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+   // Extract account number from source_account (e.g., "IC_Markets_98765" -> "98765")
+   string account_number = source_account;
+   int last_underscore = StringFind(source_account, "_", StringLen(source_account) - 15);
+   if(last_underscore > 0)
+      account_number = StringSubstr(source_account, last_underscore + 1);
+
+   // Build traceable comment: "M12345#98765"
+   string comment = "M" + IntegerToString(master_ticket) + "#" + account_number;
 
    // Execute order
    int ticket = -1;
@@ -738,8 +744,14 @@ void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
-   // Build traceable comment: "P#12345|broker_acc|8500ms"
-   string comment = "P#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+   // Extract account number from source_account (e.g., "IC_Markets_98765" -> "98765")
+   string account_number = source_account;
+   int last_underscore = StringFind(source_account, "_", StringLen(source_account) - 15);
+   if(last_underscore > 0)
+      account_number = StringSubstr(source_account, last_underscore + 1);
+
+   // Build traceable comment: "P12345#98765"
+   string comment = "P" + IntegerToString(master_ticket) + "#" + account_number;
 
    int ticket = OrderSend(symbol, pending_type, lots, price, Slippage, sl, tp,
                           comment, magic, 0, clrBlue);
