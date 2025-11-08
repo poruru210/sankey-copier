@@ -126,7 +126,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    {
       if(PositionSelectByTicket(trans.position))
       {
-         SendPositionSignal("Open", trans.position);
+         SendPositionOpenSignal(trans.position);
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
