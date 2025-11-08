@@ -139,7 +139,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forex-copier-web-ui
-          path: web-ui/.next/
+          path: |
+            web-ui/.next/static/
+            web-ui/.next/standalone/
+            web-ui/.next/server/
+            web-ui/.next/*.json
+            web-ui/.next/BUILD_ID
+          if-no-files-found: warn
           retention-days: 30
 
   compile-mql:
