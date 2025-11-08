@@ -192,23 +192,43 @@ jobs:
         run: |
           Write-Host "Installing ${{ matrix.platform }}..."
 
-          # Run installer silently
+          # Run installer silently with specific path
+          $installPath = "${{ matrix.install_path }}"
           Start-Process -FilePath "${{ matrix.platform }}setup.exe" `
-            -ArgumentList "/auto" `
+            -ArgumentList "/auto", "/portable" `
             -Wait `
             -NoNewWindow
 
           # Wait for installation to complete
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 20
 
-          # Verify installation
-          if (Test-Path "${{ matrix.install_path }}") {
-            Write-Host "✅ ${{ matrix.platform }} installed successfully"
-            Get-ChildItem "${{ matrix.install_path }}" -Recurse -Filter "metaeditor*.exe" | ForEach-Object {
-              Write-Host "Found MetaEditor: $($_.FullName)"
+          # Check various possible installation paths
+          $possiblePaths = @(
+            "${{ matrix.install_path }}",
+            "C:\Program Files (x86)\${{ matrix.platform }}",
+            "$env:USERPROFILE\AppData\Local\Programs\${{ matrix.platform }}",
+            "$env:USERPROFILE\AppData\Roaming\MetaQuotes\Terminal"
+          )
+
+          $found = $false
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              Write-Host "✅ Found installation at: $path"
+              Get-ChildItem $path -Recurse -Filter "metaeditor*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "Found MetaEditor: $($_.FullName)"
+                $global:METAEDITOR_PATH = $_.FullName
+                $found = $true
+              }
+              if ($found) { break }
             }
-          } else {
-            Write-Host "❌ Installation failed"
+          }
+
+          if (-not $found) {
+            Write-Host "❌ Installation failed - MetaEditor not found in any expected location"
+            Write-Host "Searching entire C: drive for metaeditor.exe..."
+            Get-ChildItem "C:\" -Recurse -Filter "metaeditor*.exe" -ErrorAction SilentlyContinue | Select-Object -First 5 | ForEach-Object {
+              Write-Host "Found: $($_.FullName)"
+            }
             exit 1
           }
 
@@ -216,30 +236,40 @@ jobs:
         run: |
           Write-Host "Compiling ${{ matrix.platform }} files..."
 
-          # Find MetaEditor
-          $metaeditor = Get-ChildItem "${{ matrix.install_path }}" -Recurse -Filter "metaeditor*.exe" | Select-Object -First 1
-
-          if (-not $metaeditor) {
-            Write-Host "❌ MetaEditor not found"
+          # Use MetaEditor path from previous step
+          if (-not $global:METAEDITOR_PATH) {
+            Write-Host "❌ MetaEditor path not set"
             exit 1
           }
 
-          Write-Host "Using MetaEditor: $($metaeditor.FullName)"
+          Write-Host "Using MetaEditor: $global:METAEDITOR_PATH"
+
+          # Copy include files to MetaTrader's Include directory
+          $mtIncludeDir = Split-Path (Split-Path $global:METAEDITOR_PATH) -Leaf
+          $mtInstallDir = Split-Path (Split-Path $global:METAEDITOR_PATH)
+          $targetIncludeDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}\Include"
+
+          Write-Host "Copying includes to: $targetIncludeDir"
+          if (-not (Test-Path $targetIncludeDir)) {
+            New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
+          }
+
+          Copy-Item -Path "${{ github.workspace }}\mql\Include\*" -Destination $targetIncludeDir -Recurse -Force
 
           # Compile Master EA
           $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.mq${{ matrix.version }}"
           Write-Host "Compiling Master: $masterFile"
 
-          & $metaeditor.FullName /compile:"$masterFile" /log /inc:"${{ github.workspace }}\mql\Include"
+          & $global:METAEDITOR_PATH /compile:"$masterFile" /log
 
           # Compile Slave EA
           $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.mq${{ matrix.version }}"
           Write-Host "Compiling Slave: $slaveFile"
 
-          & $metaeditor.FullName /compile:"$slaveFile" /log /inc:"${{ github.workspace }}\mql\Include"
+          & $global:METAEDITOR_PATH /compile:"$slaveFile" /log
 
           # Wait for compilation
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 10
 
       - name: Verify compiled files
         run: |
