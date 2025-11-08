@@ -147,40 +147,141 @@ jobs:
   compile-mql:
     name: Compile MQL4/MQL5 Files
     runs-on: windows-latest
-    # Temporarily disabled due to download.mql5.com being blocked (451 error)
-    # TODO: Implement alternative compilation method or use pre-compiled binaries
-    if: ${{ github.event.inputs.build_target == 'mql' && false }}
+    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'mql' || github.event_name == 'push' }}
 
     strategy:
       matrix:
         include:
           - platform: MT4
             version: '4'
-            files: |
-              mql/MT4/Master/ForexCopierMaster.mq4
-              mql/MT4/Slave/ForexCopierSlave.mq4
+            installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe
+            install_path: C:\Program Files\MetaTrader 4
           - platform: MT5
             version: '5'
-            files: |
-              mql/MT5/Master/ForexCopierMaster.mq5
-              mql/MT5/Slave/ForexCopierSlave.mq5
+            installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
+            install_path: C:\Program Files\MetaTrader 5
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Compile MQL${{ matrix.version }} files
-        uses: fx31337/mql-compile-action@v1
+      - name: Cache MetaTrader installer
+        id: cache-installer
+        uses: actions/cache@v4
         with:
-          path: mql/${{ matrix.platform }}
-          include: mql/Include
-          verbose: true
+          path: ${{ matrix.platform }}setup.exe
+          key: ${{ matrix.platform }}-installer-v1
+          restore-keys: |
+            ${{ matrix.platform }}-installer-
+
+      - name: Download MetaTrader installer
+        if: steps.cache-installer.outputs.cache-hit != 'true'
+        run: |
+          Write-Host "Downloading ${{ matrix.platform }} installer..."
+
+          Invoke-WebRequest `
+            -Uri "${{ matrix.installer_url }}" `
+            -OutFile "${{ matrix.platform }}setup.exe" `
+            -TimeoutSec 120 `
+            -UseBasicParsing
+
+          $fileInfo = Get-Item "${{ matrix.platform }}setup.exe"
+          Write-Host "Downloaded: $($fileInfo.Length) bytes"
+
+      - name: Install MetaTrader
+        run: |
+          Write-Host "Installing ${{ matrix.platform }}..."
+
+          # Run installer silently
+          Start-Process -FilePath "${{ matrix.platform }}setup.exe" `
+            -ArgumentList "/auto" `
+            -Wait `
+            -NoNewWindow
+
+          # Wait for installation to complete
+          Start-Sleep -Seconds 10
+
+          # Verify installation
+          if (Test-Path "${{ matrix.install_path }}") {
+            Write-Host "✅ ${{ matrix.platform }} installed successfully"
+            Get-ChildItem "${{ matrix.install_path }}" -Recurse -Filter "metaeditor*.exe" | ForEach-Object {
+              Write-Host "Found MetaEditor: $($_.FullName)"
+            }
+          } else {
+            Write-Host "❌ Installation failed"
+            exit 1
+          }
+
+      - name: Compile MQL files
+        run: |
+          Write-Host "Compiling ${{ matrix.platform }} files..."
+
+          # Find MetaEditor
+          $metaeditor = Get-ChildItem "${{ matrix.install_path }}" -Recurse -Filter "metaeditor*.exe" | Select-Object -First 1
+
+          if (-not $metaeditor) {
+            Write-Host "❌ MetaEditor not found"
+            exit 1
+          }
+
+          Write-Host "Using MetaEditor: $($metaeditor.FullName)"
+
+          # Compile Master EA
+          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.mq${{ matrix.version }}"
+          Write-Host "Compiling Master: $masterFile"
+
+          & $metaeditor.FullName /compile:"$masterFile" /log /inc:"${{ github.workspace }}\mql\Include"
+
+          # Compile Slave EA
+          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.mq${{ matrix.version }}"
+          Write-Host "Compiling Slave: $slaveFile"
+
+          & $metaeditor.FullName /compile:"$slaveFile" /log /inc:"${{ github.workspace }}\mql\Include"
+
+          # Wait for compilation
+          Start-Sleep -Seconds 5
+
+      - name: Verify compiled files
+        run: |
+          Write-Host "Verifying compiled files..."
+
+          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.ex${{ matrix.version }}"
+
+          $errors = @()
+
+          if (Test-Path $masterEx) {
+            $size = (Get-Item $masterEx).Length
+            Write-Host "✅ Master compiled: $size bytes"
+          } else {
+            $errors += "Master EX file not found"
+          }
+
+          if (Test-Path $slaveEx) {
+            $size = (Get-Item $slaveEx).Length
+            Write-Host "✅ Slave compiled: $size bytes"
+          } else {
+            $errors += "Slave EX file not found"
+          }
+
+          if ($errors.Count -gt 0) {
+            Write-Host "❌ Compilation errors:"
+            $errors | ForEach-Object { Write-Host "  - $_" }
+
+            # Show compilation logs
+            Get-ChildItem "${{ github.workspace }}\mql\${{ matrix.platform }}" -Recurse -Filter "*.log" | ForEach-Object {
+              Write-Host "`nLog file: $($_.FullName)"
+              Get-Content $_.FullName
+            }
+
+            exit 1
+          }
 
       - name: Prepare MQL artifacts
         run: |
           mkdir -p artifacts/mql/${{ matrix.platform }}
-          copy mql\${{ matrix.platform }}\Master\*.ex${{ matrix.version == '4' && '4' || '5' }} artifacts\mql\${{ matrix.platform }}\ 2>nul || echo "No Master files"
-          copy mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version == '4' && '4' || '5' }} artifacts\mql\${{ matrix.platform }}\ 2>nul || echo "No Slave files"
+          copy "mql\${{ matrix.platform }}\Master\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Master files"
+          copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
         uses: actions/upload-artifact@v4
@@ -192,8 +293,7 @@ jobs:
   create-release-package:
     name: Create Release Package
     runs-on: ubuntu-latest
-    needs: [build-rust-dll, build-rust-server, build-web-ui]
-    # compile-mql temporarily removed from dependencies due to download.mql5.com blocking
+    needs: [build-rust-dll, build-rust-server, build-web-ui, compile-mql]
     if: ${{ github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
 
     steps:
