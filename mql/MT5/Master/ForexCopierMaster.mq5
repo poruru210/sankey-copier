@@ -27,8 +27,8 @@ struct PositionInfo
 
 //--- Global variables
 string        AccountID;                  // Auto-generated from broker + account number
-int           g_zmq_context = -1;
-int           g_zmq_socket = -1;
+HANDLE_TYPE   g_zmq_context = -1;
+HANDLE_TYPE   g_zmq_socket = -1;
 PositionInfo  g_tracked_positions[];
 bool          g_initialized = false;
 datetime      g_last_heartbeat = 0;

@@ -25,9 +25,9 @@ input bool     UsePendingOrderForDelayed = false;            // Use pending orde
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
-int         g_zmq_context = -1;
-int         g_zmq_trade_socket = -1;    // Socket for receiving trade signals
-int         g_zmq_config_socket = -1;   // Socket for receiving configuration
+HANDLE_TYPE g_zmq_context = -1;
+HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
+HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account

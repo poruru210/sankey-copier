@@ -28,17 +28,17 @@
 
 //--- Import Rust ZeroMQ DLL
 #import "forex_copier_zmq.dll"
-   int    zmq_context_create();
-   void   zmq_context_destroy(int context);
-   int    zmq_socket_create(int context, int socket_type);
-   void   zmq_socket_destroy(int socket);
-   int    zmq_socket_bind(int socket, string address);
-   int    zmq_socket_connect(int socket, string address);
-   int    zmq_socket_send(int socket, string message);
-   int    zmq_socket_send_binary(int socket, uchar &data[], int len);
-   int    zmq_socket_receive(int socket, uchar &buffer[], int buffer_size);
-   int    zmq_socket_subscribe_all(int socket);
-   int    zmq_socket_subscribe(int socket, string topic);
+   HANDLE_TYPE zmq_context_create();
+   void        zmq_context_destroy(HANDLE_TYPE context);
+   HANDLE_TYPE zmq_socket_create(HANDLE_TYPE context, int socket_type);
+   void        zmq_socket_destroy(HANDLE_TYPE socket);
+   int         zmq_socket_bind(HANDLE_TYPE socket, string address);
+   int         zmq_socket_connect(HANDLE_TYPE socket, string address);
+   int         zmq_socket_send(HANDLE_TYPE socket, string message);
+   int         zmq_socket_send_binary(HANDLE_TYPE socket, uchar &data[], int len);
+   int         zmq_socket_receive(HANDLE_TYPE socket, uchar &buffer[], int buffer_size);
+   int         zmq_socket_subscribe_all(HANDLE_TYPE socket);
+   int         zmq_socket_subscribe(HANDLE_TYPE socket, string topic);
 
    // MessagePack serialization functions
    int    serialize_register(string message_type, string account_id, string ea_type,
@@ -55,36 +55,20 @@
    // Use copy_serialized_buffer() instead
    int    copy_serialized_buffer(uchar &dest[], int max_len);
 
-   // Config message parsing (existing)
-   #ifdef IS_MT5
-      long   parse_message(uchar &data[], int data_len);
-      string config_get_string(long handle, string field_name);
-      double config_get_double(long handle, string field_name);
-      int    config_get_bool(long handle, string field_name);
-      int    config_get_int(long handle, string field_name);
-      void   config_free(long handle);
+   // Config message parsing
+   HANDLE_TYPE parse_message(uchar &data[], int data_len);
+   string      config_get_string(HANDLE_TYPE handle, string field_name);
+   double      config_get_double(HANDLE_TYPE handle, string field_name);
+   int         config_get_bool(HANDLE_TYPE handle, string field_name);
+   int         config_get_int(HANDLE_TYPE handle, string field_name);
+   void        config_free(HANDLE_TYPE handle);
 
-      // Trade signal parsing
-      long   parse_trade_signal(uchar &data[], int data_len);
-      string trade_signal_get_string(long handle, string field_name);
-      double trade_signal_get_double(long handle, string field_name);
-      long   trade_signal_get_int(long handle, string field_name);
-      void   trade_signal_free(long handle);
-   #else
-      int    parse_message(uchar &data[], int data_len);
-      string config_get_string(int handle, string field_name);
-      double config_get_double(int handle, string field_name);
-      int    config_get_bool(int handle, string field_name);
-      int    config_get_int(int handle, string field_name);
-      void   config_free(int handle);
-
-      // Trade signal parsing
-      int    parse_trade_signal(uchar &data[], int data_len);
-      string trade_signal_get_string(int handle, string field_name);
-      double trade_signal_get_double(int handle, string field_name);
-      long   trade_signal_get_int(int handle, string field_name);
-      void   trade_signal_free(int handle);
-   #endif
+   // Trade signal parsing
+   HANDLE_TYPE parse_trade_signal(uchar &data[], int data_len);
+   string      trade_signal_get_string(HANDLE_TYPE handle, string field_name);
+   double      trade_signal_get_double(HANDLE_TYPE handle, string field_name);
+   long        trade_signal_get_int(HANDLE_TYPE handle, string field_name);
+   void        trade_signal_free(HANDLE_TYPE handle);
 #import
 
 //--- Common structures
