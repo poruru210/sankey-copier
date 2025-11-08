@@ -152,10 +152,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - platform: MT4
-            version: '4'
-            installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe
-            install_path: C:\Program Files\MetaTrader 4
+          # MT4 temporarily disabled due to metaeditor64.exe incompatibility with .mq4 files
+          # - platform: MT4
+          #   version: '4'
+          #   installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe
+          #   install_path: C:\Program Files\MetaTrader 4
           - platform: MT5
             version: '5'
             installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
@@ -351,9 +352,9 @@ jobs:
           # Save to GitHub environment for next step
           "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install MQL standard libraries
+      - name: Prepare Include directory
         run: |
-          Write-Host "=== Installing MQL${{ matrix.version }} standard libraries ==="
+          Write-Host "=== Preparing Include directory for custom libraries ==="
 
           # Read MetaEditor path from environment
           $metaeditorPath = $env:METAEDITOR_PATH
@@ -376,86 +377,12 @@ jobs:
           if (-not (Test-Path $targetIncludeDir)) {
             Write-Host "Creating Include directory..."
             New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
-          }
-
-          # Initialize MT to download standard libraries
-          # MT installation includes terminal executable which can be run once to download standard libraries
-          Write-Host "Initializing MetaTrader to download standard libraries..."
-
-          # Find terminal executable
-          $terminalExe = Get-ChildItem $mtInstallDir -Recurse -Filter "terminal*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          if ($terminalExe) {
-            Write-Host "Found terminal: $($terminalExe.FullName)"
-
-            # Run terminal with /install flag to initialize and download libraries
-            Write-Host "Running terminal to initialize (this may take a minute)..."
-            $process = Start-Process -FilePath $terminalExe.FullName `
-              -ArgumentList "/install" `
-              -PassThru `
-              -NoNewWindow `
-              -RedirectStandardOutput "${{ github.workspace }}\terminal_init.log" `
-              -RedirectStandardError "${{ github.workspace }}\terminal_init_error.log"
-
-            # Wait max 60 seconds for initialization
-            $waited = 0
-            while (-not $process.HasExited -and $waited -lt 60) {
-              Start-Sleep -Seconds 5
-              $waited += 5
-              Write-Host "Waiting for terminal initialization... ($waited seconds)"
-            }
-
-            if (-not $process.HasExited) {
-              Write-Host "Stopping terminal process after timeout..."
-              $process.Kill()
-            }
-
-            Write-Host "Terminal initialization completed"
-
-            # Check if Include directory now exists with standard libraries
-            if (Test-Path $targetIncludeDir) {
-              $includeFileCount = (Get-ChildItem $targetIncludeDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-              Write-Host "Include directory exists with $includeFileCount files"
-
-              if ($includeFileCount -gt 0) {
-                Write-Host "✅ Standard libraries downloaded successfully"
-
-                # List top-level directories
-                Write-Host ""
-                Write-Host "Standard library directories:"
-                Get-ChildItem $targetIncludeDir -Directory | Select-Object -First 20 | ForEach-Object {
-                  Write-Host "  DIR: $($_.Name)"
-                }
-
-                # For MT5, verify Trade directory
-                if ("${{ matrix.version }}" -eq "5") {
-                  $tradeDir = Join-Path $targetIncludeDir "Trade"
-                  if (Test-Path $tradeDir) {
-                    Write-Host ""
-                    Write-Host "✅ Trade directory verified:"
-                    Get-ChildItem $tradeDir -File | ForEach-Object {
-                      Write-Host "  - $($_.Name)"
-                    }
-                  } else {
-                    Write-Host "⚠️ Trade directory not found"
-                  }
-                }
-              } else {
-                Write-Host "⚠️ Include directory exists but is empty"
-                Write-Host "This is normal for silent installation. Will proceed with custom includes only."
-              }
-            } else {
-              Write-Host "⚠️ Include directory still does not exist after initialization"
-              Write-Host "Creating empty Include directory and proceeding with custom includes only..."
-              New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
-            }
+            Write-Host "✅ Include directory created"
           } else {
-            Write-Host "⚠️ Terminal executable not found, skipping initialization"
-            Write-Host "Creating empty Include directory for custom includes..."
-            if (-not (Test-Path $targetIncludeDir)) {
-              New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
-            }
+            Write-Host "✅ Include directory already exists"
           }
+
+          Write-Host "Will use custom Trade.mqh and other include files from workspace"
 
       - name: Compile MQL files
         run: |
