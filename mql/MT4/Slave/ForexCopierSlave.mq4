@@ -424,6 +424,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    long magic_long = trade_signal_get_int(handle, "magic_number");
    int magic = (int)magic_long;
    string timestamp = trade_signal_get_string(handle, "timestamp");
+   string source_account = trade_signal_get_string(handle, "source_account");
 
    Print("Processing ", action, " for master ticket #", master_ticket);
 
@@ -445,7 +446,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          string transformed_order_type = ReverseOrderType(order_type_str);
 
          // Open order with transformed values
-         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp);
+         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp, source_account);
       }
    }
    else if(action == "Close")
@@ -469,7 +470,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open new order                                                    |
 //+------------------------------------------------------------------+
 void OpenOrder(int master_ticket, string symbol, string order_type_str, double lots,
-               double price, double sl, double tp, int magic, string timestamp)
+               double price, double sl, double tp, int magic, string timestamp, string source_account)
 {
    // Check if already copied
    int slave_ticket = GetSlaveTicket(master_ticket);
@@ -494,7 +495,7 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
       else
       {
          Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
-         PlacePendingOrder(master_ticket, symbol, order_type_str, lots, price, sl, tp, magic);
+         PlacePendingOrder(master_ticket, symbol, order_type_str, lots, price, sl, tp, magic, source_account, delay_ms);
          return;
       }
    }
@@ -512,6 +513,9 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
+   // Build traceable comment: "M#12345|broker_acc|120ms"
+   string comment = "M#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+
    // Execute order
    int ticket = -1;
    for(int attempt = 0; attempt < MaxRetries; attempt++)
@@ -522,12 +526,12 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
       {
          double exec_price = (order_type == OP_BUY) ? Ask : Bid;
          ticket = OrderSend(symbol, order_type, lots, exec_price, Slippage, sl, tp,
-                           "Copied from #" + IntegerToString(master_ticket), magic, 0, clrGreen);
+                           comment, magic, 0, clrGreen);
       }
       else
       {
          ticket = OrderSend(symbol, order_type, lots, price, Slippage, sl, tp,
-                           "Copied from #" + IntegerToString(master_ticket), magic, 0, clrBlue);
+                           comment, magic, 0, clrBlue);
       }
 
       if(ticket > 0)
@@ -692,7 +696,7 @@ string GetJsonValue(string json, string key)
 //| Place pending order at original price                            |
 //+------------------------------------------------------------------+
 void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
-                       double lots, double price, double sl, double tp, int magic)
+                       double lots, double price, double sl, double tp, int magic, string source_account, int delay_ms)
 {
    // Check if pending order already exists
    if(GetPendingTicket(master_ticket) > 0)
@@ -734,8 +738,11 @@ void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
+   // Build traceable comment: "P#12345|broker_acc|8500ms"
+   string comment = "P#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+
    int ticket = OrderSend(symbol, pending_type, lots, price, Slippage, sl, tp,
-                          "Pending from #" + IntegerToString(master_ticket), magic, 0, clrBlue);
+                          comment, magic, 0, clrBlue);
 
    if(ticket > 0)
    {

@@ -270,6 +270,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    long magic_long = trade_signal_get_int(handle, "magic_number");
    int magic_number = (int)magic_long;
    string timestamp = trade_signal_get_string(handle, "timestamp");
+   string source_account = trade_signal_get_string(handle, "source_account");
 
    if(action == "Open" && AllowNewOrders)
    {
@@ -287,7 +288,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       string transformed_order_type = ReverseOrderType(order_type_str, g_config_reverse_trade);
 
       // Open position with transformed values
-      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp);
+      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account);
    }
    else if(action == "Close" && AllowCloseOrders)
    {
@@ -307,7 +308,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open position                                                     |
 //+------------------------------------------------------------------+
 void OpenPosition(ulong master_ticket, string symbol, string type_str,
-                  double lots, double price, double sl, double tp, string timestamp)
+                  double lots, double price, double sl, double tp, string timestamp, string source_account)
 {
    if(GetSlaveTicket(master_ticket) > 0)
    {
@@ -330,7 +331,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
       else
       {
          Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
-         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp);
+         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms);
          return;
       }
    }
@@ -340,15 +341,18 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
 
    lots = NormalizeDouble(lots, 2);
 
+   // Build traceable comment: "M#12345|broker_acc|120ms"
+   string comment = "M#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+
    g_trade.SetExpertMagicNumber(0);
    bool result = false;
 
    for(int i = 0; i < MaxRetries; i++)
    {
       if(order_type == ORDER_TYPE_BUY)
-         result = g_trade.Buy(lots, symbol, 0, sl, tp, "Copy from #" + IntegerToString(master_ticket));
+         result = g_trade.Buy(lots, symbol, 0, sl, tp, comment);
       else if(order_type == ORDER_TYPE_SELL)
-         result = g_trade.Sell(lots, symbol, 0, sl, tp, "Copy from #" + IntegerToString(master_ticket));
+         result = g_trade.Sell(lots, symbol, 0, sl, tp, comment);
 
       if(result)
       {
@@ -415,7 +419,7 @@ void ModifyPosition(ulong master_ticket, double sl, double tp)
 //| Place pending order at original price                            |
 //+------------------------------------------------------------------+
 void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
-                       double lots, double price, double sl, double tp)
+                       double lots, double price, double sl, double tp, string source_account, int delay_ms)
 {
    // Check if pending order already exists
    if(GetPendingTicket(master_ticket) > 0)
@@ -443,10 +447,14 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
    }
 
    lots = NormalizeDouble(lots, 2);
+
+   // Build traceable comment: "P#12345|broker_acc|8500ms"
+   string comment = "P#" + IntegerToString(master_ticket) + "|" + source_account + "|" + IntegerToString(delay_ms) + "ms";
+
    g_trade.SetExpertMagicNumber(0);
 
    bool result = g_trade.OrderOpen(symbol, pending_type, lots, 0, price, sl, tp,
-                                    ORDER_TIME_GTC, 0, "Pending from #" + IntegerToString(master_ticket));
+                                    ORDER_TIME_GTC, 0, comment);
 
    if(result)
    {
