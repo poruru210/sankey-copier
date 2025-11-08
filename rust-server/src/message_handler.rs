@@ -226,6 +226,7 @@ mod tests {
         CopySettings, HeartbeatMessage, OrderType, RegisterMessage,
         TradeAction, TradeFilters, UnregisterMessage,
     };
+    use chrono::Utc;
 
     async fn create_test_handler() -> MessageHandler {
         use std::sync::atomic::{AtomicU16, Ordering};

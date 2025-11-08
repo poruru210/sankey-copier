@@ -120,11 +120,10 @@ impl ConnectionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{EaType, Platform};
 
     fn create_test_register_message(account_id: &str) -> RegisterMessage {
-        use chrono::Utc;
         RegisterMessage {
+            message_type: "Register".to_string(),
             account_id: account_id.to_string(),
             account_number: 12345,
             broker: "Test Broker".to_string(),
@@ -134,9 +133,9 @@ mod tests {
             balance: 10000.0,
             equity: 10000.0,
             leverage: 100,
-            ea_type: EaType::Master,
-            platform: Platform::MT4,
-            timestamp: Utc::now(),
+            ea_type: "Master".to_string(),
+            platform: "MT4".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
 
@@ -178,11 +177,12 @@ mod tests {
         manager.register_ea(msg).await;
 
         let hb_msg = HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
             account_id: account_id.clone(),
             balance: 12000.0,
             equity: 11500.0,
-            open_positions: Some(3),
-            timestamp: chrono::Utc::now(),
+            open_positions: 3,
+            timestamp: chrono::Utc::now().to_rfc3339(),
         };
         manager.update_heartbeat(hb_msg).await;
 
@@ -239,11 +239,12 @@ mod tests {
         // Send heartbeat after 1 second
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         manager.update_heartbeat(HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
             account_id: account_id.clone(),
             balance: 10000.0,
             equity: 10000.0,
-            open_positions: Some(0),
-            timestamp: chrono::Utc::now(),
+            open_positions: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
         }).await;
 
         // Wait another second (total 2 seconds, but heartbeat was sent at 1 second)
