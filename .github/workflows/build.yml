@@ -152,42 +152,89 @@ jobs:
     strategy:
       matrix:
         include:
-          # MT4 temporarily disabled due to metaeditor64.exe incompatibility with .mq4 files
-          # - platform: MT4
-          #   version: '4'
-          #   installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt4/mt4setup.exe
-          #   install_path: C:\Program Files\MetaTrader 4
+          - platform: MT4
+            version: '4'
+            exe_name: icmarketssc4setup.exe
           - platform: MT5
             version: '5'
-            installer_url: https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
-            install_path: C:\Program Files\MetaTrader 5
+            exe_name: icmarketssc5setup.exe
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache MetaTrader installer
-        id: cache-installer
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix.platform }}setup.exe
-          key: ${{ matrix.platform }}-installer-v1
-          restore-keys: |
-            ${{ matrix.platform }}-installer-
-
-      - name: Download MetaTrader installer
-        if: steps.cache-installer.outputs.cache-hit != 'true'
+      - name: Download MetaTrader installer from Private Release
+        env:
+          GH_TOKEN: ${{ secrets.MT_INSTALLER_PAT }}
         run: |
-          Write-Host "Downloading ${{ matrix.platform }} installer..."
+          Write-Host "Downloading IC Markets installer from private release..."
 
-          Invoke-WebRequest `
-            -Uri "${{ matrix.installer_url }}" `
-            -OutFile "${{ matrix.platform }}setup.exe" `
-            -TimeoutSec 120 `
-            -UseBasicParsing
+          $token = $env:GH_TOKEN
+          $headers = @{
+              "Authorization" = "Bearer $token"
+              "Accept" = "application/vnd.github+json"
+              "X-GitHub-Api-Version" = "2022-11-28"
+          }
 
-          $fileInfo = Get-Item "${{ matrix.platform }}setup.exe"
-          Write-Host "Downloaded: $($fileInfo.Length) bytes"
+          # Get release information
+          $releaseUrl = "https://api.github.com/repos/poruru-code/mt-setup/releases/tags/5.0.0.5387"
+          Write-Host "Fetching release info from: $releaseUrl"
+
+          $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers -Method Get
+
+          # Find the icmarkets-setup.zip asset
+          $asset = $release.assets | Where-Object { $_.name -eq "icmarkets-setup.zip" }
+
+          if (-not $asset) {
+              Write-Host "❌ Asset 'icmarkets-setup.zip' not found in release"
+              Write-Host "Available assets:"
+              $release.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+              exit 1
+          }
+
+          Write-Host "Found asset: $($asset.name) (ID: $($asset.id), Size: $($asset.size) bytes)"
+
+          # Download the asset
+          $downloadUrl = "https://api.github.com/repos/poruru-code/mt-setup/releases/assets/$($asset.id)"
+          $downloadHeaders = @{
+              "Authorization" = "Bearer $token"
+              "Accept" = "application/octet-stream"
+          }
+
+          Write-Host "Downloading from: $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -Headers $downloadHeaders -OutFile "icmarkets-setup.zip" -TimeoutSec 120
+
+          if (-not (Test-Path "icmarkets-setup.zip")) {
+              Write-Host "❌ Failed to download icmarkets-setup.zip"
+              exit 1
+          }
+
+          $zipInfo = Get-Item "icmarkets-setup.zip"
+          Write-Host "✅ Downloaded: $($zipInfo.Length) bytes"
+
+          # Extract ZIP
+          Write-Host "Extracting ZIP archive..."
+          Expand-Archive -Path "icmarkets-setup.zip" -DestinationPath . -Force
+
+          # List extracted files
+          Write-Host "Extracted files:"
+          Get-ChildItem *.exe | ForEach-Object {
+              Write-Host "  - $($_.Name) ($($_.Length) bytes)"
+          }
+
+          # Select the appropriate installer for this platform
+          $installerName = "${{ matrix.exe_name }}"
+
+          if (-not (Test-Path $installerName)) {
+              Write-Host "❌ Installer not found: $installerName"
+              exit 1
+          }
+
+          # Rename to standard name for next steps
+          Rename-Item $installerName "${{ matrix.platform }}setup.exe"
+
+          $installerInfo = Get-Item "${{ matrix.platform }}setup.exe"
+          Write-Host "✅ Prepared installer: $($installerInfo.Name) ($($installerInfo.Length) bytes)"
 
       - name: Install MetaTrader
         run: |
