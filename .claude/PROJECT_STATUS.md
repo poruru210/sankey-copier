@@ -1,5 +1,5 @@
 # Project Status
-## Forex Copier Development Overview
+## SANKEY Copier Development Overview
 
 **Last Updated**: 2025-11-07 21:23
 **Current Phase**: Phase 4 Complete
@@ -77,7 +77,7 @@ All planned phases (1-4) completed. Phase 5 (Config Acknowledgment) is available
 - Memory-safe MessagePack parsing with static buffers
 
 **Files Modified**:
-- [mql/MT4/Slave/ForexCopierSlave.mq4](mql/MT4/Slave/ForexCopierSlave.mq4) - Complete rewrite (916 lines)
+- [mql/MT4/Slave/SankeyCopierSlave.mq4](mql/MT4/Slave/SankeyCopierSlave.mq4) - Complete rewrite (916 lines)
   - DLL imports with 32-bit pointer types (int)
   - Dual socket initialization
   - ProcessConfigMessage with MessagePack parsing

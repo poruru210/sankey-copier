@@ -1,10 +1,10 @@
 [package]
-name = "forex_copier_zmq"
+name = "sankey_copier_zmq"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "forex_copier_zmq"
+name = "sankey_copier_zmq"
 crate-type = ["cdylib", "rlib"]  # cdylib for DLL, rlib for Rust dependency
 
 [dependencies]

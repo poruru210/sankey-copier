@@ -1,6 +1,6 @@
 # GitHub Actions ビルドワークフロー
 
-このディレクトリには、Forex Copierプロジェクトの自動ビルドを行うGitHub Actionsワークフローが含まれています。
+このディレクトリには、SANKEY Copierプロジェクトの自動ビルドを行うGitHub Actionsワークフローが含まれています。
 
 ## ワークフロー一覧
 
@@ -14,7 +14,7 @@
 
 1. GitHubリポジトリページにアクセス
 2. 「Actions」タブをクリック
-3. 左サイドバーから「Build Forex Copier」を選択
+3. 左サイドバーから「Build SANKEY Copier」を選択
 4. 「Run workflow」ボタンをクリック
 5. ビルド対象を選択:
    - **all**: すべてのコンポーネントをビルド（推奨）
@@ -31,12 +31,12 @@
   - 32-bit版（MT4用）: `i686-pc-windows-msvc`
   - 64-bit版（MT5用）: `x86_64-pc-windows-msvc`
 - **成果物**: `forex-copier-dll`
-  - `MT4/forex_copier_zmq.dll` (32-bit)
-  - `MT5/forex_copier_zmq.dll` (64-bit)
+  - `MT4/sankey_copier_zmq.dll` (32-bit)
+  - `MT5/sankey_copier_zmq.dll` (64-bit)
 - **ランナー**: `windows-latest`
 
 #### `rust-server` - Rust Server
-- **ビルド内容**: メインのForex Copierサーバー
+- **ビルド内容**: メインのSANKEY Copierサーバー
 - **成果物**: `forex-copier-server`
   - `forex-copier-server.exe`
 - **ランナー**: `windows-latest`

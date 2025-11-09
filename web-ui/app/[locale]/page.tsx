@@ -5,7 +5,7 @@ import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow'
 import { ServerLog } from '@/components/ServerLog';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
-import { useForexCopier } from '@/hooks/useForexCopier';
+import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 
 export default function Home() {
   const {
@@ -18,7 +18,7 @@ export default function Home() {
     createSetting,
     updateSetting,
     deleteSetting,
-  } = useForexCopier();
+  } = useSankeyCopier();
 
   // Mobile drawer state for filter sidebar
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);

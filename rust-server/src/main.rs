@@ -32,13 +32,13 @@ async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "forex_copier_server=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "sankey_copier_server=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .with(LogBufferLayer::new(log_buffer.clone()))
         .init();
 
-    tracing::info!("Starting Forex Copier Server...");
+    tracing::info!("Starting SANKEY Copier Server...");
     tracing::info!("Server Version: {}", env!("GIT_VERSION"));
 
     // Load configuration

@@ -1,4 +1,4 @@
-# Forex Copier Server Configuration
+# SANKEY Copier Server Configuration
 
 [server]
 # Server host and port
@@ -7,7 +7,7 @@ port = 8080
 
 [database]
 # SQLite database URL
-url = "sqlite://forex_copier.db?mode=rwc"
+url = "sqlite://sankey_copier.db?mode=rwc"
 
 [zeromq]
 # ZeroMQ port configuration

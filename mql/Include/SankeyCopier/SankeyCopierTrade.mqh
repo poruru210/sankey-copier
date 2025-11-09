@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                      ForexCopierTrade.mqh        |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                      SankeyCopierTrade.mqh        |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                     Trade filtering and transformation            |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 
-#include "ForexCopierCommon.mqh"
+#include "SankeyCopierCommon.mqh"
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |

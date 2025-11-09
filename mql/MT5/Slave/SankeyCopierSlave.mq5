@@ -1,18 +1,18 @@
 //+------------------------------------------------------------------+
-//|                                        ForexCopierSlave.mq5      |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                        SankeyCopierSlave.mq5      |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                                                                  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
 #property version   "1.00"
 
 #include <Trade/Trade.mqh>
 
 //--- Include common headers
-#include <ForexCopier/ForexCopierCommon.mqh>
-#include <ForexCopier/ForexCopierMessages.mqh>
-#include <ForexCopier/ForexCopierTrade.mqh>
+#include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierMessages.mqh>
+#include <SankeyCopier/SankeyCopierTrade.mqh>
 
 //--- Input parameters
 input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
@@ -60,7 +60,7 @@ int            g_config_version = 0;             // Configuration version
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== ForexCopier Slave EA (MT5) Starting ===");
+   Print("=== SankeyCopier Slave EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();

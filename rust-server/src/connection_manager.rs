@@ -184,6 +184,7 @@ mod tests {
             equity: 11500.0,
             open_positions: 3,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            version_git: "test".to_string(),
         };
         manager.update_heartbeat(hb_msg).await;
 
@@ -246,6 +247,7 @@ mod tests {
             equity: 10000.0,
             open_positions: 0,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            version_git: "test".to_string(),
         }).await;
 
         // Wait another second (total 2 seconds, but heartbeat was sent at 1 second)

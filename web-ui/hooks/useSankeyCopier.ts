@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 
-export function useForexCopier() {
+export function useSankeyCopier() {
   const [settings, setSettings] = useState<CopySettings[]>([]);
   const [connections, setConnections] = useState<EaConnection[]>([]);
   const [loading, setLoading] = useState(true);

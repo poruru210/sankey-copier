@@ -1,6 +1,6 @@
-# Forex Copier セットアップガイド
+# SANKEY Copier セットアップガイド
 
-このガイドでは、Forex Copierを初めて使用する方向けに、詳細なセットアップ手順を説明します。
+このガイドでは、SANKEY Copierを初めて使用する方向けに、詳細なセットアップ手順を説明します。
 
 ## 前提条件
 
@@ -68,10 +68,10 @@ cargo run --release
 
 以下のようなログが表示されれば成功:
 ```
-INFO forex_copier_server: Starting Forex Copier Server...
-INFO forex_copier_server: Database initialized
-INFO forex_copier_server: ZeroMQ receiver started on tcp://*:5555
-INFO forex_copier_server: HTTP server listening on http://0.0.0.0:8080
+INFO sankey_copier_server: Starting SANKEY Copier Server...
+INFO sankey_copier_server: Database initialized
+INFO sankey_copier_server: ZeroMQ receiver started on tcp://*:5555
+INFO sankey_copier_server: HTTP server listening on http://0.0.0.0:8080
 ```
 
 ### サーバーをバックグラウンドで実行
@@ -83,8 +83,8 @@ Windowsサービスとして実行したい場合は、NSSM (Non-Sucking Service
 3. 以下を実行:
 
 ```cmd
-nssm install ForexCopier "D:\projects\test\forex-copier\rust-server\target\release\forex-copier-server.exe"
-nssm start ForexCopier
+nssm install SankeyCopier "D:\projects\test\forex-copier\rust-server\target\release\forex-copier-server.exe"
+nssm start SankeyCopier
 ```
 
 ## ステップ3: WebUIのセットアップ
@@ -123,13 +123,13 @@ npm run build
 
 2. Master EA をコピー:
    ```
-   forex-copier/mql/MT4/Master/ForexCopierMaster.mq4
+   forex-copier/mql/MT4/Master/SankeyCopierMaster.mq4
    → C:\Program Files\[Your Broker] MetaTrader 4\MQL4\Experts\
    ```
 
 3. Slave EA をコピー:
    ```
-   forex-copier/mql/MT4/Slave/ForexCopierSlave.mq4
+   forex-copier/mql/MT4/Slave/SankeyCopierSlave.mq4
    → C:\Program Files\[Your Broker] MetaTrader 4\MQL4\Experts\
    ```
 
@@ -138,13 +138,13 @@ npm run build
 ### EAのコンパイル
 
 1. MT4/MT5でMetaEditorを開く (F4キー)
-2. Navigator から ForexCopierMaster を開く
+2. Navigator から SankeyCopierMaster を開く
 3. コンパイルボタンをクリック (F7キー)
 4. エラーログを確認:
    - `0 error(s), 0 warning(s)` であればOK
    - エラーがある場合は `libzmq.dll` のパスを確認
 
-5. ForexCopierSlaveも同様にコンパイル
+5. SankeyCopierSlaveも同様にコンパイル
 
 ## ステップ5: 実際の運用例
 
@@ -153,7 +153,7 @@ npm run build
 #### Master口座の設定
 
 1. MT4でEURUSDチャートを開く
-2. ForexCopierMaster をチャートにドラッグ
+2. SankeyCopierMaster をチャートにドラッグ
 3. パラメータを設定:
    - ServerAddress: `tcp://localhost:5555`
    - AccountID: `MASTER_001`
@@ -164,7 +164,7 @@ npm run build
 #### Slave口座1の設定
 
 1. 別のMT4でEURUSDチャートを開く
-2. ForexCopierSlave をチャートにドラッグ
+2. SankeyCopierSlave をチャートにドラッグ
 3. パラメータを設定:
    - ServerAddress: `tcp://localhost:5556`
    - AccountID: `SLAVE_001`
@@ -287,7 +287,7 @@ curl -X PUT http://localhost:8080/api/settings/1 \
 **ファイアウォールの確認:**
 ```powershell
 # 管理者権限で実行
-netsh advfirewall firewall add rule name="Forex Copier" dir=in action=allow protocol=TCP localport=5555,5556,8080
+netsh advfirewall firewall add rule name="SANKEY Copier" dir=in action=allow protocol=TCP localport=5555,5556,8080
 ```
 
 ### Q2: WebUIに接続できない

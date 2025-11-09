@@ -1,6 +1,6 @@
 # Integration Tests
 
-This directory contains integration tests for the Forex Copier MessagePack implementation.
+This directory contains integration tests for the SANKEY Copier MessagePack implementation.
 
 ## Test Structure
 

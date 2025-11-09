@@ -373,6 +373,7 @@ mod tests {
             equity: 11500.0,
             open_positions: 3,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            version_git: "test".to_string(),
         };
         handler.handle_heartbeat(hb_msg).await;
 

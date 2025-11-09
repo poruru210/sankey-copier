@@ -1,9 +1,9 @@
 //+------------------------------------------------------------------+
-//|                                        ForexCopierCommon.mqh    |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                        SankeyCopierCommon.mqh    |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                     Common definitions and utilities              |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 
 //--- Platform detection and type aliases
 #ifdef __MQL5__
@@ -27,7 +27,7 @@
 #define SPACE_CHAR 32
 
 //--- Import Rust ZeroMQ DLL
-#import "forex_copier_zmq.dll"
+#import "sankey_copier_zmq.dll"
    HANDLE_TYPE zmq_context_create();
    void        zmq_context_destroy(HANDLE_TYPE context);
    HANDLE_TYPE zmq_socket_create(HANDLE_TYPE context, int socket_type);

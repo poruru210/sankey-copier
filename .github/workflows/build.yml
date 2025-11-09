@@ -1,4 +1,4 @@
-name: Build Forex Copier
+name: Build SANKEY Copier
 
 on:
   push:
@@ -54,8 +54,8 @@ jobs:
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
-          copy mql-zmq-dll\target\i686-pc-windows-msvc\release\forex_copier_zmq.dll artifacts\dll\MT4\
-          copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\forex_copier_zmq.dll artifacts\dll\MT5\
+          copy mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
+          copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
         uses: actions/upload-artifact@v4
@@ -476,7 +476,7 @@ jobs:
           }
 
           # Compile Master EA
-          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.mq${{ matrix.version }}"
+          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Master EA ==="
           Write-Host "Source file: $masterFile"
@@ -496,7 +496,7 @@ jobs:
           }
 
           # Compile Slave EA
-          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.mq${{ matrix.version }}"
+          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Slave EA ==="
           Write-Host "Source file: $slaveFile"
@@ -574,8 +574,8 @@ jobs:
         run: |
           Write-Host "Verifying compiled files..."
 
-          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.ex${{ matrix.version }}"
-          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.ex${{ matrix.version }}"
+          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.ex${{ matrix.version }}"
 
           $errors = @()
 
@@ -639,7 +639,7 @@ jobs:
           fi
 
           if [ -d "release-artifacts/forex-copier-dll/MT5" ]; then
-            cp release-artifacts/forex-copier-dll/MT5/forex_copier_zmq.dll release/forex-copier/MT5/Libraries/
+            cp release-artifacts/forex-copier-dll/MT5/sankey_copier_zmq.dll release/forex-copier/MT5/Libraries/
           fi
 
           # MT4 structure
@@ -650,7 +650,7 @@ jobs:
           fi
 
           if [ -d "release-artifacts/forex-copier-dll/MT4" ]; then
-            cp release-artifacts/forex-copier-dll/MT4/forex_copier_zmq.dll release/forex-copier/MT4/Libraries/
+            cp release-artifacts/forex-copier-dll/MT4/sankey_copier_zmq.dll release/forex-copier/MT4/Libraries/
           fi
 
           # Server

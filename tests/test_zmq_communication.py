@@ -2,7 +2,7 @@
 """
 ZeroMQ Communication Integration Tests
 
-Tests the ZeroMQ message exchange patterns used by the Forex Copier.
+Tests the ZeroMQ message exchange patterns used by the SANKEY Copier.
 Simulates Master and Slave EA communication.
 """
 

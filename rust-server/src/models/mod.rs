@@ -3,7 +3,7 @@ mod connection;
 pub use connection::*;
 
 // Re-export shared types from DLL
-pub use forex_copier_zmq::{
+pub use sankey_copier_zmq::{
     SymbolMapping,
     TradeFilters,
 };

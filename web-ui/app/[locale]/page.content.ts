@@ -4,8 +4,8 @@ const pageContent = {
   key: 'home',
   content: {
     title: t({
-      en: 'SANKEY Forex Copier',
-      ja: 'SANKEY Forex Copier',
+      en: 'SANKEY SANKEY Copier',
+      ja: 'SANKEY SANKEY Copier',
     }),
     description: t({
       en: 'Trade copying management dashboard',
