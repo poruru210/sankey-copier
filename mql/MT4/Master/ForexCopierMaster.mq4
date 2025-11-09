@@ -79,6 +79,9 @@ int OnInit()
    // Scan existing orders
    ScanExistingOrders();
 
+   // Set up timer for heartbeat (1 second interval)
+   EventSetTimer(1);
+
    g_initialized = true;
    Print("=== ForexCopier Master EA (MT4) Initialized ===");
 
@@ -95,10 +98,29 @@ void OnDeinit(const int reason)
    // Send unregister message
    SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
 
+   // Kill timer
+   EventKillTimer();
+
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
    Print("=== ForexCopier Master EA (MT4) Stopped ===");
+}
+
+//+------------------------------------------------------------------+
+//| Timer function (called every 1 second)                            |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   if(!g_initialized)
+      return;
+
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
+   if(TimeCurrent() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
+   {
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
+      g_last_heartbeat = TimeCurrent();
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -108,14 +130,6 @@ void OnTick()
 {
    if(!g_initialized)
       return;
-
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
-   static datetime last_heartbeat = 0;
-   if(TimeCurrent() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
-   {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
-      last_heartbeat = TimeCurrent();
-   }
 
    // Periodic scan for new orders
    static datetime last_scan = 0;

@@ -73,6 +73,9 @@ int OnInit()
    // Send registration message to server
    SendRegistrationMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5");
 
+   // Set up timer for heartbeat (1 second interval)
+   EventSetTimer(1);
+
    Print("=== ForexCopier Master EA (MT5) Initialized ===");
    return INIT_SUCCEEDED;
 }
@@ -85,6 +88,9 @@ void OnDeinit(const int reason)
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
 
+   // Kill timer
+   EventKillTimer();
+
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
@@ -92,9 +98,9 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                              |
+//| Timer function (called every 1 second)                            |
 //+------------------------------------------------------------------+
-void OnTick()
+void OnTimer()
 {
    if(!g_initialized) return;
 
@@ -104,6 +110,14 @@ void OnTick()
       SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
       g_last_heartbeat = TimeCurrent();
    }
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   if(!g_initialized) return;
 
    static datetime last_scan = 0;
    if(TimeCurrent() - last_scan > ScanInterval / 1000)
