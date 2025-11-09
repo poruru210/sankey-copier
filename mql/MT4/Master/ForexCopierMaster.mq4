@@ -116,10 +116,11 @@ void OnTimer()
       return;
 
    // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
-   if(TimeCurrent() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
+   // Use TimeLocal() instead of TimeCurrent() to ensure heartbeat works even when market is closed
+   if(TimeLocal() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
       SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
-      g_last_heartbeat = TimeCurrent();
+      g_last_heartbeat = TimeLocal();
    }
 }
 
