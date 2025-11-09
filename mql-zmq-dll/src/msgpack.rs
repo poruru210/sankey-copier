@@ -82,6 +82,7 @@ pub struct HeartbeatMessage {
     pub equity: f64,
     pub open_positions: i32,
     pub timestamp: String,
+    pub version_git: String,  // Git commit short ID
 }
 
 /// Trade signal message structure
@@ -403,6 +404,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
         equity,
         open_positions,
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
+        version_git: env!("GIT_VERSION").to_string(),
     };
 
     match rmp_serde::to_vec_named(&msg) {

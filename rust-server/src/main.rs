@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
         .init();
 
     tracing::info!("Starting Forex Copier Server...");
+    tracing::info!("Server Version: {}", env!("GIT_VERSION"));
 
     // Load configuration
     let config = match Config::from_file("config.toml") {

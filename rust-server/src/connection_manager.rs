@@ -63,11 +63,12 @@ impl ConnectionManager {
             conn.status = ConnectionStatus::Online;
 
             tracing::debug!(
-                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2})",
+                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {})",
                 account_id,
                 conn.balance,
                 conn.currency,
-                conn.equity
+                conn.equity,
+                msg.version_git
             );
         } else {
             tracing::warn!("Heartbeat received from unregistered EA: {}", account_id);

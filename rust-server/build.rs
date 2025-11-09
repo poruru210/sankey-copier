@@ -1,12 +1,6 @@
 use std::process::Command;
 
 fn main() {
-    // Link Windows Security API library
-    #[cfg(windows)]
-    {
-        println!("cargo:rustc-link-lib=Advapi32");
-    }
-
     // Get Git version using describe --always --dirty
     let git_version = Command::new("git")
         .args(&["describe", "--always", "--dirty"])
