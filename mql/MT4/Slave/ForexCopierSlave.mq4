@@ -204,7 +204,9 @@ void OnTick()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessConfigMessage(msgpack_payload, payload_len);
+         ProcessConfigMessage(msgpack_payload, payload_len, g_current_master, g_trade_group_id,
+                             g_config_enabled, g_config_lot_multiplier, g_config_reverse_trade,
+                             g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
       }
    }
 
@@ -279,7 +281,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       if(AllowNewOrders)
       {
          // Apply filtering
-         if(!ShouldProcessTrade(symbol, magic))
+         if(!ShouldProcessTrade(symbol, magic, g_config_enabled, g_filters))
          {
             Print("Trade filtered out: ", symbol, " magic=", magic);
             trade_signal_free(handle);
@@ -287,9 +289,9 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          }
 
          // Apply transformations
-         string transformed_symbol = TransformSymbol(symbol);
-         double transformed_lots = TransformLotSize(lots);
-         string transformed_order_type = ReverseOrderType(order_type_str);
+         string transformed_symbol = TransformSymbol(symbol, g_symbol_mappings);
+         double transformed_lots = TransformLotSize(lots, g_config_lot_multiplier);
+         string transformed_order_type = ReverseOrderType(order_type_str, g_config_reverse_trade);
 
          // Open order with transformed values
          OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp, source_account);
