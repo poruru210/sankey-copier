@@ -65,7 +65,7 @@ jobs:
       - name: Upload DLL artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-dll
+          name: sankey-copier-dll
           path: artifacts/dll/
           retention-days: 30
 
@@ -94,12 +94,12 @@ jobs:
       - name: Prepare server artifacts
         run: |
           mkdir -p artifacts/server
-          copy rust-server\target\release\forex-copier-server.exe artifacts\server\
+          copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-server
+          name: sankey-copier-server
           path: artifacts/server/
           retention-days: 30
 
@@ -143,7 +143,7 @@ jobs:
       - name: Upload Web UI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-web-ui
+          name: sankey-copier-web-ui
           path: ${{ github.workspace }}/web-ui/.next
           include-hidden-files: true
           if-no-files-found: warn
@@ -613,7 +613,7 @@ jobs:
       - name: Upload MQL artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-mql-${{ matrix.platform }}
+          name: sankey-copier-mql-${{ matrix.platform }}
           path: artifacts/mql/${{ matrix.platform }}/
           retention-days: 30
 
@@ -634,49 +634,49 @@ jobs:
 
       - name: Create release structure
         run: |
-          mkdir -p release/forex-copier
+          mkdir -p release/sankey-copier
 
           # MT5 structure
-          if [ -d "release-artifacts/forex-copier-mql-MT5" ]; then
-            mkdir -p release/forex-copier/MT5/Experts
-            mkdir -p release/forex-copier/MT5/Libraries
-            cp release-artifacts/forex-copier-mql-MT5/*.ex5 release/forex-copier/MT5/Experts/
+          if [ -d "release-artifacts/sankey-copier-mql-MT5" ]; then
+            mkdir -p release/sankey-copier/MT5/Experts
+            mkdir -p release/sankey-copier/MT5/Libraries
+            cp release-artifacts/sankey-copier-mql-MT5/*.ex5 release/sankey-copier/MT5/Experts/
           fi
 
-          if [ -d "release-artifacts/forex-copier-dll/MT5" ]; then
-            cp release-artifacts/forex-copier-dll/MT5/sankey_copier_zmq.dll release/forex-copier/MT5/Libraries/
+          if [ -d "release-artifacts/sankey-copier-dll/MT5" ]; then
+            cp release-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll release/sankey-copier/MT5/Libraries/
           fi
 
           # MT4 structure
-          if [ -d "release-artifacts/forex-copier-mql-MT4" ]; then
-            mkdir -p release/forex-copier/MT4/Experts
-            mkdir -p release/forex-copier/MT4/Libraries
-            cp release-artifacts/forex-copier-mql-MT4/*.ex4 release/forex-copier/MT4/Experts/
+          if [ -d "release-artifacts/sankey-copier-mql-MT4" ]; then
+            mkdir -p release/sankey-copier/MT4/Experts
+            mkdir -p release/sankey-copier/MT4/Libraries
+            cp release-artifacts/sankey-copier-mql-MT4/*.ex4 release/sankey-copier/MT4/Experts/
           fi
 
-          if [ -d "release-artifacts/forex-copier-dll/MT4" ]; then
-            cp release-artifacts/forex-copier-dll/MT4/sankey_copier_zmq.dll release/forex-copier/MT4/Libraries/
+          if [ -d "release-artifacts/sankey-copier-dll/MT4" ]; then
+            cp release-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll release/sankey-copier/MT4/Libraries/
           fi
 
           # Server
-          if [ -d "release-artifacts/forex-copier-server" ]; then
-            mkdir -p release/forex-copier/server
-            cp -r release-artifacts/forex-copier-server/* release/forex-copier/server/
+          if [ -d "release-artifacts/sankey-copier-server" ]; then
+            mkdir -p release/sankey-copier/server
+            cp -r release-artifacts/sankey-copier-server/* release/sankey-copier/server/
           fi
 
           # Web UI
-          if [ -d "release-artifacts/forex-copier-web-ui" ]; then
-            mkdir -p release/forex-copier/web-ui
-            cp -r release-artifacts/forex-copier-web-ui/* release/forex-copier/web-ui/
+          if [ -d "release-artifacts/sankey-copier-web-ui" ]; then
+            mkdir -p release/sankey-copier/web-ui
+            cp -r release-artifacts/sankey-copier-web-ui/* release/sankey-copier/web-ui/
           fi
 
           # ドキュメント
-          cp README.md release/forex-copier/
-          cp SETUP_GUIDE.md release/forex-copier/
+          cp README.md release/sankey-copier/
+          cp SETUP_GUIDE.md release/sankey-copier/
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-release-package
-          path: release/forex-copier/
+          name: sankey-copier-release-package
+          path: release/sankey-copier/
           retention-days: 90
