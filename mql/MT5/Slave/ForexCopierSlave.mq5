@@ -181,10 +181,9 @@ void OnTimer()
 
    // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
    datetime now = TimeCurrent();
-   datetime elapsed = now - g_last_heartbeat;
-   Print("[DEBUG] Time check: now=", now, ", last_heartbeat=", g_last_heartbeat, ", elapsed=", elapsed);
+   Print("[DEBUG] Time check: now=", now, ", last_heartbeat=", g_last_heartbeat, ", elapsed=", (int)(now - g_last_heartbeat), " seconds");
 
-   if(elapsed >= HEARTBEAT_INTERVAL_SECONDS)
+   if(now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
       Print("[DEBUG] Sending heartbeat...");
       SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID);

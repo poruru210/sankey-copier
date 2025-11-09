@@ -94,7 +94,6 @@ impl ZmqServer {
                                         "Heartbeat" => {
                                             match rmp_serde::from_slice::<HeartbeatMessage>(&bytes) {
                                                 Ok(hb) => {
-                                                    tracing::debug!("Received Heartbeat message from: {}", hb.account_id);
                                                     if let Err(e) = tx.send(ZmqMessage::Heartbeat(hb)) {
                                                         tracing::error!("Failed to send message to channel: {}", e);
                                                     }
@@ -133,7 +132,6 @@ impl ZmqServer {
                                     // Message has 'action' field - it's a TradeSignal
                                     match rmp_serde::from_slice::<TradeSignal>(&bytes) {
                                         Ok(signal) => {
-                                            tracing::debug!("Received TradeSignal: {:?}", signal);
                                             if let Err(e) = tx.send(ZmqMessage::TradeSignal(signal)) {
                                                 tracing::error!("Failed to send signal to channel: {}", e);
                                             }
