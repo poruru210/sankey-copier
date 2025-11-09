@@ -669,9 +669,9 @@ jobs:
           cp README.md release/forex-copier/
           cp SETUP_GUIDE.md release/forex-copier/
 
-          # ZIPアーカイブ作成
-          cd release
-          zip -r forex-copier-$(date +%Y%m%d-%H%M%S).zip forex-copier
+          # ZIPアーカイブ作成（ルートにMT5/MT4フォルダが来るように）
+          cd release/forex-copier
+          zip -r ../forex-copier-$(date +%Y%m%d-%H%M%S).zip .
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
