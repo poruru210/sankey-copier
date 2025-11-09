@@ -40,6 +40,11 @@ jobs:
         with:
           workspaces: mql-zmq-dll
 
+      - name: Run tests
+        working-directory: mql-zmq-dll
+        run: |
+          cargo test --lib
+
       - name: Build 32-bit DLL (MT4用)
         working-directory: mql-zmq-dll
         run: |
@@ -51,6 +56,7 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
@@ -58,6 +64,7 @@ jobs:
           copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-dll
@@ -81,17 +88,26 @@ jobs:
         with:
           workspaces: rust-server
 
+      - name: Run tests
+        working-directory: rust-server
+        run: |
+          cargo test --lib
+          cargo test --test config_distribution_test
+          cargo test --test performance_benchmark_test
+
       - name: Build server
         working-directory: rust-server
         run: |
           cargo build --release
 
       - name: Prepare server artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/server
           copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-server
@@ -129,6 +145,10 @@ jobs:
         working-directory: web-ui
         run: pnpm install --no-frozen-lockfile
 
+      - name: Run linter
+        working-directory: web-ui
+        run: pnpm lint || true
+
       - name: Build Web UI
         working-directory: web-ui
         env:
@@ -136,6 +156,7 @@ jobs:
         run: pnpm build
 
       - name: Upload Web UI artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-web-ui
@@ -606,6 +627,7 @@ jobs:
           copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
@@ -616,7 +638,7 @@ jobs:
     name: Create Release Package
     runs-on: ubuntu-latest
     needs: [build-rust-dll, build-rust-server, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || github.event_name == 'push' || github.event_name == 'pull_request' }}
+    if: ${{ github.event.inputs.build_target == 'all' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
 
     steps:
       - name: Checkout code
