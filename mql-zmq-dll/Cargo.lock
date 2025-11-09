@@ -134,16 +134,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52051878f80a721bb68ebfbc930e07b65ba72f2da88968ea5c06fd6ca3d3a127"
 
 [[package]]
-name = "forex_copier_zmq"
-version = "0.1.0"
-dependencies = [
- "rmp-serde",
- "serde",
- "serde_json",
- "zmq",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +311,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sankey_copier_zmq"
+version = "0.1.0"
+dependencies = [
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "zmq",
 ]
 
 [[package]]
