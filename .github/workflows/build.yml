@@ -2,9 +2,14 @@ name: Build SANKEY Copier
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - 'claude/rename-forex-to-sankey-*'
     paths:
       - '.github/workflows/**'
+      - 'mql-zmq-dll/**'
+      - 'rust-server/**'
+      - 'mql/**'
   workflow_dispatch:  # 手動実行のみ
     inputs:
       build_target:
