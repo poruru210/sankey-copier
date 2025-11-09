@@ -136,6 +136,9 @@ int OnInit()
    // Send registration message to server
    SendRegistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
 
+   // Set up timer for heartbeat and config messages (1 second interval)
+   EventSetTimer(1);
+
    Print("=== ForexCopier Slave EA Initialized ===");
 
    return INIT_SUCCEEDED;
@@ -151,6 +154,9 @@ void OnDeinit(const int reason)
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
 
+   // Kill timer
+   EventKillTimer();
+
    if(g_zmq_config_socket >= 0) zmq_socket_destroy(g_zmq_config_socket);
    if(g_zmq_trade_socket >= 0) zmq_socket_destroy(g_zmq_trade_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
@@ -159,9 +165,9 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                              |
+//| Timer function (called every 1 second)                            |
 //+------------------------------------------------------------------+
-void OnTick()
+void OnTimer()
 {
    if(!g_initialized)
       return;
@@ -209,6 +215,15 @@ void OnTick()
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   if(!g_initialized)
+      return;
 
    // Check for trade signal messages (MessagePack format)
    uchar trade_buffer[];
