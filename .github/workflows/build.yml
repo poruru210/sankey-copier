@@ -631,10 +631,26 @@ jobs:
         run: |
           mkdir -p release/forex-copier
 
-          # DLL
-          if [ -d "release-artifacts/forex-copier-dll" ]; then
-            mkdir -p release/forex-copier/dll
-            cp -r release-artifacts/forex-copier-dll/* release/forex-copier/dll/
+          # MT5 structure
+          if [ -d "release-artifacts/forex-copier-mql-MT5" ]; then
+            mkdir -p release/forex-copier/MT5/Experts
+            mkdir -p release/forex-copier/MT5/Libraries
+            cp release-artifacts/forex-copier-mql-MT5/*.ex5 release/forex-copier/MT5/Experts/
+          fi
+
+          if [ -d "release-artifacts/forex-copier-dll/MT5" ]; then
+            cp release-artifacts/forex-copier-dll/MT5/forex_copier_zmq.dll release/forex-copier/MT5/Libraries/
+          fi
+
+          # MT4 structure
+          if [ -d "release-artifacts/forex-copier-mql-MT4" ]; then
+            mkdir -p release/forex-copier/MT4/Experts
+            mkdir -p release/forex-copier/MT4/Libraries
+            cp release-artifacts/forex-copier-mql-MT4/*.ex4 release/forex-copier/MT4/Experts/
+          fi
+
+          if [ -d "release-artifacts/forex-copier-dll/MT4" ]; then
+            cp release-artifacts/forex-copier-dll/MT4/forex_copier_zmq.dll release/forex-copier/MT4/Libraries/
           fi
 
           # Server
@@ -649,28 +665,17 @@ jobs:
             cp -r release-artifacts/forex-copier-web-ui/* release/forex-copier/web-ui/
           fi
 
-          # MQL
-          if [ -d "release-artifacts/forex-copier-mql-MT4" ]; then
-            mkdir -p release/forex-copier/mql/MT4
-            cp -r release-artifacts/forex-copier-mql-MT4/* release/forex-copier/mql/MT4/
-          fi
-
-          if [ -d "release-artifacts/forex-copier-mql-MT5" ]; then
-            mkdir -p release/forex-copier/mql/MT5
-            cp -r release-artifacts/forex-copier-mql-MT5/* release/forex-copier/mql/MT5/
-          fi
-
           # ドキュメント
           cp README.md release/forex-copier/
           cp SETUP_GUIDE.md release/forex-copier/
 
-          # アーカイブ作成
+          # ZIPアーカイブ作成
           cd release
-          tar -czf forex-copier-$(date +%Y%m%d-%H%M%S).tar.gz forex-copier
+          zip -r forex-copier-$(date +%Y%m%d-%H%M%S).zip forex-copier
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
           name: forex-copier-release-package
-          path: release/*.tar.gz
+          path: release/*.zip
           retention-days: 90
