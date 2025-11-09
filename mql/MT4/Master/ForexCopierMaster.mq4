@@ -9,9 +9,9 @@
 #property strict
 
 //--- Include common headers
-#include <ForexCopierCommon.mqh>
-#include <ForexCopierMessages.mqh>
-#include <ForexCopierTrade.mqh>
+#include <ForexCopier/ForexCopierCommon.mqh>
+#include <ForexCopier/ForexCopierMessages.mqh>
+#include <ForexCopier/ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address

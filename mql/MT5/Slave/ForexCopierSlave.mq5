@@ -10,9 +10,9 @@
 #include <Trade/Trade.mqh>
 
 //--- Include common headers
-#include <ForexCopierCommon.mqh>
-#include <ForexCopierMessages.mqh>
-#include <ForexCopierTrade.mqh>
+#include <ForexCopier/ForexCopierCommon.mqh>
+#include <ForexCopier/ForexCopierMessages.mqh>
+#include <ForexCopier/ForexCopierTrade.mqh>
 
 //--- Input parameters
 input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
