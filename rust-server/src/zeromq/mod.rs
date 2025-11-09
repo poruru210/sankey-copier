@@ -22,6 +22,13 @@ struct MessageTypeDiscriminator {
     action: Option<String>,
 }
 
+// Flexible struct to extract partial heartbeat data (without version_git)
+#[derive(Debug, Deserialize)]
+struct FlexibleHeartbeat {
+    #[serde(default)]
+    account_id: Option<String>,
+}
+
 pub struct ZmqServer {
     context: Arc<zmq::Context>,
     rx_sender: mpsc::UnboundedSender<ZmqMessage>,
@@ -93,7 +100,28 @@ impl ZmqServer {
                                                     }
                                                 }
                                                 Err(e) => {
-                                                    tracing::error!("Failed to deserialize Heartbeat message: {}", e);
+                                                    // Try to extract account_id from MessagePack for better error reporting
+                                                    match rmp_serde::from_slice::<FlexibleHeartbeat>(&bytes) {
+                                                        Ok(partial) => {
+                                                            let acc = partial.account_id.as_deref().unwrap_or("unknown");
+                                                            tracing::error!(
+                                                                "Failed to deserialize Heartbeat message from EA [account_id: {}]: {}",
+                                                                acc, e
+                                                            );
+                                                        }
+                                                        Err(parse_err) => {
+                                                            // Cannot extract any info - log raw bytes
+                                                            let bytes_preview = if bytes.len() > 32 {
+                                                                format!("{:02x?}...", &bytes[..32])
+                                                            } else {
+                                                                format!("{:02x?}", bytes)
+                                                            };
+                                                            tracing::error!(
+                                                                "Failed to deserialize Heartbeat message: {} (data: {}, parse error: {})",
+                                                                e, bytes_preview, parse_err
+                                                            );
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }

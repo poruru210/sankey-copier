@@ -12,6 +12,7 @@ use tower_http::cors::CorsLayer;
 use crate::{
     connection_manager::ConnectionManager,
     db::Database,
+    log_buffer::LogBuffer,
     models::{CopySettings, EaConnection, ConfigMessage},
     zeromq::ZmqConfigPublisher,
 };
@@ -23,6 +24,7 @@ pub struct AppState {
     pub settings_cache: Arc<RwLock<Vec<CopySettings>>>,
     pub connection_manager: Arc<ConnectionManager>,
     pub config_sender: Arc<ZmqConfigPublisher>,
+    pub log_buffer: LogBuffer,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -32,6 +34,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/settings/:id/toggle", post(toggle_settings))
         .route("/api/connections", get(list_connections))
         .route("/api/connections/:id", get(get_connection))
+        .route("/api/logs", get(get_logs))
         .route("/ws", get(websocket_handler))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -290,4 +293,13 @@ async fn get_connection(
             account_id
         )))),
     }
+}
+
+// サーバーログ取得
+async fn get_logs(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Vec<crate::log_buffer::LogEntry>>>, Response> {
+    let buffer = state.log_buffer.read().await;
+    let logs: Vec<_> = buffer.iter().cloned().collect();
+    Ok(Json(ApiResponse::success(logs)))
 }

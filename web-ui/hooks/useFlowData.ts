@@ -171,6 +171,8 @@ export function useFlowData({
 
       const isActive =
         setting.enabled &&
+        sourceAccount.isOnline &&
+        receiverAccount.isOnline &&
         !sourceAccount.hasError &&
         !receiverAccount.hasError &&
         !receiverAccount.hasWarning;

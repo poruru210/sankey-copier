@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
-import { ActivityLog } from '@/components/ActivityLog';
+import { ServerLog } from '@/components/ServerLog';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useForexCopier } from '@/hooks/useForexCopier';
@@ -74,8 +74,8 @@ export default function Home() {
             onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
           />
 
-          {/* Real-time Activity */}
-          <ActivityLog messages={wsMessages} />
+          {/* Server Logs */}
+          <ServerLog />
         </div>
       </div>
     </div>

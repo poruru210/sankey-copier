@@ -3,6 +3,7 @@ mod config;
 mod connection_manager;
 mod db;
 mod engine;
+mod log_buffer;
 mod message_handler;
 mod models;
 mod zeromq;
@@ -18,18 +19,23 @@ use config::Config;
 use connection_manager::ConnectionManager;
 use db::Database;
 use engine::CopyEngine;
+use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
 use zeromq::{ZmqMessage, ZmqSender, ZmqServer, ZmqConfigPublisher};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
+    // Create log buffer
+    let log_buffer = create_log_buffer();
+
+    // Initialize logging with log buffer layer
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "forex_copier_server=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
+        .with(LogBufferLayer::new(log_buffer.clone()))
         .init();
 
     tracing::info!("Starting Forex Copier Server...");
@@ -126,6 +132,7 @@ async fn main() -> Result<()> {
         settings_cache: settings_cache.clone(),
         connection_manager: connection_manager.clone(),
         config_sender: zmq_config_sender.clone(),
+        log_buffer: log_buffer.clone(),
     };
 
     // Build API router
