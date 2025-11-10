@@ -22,6 +22,10 @@ web-ui/debug_*.png
 *.ex4
 *.ex5
 
+# MQL Libraries (build artifacts)
+mql/MT4/Libraries/*.dll
+mql/MT5/Libraries/*.dll
+
 # Logs
 *.log
 
