@@ -1,6 +1,8 @@
 'use client';
 
-import { Menu } from 'lucide-react';
+import { Menu, Settings } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Button } from './ui/button';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
@@ -11,11 +13,16 @@ interface HeaderProps {
 }
 
 export function Header({ isMobile, onOpenMobileFilter }: HeaderProps) {
+  const pathname = usePathname();
+
+  // Extract locale from pathname (e.g., /en/installations -> en)
+  const locale = pathname.split('/')[1] || 'en';
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background">
       <div className="container mx-auto flex h-14 max-w-[1600px] items-center justify-between px-6">
         {/* App Name + Mobile Filter Button */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-6">
           {/* Mobile Filter Button */}
           {isMobile && onOpenMobileFilter && (
             <Button
@@ -29,7 +36,33 @@ export function Header({ isMobile, onOpenMobileFilter }: HeaderProps) {
             </Button>
           )}
 
-          <h1 className="text-lg font-semibold text-foreground">SANKEY Copier</h1>
+          <Link href={`/${locale}`}>
+            <h1 className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors">
+              SANKEY Copier
+            </h1>
+          </Link>
+
+          {/* Navigation */}
+          <nav className="hidden md:flex items-center gap-1">
+            <Link href={`/${locale}`}>
+              <Button
+                variant={pathname === `/${locale}` ? 'default' : 'ghost'}
+                size="sm"
+              >
+                Connections
+              </Button>
+            </Link>
+            <Link href={`/${locale}/installations`}>
+              <Button
+                variant={pathname.includes('/installations') ? 'default' : 'ghost'}
+                size="sm"
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Installations
+              </Button>
+            </Link>
+          </nav>
         </div>
 
         {/* Controls */}

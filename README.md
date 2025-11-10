@@ -33,40 +33,53 @@
                                       [ スマホ / PC ]
 ```
 
-## クイックスタート
+## インストール
 
-### 必要要件
+### Windowsインストーラー（推奨）
 
-- **Windows 10/11** (MT4/MT5用)
-- **Rust 1.70以上**
-- **Node.js 18以上**
-- **MetaTrader 4 または 5**
+最も簡単な方法は、Windowsインストーラーを使用することです：
 
-### 基本的なセットアップ
+1. **インストーラーをダウンロード**
+   - [GitHubのReleases](https://github.com/your-org/sankey-copier/releases)から最新版をダウンロード
+   - `SankeyCopierSetup-x.x.x.exe` を実行
 
-1. **Rustサーバーの起動**
-   ```bash
-   cd rust-server
-   cargo run --release
-   ```
+2. **インストール完了後**
+   - サービスが自動的に起動します
+   - システムトレイにアイコンが表示されます
+   - ブラウザで http://localhost:8080 を開く
 
-2. **WebUIの起動**
-   ```bash
-   cd web-ui
-   pnpm install
-   pnpm dev
-   ```
-   ブラウザで http://localhost:5173 を開く
+3. **MT4/MT5 コンポーネントのインストール**
+   - WebUIの「MT4/MT5 Installations」ページで自動検出
+   - 「Install」ボタンをクリックしてDLL/EAをインストール
 
-3. **MT4/MT5 EAの設定**
+4. **トレードコピーの設定**
    - Master EA (`SankeyCopierMaster`) をMaster口座のチャートにアタッチ
    - Slave EA (`SankeyCopierSlave`) をSlave口座のチャートにアタッチ
+   - WebUIで「+ New Setting」からコピー設定を作成・有効化
 
-4. **WebUIでコピー設定を作成**
-   - 「+ New Setting」からMaster/Slave口座を選択
-   - Lot Multiplierなどを設定して「Create」→「Enable」
+**インストーラーの機能:**
+- Rustサーバーを Windows サービスとして自動登録
+- WebUIを Windows サービスとして自動登録
+- システムトレイアプリケーションを自動起動
+- MT4/MT5のDLL/EAコンポーネントを含む
+- ワンクリックでのアンインストール
 
-詳細なセットアップ手順は [docs/setup.md](docs/setup.md) を参照してください。
+### 開発者向けセットアップ
+
+開発やカスタマイズを行う場合は、手動でセットアップできます：
+
+**必要要件:**
+- Windows 10/11
+- Rust 1.70以上
+- Node.js 18以上
+- MetaTrader 4 または 5
+
+**手順:**
+1. Rustサーバーの起動: `cd rust-server && cargo run --release`
+2. WebUIの起動: `cd web-ui && npm install && npm run dev`
+3. http://localhost:5173 でWebUIにアクセス
+
+詳細は [docs/setup.md](docs/setup.md) と [installer/README.md](installer/README.md) を参照してください。
 
 ## ドキュメント
 

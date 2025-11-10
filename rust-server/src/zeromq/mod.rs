@@ -4,15 +4,15 @@ use anyhow::{Result, Context};
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
 use std::sync::Arc;
-use crate::models::{TradeSignal, ConfigMessage, RegisterMessage, UnregisterMessage, HeartbeatMessage};
+use crate::models::{TradeSignal, UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
 
 pub use config_publisher::ZmqConfigPublisher;
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),
-    Register(RegisterMessage),
     Unregister(UnregisterMessage),
     Heartbeat(HeartbeatMessage),
+    RequestConfig(RequestConfigMessage),
 }
 
 /// Helper struct to determine message type from MessagePack data
@@ -65,16 +65,16 @@ impl ZmqServer {
                                 // Check message_type field first
                                 if let Some(msg_type) = discriminator.message_type {
                                     match msg_type.as_str() {
-                                        "Register" => {
-                                            match rmp_serde::from_slice::<RegisterMessage>(&bytes) {
-                                                Ok(reg) => {
-                                                    tracing::debug!("Received Register message: {:?}", reg);
-                                                    if let Err(e) = tx.send(ZmqMessage::Register(reg)) {
+                                        "RequestConfig" => {
+                                            match rmp_serde::from_slice::<RequestConfigMessage>(&bytes) {
+                                                Ok(req) => {
+                                                    tracing::debug!("Received RequestConfig message: {:?}", req);
+                                                    if let Err(e) = tx.send(ZmqMessage::RequestConfig(req)) {
                                                         tracing::error!("Failed to send message to channel: {}", e);
                                                     }
                                                 }
                                                 Err(e) => {
-                                                    tracing::error!("Failed to deserialize Register message: {}", e);
+                                                    tracing::error!("Failed to deserialize RequestConfig message: {}", e);
                                                 }
                                             }
                                         }
@@ -235,19 +235,9 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
 /// Type alias for trade signal publisher
 pub type ZmqSender = ZmqPublisher<TradeSignal>;
 
-/// Type alias for config message publisher
-pub type ZmqConfigSender = ZmqPublisher<ConfigMessage>;
-
 /// Extension methods for ZmqSender to maintain existing API
 impl ZmqSender {
     pub async fn send_signal(&self, trade_group_id: &str, signal: &TradeSignal) -> Result<()> {
         self.publish(trade_group_id, signal).await
-    }
-}
-
-/// Extension methods for ZmqConfigSender to maintain existing API
-impl ZmqConfigSender {
-    pub async fn send_config(&self, config: &ConfigMessage) -> Result<()> {
-        self.publish(&config.account_id, config).await
     }
 }

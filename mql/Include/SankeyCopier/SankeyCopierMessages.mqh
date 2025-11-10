@@ -8,35 +8,32 @@
 #include "SankeyCopierCommon.mqh"
 
 //+------------------------------------------------------------------+
-//| Send registration message to server                              |
+//| Send configuration request message to server (for Slave EAs)     |
 //+------------------------------------------------------------------+
-bool SendRegistrationMessage(HANDLE_TYPE zmq_context, string server_address, string account_id, string ea_type, string platform)
+bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, string account_id)
 {
-   // Create temporary PUSH socket for registration
+   // Create temporary PUSH socket for config request
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
-      Print("ERROR: Failed to create registration socket");
+      Print("ERROR: Failed to create request config socket");
       return false;
    }
 
    if(zmq_socket_connect(push_socket, server_address) == 0)
    {
-      Print("ERROR: Failed to connect to registration server: ", server_address);
+      Print("ERROR: Failed to connect to request config server: ", server_address);
       zmq_socket_destroy(push_socket);
       return false;
    }
 
-   // Serialize registration message using MessagePack
-   int len = serialize_register("Register", account_id, ea_type, platform,
-                                        GetAccountNumber(), GetBrokerName(), GetAccountName(),
-                                        GetServerName(), GetAccountBalance(), GetAccountEquity(),
-                                        GetAccountCurrency(), GetAccountLeverage(),
-                                        FormatTimestampISO8601(TimeCurrent()));
+   // Serialize request config message using MessagePack
+   int len = serialize_request_config("RequestConfig", account_id,
+                                      FormatTimestampISO8601(TimeCurrent()));
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize registration message");
+      Print("ERROR: Failed to serialize request config message");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -48,7 +45,7 @@ bool SendRegistrationMessage(HANDLE_TYPE zmq_context, string server_address, str
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy registration message buffer");
+      Print("ERROR: Failed to copy request config message buffer");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -57,9 +54,9 @@ bool SendRegistrationMessage(HANDLE_TYPE zmq_context, string server_address, str
    bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
    if(success)
-      Print("Registration message sent successfully");
+      Print("RequestConfig message sent successfully");
    else
-      Print("ERROR: Failed to send registration message");
+      Print("ERROR: Failed to send request config message");
 
    zmq_socket_destroy(push_socket);
    return success;
@@ -121,9 +118,9 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 }
 
 //+------------------------------------------------------------------+
-//| Send heartbeat message to server                                 |
+//| Send heartbeat message to server (includes EA info for auto-registration) |
 //+------------------------------------------------------------------+
-bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string account_id)
+bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string account_id, string ea_type, string platform)
 {
    // Create temporary PUSH socket for heartbeat
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
@@ -140,10 +137,13 @@ bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string
       return false;
    }
 
-   // Serialize heartbeat message using MessagePack
+   // Serialize heartbeat message using MessagePack (includes EA info for auto-registration)
    int len = serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
-                                         GetAccountEquity(), GetOpenPositionsCount(),
-                                         FormatTimestampISO8601(TimeCurrent()));
+                                 GetAccountEquity(), GetOpenPositionsCount(),
+                                 FormatTimestampISO8601(TimeCurrent()),
+                                 ea_type, platform,
+                                 GetAccountNumber(), GetBrokerName(), GetAccountName(),
+                                 GetServerName(), GetAccountCurrency(), GetAccountLeverage());
 
    if(len <= 0)
    {

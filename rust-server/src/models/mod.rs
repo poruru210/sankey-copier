@@ -1,6 +1,8 @@
 mod connection;
+mod mt_installation;
 
 pub use connection::*;
+pub use mt_installation::*;
 
 // Re-export shared types from DLL
 pub use sankey_copier_zmq::{

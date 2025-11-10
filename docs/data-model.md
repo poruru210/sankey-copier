@@ -512,32 +512,7 @@ struct ConfigInfo {
 
 すべてのメッセージは `mql-zmq-dll/src/msgpack.rs` で定義されています。
 
-#### 1. RegisterMessage
-
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterMessage {
-    pub message_type: String,  // "Register"
-    pub account_id: String,
-    pub ea_type: String,       // "Master" | "Slave"
-    pub platform: String,      // "MT4" | "MT5"
-    pub account_number: i64,
-    pub broker: String,
-    pub account_name: String,
-    pub server: String,
-    pub balance: f64,
-    pub equity: f64,
-    pub currency: String,
-    pub leverage: i64,
-    pub timestamp: String,     // ISO 8601
-}
-```
-
-**サイズ**: 約280 bytes (MessagePack)
-
----
-
-#### 2. UnregisterMessage
+#### 1. UnregisterMessage
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -552,7 +527,9 @@ pub struct UnregisterMessage {
 
 ---
 
-#### 3. HeartbeatMessage
+#### 2. HeartbeatMessage
+
+定期的（30秒ごと）に送信する生存確認メッセージ。**初回送信時に自動的にEA登録も行います**。
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -563,11 +540,43 @@ pub struct HeartbeatMessage {
     pub equity: f64,
     pub open_positions: i32,
     pub timestamp: String,
-    pub version_git: String,   // Git commit hash
+    pub ea_type: String,       // "Master" | "Slave"
+    pub platform: String,      // "MT4" | "MT5"
+    pub account_number: i64,
+    pub broker: String,
+    pub account_name: String,
+    pub server: String,
+    pub currency: String,
+    pub leverage: i64,
 }
 ```
 
-**サイズ**: 約140 bytes (MessagePack)
+**サイズ**: 約280 bytes (MessagePack)
+
+**自動登録機能**:
+- 初回Heartbeat受信時、サーバーは自動的にEAをConnection Managerに登録します
+- RegisterMessageが廃止され、HeartbeatMessageに登録機能が統合されました
+
+---
+
+#### 3. RequestConfigMessage
+
+Slave EAが初回Heartbeat成功後に送信する設定要求メッセージ。
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestConfigMessage {
+    pub message_type: String,  // "RequestConfig"
+    pub account_id: String,
+    pub timestamp: String,     // ISO 8601
+}
+```
+
+**サイズ**: 約50 bytes (MessagePack)
+
+**用途**:
+- Slave EAは初回Heartbeat送信に成功した後、このメッセージを送信して設定を要求します
+- サーバーはこのメッセージを受信すると、該当するSlave EAの設定を検索してConfigMessageを配信します
 
 ---
 
@@ -783,21 +792,22 @@ let config: ConfigMessage = rmp_serde::from_slice(payload)?;
 #### シリアライゼーション (MQL → MessagePack)
 
 ```mql5
-// Rust DLL関数呼び出し
-int msg_len = serialize_register(
-    "Register",
+// Rust DLL関数呼び出し - Heartbeat (自動登録情報含む)
+int msg_len = serialize_heartbeat(
+    "Heartbeat",
     account_id,
-    "Master",
-    "MT5",
-    AccountInfoInteger(ACCOUNT_LOGIN),
-    AccountInfoString(ACCOUNT_COMPANY),
-    AccountInfoString(ACCOUNT_NAME),
-    AccountInfoString(ACCOUNT_SERVER),
     AccountInfoDouble(ACCOUNT_BALANCE),
     AccountInfoDouble(ACCOUNT_EQUITY),
-    AccountInfoString(ACCOUNT_CURRENCY),
-    AccountInfoInteger(ACCOUNT_LEVERAGE),
-    timestamp
+    CountOpenPositions(),
+    timestamp,
+    "Master",                          // ea_type
+    "MT5",                             // platform
+    AccountInfoInteger(ACCOUNT_LOGIN), // account_number
+    AccountInfoString(ACCOUNT_COMPANY),// broker
+    AccountInfoString(ACCOUNT_NAME),   // account_name
+    AccountInfoString(ACCOUNT_SERVER), // server
+    AccountInfoString(ACCOUNT_CURRENCY),// currency
+    AccountInfoInteger(ACCOUNT_LEVERAGE) // leverage
 );
 
 // シリアライズされたバッファを取得

@@ -32,6 +32,7 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
+bool        g_config_requested = false; // Track if config has been requested
 
 struct OrderMapping {
     int master_ticket;
@@ -133,9 +134,6 @@ int OnInit()
 
    g_initialized = true;
 
-   // Send registration message to server
-   SendRegistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
-
    // Set up timer for heartbeat and config messages (1 second interval)
    EventSetTimer(1);
 
@@ -169,39 +167,44 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   static int timer_call_count = 0;
-   timer_call_count++;
-   Print("[DEBUG] OnTimer() called (count=", timer_call_count, ")");
-
    if(!g_initialized)
-   {
-      Print("[DEBUG] Not initialized, returning");
       return;
-   }
 
    // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
    datetime now = TimeLocal();
-   Print("[DEBUG] Time check: now=", now, ", last_heartbeat=", g_last_heartbeat, ", elapsed=", (int)(now - g_last_heartbeat), " seconds");
 
    if(now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
-      Print("[DEBUG] Sending heartbeat...");
-      SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
-      g_last_heartbeat = TimeLocal();
-      Print("[DEBUG] Heartbeat sent, updated last_heartbeat=", g_last_heartbeat);
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
+
+      if(heartbeat_sent)
+      {
+         g_last_heartbeat = TimeLocal();
+
+         // On first successful heartbeat, request configuration from server
+         if(!g_config_requested)
+         {
+            Print("[INFO] First heartbeat successful, requesting configuration...");
+            if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+            {
+               g_config_requested = true;
+               Print("[INFO] Configuration request sent successfully");
+            }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+            }
+         }
+      }
    }
 
    // Check for configuration messages (MessagePack format)
-   Print("[DEBUG] Checking for config messages...");
    uchar config_buffer[];
    ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
-   Print("[DEBUG] Buffer resized, calling zmq_socket_receive...");
    int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, MESSAGE_BUFFER_SIZE);
-   Print("[DEBUG] zmq_socket_receive returned: ", config_bytes);
 
    if(config_bytes > 0)
    {
-      Print("[DEBUG] Processing config message (", config_bytes, " bytes)");
       // Find the space separator between topic and MessagePack payload
       int space_pos = -1;
       for(int i = 0; i < config_bytes; i++)
@@ -231,8 +234,6 @@ void OnTimer()
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
       }
    }
-
-   Print("[DEBUG] OnTimer() completed");
 }
 
 //+------------------------------------------------------------------+

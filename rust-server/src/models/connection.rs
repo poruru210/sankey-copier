@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export shared message types from DLL
-pub use sankey_copier_zmq::{RegisterMessage, UnregisterMessage, HeartbeatMessage};
+pub use sankey_copier_zmq::{UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
 
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,28 +67,6 @@ pub enum ConnectionStatus {
     Timeout,
 }
 
-/// Convert shared RegisterMessage to EaConnection
-impl From<RegisterMessage> for EaConnection {
-    fn from(msg: RegisterMessage) -> Self {
-        let now = Utc::now();
-        Self {
-            account_id: msg.account_id,
-            ea_type: EaType::from_str(&msg.ea_type).unwrap_or(EaType::Master),
-            platform: Platform::from_str(&msg.platform).unwrap_or(Platform::MT5),
-            account_number: msg.account_number,
-            broker: msg.broker,
-            account_name: msg.account_name,
-            server: msg.server,
-            balance: msg.balance,
-            equity: msg.equity,
-            currency: msg.currency,
-            leverage: msg.leverage,
-            last_heartbeat: now,
-            status: ConnectionStatus::Online,
-            connected_at: now,
-        }
-    }
-}
 
 // Re-export ConfigMessage from DLL
 pub use sankey_copier_zmq::ConfigMessage;

@@ -1,3 +1,5 @@
+mod mt_installations;
+
 use axum::{
     extract::{Path, State, ws::WebSocket, ws::WebSocketUpgrade},
     response::Response,
@@ -36,6 +38,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/connections/:id", get(get_connection))
         .route("/api/logs", get(get_logs))
         .route("/ws", get(websocket_handler))
+        // MT installations API
+        .route("/api/mt-installations", get(mt_installations::list_mt_installations))
+        .route("/api/mt-installations/:id/install", post(mt_installations::install_to_mt))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

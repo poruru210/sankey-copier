@@ -47,24 +47,6 @@ pub struct ConfigMessage {
     pub config_version: u32,
 }
 
-/// Registration message structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterMessage {
-    pub message_type: String,  // "Register"
-    pub account_id: String,
-    pub ea_type: String,  // "Master" or "Slave"
-    pub platform: String,  // "MT4" or "MT5"
-    pub account_number: i64,
-    pub broker: String,
-    pub account_name: String,
-    pub server: String,
-    pub balance: f64,
-    pub equity: f64,
-    pub currency: String,
-    pub leverage: i64,
-    pub timestamp: String,
-}
-
 /// Unregistration message structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnregisterMessage {
@@ -73,7 +55,15 @@ pub struct UnregisterMessage {
     pub timestamp: String,
 }
 
-/// Heartbeat message structure
+/// Request configuration message structure (for Slave EAs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestConfigMessage {
+    pub message_type: String,  // "RequestConfig"
+    pub account_id: String,
+    pub timestamp: String,
+}
+
+/// Heartbeat message structure (includes all EA information for auto-registration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartbeatMessage {
     pub message_type: String,  // "Heartbeat"
@@ -83,6 +73,15 @@ pub struct HeartbeatMessage {
     pub open_positions: i32,
     pub timestamp: String,
     pub version_git: String,  // Git commit short ID
+    // EA identification fields (for auto-registration)
+    pub ea_type: String,       // "Master" or "Slave"
+    pub platform: String,      // "MT4" or "MT5"
+    pub account_number: i64,
+    pub broker: String,
+    pub account_name: String,
+    pub server: String,
+    pub currency: String,
+    pub leverage: i64,
 }
 
 /// Trade signal message structure
@@ -318,39 +317,19 @@ pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
 // Static buffer for serialized data
 static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> = LazyLock::new(|| Mutex::new(Vec::with_capacity(8192)));
 
-/// Serialize a RegisterMessage to MessagePack
+/// Serialize a RequestConfigMessage to MessagePack
 ///
 /// Returns the length of serialized data (or 0 on error).
-/// The serialized data is stored in an internal buffer accessible via msgpack_get_buffer().
+/// The serialized data is stored in an internal buffer accessible via copy_serialized_buffer().
 #[no_mangle]
-pub unsafe extern "C" fn serialize_register(
+pub unsafe extern "C" fn serialize_request_config(
     message_type: *const u16,
     account_id: *const u16,
-    ea_type: *const u16,
-    platform: *const u16,
-    account_number: i64,
-    broker: *const u16,
-    account_name: *const u16,
-    server: *const u16,
-    balance: f64,
-    equity: f64,
-    currency: *const u16,
-    leverage: i64,
     timestamp: *const u16,
 ) -> i32 {
-    let msg = RegisterMessage {
+    let msg = RequestConfigMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
         account_id: utf16_to_string(account_id).unwrap_or_default(),
-        ea_type: utf16_to_string(ea_type).unwrap_or_default(),
-        platform: utf16_to_string(platform).unwrap_or_default(),
-        account_number,
-        broker: utf16_to_string(broker).unwrap_or_default(),
-        account_name: utf16_to_string(account_name).unwrap_or_default(),
-        server: utf16_to_string(server).unwrap_or_default(),
-        balance,
-        equity,
-        currency: utf16_to_string(currency).unwrap_or_default(),
-        leverage,
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
     };
 
@@ -396,6 +375,14 @@ pub unsafe extern "C" fn serialize_heartbeat(
     equity: f64,
     open_positions: i32,
     timestamp: *const u16,
+    ea_type: *const u16,
+    platform: *const u16,
+    account_number: i64,
+    broker: *const u16,
+    account_name: *const u16,
+    server: *const u16,
+    currency: *const u16,
+    leverage: i64,
 ) -> i32 {
     let msg = HeartbeatMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
@@ -405,6 +392,14 @@ pub unsafe extern "C" fn serialize_heartbeat(
         open_positions,
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
         version_git: env!("GIT_VERSION").to_string(),
+        ea_type: utf16_to_string(ea_type).unwrap_or_default(),
+        platform: utf16_to_string(platform).unwrap_or_default(),
+        account_number,
+        broker: utf16_to_string(broker).unwrap_or_default(),
+        account_name: utf16_to_string(account_name).unwrap_or_default(),
+        server: utf16_to_string(server).unwrap_or_default(),
+        currency: utf16_to_string(currency).unwrap_or_default(),
+        leverage,
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -662,20 +657,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_register_message_serialization() {
-        let msg = RegisterMessage {
-            message_type: "Register".to_string(),
+    fn test_request_config_message_serialization() {
+        let msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
             account_id: "test_account_123".to_string(),
-            ea_type: "Master".to_string(),
-            platform: "MT5".to_string(),
-            account_number: 12345,
-            broker: "TestBroker".to_string(),
-            account_name: "Test Account".to_string(),
-            server: "TestServer-Live".to_string(),
-            balance: 10000.50,
-            equity: 10000.50,
-            currency: "USD".to_string(),
-            leverage: 100,
             timestamp: "2025-01-01T00:00:00Z".to_string(),
         };
 
@@ -684,22 +669,12 @@ mod tests {
         assert!(serialized.len() > 0, "Serialized data should not be empty");
 
         // Deserialize
-        let deserialized: RegisterMessage = rmp_serde::from_slice(&serialized)
+        let deserialized: RequestConfigMessage = rmp_serde::from_slice(&serialized)
             .expect("Failed to deserialize");
 
         // Verify fields
         assert_eq!(msg.message_type, deserialized.message_type);
         assert_eq!(msg.account_id, deserialized.account_id);
-        assert_eq!(msg.ea_type, deserialized.ea_type);
-        assert_eq!(msg.platform, deserialized.platform);
-        assert_eq!(msg.account_number, deserialized.account_number);
-        assert_eq!(msg.broker, deserialized.broker);
-        assert_eq!(msg.account_name, deserialized.account_name);
-        assert_eq!(msg.server, deserialized.server);
-        assert_eq!(msg.balance, deserialized.balance);
-        assert_eq!(msg.equity, deserialized.equity);
-        assert_eq!(msg.currency, deserialized.currency);
-        assert_eq!(msg.leverage, deserialized.leverage);
         assert_eq!(msg.timestamp, deserialized.timestamp);
     }
 
@@ -730,6 +705,14 @@ mod tests {
             open_positions: 3,
             timestamp: "2025-01-01T00:00:00Z".to_string(),
             version_git: "test123".to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 12345,
+            broker: "TestBroker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "TestServer-Live".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -742,6 +725,14 @@ mod tests {
         assert_eq!(msg.equity, deserialized.equity);
         assert_eq!(msg.open_positions, deserialized.open_positions);
         assert_eq!(msg.timestamp, deserialized.timestamp);
+        assert_eq!(msg.ea_type, deserialized.ea_type);
+        assert_eq!(msg.platform, deserialized.platform);
+        assert_eq!(msg.account_number, deserialized.account_number);
+        assert_eq!(msg.broker, deserialized.broker);
+        assert_eq!(msg.account_name, deserialized.account_name);
+        assert_eq!(msg.server, deserialized.server);
+        assert_eq!(msg.currency, deserialized.currency);
+        assert_eq!(msg.leverage, deserialized.leverage);
     }
 
     #[test]
@@ -896,20 +887,22 @@ mod tests {
         let handles: Vec<_> = (0..4)
             .map(|i| {
                 thread::spawn(move || {
-                    let msg = RegisterMessage {
-                        message_type: "Register".to_string(),
+                    let msg = HeartbeatMessage {
+                        message_type: "Heartbeat".to_string(),
                         account_id: format!("account_{}", i),
+                        balance: 10000.0 + i as f64,
+                        equity: 10000.0 + i as f64,
+                        open_positions: i as i32,
+                        timestamp: "2025-01-01T00:00:00Z".to_string(),
+                        version_git: "test".to_string(),
                         ea_type: "Master".to_string(),
                         platform: "MT5".to_string(),
                         account_number: i as i64,
                         broker: "TestBroker".to_string(),
                         account_name: format!("Account {}", i),
                         server: "TestServer".to_string(),
-                        balance: 10000.0 + i as f64,
-                        equity: 10000.0 + i as f64,
                         currency: "USD".to_string(),
                         leverage: 100,
-                        timestamp: "2025-01-01T00:00:00Z".to_string(),
                     };
 
                     // This should not panic
