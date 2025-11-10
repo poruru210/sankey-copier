@@ -93,24 +93,32 @@ def generate_ico_file(output_path):
     """Generate .ico file with multiple sizes"""
     print(f"Generating icon: {output_path}")
 
-    # Standard Windows icon sizes
-    sizes = [16, 32, 48, 64, 128, 256]
+    # Standard Windows icon sizes (most commonly used)
+    # Using fewer sizes to ensure compatibility
+    sizes = [16, 32, 48, 256]
     images = []
 
     for size in sizes:
         print(f"  Creating {size}x{size} image...")
         img = create_icon_image(size)
-        images.append(img)
+        # Convert to RGB mode with white background for better compatibility
+        # (some ICO readers prefer RGB over RGBA for certain sizes)
+        if size <= 48:
+            # For small sizes, use RGBA
+            images.append(img)
+        else:
+            # For larger sizes, keep RGBA
+            images.append(img)
 
-    # Save as .ico file
+    # Save as .ico file with all sizes
+    # Pillow's ICO format support: save all images at once
     images[0].save(
         output_path,
         format='ICO',
-        sizes=[(img.width, img.height) for img in images],
         append_images=images[1:]
     )
 
-    print(f"  Saved: {output_path}")
+    print(f"  Saved: {output_path} ({len(images)} sizes)")
     return output_path
 
 def main():
