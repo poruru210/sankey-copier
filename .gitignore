@@ -52,3 +52,14 @@ nul
 .kiri/
 var/
 tests/__pycache__/
+
+# Installer
+installer/Output/
+installer/resources/nssm.exe
+installer/resources/nssm-x86.exe
+installer/output/
+
+# Next.js standalone build
+web-ui/.next/standalone/
+web-ui/.next/static/
+web-ui/out/

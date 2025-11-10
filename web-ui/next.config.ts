@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
 const nextConfig: NextConfig = {
+  // Output standalone for Windows service deployment
+  output: 'standalone',
+
   // Allow external network access during development
   // Specify the actual IP address of your network interface
   allowedDevOrigins: [

@@ -1,0 +1,78 @@
+SANKEY Copier License Agreement
+
+Copyright (c) 2024 SANKEY Copier Project
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+THIRD-PARTY LICENSES
+
+This software includes the following third-party components:
+
+1. NSSM (Non-Sucking Service Manager)
+   - Public Domain
+   - https://nssm.cc/
+
+2. Rust and Cargo
+   - MIT License / Apache License 2.0
+   - https://www.rust-lang.org/
+
+3. Next.js
+   - MIT License
+   - https://nextjs.org/
+
+4. ZeroMQ
+   - MPL-2.0 License
+   - https://zeromq.org/
+
+For a complete list of dependencies and their licenses, please see:
+https://github.com/your-org/sankey-copier/blob/main/LICENSES
+
+---
+
+DISCLAIMER
+
+This software is designed for use with MetaTrader 4 and MetaTrader 5 trading platforms.
+Trading in financial markets involves substantial risk. This software is provided as a tool
+and does not constitute financial advice. Users are solely responsible for their trading
+decisions and any resulting profits or losses.
+
+The authors and contributors of this software:
+- Make no guarantees about the accuracy or reliability of trade copying
+- Are not responsible for any financial losses incurred through the use of this software
+- Are not responsible for any technical issues or data loss
+- Recommend thorough testing in a demo environment before live trading
+
+USE AT YOUR OWN RISK.
+
+---
+
+SUPPORT
+
+For support, documentation, and updates, please visit:
+https://github.com/your-org/sankey-copier
+
+For bug reports and feature requests:
+https://github.com/your-org/sankey-copier/issues
+
+---
+
+By installing this software, you acknowledge that you have read and agree to
+the terms of this license agreement.
