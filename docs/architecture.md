@@ -365,31 +365,31 @@ SANKEY Copierは、ZeroMQの3つの独立したチャンネルを使用します
 ```mermaid
 graph TB
     subgraph "Port 5555: 制御チャンネル (PULL)"
-        A[Master EA] -->|PUSH| B[Register Message]
-        A -->|PUSH| C[Heartbeat Message]
+        A[Master EA] -->|PUSH| C[Heartbeat Message<br/>+ Auto-Register]
         A -->|PUSH| D[TradeSignal Message]
-        E[Slave EA] -->|PUSH| F[Register Message]
-        E -->|PUSH| G[Heartbeat Message]
+        E[Slave EA] -->|PUSH| G[Heartbeat Message<br/>+ Auto-Register]
+        E -->|PUSH| H[RequestConfig Message]
+        E -->|PUSH| I[Unregister Message]
     end
 
     subgraph "Port 5556: トレード配信チャンネル (PUB/SUB)"
-        H[Server PUB] -->|トピック:<br/>master_account| I[Slave EA SUB]
-        H -->|TradeSignal<br/>MessagePack| I
+        J[Server PUB] -->|トピック:<br/>master_account| K[Slave EA SUB]
+        J -->|TradeSignal<br/>MessagePack| K
     end
 
     subgraph "Port 5557: 設定配信チャンネル (PUB/SUB)"
-        J[Server PUB] -->|トピック:<br/>slave_account| K[Slave EA SUB]
-        J -->|ConfigMessage<br/>MessagePack| K
+        L[Server PUB] -->|トピック:<br/>slave_account| M[Slave EA SUB]
+        L -->|ConfigMessage<br/>MessagePack| M
     end
 
-    B --> L[Message Handler]
-    C --> L
-    D --> L
-    F --> L
-    G --> L
+    C --> N[Message Handler]
+    D --> N
+    G --> N
+    H --> N
+    I --> N
 
-    L -->|Copy Engine| H
-    L -->|Config Publisher| J
+    N -->|Copy Engine| J
+    N -->|Config Publisher| L
 ```
 
 ### ポート詳細
@@ -436,7 +436,7 @@ graph TB
 
 ## データフロー
 
-### 1. EA登録フロー
+### 1. EA自動登録フロー
 
 ```mermaid
 sequenceDiagram
@@ -446,21 +446,34 @@ sequenceDiagram
     participant DB as SQLite
     participant Config as Config Publisher<br/>(Port 5557)
 
-    EA->>ZMQ: RegisterMessage (MessagePack)
-    ZMQ->>Server: PULL受信
-    Server->>Server: Message Handler処理
-    Server->>DB: Connection Manager登録
-    DB-->>Server: 登録完了
+    Note over EA: EA起動 (OnInit)
+
+    loop 30秒ごと (OnTimer)
+        EA->>ZMQ: HeartbeatMessage<br/>(EA情報含む)
+        ZMQ->>Server: PULL受信
+        Server->>Server: Message Handler処理
+
+        alt 初回Heartbeat（未登録）
+            Server->>DB: Connection Manager自動登録
+            DB-->>Server: 登録完了
+            Note over Server: EA自動登録完了
+            Server->>Server: WebSocket通知
+            Server->>Server: ログ記録
+        else 既存EA
+            Server->>DB: last_heartbeat更新
+        end
+    end
 
     alt Slave EAの場合
+        Note over EA: 初回Heartbeat成功後
+        EA->>ZMQ: RequestConfigMessage
+        ZMQ->>Server: PULL受信
         Server->>DB: 設定クエリ (slave_account)
         DB-->>Server: CopySettings取得
         Server->>Config: ConfigMessage送信
         Config->>EA: 設定配信 (トピック: slave_account)
+        EA->>EA: 設定適用
     end
-
-    Server->>Server: WebSocket通知
-    Server->>Server: ログ記録
 ```
 
 ### 2. トレードコピーフロー

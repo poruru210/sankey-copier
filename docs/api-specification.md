@@ -508,40 +508,41 @@ EAがサーバーに送信するメッセージ。すべて **MessagePack** 形�
 
 ```mermaid
 graph TD
-    A[Port 5555] --> B[RegisterMessage]
+    A[Port 5555] --> B[HeartbeatMessage]
     A --> C[UnregisterMessage]
-    A --> D[HeartbeatMessage]
-    A --> E[TradeSignalMessage]
+    A --> D[TradeSignalMessage]
+    A --> E[RequestConfigMessage]
 
-    B --> F[EA登録]
+    B --> F[生存確認 + 自動登録]
     C --> G[EA登録解除]
-    D --> H[生存確認]
-    E --> I[トレードシグナル]
+    D --> H[トレードシグナル]
+    E --> I[設定要求]
 ```
 
 ---
 
-#### 1. RegisterMessage
+#### 1. HeartbeatMessage
 
-EA起動時に送信する登録メッセージ。
+定期的（30秒ごと）に送信する生存確認メッセージ。**初回送信時に自動的にEA登録も行います**。
 
 **MessagePack構造**:
 
 ```json
 {
-  "message_type": "Register",
+  "message_type": "Heartbeat",
   "account_id": "FXGT-12345",
+  "balance": 10050.75,
+  "equity": 10100.25,
+  "open_positions": 3,
+  "timestamp": "2025-11-10T10:30:00.000Z",
   "ea_type": "Master",
   "platform": "MT5",
   "account_number": 12345,
   "broker": "FXGT",
   "account_name": "Demo Account",
   "server": "FXGT-Server",
-  "balance": 10000.50,
-  "equity": 10050.25,
   "currency": "USD",
-  "leverage": 500,
-  "timestamp": "2025-11-10T10:00:00.000Z"
+  "leverage": 500
 }
 ```
 
@@ -549,29 +550,65 @@ EA起動時に送信する登録メッセージ。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|------|------|------|
-| `message_type` | string | ✅ | `"Register"` 固定 |
+| `message_type` | string | ✅ | `"Heartbeat"` 固定 |
 | `account_id` | string | ✅ | アカウントID（自動生成: `ブローカー名-口座番号`） |
+| `balance` | f64 | ✅ | 残高 |
+| `equity` | f64 | ✅ | 有効証拠金 |
+| `open_positions` | i32 | ✅ | 現在のオープンポジション数 |
+| `timestamp` | string | ✅ | ISO 8601形式のタイムスタンプ |
 | `ea_type` | string | ✅ | `"Master"` または `"Slave"` |
 | `platform` | string | ✅ | `"MT4"` または `"MT5"` |
 | `account_number` | i64 | ✅ | MT口座番号 |
 | `broker` | string | ✅ | ブローカー名 |
 | `account_name` | string | ✅ | 口座名 |
 | `server` | string | ✅ | サーバー名 |
-| `balance` | f64 | ✅ | 残高 |
-| `equity` | f64 | ✅ | 有効証拠金 |
 | `currency` | string | ✅ | 通貨 (例: `"USD"`) |
 | `leverage` | i64 | ✅ | レバレッジ |
+
+**サーバー側処理**:
+
+1. EAが未登録の場合、Connection Managerに自動登録（初回Heartbeat時）
+2. 既存EAの場合、`last_heartbeat` を現在時刻に更新
+3. `balance`, `equity` を更新
+
+**タイムアウト**:
+
+- デフォルト: 30秒
+- タイムアウト時、`status` を `Timeout` に変更
+
+---
+
+#### 2. RequestConfigMessage
+
+Slave EAが初回Heartbeat成功後に送信する設定要求メッセージ。
+
+**MessagePack構造**:
+
+```json
+{
+  "message_type": "RequestConfig",
+  "account_id": "XM-67890",
+  "timestamp": "2025-11-10T10:00:01.000Z"
+}
+```
+
+**フィールド**:
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|------|------|------|
+| `message_type` | string | ✅ | `"RequestConfig"` 固定 |
+| `account_id` | string | ✅ | Slave EAのアカウントID |
 | `timestamp` | string | ✅ | ISO 8601形式のタイムスタンプ |
 
 **サーバー側処理**:
 
-1. Connection Managerに登録
-2. Slave EAの場合、設定を検索してConfigMessage送信
-3. WebSocket通知
+1. データベースから該当Slave EAの設定を検索
+2. 設定が存在する場合、ConfigMessageを生成してPort 5557で配信
+3. 設定が存在しない場合、ログに記録（エラーではない）
 
 ---
 
-#### 2. UnregisterMessage
+#### 3. UnregisterMessage
 
 EA終了時に送信する登録解除メッセージ。
 
@@ -589,43 +626,6 @@ EA終了時に送信する登録解除メッセージ。
 
 1. Connection Managerから削除
 2. WebSocket通知
-
----
-
-#### 3. HeartbeatMessage
-
-定期的（30秒ごと）に送信する生存確認メッセージ。
-
-**MessagePack構造**:
-
-```json
-{
-  "message_type": "Heartbeat",
-  "account_id": "FXGT-12345",
-  "balance": 10050.75,
-  "equity": 10100.25,
-  "open_positions": 3,
-  "timestamp": "2025-11-10T10:30:00.000Z",
-  "version_git": "a748f63"
-}
-```
-
-**フィールド**:
-
-| フィールド | 型 | 必須 | 説明 |
-|-----------|------|------|------|
-| `version_git` | string | ✅ | EAビルド時のGitコミットハッシュ |
-| `open_positions` | i32 | ✅ | 現在のオープンポジション数 |
-
-**サーバー側処理**:
-
-1. `last_heartbeat` を現在時刻に更新
-2. `balance`, `equity` を更新
-
-**タイムアウト**:
-
-- デフォルト: 30秒
-- タイムアウト時、`status` を `Timeout` に変更
 
 ---
 
@@ -847,8 +847,9 @@ if (recv_len > 0) {
 
 | メッセージ種別 | JSON | MessagePack | 削減率 |
 |---------------|------|-------------|--------|
-| RegisterMessage | ~400 bytes | ~280 bytes | 30% |
-| HeartbeatMessage | ~200 bytes | ~140 bytes | 30% |
+| HeartbeatMessage (Full) | ~400 bytes | ~280 bytes | 30% |
+| RequestConfigMessage | ~70 bytes | ~50 bytes | 29% |
+| UnregisterMessage | ~90 bytes | ~60 bytes | 33% |
 | TradeSignal (Open) | ~350 bytes | ~245 bytes | 30% |
 | TradeSignal (Close) | ~150 bytes | ~70 bytes | 53% |
 | ConfigMessage (フル) | ~1200 bytes | ~840 bytes | 30% |
@@ -862,7 +863,7 @@ if (recv_len > 0) {
 
 ## APIシーケンス
 
-### 1. EA登録とConfig配信
+### 1. EA自動登録とConfig配信
 
 ```mermaid
 sequenceDiagram
@@ -872,11 +873,24 @@ sequenceDiagram
     participant DB as SQLite
     participant ZMQ5557 as ZMQ Port 5557
 
-    Slave->>ZMQ5555: RegisterMessage
-    ZMQ5555->>Server: PULL受信
-    Server->>DB: Connection Manager登録
-    DB-->>Server: 登録完了
+    Note over Slave: EA起動 (OnInit)
 
+    loop 30秒ごと (OnTimer)
+        Slave->>ZMQ5555: HeartbeatMessage<br/>(EA情報含む)
+        ZMQ5555->>Server: PULL受信
+
+        alt 初回Heartbeat（未登録）
+            Server->>DB: Connection Manager自動登録
+            DB-->>Server: 登録完了
+            Note over Server: EA自動登録完了
+        else 既存EA
+            Server->>DB: last_heartbeat更新
+        end
+    end
+
+    Note over Slave: 初回Heartbeat成功後
+    Slave->>ZMQ5555: RequestConfigMessage
+    ZMQ5555->>Server: PULL受信
     Server->>DB: get_settings_for_slave("XM-67890")
     DB-->>Server: CopySettings取得
 
