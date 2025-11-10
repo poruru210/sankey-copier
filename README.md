@@ -1,238 +1,100 @@
 # SANKEY Copier
 
-高性能なMT4/MT5トレードコピーシステム。低遅延のローカル通信とスマートフォンからの制御が可能です。
+高性能なMT4/MT5トレードコピーシステム。低遅延のローカル通信とスマートフォンからのリモート制御が可能です。
 
-## 特徴
+## 主な特徴
 
-- **双方向対応**: MT4↔MT5、MT4↔MT4、MT5↔MT5すべての組み合わせに対応
-- **低遅延**: ZeroMQを使用したローカル通信で最小限の遅延
-- **リモート制御**: スマートフォンからコピーのON/OFF、設定変更が可能
+- **双方向対応**: MT4↔MT5、MT4↔MT4、MT5↔MT5のすべての組み合わせに対応
+- **低遅延**: ZeroMQによるローカル通信で最小限の遅延（MT5: <10ms、MT4: <100ms）
+- **リモート制御**: スマートフォンからコピー設定のON/OFF、リアルタイム監視が可能
 - **柔軟なシンボル変換**: プリフィックス/サフィックス削除・追加、完全なシンボル名マッピング
-- **高度なフィルタリング**: 通貨ペア、マジックナンバーでフィルタリング
+- **高度なフィルタリング**: 通貨ペア、マジックナンバーによるフィルタリング
 - **ロット調整**: 固定倍率、残高比率などに対応
 - **リアルタイム監視**: WebUIでトレードコピーの状態をリアルタイム確認
+- **多言語対応**: 英語・日本語に対応したWebUI
 
 ## アーキテクチャ
 
 ```
-[MT4/MT5 Master EA] --ZeroMQ--> [Rust中継サーバー] --ZeroMQ--> [MT4/MT5 Slave EA]
-                                        ↑
-                                   [Web UI API]
-                                        ↑
-                                  [スマホブラウザ]
+┌─────────────────┐      ZeroMQ        ┌──────────────────┐      ZeroMQ        ┌─────────────────┐
+│  MT4/MT5 Master │ ───────────────> │  Rust中継サーバー  │ ───────────────> │  MT4/MT5 Slave  │
+│       EA        │   ポート: 5555    │  + SQLite DB     │   ポート: 5556    │       EA        │
+└─────────────────┘                  └──────────────────┘                  └─────────────────┘
+                                             │ ▲
+                                             │ │ HTTP/WebSocket
+                                             │ │ ポート: 8080
+                                             ▼ │
+                                      ┌──────────────────┐
+                                      │   Web UI         │
+                                      │  (Next.js 16)    │
+                                      └──────────────────┘
+                                             ▲
+                                             │
+                                      [ スマホ / PC ]
 ```
 
-## 必要要件
+## クイックスタート
 
-### サーバー側
-- Rust (1.70以上)
-- ZeroMQ library (libzmq)
-- SQLite
+### 必要要件
 
-### MT4/MT5側
-- MetaTrader 4 または MetaTrader 5
-- Rust (1.70以上) - ZeroMQ DLLのビルドに必要
+- **Windows 10/11** (MT4/MT5用)
+- **Rust 1.70以上**
+- **Node.js 18以上**
+- **MetaTrader 4 または 5**
 
-### WebUI
-- Node.js (18以上)
-- npm または yarn
+### 基本的なセットアップ
 
-## インストール
+1. **Rustサーバーの起動**
+   ```bash
+   cd rust-server
+   cargo run --release
+   ```
 
-### 1. Rustサーバーのセットアップ
+2. **WebUIの起動**
+   ```bash
+   cd web-ui
+   pnpm install
+   pnpm dev
+   ```
+   ブラウザで http://localhost:5173 を開く
 
-```bash
-cd rust-server
+3. **MT4/MT5 EAの設定**
+   - Master EA (`SankeyCopierMaster`) をMaster口座のチャートにアタッチ
+   - Slave EA (`SankeyCopierSlave`) をSlave口座のチャートにアタッチ
 
-# 依存関係のインストール
-# 初回実行時に自動でビルドされます
+4. **WebUIでコピー設定を作成**
+   - 「+ New Setting」からMaster/Slave口座を選択
+   - Lot Multiplierなどを設定して「Create」→「Enable」
 
-# サーバーの起動
-cargo run --release
-```
+詳細なセットアップ手順は [docs/setup.md](docs/setup.md) を参照してください。
 
-サーバーは以下のポートで起動します:
-- HTTP/WebSocket API: `http://localhost:8080`
-- ZeroMQ Master受信: `tcp://*:5555`
-- ZeroMQ Slave送信: `tcp://localhost:5556`
+## ドキュメント
 
-### 2. WebUIのセットアップ
+### セットアップ・運用
+- **[セットアップガイド](docs/setup.md)** - 初心者向けの詳細なインストール手順
+- **[運用・デプロイガイド](docs/operations.md)** - 本番環境へのデプロイ、メンテナンス、バックアップ
+- **[トラブルシューティング](docs/troubleshooting.md)** - よくある問題と解決方法
 
-**新しいWeb UI (Next.js 16 + Intlayer 多言語対応)**
+### 技術仕様
+- **[システムアーキテクチャ](docs/architecture.md)** - システム設計、コンポーネント構成、データフロー
+- **[API仕様](docs/api-specification.md)** - REST API、WebSocket、ZeroMQプロトコル
+- **[データモデル](docs/data-model.md)** - データベーススキーマ、データ構造
 
-```bash
-cd web-ui
+## 主要な機能
 
-# 依存関係のインストール (pnpm推奨)
-pnpm install
+### シンボル名の変換
 
-# 開発サーバーの起動
-pnpm dev
+ブローカーによってシンボル名が異なる場合に対応:
 
-# 本番ビルド
-pnpm build
-pnpm start
-```
-
-開発サーバー: `http://localhost:5173`
-
-**特徴:**
-- **多言語対応**: 英語と日本語に対応（Intlayer使用）
-- **Next.js 16**: 最新のReactフレームワーク
-- **TypeScript**: 完全な型サポート
-- **Tailwind CSS**: モダンなUI
-- **WebSocket**: リアルタイム更新
-
-詳細は [web-ui/README.md](web-ui/README.md) を参照してください。
-
-### 3. MT4/MT5 EAのインストール
-
-#### ZeroMQ DLLのビルドと配置
-
-このプロジェクトでは、RustでビルドしたカスタムZeroMQ DLL (`sankey_copier_zmq.dll`) を使用します。
-
-**DLLのビルド:**
-
-MT4/MT5には32-bit版と64-bit版があります。お使いのMT4/MT5に合わせてビルドしてください。
-
-```bash
-cd mql-zmq-dll
-
-# 32-bit版のビルド (MT4は通常32-bit、MT5は両方存在)
-rustup target add i686-pc-windows-msvc
-cargo build --release --target i686-pc-windows-msvc
-
-# ビルドされたDLLをLibrariesフォルダにコピー
-cp target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll ../mql/MT4/Libraries/
-cp target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll ../mql/MT5/Libraries/
-```
-
-**64-bit版のMT5をお使いの場合:**
-
-```bash
-# 64-bit版のビルド
-cargo build --release
-
-# ビルドされたDLLをLibrariesフォルダにコピー
-cp target/release/sankey_copier_zmq.dll ../mql/MT5/Libraries/
-```
-
-**注意**: MT5のバージョン確認方法:
-- MT5を起動し、「ヘルプ」→「バージョン情報」を確認
-- または、MT5のインストールフォルダに `terminal64.exe` があれば64-bit版です
-
-**MT4への配置:**
-- `mql/MT4/Libraries/sankey_copier_zmq.dll` を MT4の `MQL4/Libraries/` フォルダにコピー
-
-**MT5への配置:**
-- `mql/MT5/Libraries/sankey_copier_zmq.dll` を MT5の `MQL5/Libraries/` フォルダにコピー
-
-**重要**: MT4/MT5の設定で DLL の使用を許可する必要があります:
-1. MT4/MT5の「ツール」→「オプション」を開く
-2. 「エキスパートアドバイザ」タブを選択
-3. 「DLLの使用を許可する」にチェックを入れる
-
-#### EAファイルの配置
-
-**MT4の場合:**
-```
-mql/MT4/Master/SankeyCopierMaster.mq4
-  → [MT4インストールフォルダ]/MQL4/Experts/
-
-mql/MT4/Slave/SankeyCopierSlave.mq4
-  → [MT4インストールフォルダ]/MQL4/Experts/
-```
-
-**MT5の場合:**
-```
-mql/MT5/Master/SankeyCopierMaster.mq5
-  → [MT5インストールフォルダ]/MQL5/Experts/
-
-mql/MT5/Slave/SankeyCopierSlave.mq5
-  → [MT5インストールフォルダ]/MQL5/Experts/
-```
-
-#### MT4/MT5でのコンパイル
-
-1. MetaEditorを開く
-2. 各EAファイルを開いてコンパイル (F7)
-3. エラーがないことを確認
-
-## 使用方法
-
-### 1. サーバーの起動
-
-```bash
-cd rust-server
-cargo run --release
-```
-
-### 2. WebUIの起動
-
-```bash
-cd web-ui
-npm run dev
-```
-
-ブラウザで `http://localhost:5173` を開く
-
-### 3. Master EAの設定
-
-MT4/MT5でチャートを開き、Master EAをアタッチ:
-
-**パラメータ:**
-- `ServerAddress`: `tcp://localhost:5555` (デフォルト)
-- `AccountID`: マスターアカウントの識別子 (例: `MASTER_001`)
-- `MagicFilter`: コピーするマジックナンバー (0=すべて)
-- `ScanInterval`: スキャン間隔 (ミリ秒)
-
-### 4. Slave EAの設定
-
-別のMT4/MT5でチャートを開き、Slave EAをアタッチ:
-
-**パラメータ:**
-- `ServerAddress`: `tcp://localhost:5556` (デフォルト)
-- `AccountID`: スレーブアカウントの識別子 (例: `SLAVE_001`)
-- `Slippage`: 許容スリッページ (ポイント)
-- `MaxRetries`: 注文リトライ回数
-- `AllowNewOrders`: 新規注文を許可
-- `AllowCloseOrders`: 決済を許可
-
-### 5. WebUIでコピー設定を作成
-
-1. WebUIで「+ New Setting」をクリック
-2. 以下を入力:
-   - Master Account: `MASTER_001` (Master EAのAccountIDと一致)
-   - Slave Account: `SLAVE_001` (Slave EAのAccountIDと一致)
-   - Lot Multiplier: ロット倍率 (例: `1.0` で同じロット)
-   - Reverse Trade: 売買反転する場合はチェック
-3. 「Create」をクリック
-
-### 6. コピーの開始
-
-- WebUIで作成した設定の「Enable」ボタンをクリック
-- Master口座でトレードを行うと、自動的にSlave口座にコピーされます
-- WebUIの「Recent Activity」でリアルタイムに状態を確認できます
-
-## 高度な設定
-
-### シンボル変換
-
-ブローカーによってシンボル名が異なる場合に使用します。
-
-**例: プリフィックス/サフィックスの変換**
-- Master: `EURUSD.raw`
-- Slave: `EURUSD`
-
-設定でシンボルマッピングを追加:
 ```json
 {
-  "source_symbol": "EURUSD.raw",
-  "target_symbol": "EURUSD"
+  "symbol_mappings": [
+    { "source_symbol": "EURUSD.raw", "target_symbol": "EURUSD" }
+  ]
 }
 ```
 
-### フィルター設定
+### トレードフィルター
 
 特定の通貨ペアやマジックナンバーのみコピー:
 
@@ -240,67 +102,66 @@ MT4/MT5でチャートを開き、Master EAをアタッチ:
 {
   "filters": {
     "allowed_symbols": ["EURUSD", "GBPUSD"],
-    "blocked_symbols": null,
-    "allowed_magic_numbers": [12345],
-    "blocked_magic_numbers": null
+    "allowed_magic_numbers": [12345]
   }
 }
 ```
 
-### ロット計算戦略
+### ロット調整
 
-Rust側のコードで以下の戦略を実装済み:
+```json
+{
+  "lot_multiplier": 1.0  // Masterと同じロット
+  "lot_multiplier": 0.5  // Masterの半分
+  "lot_multiplier": 2.0  // Masterの2倍
+}
+```
 
-1. **固定倍率**: `lot_multiplier` で指定
-2. **残高比率**: 口座残高に応じて自動計算
-3. **リスク比率**: リスク%とストップロスから計算
+### 売買反転
 
-## トラブルシューティング
+```json
+{
+  "reverse_trade": true  // Buy ↔ Sell を反転
+}
+```
 
-### EAが接続できない
+## パフォーマンス
 
-1. Rustサーバーが起動しているか確認
-2. MT4/MT5の「ツール」→「オプション」→「エキスパートアドバイザ」で「DLLの使用を許可する」がチェックされているか確認
-3. `sankey_copier_zmq.dll` が正しい場所に配置されているか確認
-4. MT4/MT5のエキスパートログで DLL ロードエラーが出ていないか確認
+| 項目 | MT4 | MT5 |
+|------|-----|-----|
+| **トレード検出** | 最大100ms（OnTick定期スキャン） | <10ms（OnTradeTransaction イベント駆動） |
+| **総レイテンシ** | 150-200ms | <50ms |
+| **適用シーン** | デイトレード、スイングトレード | スキャルピング、高頻度トレード |
 
-### トレードがコピーされない
-
-1. WebUIでコピー設定が「Active」になっているか確認
-2. Master EAとSlave EAの`AccountID`とWebUIの設定が一致しているか確認
-3. フィルター設定で対象トレードが除外されていないか確認
-4. Slave EAの`AllowNewOrders`が有効になっているか確認
-
-### WebUIが表示されない
-
-1. Rustサーバーが起動しているか確認
-2. ブラウザのコンソールでエラーを確認
-3. ファイアウォールで8080ポートがブロックされていないか確認
-
-## セキュリティ
-
-- 本番環境では必ず適切なファイアウォール設定を行ってください
-- WebUIには認証機能がないため、外部に公開しないでください
-- 機密情報(API Key等)をログに出力しないよう注意してください
+詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
 
 ## ライセンス
 
 MIT License
 
+## セキュリティ
+
+- 本番環境では適切なファイアウォール設定を行ってください
+- WebUIには認証機能がないため、外部に公開しないでください
+- 外部アクセスが必要な場合はVPN（Tailscale、WireGuardなど）の使用を推奨します
+
 ## サポート
 
-問題が発生した場合は、GitHubのIssuesでお知らせください。
+問題が発生した場合:
+
+1. [トラブルシューティングガイド](docs/troubleshooting.md)を確認
+2. [GitHubのIssues](https://github.com/[your-repo]/issues)で既存の問題を検索
+3. 解決しない場合は新しいIssueを作成してください
 
 ## 貢献
 
-プルリクエストを歓迎します!
+プルリクエストを歓迎します！バグ報告や機能提案もお気軽にどうぞ。
 
 ## ロードマップ
 
 - [ ] WebUI認証機能
-- [ ] 詳細なトレード履歴
-- [ ] パフォーマンス分析
-- [ ] Telegram通知
+- [ ] 詳細なトレード履歴とパフォーマンス分析
+- [ ] Telegram/Discord通知
 - [ ] クラウド版の提供
 - [ ] スマホアプリ (iOS/Android)
 
