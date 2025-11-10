@@ -4,7 +4,7 @@ use anyhow::{Result, Context};
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc;
 use std::sync::Arc;
-use crate::models::{TradeSignal, ConfigMessage, UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
+use crate::models::{TradeSignal, UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
 
 pub use config_publisher::ZmqConfigPublisher;
 
@@ -235,19 +235,9 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
 /// Type alias for trade signal publisher
 pub type ZmqSender = ZmqPublisher<TradeSignal>;
 
-/// Type alias for config message publisher
-pub type ZmqConfigSender = ZmqPublisher<ConfigMessage>;
-
 /// Extension methods for ZmqSender to maintain existing API
 impl ZmqSender {
     pub async fn send_signal(&self, trade_group_id: &str, signal: &TradeSignal) -> Result<()> {
         self.publish(trade_group_id, signal).await
-    }
-}
-
-/// Extension methods for ZmqConfigSender to maintain existing API
-impl ZmqConfigSender {
-    pub async fn send_config(&self, config: &ConfigMessage) -> Result<()> {
-        self.publish(&config.account_id, config).await
     }
 }
