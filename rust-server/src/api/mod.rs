@@ -3,7 +3,7 @@ mod mt_installations;
 use axum::{
     extract::{Path, State, ws::WebSocket, ws::WebSocketUpgrade},
     response::Response,
-    routing::{get, post, delete},
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -38,10 +38,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/connections/:id", get(get_connection))
         .route("/api/logs", get(get_logs))
         .route("/ws", get(websocket_handler))
-        // MT installations API
+        // MT installations API (process detection only)
         .route("/api/mt-installations", get(mt_installations::list_mt_installations))
-        .route("/api/mt-installations/manual", post(mt_installations::add_manual_installation))
-        .route("/api/mt-installations/:id", delete(mt_installations::remove_manual_installation))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

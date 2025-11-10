@@ -19,12 +19,11 @@ pub enum Architecture {
     Bit64,
 }
 
-/// 検出方法
+/// 検出方法（プロセスベースのみ）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum DetectionMethod {
     Process,
-    Manual,
 }
 
 /// インストールされたコンポーネント
