@@ -66,3 +66,48 @@ export interface AccountInfo {
   errorMsg: string;
   isExpanded: boolean;
 }
+
+// MT4/MT5 Installation types
+export type MtType = 'MT4' | 'MT5';
+
+export type Architecture = '32-bit' | '64-bit';
+
+export type DetectionMethod = 'process';
+
+export interface InstalledComponents {
+  dll: boolean;
+  master_ea: boolean;
+  slave_ea: boolean;
+  includes: boolean;
+}
+
+export interface MtInstallation {
+  id: string;
+  name: string;
+  type: MtType;
+  platform: Architecture;
+  path: string;
+  executable: string;
+  version: string | null;
+  is_running: boolean;
+  process_id: number | null;
+  detection_method: DetectionMethod;
+  is_installed: boolean;
+  installed_version: string | null;
+  available_version: string;
+  components: InstalledComponents;
+  last_updated: string | null;
+}
+
+export interface DetectionSummary {
+  total_found: number;
+  by_method: Record<string, number>;
+  running: number;
+  stopped: number;
+}
+
+export interface MtInstallationsResponse {
+  success: boolean;
+  data: MtInstallation[];
+  detection_summary: DetectionSummary;
+}
