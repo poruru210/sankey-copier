@@ -92,6 +92,10 @@ fn create_menu() -> Result<Menu> {
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
+    // About
+    let about_item = MenuItem::new("About", true, Some("about"));
+    menu.append(&about_item)?;
+
     // Exit
     menu.append(&PredefinedMenuItem::quit(Some("quit")))?;
 
@@ -141,6 +145,11 @@ fn handle_menu_event(id: &str) {
                 Ok(status) => show_info(&status),
                 Err(e) => show_error(&format!("Failed to get status: {}", e)),
             }
+        }
+
+        // About
+        "about" => {
+            show_about();
         }
 
         // Quit
@@ -366,6 +375,23 @@ fn show_info(message: &str) {
     {
         println!("Info: {}", message);
     }
+}
+
+/// Show about dialog
+fn show_about() {
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    let message = format!(
+        "SANKEY Copier Tray Application\n\n\
+         Version: {}\n\n\
+         MT4/MT5 Trade Copy System\n\
+         Low-latency local communication with remote control\n\n\
+         Copyright © 2024 SANKEY Copier Project\n\
+         Licensed under MIT License",
+        VERSION
+    );
+
+    show_info(&message);
 }
 
 #[cfg(target_os = "windows")]

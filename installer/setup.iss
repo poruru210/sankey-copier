@@ -54,6 +54,13 @@ UninstallDisplayName={#MyAppName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
+[Messages]
+; English
+english.WelcomeLabel2=This will install [name/ver] on your computer.%n%nVersion: {#MyAppVersion}%n%nIt is recommended that you close all other applications before continuing.
+
+; Japanese
+japanese.WelcomeLabel2=[name/ver] をコンピュータにインストールします。%n%nバージョン: {#MyAppVersion}%n%n続行する前に、他のすべてのアプリケーションを閉じることをお勧めします。
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "Start services automatically on Windows startup"; Flags: checkedonce
