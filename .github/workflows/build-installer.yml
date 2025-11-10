@@ -89,6 +89,21 @@ jobs:
       env:
         NEXT_BUILD_STANDALONE: 'true'
 
+    - name: Get version
+      id: version
+      run: |
+        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
+          $version = $matches[1]
+        } elseif ($env:INPUT_VERSION) {
+          $version = $env:INPUT_VERSION
+        } else {
+          $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+      env:
+        INPUT_VERSION: ${{ github.event.inputs.version }}
+
     - name: Verify build artifacts
       run: |
         $artifacts = @(
@@ -110,32 +125,10 @@ jobs:
 
     - name: Compile installer with Inno Setup
       run: |
-        iscc installer/setup.iss
-
-    - name: Get version
-      id: version
-      run: |
-        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
-          $version = $matches[1]
-        } elseif ($env:INPUT_VERSION) {
-          $version = $env:INPUT_VERSION
-        } else {
-          $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        }
-        echo "version=$version" >> $env:GITHUB_OUTPUT
-        echo "Version: $version"
-      env:
-        INPUT_VERSION: ${{ github.event.inputs.version }}
-
-    - name: Rename installer
-      run: |
         $version = "${{ steps.version.outputs.version }}"
-        $oldName = "installer/Output/SankeyCopierSetup-1.0.0.exe"
-        $newName = "installer/Output/SankeyCopierSetup-$version.exe"
-        if (Test-Path $oldName) {
-          Rename-Item -Path $oldName -NewName (Split-Path $newName -Leaf)
-          Write-Host "Renamed to: $newName" -ForegroundColor Green
-        }
+        Write-Host "Compiling installer with version: $version" -ForegroundColor Cyan
+        iscc /DMyAppVersion=$version installer/setup.iss
+        Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
 
     - name: Upload installer artifact
       uses: actions/upload-artifact@v4

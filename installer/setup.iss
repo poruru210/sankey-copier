@@ -1,9 +1,14 @@
 ; SANKEY Copier Windows Installer Script
 ; Requires Inno Setup 6.2.2 or later
 ; https://jrsoftware.org/isinfo.php
+;
+; Version can be overridden via command line:
+; ISCC /DMyAppVersion=1.2.3 setup.iss
 
 #define MyAppName "SANKEY Copier"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "SANKEY Copier Project"
 #define MyAppURL "https://github.com/your-org/sankey-copier"
 #define MyAppExeName "sankey-copier-server.exe"

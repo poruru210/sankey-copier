@@ -27,6 +27,30 @@ Download NSSM from:
 - Node.js 18+ (for building web-ui)
 - PowerShell 5.1+ (for running build scripts)
 
+## Version Number Format
+
+SANKEY Copier uses **Semantic Versioning (SemVer)**:
+
+```
+MAJOR.MINOR.PATCH
+```
+
+- **MAJOR**: Incompatible API changes or major features (e.g., 1.0.0 → 2.0.0)
+- **MINOR**: Backward-compatible new features (e.g., 1.0.0 → 1.1.0)
+- **PATCH**: Backward-compatible bug fixes (e.g., 1.0.0 → 1.0.1)
+
+**Examples:**
+- `1.0.0` - Initial release
+- `1.1.0` - Added new feature (e.g., Telegram notifications)
+- `1.1.1` - Fixed bug in notifications
+- `2.0.0` - Breaking change (e.g., new database schema)
+
+**Git tags must include 'v' prefix:**
+```bash
+git tag v1.0.0        # Correct
+git tag 1.0.0         # Won't trigger workflow
+```
+
 ## Building the Installer
 
 ### Option 1: Using GitHub Actions (Recommended)
@@ -76,9 +100,13 @@ This script will:
 2. Click "Compile" button
 3. Installer will be created in `installer/Output/`
 
-**Option B: Using Command Line**
+**Option B: Using Command Line (with version)**
 ```powershell
+# Default version (1.0.0)
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+
+# Specify version
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.2.3 setup.iss
 ```
 
 ### Output
@@ -86,6 +114,10 @@ The installer will be created as:
 ```
 installer/Output/SankeyCopierSetup-x.x.x.exe
 ```
+
+**Version in filename:**
+- If you don't specify `/DMyAppVersion`, the default `1.0.0` is used
+- Specify version via command line to match your release version
 
 ## Installer Features
 
