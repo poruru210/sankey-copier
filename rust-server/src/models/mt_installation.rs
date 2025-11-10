@@ -19,20 +19,19 @@ pub enum Architecture {
     Bit64,
 }
 
-/// 検出方法（プロセスベースのみ）
+/// 検出方法（Windowsレジストリベース）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum DetectionMethod {
-    Process,
+    Registry,
 }
 
-/// インストールされたコンポーネント
+/// インストールされたコンポーネント（実行に必要なもののみ）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstalledComponents {
     pub dll: bool,
     pub master_ea: bool,
     pub slave_ea: bool,
-    pub includes: bool,
 }
 
 /// MT4/MT5インストール情報

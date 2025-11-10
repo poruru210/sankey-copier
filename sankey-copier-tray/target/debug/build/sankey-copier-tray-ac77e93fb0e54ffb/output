@@ -1,0 +1,15 @@
+package.metadata does not exist
+"C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.22621.0\\x64\\rc.exe"
+"C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\rc.exe"
+Selected RC path: 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\rc.exe'
+RC Output:
+Microsoft (R) Windows (R) Resource Compiler Version 10.0.10011.16384
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+------
+RC Error:
+
+------
+cargo:rustc-link-search=native=D:\projects\test\forex-copier\sankey-copier-tray\target\debug\build\sankey-copier-tray-ac77e93fb0e54ffb\out
+cargo:rustc-link-lib=dylib=resource

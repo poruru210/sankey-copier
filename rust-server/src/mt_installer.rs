@@ -62,10 +62,6 @@ impl MtInstaller {
         self.install_eas(&mql_path, mt_type)
             .context("Failed to install EAs")?;
 
-        // Include filesをコピー
-        self.install_includes(&mql_path)
-            .context("Failed to install include files")?;
-
         tracing::info!("Installation completed successfully");
         Ok(())
     }
@@ -109,15 +105,15 @@ impl MtInstaller {
         Ok(())
     }
 
-    /// EAをインストール
+    /// EAをインストール（コンパイル済みバイナリのみ）
     fn install_eas(&self, mql_path: &Path, mt_type: &MtType) -> Result<()> {
         let experts_path = mql_path.join("Experts");
         fs::create_dir_all(&experts_path)
             .context("Failed to create Experts directory")?;
 
         let (mt_folder, extension) = match mt_type {
-            MtType::MT4 => ("MT4", "mq4"),
-            MtType::MT5 => ("MT5", "mq5"),
+            MtType::MT4 => ("MT4", "ex4"),
+            MtType::MT5 => ("MT5", "ex5"),
         };
 
         // Master EAをコピー
@@ -127,7 +123,7 @@ impl MtInstaller {
 
         if !master_source.exists() {
             anyhow::bail!(
-                "Master EA source not found: {}",
+                "Master EA binary not found: {}",
                 master_source.display()
             );
         }
@@ -150,7 +146,7 @@ impl MtInstaller {
 
         if !slave_source.exists() {
             anyhow::bail!(
-                "Slave EA source not found: {}",
+                "Slave EA binary not found: {}",
                 slave_source.display()
             );
         }
@@ -169,48 +165,6 @@ impl MtInstaller {
         Ok(())
     }
 
-    /// Include filesをインストール
-    fn install_includes(&self, mql_path: &Path) -> Result<()> {
-        let include_path = mql_path.join("Include");
-        let sankey_include_path = include_path.join("SankeyCopier");
-
-        fs::create_dir_all(&sankey_include_path)
-            .context("Failed to create Include/SankeyCopier directory")?;
-
-        let source_include_path = self
-            .components_base_path
-            .join("mql/Include/SankeyCopier");
-
-        if !source_include_path.exists() {
-            anyhow::bail!(
-                "Include files source not found: {}",
-                source_include_path.display()
-            );
-        }
-
-        // 各.mqhファイルをコピー
-        let include_files = ["SankeyCopierCommon.mqh", "SankeyCopierMessages.mqh", "SankeyCopierTrade.mqh"];
-
-        for file_name in &include_files {
-            let source = source_include_path.join(file_name);
-            if !source.exists() {
-                anyhow::bail!("Include file not found: {}", source.display());
-            }
-
-            let dest = sankey_include_path.join(file_name);
-
-            tracing::info!(
-                "Copying include file from {} to {}",
-                source.display(),
-                dest.display()
-            );
-
-            fs::copy(&source, &dest)
-                .with_context(|| format!("Failed to copy {} to {}", file_name, dest.display()))?;
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -318,14 +272,14 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA files for MT4
+        // Create source EA binary files for MT4
         let source_master_path = temp_components.path().join("mql/MT4/Master");
         let source_slave_path = temp_components.path().join("mql/MT4/Slave");
         fs::create_dir_all(&source_master_path).unwrap();
         fs::create_dir_all(&source_slave_path).unwrap();
 
-        fs::write(source_master_path.join("SankeyCopierMaster.mq4"), b"master ea mt4").unwrap();
-        fs::write(source_slave_path.join("SankeyCopierSlave.mq4"), b"slave ea mt4").unwrap();
+        fs::write(source_master_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
+        fs::write(source_slave_path.join("SankeyCopierSlave.ex4"), b"slave ea mt4").unwrap();
 
         // Create MT4 structure
         let mql_path = temp_mt.path().join("MQL4");
@@ -338,8 +292,8 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify EAs were copied
-        let dest_master = mql_path.join("Experts").join("SankeyCopierMaster.mq4");
-        let dest_slave = mql_path.join("Experts").join("SankeyCopierSlave.mq4");
+        let dest_master = mql_path.join("Experts").join("SankeyCopierMaster.ex4");
+        let dest_slave = mql_path.join("Experts").join("SankeyCopierSlave.ex4");
         assert!(dest_master.exists());
         assert!(dest_slave.exists());
         assert_eq!(fs::read(&dest_master).unwrap(), b"master ea mt4");
@@ -351,14 +305,14 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA files for MT5
+        // Create source EA binary files for MT5
         let source_master_path = temp_components.path().join("mql/MT5/Master");
         let source_slave_path = temp_components.path().join("mql/MT5/Slave");
         fs::create_dir_all(&source_master_path).unwrap();
         fs::create_dir_all(&source_slave_path).unwrap();
 
-        fs::write(source_master_path.join("SankeyCopierMaster.mq5"), b"master ea mt5").unwrap();
-        fs::write(source_slave_path.join("SankeyCopierSlave.mq5"), b"slave ea mt5").unwrap();
+        fs::write(source_master_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
+        fs::write(source_slave_path.join("SankeyCopierSlave.ex5"), b"slave ea mt5").unwrap();
 
         // Create MT5 structure
         let mql_path = temp_mt.path().join("MQL5");
@@ -371,71 +325,12 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify EAs were copied
-        let dest_master = mql_path.join("Experts").join("SankeyCopierMaster.mq5");
-        let dest_slave = mql_path.join("Experts").join("SankeyCopierSlave.mq5");
+        let dest_master = mql_path.join("Experts").join("SankeyCopierMaster.ex5");
+        let dest_slave = mql_path.join("Experts").join("SankeyCopierSlave.ex5");
         assert!(dest_master.exists());
         assert!(dest_slave.exists());
         assert_eq!(fs::read(&dest_master).unwrap(), b"master ea mt5");
         assert_eq!(fs::read(&dest_slave).unwrap(), b"slave ea mt5");
-    }
-
-    #[test]
-    fn test_install_includes() {
-        let temp_components = TempDir::new().unwrap();
-        let temp_mt = TempDir::new().unwrap();
-
-        // Create source include files
-        let source_includes = temp_components.path().join("mql/Include/SankeyCopier");
-        fs::create_dir_all(&source_includes).unwrap();
-
-        fs::write(source_includes.join("SankeyCopierCommon.mqh"), b"common").unwrap();
-        fs::write(source_includes.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
-        fs::write(source_includes.join("SankeyCopierTrade.mqh"), b"trade").unwrap();
-
-        // Create MQL structure
-        let mql_path = temp_mt.path().join("MQL4");
-        fs::create_dir_all(&mql_path).unwrap();
-
-        // Install
-        let installer = MtInstaller::new(temp_components.path().to_path_buf());
-        let result = installer.install_includes(&mql_path);
-
-        assert!(result.is_ok());
-
-        // Verify includes were copied
-        let dest_includes = mql_path.join("Include").join("SankeyCopier");
-        assert!(dest_includes.join("SankeyCopierCommon.mqh").exists());
-        assert!(dest_includes.join("SankeyCopierMessages.mqh").exists());
-        assert!(dest_includes.join("SankeyCopierTrade.mqh").exists());
-
-        assert_eq!(fs::read(dest_includes.join("SankeyCopierCommon.mqh")).unwrap(), b"common");
-        assert_eq!(fs::read(dest_includes.join("SankeyCopierMessages.mqh")).unwrap(), b"messages");
-        assert_eq!(fs::read(dest_includes.join("SankeyCopierTrade.mqh")).unwrap(), b"trade");
-    }
-
-    #[test]
-    fn test_install_includes_missing_file() {
-        let temp_components = TempDir::new().unwrap();
-        let temp_mt = TempDir::new().unwrap();
-
-        // Create source include files but miss one
-        let source_includes = temp_components.path().join("mql/Include/SankeyCopier");
-        fs::create_dir_all(&source_includes).unwrap();
-
-        fs::write(source_includes.join("SankeyCopierCommon.mqh"), b"common").unwrap();
-        fs::write(source_includes.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
-        // Missing: SankeyCopierTrade.mqh
-
-        // Create MQL structure
-        let mql_path = temp_mt.path().join("MQL4");
-        fs::create_dir_all(&mql_path).unwrap();
-
-        // Install should fail
-        let installer = MtInstaller::new(temp_components.path().to_path_buf());
-        let result = installer.install_includes(&mql_path);
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Include file not found"));
     }
 
     #[test]
@@ -456,14 +351,11 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // Verify all components
+        // Verify all components (実行に必要なもののみ)
         let mql_path = mt_path.join("MQL4");
         assert!(mql_path.join("Libraries").join("sankey_copier_zmq.dll").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierMaster.mq4").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierSlave.mq4").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierCommon.mqh").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierMessages.mqh").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierTrade.mqh").exists());
+        assert!(mql_path.join("Experts").join("SankeyCopierMaster.ex4").exists());
+        assert!(mql_path.join("Experts").join("SankeyCopierSlave.ex4").exists());
     }
 
     #[test]
@@ -484,17 +376,14 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // Verify all components
+        // Verify all components (実行に必要なもののみ)
         let mql_path = mt_path.join("MQL5");
         assert!(mql_path.join("Libraries").join("sankey_copier_zmq.dll").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierMaster.mq5").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierSlave.mq5").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierCommon.mqh").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierMessages.mqh").exists());
-        assert!(mql_path.join("Include").join("SankeyCopier").join("SankeyCopierTrade.mqh").exists());
+        assert!(mql_path.join("Experts").join("SankeyCopierMaster.ex5").exists());
+        assert!(mql_path.join("Experts").join("SankeyCopierSlave.ex5").exists());
     }
 
-    /// Helper function to setup complete component directory structure
+    /// Helper function to setup complete component directory structure (実行に必要なもののみ)
     fn setup_complete_components(base_path: &Path, is_mt4: bool) {
         // DLL files (32-bit)
         let dll_32_path = base_path.join("mql-zmq-dll/target/i686-pc-windows-msvc/release");
@@ -506,21 +395,14 @@ mod tests {
         fs::create_dir_all(&dll_64_path).unwrap();
         fs::write(dll_64_path.join("sankey_copier_zmq.dll"), b"64-bit dll").unwrap();
 
-        let (mt_folder, ext) = if is_mt4 { ("MT4", "mq4") } else { ("MT5", "mq5") };
+        let (mt_folder, ext) = if is_mt4 { ("MT4", "ex4") } else { ("MT5", "ex5") };
 
-        // EA files
+        // EA binary files
         let master_path = base_path.join(format!("mql/{}/Master", mt_folder));
         let slave_path = base_path.join(format!("mql/{}/Slave", mt_folder));
         fs::create_dir_all(&master_path).unwrap();
         fs::create_dir_all(&slave_path).unwrap();
         fs::write(master_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
         fs::write(slave_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();
-
-        // Include files
-        let includes_path = base_path.join("mql/Include/SankeyCopier");
-        fs::create_dir_all(&includes_path).unwrap();
-        fs::write(includes_path.join("SankeyCopierCommon.mqh"), b"common").unwrap();
-        fs::write(includes_path.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
-        fs::write(includes_path.join("SankeyCopierTrade.mqh"), b"trade").unwrap();
     }
 }

@@ -72,13 +72,12 @@ export type MtType = 'MT4' | 'MT5';
 
 export type Architecture = '32-bit' | '64-bit';
 
-export type DetectionMethod = 'process';
+export type DetectionMethod = 'registry';
 
 export interface InstalledComponents {
   dll: boolean;
   master_ea: boolean;
   slave_ea: boolean;
-  includes: boolean;
 }
 
 export interface MtInstallation {

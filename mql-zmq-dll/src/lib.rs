@@ -6,8 +6,8 @@ use std::sync::{LazyLock, Mutex};
 
 // Re-export message types for use in rust-server
 pub use msgpack::{
-    RegisterMessage,
     UnregisterMessage,
+    RequestConfigMessage,
     HeartbeatMessage,
     TradeSignalMessage,
     ConfigMessage,

@@ -32,6 +32,7 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
+bool        g_config_requested = false; // Track if config has been requested
 
 struct OrderMapping {
     int master_ticket;
@@ -133,9 +134,6 @@ int OnInit()
 
    g_initialized = true;
 
-   // Send registration message to server
-   SendRegistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
-
    // Set up timer for heartbeat and config messages (1 second interval)
    EventSetTimer(1);
 
@@ -186,9 +184,28 @@ void OnTimer()
    if(now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
       Print("[DEBUG] Sending heartbeat...");
-      SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
-      g_last_heartbeat = TimeLocal();
-      Print("[DEBUG] Heartbeat sent, updated last_heartbeat=", g_last_heartbeat);
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
+
+      if(heartbeat_sent)
+      {
+         g_last_heartbeat = TimeLocal();
+         Print("[DEBUG] Heartbeat sent, updated last_heartbeat=", g_last_heartbeat);
+
+         // On first successful heartbeat, request configuration from server
+         if(!g_config_requested)
+         {
+            Print("[INFO] First heartbeat successful, requesting configuration...");
+            if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+            {
+               g_config_requested = true;
+               Print("[INFO] Configuration request sent successfully");
+            }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+            }
+         }
+      }
    }
 
    // Check for configuration messages (MessagePack format)

@@ -1,0 +1,12 @@
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\deps\tinystr-7c5e0ceb7ed70f0a.d: C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\lib.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\macros.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ascii.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\asciibyte.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\error.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\int_ops.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\unvalidated.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ule.rs
+
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\deps\libtinystr-7c5e0ceb7ed70f0a.rmeta: C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\lib.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\macros.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ascii.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\asciibyte.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\error.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\int_ops.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\unvalidated.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ule.rs
+
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\lib.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\macros.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ascii.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\asciibyte.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\error.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\int_ops.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\unvalidated.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tinystr-0.8.2\src\ule.rs:

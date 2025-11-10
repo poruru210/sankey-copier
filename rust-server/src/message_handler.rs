@@ -6,7 +6,7 @@ use crate::{
     db::Database,
     engine::CopyEngine,
     models::{
-        ConfigMessage, CopySettings, HeartbeatMessage, RegisterMessage,
+        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage,
         SymbolConverter, TradeSignal, UnregisterMessage,
     },
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
@@ -47,73 +47,60 @@ impl MessageHandler {
     /// Process a single ZMQ message
     pub async fn handle_message(&self, msg: ZmqMessage) {
         match msg {
-            ZmqMessage::Register(reg_msg) => self.handle_register(reg_msg).await,
+            ZmqMessage::RequestConfig(req_msg) => self.handle_request_config(req_msg).await,
             ZmqMessage::Unregister(unreg_msg) => self.handle_unregister(unreg_msg).await,
             ZmqMessage::Heartbeat(hb_msg) => self.handle_heartbeat(hb_msg).await,
             ZmqMessage::TradeSignal(signal) => self.handle_trade_signal(signal).await,
         }
     }
 
-    /// Handle EA registration
-    async fn handle_register(&self, msg: RegisterMessage) {
+    /// Handle configuration request from Slave EA
+    async fn handle_request_config(&self, msg: RequestConfigMessage) {
         let account_id = msg.account_id.clone();
-        let ea_type = msg.ea_type.clone();
-        let platform = msg.platform.clone();
 
-        self.connection_manager.register_ea(msg).await;
+        tracing::info!("Config request received from: {}", account_id);
 
-        // Phase 2: Send CONFIG to Slave EA immediately upon registration
-        if ea_type == "Slave" {
-            tracing::info!("Slave EA registered: {}, checking for existing configuration...", account_id);
+        match self.db.get_settings_for_slave(&account_id).await {
+            Ok(Some(settings)) => {
+                tracing::info!(
+                    "Found settings for {}: master={}, enabled={}, lot_mult={:?}",
+                    account_id,
+                    settings.master_account,
+                    settings.enabled,
+                    settings.lot_multiplier
+                );
 
-            match self.db.get_settings_for_slave(&account_id).await {
-                Ok(Some(settings)) => {
-                    tracing::info!(
-                        "Found existing settings for slave {}: master={}, enabled={}, lot_mult={:?}",
-                        account_id,
-                        settings.master_account,
-                        settings.enabled,
-                        settings.lot_multiplier
-                    );
+                // Convert CopySettings to ConfigMessage
+                let config: ConfigMessage = settings.into();
 
-                    // Convert CopySettings to ConfigMessage
-                    let config: ConfigMessage = settings.into();
-
-                    // Send CONFIG via MessagePack
-                    if let Err(e) = self.config_sender.send_config(&config).await {
-                        tracing::error!(
-                            "Failed to send config to newly registered slave {}: {}",
-                            account_id,
-                            e
-                        );
-                    } else {
-                        tracing::info!(
-                            "Successfully sent CONFIG to newly registered slave: {}",
-                            account_id
-                        );
-                    }
-                }
-                Ok(None) => {
-                    tracing::info!(
-                        "No existing configuration found for slave {}. EA will wait for Web UI configuration.",
-                        account_id
-                    );
-                }
-                Err(e) => {
+                // Send CONFIG via MessagePack
+                if let Err(e) = self.config_sender.send_config(&config).await {
                     tracing::error!(
-                        "Failed to query settings for slave {}: {}",
+                        "Failed to send config to {}: {}",
                         account_id,
                         e
                     );
+                } else {
+                    tracing::info!(
+                        "Successfully sent CONFIG to: {}",
+                        account_id
+                    );
                 }
             }
+            Ok(None) => {
+                tracing::info!(
+                    "No configuration found for {}. EA will wait for Web UI configuration.",
+                    account_id
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to query settings for {}: {}",
+                    account_id,
+                    e
+                );
+            }
         }
-
-        // Notify WebSocket clients
-        let _ = self.broadcast_tx.send(format!(
-            "ea_connected:{}:{:?}:{:?}",
-            account_id, ea_type, platform
-        ));
     }
 
     /// Handle EA unregistration
@@ -125,15 +112,16 @@ impl MessageHandler {
         let _ = self.broadcast_tx.send(format!("ea_disconnected:{}", account_id));
     }
 
-    /// Handle heartbeat messages
+    /// Handle heartbeat messages (auto-registration + health monitoring only)
     async fn handle_heartbeat(&self, msg: HeartbeatMessage) {
         let account_id = msg.account_id.clone();
         let balance = msg.balance;
         let equity = msg.equity;
 
+        // Update heartbeat (performs auto-registration if needed)
         self.connection_manager.update_heartbeat(msg).await;
 
-        // Notify WebSocket clients
+        // Notify WebSocket clients of heartbeat
         let _ = self.broadcast_tx.send(format!(
             "ea_heartbeat:{}:{:.2}:{:.2}",
             account_id, balance, equity
@@ -223,7 +211,7 @@ impl MessageHandler {
 mod tests {
     use super::*;
     use crate::models::{
-        CopySettings, HeartbeatMessage, OrderType, RegisterMessage,
+        CopySettings, HeartbeatMessage, OrderType,
         TradeAction, TradeFilters, UnregisterMessage,
     };
     use chrono::Utc;
@@ -262,24 +250,6 @@ mod tests {
         )
     }
 
-    fn create_test_register_message() -> RegisterMessage {
-        RegisterMessage {
-            message_type: "Register".to_string(),
-            account_id: "TEST_001".to_string(),
-            account_number: 12345,
-            broker: "Test Broker".to_string(),
-            account_name: "Test Account".to_string(),
-            server: "Test-Server".to_string(),
-            currency: "USD".to_string(),
-            balance: 10000.0,
-            equity: 10000.0,
-            leverage: 100,
-            ea_type: "Master".to_string(),
-            platform: "MT4".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        }
-    }
-
     fn create_test_trade_signal() -> TradeSignal {
         TradeSignal {
             action: TradeAction::Open,
@@ -316,27 +286,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_register() {
-        let handler = create_test_handler().await;
-        let msg = create_test_register_message();
-        let account_id = msg.account_id.clone();
-
-        handler.handle_register(msg).await;
-
-        // Verify EA was registered
-        let ea = handler.connection_manager.get_ea(&account_id).await;
-        assert!(ea.is_some());
-        assert_eq!(ea.unwrap().account_id, account_id);
-    }
-
-    #[tokio::test]
     async fn test_handle_unregister() {
         let handler = create_test_handler().await;
-        let msg = create_test_register_message();
-        let account_id = msg.account_id.clone();
+        let account_id = "TEST_001".to_string();
 
-        // First register
-        handler.handle_register(msg).await;
+        // First auto-register via heartbeat
+        let hb_msg = HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
+            account_id: account_id.clone(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            version_git: "test".to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT4".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+        };
+        handler.handle_heartbeat(hb_msg).await;
 
         // Then unregister
         handler
@@ -359,13 +331,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_heartbeat() {
         let handler = create_test_handler().await;
-        let reg_msg = create_test_register_message();
-        let account_id = reg_msg.account_id.clone();
+        let account_id = "TEST_001".to_string();
 
-        // First register
-        handler.handle_register(reg_msg).await;
-
-        // Send heartbeat
+        // Send heartbeat (auto-registration)
         let hb_msg = HeartbeatMessage {
             message_type: "Heartbeat".to_string(),
             account_id: account_id.clone(),
@@ -374,10 +342,18 @@ mod tests {
             open_positions: 3,
             timestamp: chrono::Utc::now().to_rfc3339(),
             version_git: "test".to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT4".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
         };
         handler.handle_heartbeat(hb_msg).await;
 
-        // Verify balance and equity updated
+        // Verify EA was auto-registered with correct balance and equity
         let ea = handler.connection_manager.get_ea(&account_id).await;
         assert!(ea.is_some());
         let ea = ea.unwrap();

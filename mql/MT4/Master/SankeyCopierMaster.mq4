@@ -73,9 +73,6 @@ int OnInit()
 
    Print("Connected to server successfully");
 
-   // Send registration message
-   SendRegistrationMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4");
-
    // Scan existing orders
    ScanExistingOrders();
 
@@ -119,7 +116,7 @@ void OnTimer()
    // Use TimeLocal() instead of TimeCurrent() to ensure heartbeat works even when market is closed
    if(TimeLocal() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID);
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4");
       g_last_heartbeat = TimeLocal();
    }
 }

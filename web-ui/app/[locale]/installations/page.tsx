@@ -34,8 +34,8 @@ export default function InstallationsPage() {
 
   const getComponentStatus = (installation: MtInstallation) => {
     const { components } = installation;
-    const installed = [components.dll, components.master_ea, components.slave_ea, components.includes].filter(Boolean).length;
-    const total = 4;
+    const installed = [components.dll, components.master_ea, components.slave_ea].filter(Boolean).length;
+    const total = 3;
     return { installed, total };
   };
 
@@ -61,7 +61,7 @@ export default function InstallationsPage() {
         <div className="container mx-auto p-6 max-w-[1200px]">
           {/* Page Title */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">MT4/MT5 Installation Manager</h1>
+            <h1 className="text-3xl font-bold mb-2">Installation Manager</h1>
             <p className="text-muted-foreground">
               Detect and install SANKEY Copier components to your MT4/MT5 platforms
             </p>
@@ -111,115 +111,239 @@ export default function InstallationsPage() {
             <Card>
               <CardContent className="py-12 text-center">
                 <p className="text-lg text-muted-foreground">
-                  No running MT4/MT5 installations detected.
+                  No MT4/MT5 installations detected.
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Please start MT4 or MT5, then click &quot;Refresh Detection&quot;
+                  Click &quot;Refresh Detection&quot; to scan for installations
                 </p>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {installations.map((installation) => {
-                const componentStatus = getComponentStatus(installation);
-                const isInstalling = installing === installation.id;
-                const allComponentsInstalled = componentStatus.installed === componentStatus.total;
+            <>
+              {/* MT5 Group */}
+              {(() => {
+                const mt5Installations = installations.filter((i) => i.type === 'MT5');
+                if (mt5Installations.length === 0) return null;
 
                 return (
-                  <Card key={installation.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{installation.name}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {installation.type} ({installation.platform})
-                          </CardDescription>
-                        </div>
-                        <Badge variant={installation.is_running ? 'default' : 'secondary'}>
-                          {installation.is_running ? 'Running' : 'Stopped'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {/* Path */}
-                      <div className="mb-4">
-                        <p className="text-xs text-muted-foreground mb-1">Installation Path</p>
-                        <p className="text-sm font-mono truncate" title={installation.path}>
-                          {installation.path}
-                        </p>
-                      </div>
+                  <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                      <h2 className="text-2xl font-bold">MetaTrader 5</h2>
+                      <Badge variant="outline">{mt5Installations.length} found</Badge>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {mt5Installations.map((installation) => {
+                        const componentStatus = getComponentStatus(installation);
+                        const isInstalling = installing === installation.id;
+                        const allComponentsInstalled = componentStatus.installed === componentStatus.total;
 
-                      {/* Version */}
-                      {installation.version && (
-                        <div className="mb-4">
-                          <p className="text-xs text-muted-foreground mb-1">Version</p>
-                          <p className="text-sm">{installation.version}</p>
-                        </div>
-                      )}
+                        return (
+                          <Card key={installation.id}>
+                            <CardHeader>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <CardTitle className="text-lg">{installation.name}</CardTitle>
+                                  <CardDescription className="mt-1">
+                                    {installation.platform}
+                                  </CardDescription>
+                                </div>
+                                <Badge variant={installation.is_running ? 'default' : 'secondary'}>
+                                  {installation.is_running ? 'Running' : 'Stopped'}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              {/* Path */}
+                              <div className="mb-4">
+                                <p className="text-xs text-muted-foreground mb-1">Installation Path</p>
+                                <p className="text-sm font-mono truncate" title={installation.path}>
+                                  {installation.path}
+                                </p>
+                              </div>
 
-                      {/* Component Status */}
-                      <div className="mb-4">
-                        <p className="text-xs text-muted-foreground mb-2">Components Status</p>
-                        <div className="space-y-1">
-                          <ComponentStatusItem
-                            name="DLL"
-                            installed={installation.components.dll}
-                          />
-                          <ComponentStatusItem
-                            name="Master EA"
-                            installed={installation.components.master_ea}
-                          />
-                          <ComponentStatusItem
-                            name="Slave EA"
-                            installed={installation.components.slave_ea}
-                          />
-                          <ComponentStatusItem
-                            name="Include Files"
-                            installed={installation.components.includes}
-                          />
-                        </div>
-                        <div className="mt-2">
-                          <Badge variant={allComponentsInstalled ? 'default' : 'secondary'}>
-                            {componentStatus.installed}/{componentStatus.total} installed
-                          </Badge>
-                        </div>
-                      </div>
+                              {/* Version */}
+                              {installation.version && (
+                                <div className="mb-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Version</p>
+                                  <p className="text-sm">{installation.version}</p>
+                                </div>
+                              )}
 
-                      {/* Install Button */}
-                      <Button
-                        onClick={() => handleInstall(installation)}
-                        disabled={isInstalling || allComponentsInstalled}
-                        className="w-full gap-2"
-                        variant={allComponentsInstalled ? 'outline' : 'default'}
-                      >
-                        {isInstalling ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Installing...
-                          </>
-                        ) : allComponentsInstalled ? (
-                          <>
-                            <CheckCircle className="h-4 w-4" />
-                            All Components Installed
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4" />
-                            Install Components
-                          </>
-                        )}
-                      </Button>
+                              {/* Component Status */}
+                              <div className="mb-4">
+                                <p className="text-xs text-muted-foreground mb-2">Components Status</p>
+                                <div className="space-y-1">
+                                  <ComponentStatusItem
+                                    name="DLL"
+                                    installed={installation.components.dll}
+                                  />
+                                  <ComponentStatusItem
+                                    name="Master EA"
+                                    installed={installation.components.master_ea}
+                                  />
+                                  <ComponentStatusItem
+                                    name="Slave EA"
+                                    installed={installation.components.slave_ea}
+                                  />
+                                </div>
+                                <div className="mt-2">
+                                  <Badge variant={allComponentsInstalled ? 'default' : 'secondary'}>
+                                    {componentStatus.installed}/{componentStatus.total} installed
+                                  </Badge>
+                                </div>
+                              </div>
 
-                      {installation.is_running && !allComponentsInstalled && (
-                        <p className="text-xs text-muted-foreground mt-2 text-center">
-                          Warning: MT is running. Installation may require restart.
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
+                              {/* Install Button */}
+                              <Button
+                                onClick={() => handleInstall(installation)}
+                                disabled={isInstalling || allComponentsInstalled}
+                                className="w-full gap-2"
+                                variant={allComponentsInstalled ? 'outline' : 'default'}
+                              >
+                                {isInstalling ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Installing...
+                                  </>
+                                ) : allComponentsInstalled ? (
+                                  <>
+                                    <CheckCircle className="h-4 w-4" />
+                                    All Components Installed
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="h-4 w-4" />
+                                    Install Components
+                                  </>
+                                )}
+                              </Button>
+
+                              {installation.is_running && !allComponentsInstalled && (
+                                <p className="text-xs text-muted-foreground mt-2 text-center">
+                                  Warning: MT is running. Installation may require restart.
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
-              })}
-            </div>
+              })()}
+
+              {/* MT4 Group */}
+              {(() => {
+                const mt4Installations = installations.filter((i) => i.type === 'MT4');
+                if (mt4Installations.length === 0) return null;
+
+                return (
+                  <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                      <h2 className="text-2xl font-bold">MetaTrader 4</h2>
+                      <Badge variant="outline">{mt4Installations.length} found</Badge>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {mt4Installations.map((installation) => {
+                        const componentStatus = getComponentStatus(installation);
+                        const isInstalling = installing === installation.id;
+                        const allComponentsInstalled = componentStatus.installed === componentStatus.total;
+
+                        return (
+                          <Card key={installation.id}>
+                            <CardHeader>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <CardTitle className="text-lg">{installation.name}</CardTitle>
+                                  <CardDescription className="mt-1">
+                                    {installation.platform}
+                                  </CardDescription>
+                                </div>
+                                <Badge variant={installation.is_running ? 'default' : 'secondary'}>
+                                  {installation.is_running ? 'Running' : 'Stopped'}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              {/* Path */}
+                              <div className="mb-4">
+                                <p className="text-xs text-muted-foreground mb-1">Installation Path</p>
+                                <p className="text-sm font-mono truncate" title={installation.path}>
+                                  {installation.path}
+                                </p>
+                              </div>
+
+                              {/* Version */}
+                              {installation.version && (
+                                <div className="mb-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Version</p>
+                                  <p className="text-sm">{installation.version}</p>
+                                </div>
+                              )}
+
+                              {/* Component Status */}
+                              <div className="mb-4">
+                                <p className="text-xs text-muted-foreground mb-2">Components Status</p>
+                                <div className="space-y-1">
+                                  <ComponentStatusItem
+                                    name="DLL"
+                                    installed={installation.components.dll}
+                                  />
+                                  <ComponentStatusItem
+                                    name="Master EA"
+                                    installed={installation.components.master_ea}
+                                  />
+                                  <ComponentStatusItem
+                                    name="Slave EA"
+                                    installed={installation.components.slave_ea}
+                                  />
+                                </div>
+                                <div className="mt-2">
+                                  <Badge variant={allComponentsInstalled ? 'default' : 'secondary'}>
+                                    {componentStatus.installed}/{componentStatus.total} installed
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* Install Button */}
+                              <Button
+                                onClick={() => handleInstall(installation)}
+                                disabled={isInstalling || allComponentsInstalled}
+                                className="w-full gap-2"
+                                variant={allComponentsInstalled ? 'outline' : 'default'}
+                              >
+                                {isInstalling ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Installing...
+                                  </>
+                                ) : allComponentsInstalled ? (
+                                  <>
+                                    <CheckCircle className="h-4 w-4" />
+                                    All Components Installed
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="h-4 w-4" />
+                                    Install Components
+                                  </>
+                                )}
+                              </Button>
+
+                              {installation.is_running && !allComponentsInstalled && (
+                                <p className="text-xs text-muted-foreground mt-2 text-center">
+                                  Warning: MT is running. Installation may require restart.
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </div>
       </div>

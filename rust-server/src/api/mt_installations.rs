@@ -11,16 +11,16 @@ use crate::mt_installer::MtInstaller;
 
 use super::{ApiResponse, AppState};
 
-/// MT4/MT5インストール一覧を取得（プロセス検出のみ）
+/// MT4/MT5インストール一覧を取得（レジストリ検出）
 pub async fn list_mt_installations(
     State(_state): State<AppState>,
 ) -> Result<Json<ApiResponse<MtInstallationsResponse>>, String> {
-    // プロセスから起動中のMT4/MT5を検出
-    let mut detector = MtDetector::new();
-    let installations = match detector.detect_running_installations() {
+    // Windowsレジストリから MT4/MT5 を検出
+    let detector = MtDetector::new();
+    let installations = match detector.detect() {
         Ok(installs) => installs,
         Err(e) => {
-            tracing::error!("Failed to detect running MT installations: {}", e);
+            tracing::error!("Failed to detect MT installations: {}", e);
             Vec::new()
         }
     };
@@ -33,7 +33,7 @@ pub async fn list_mt_installations(
     let mut by_method: HashMap<String, usize> = HashMap::new();
     for installation in &installations {
         let method = match installation.detection_method {
-            DetectionMethod::Process => "process",
+            DetectionMethod::Registry => "registry",
         };
         *by_method.entry(method.to_string()).or_insert(0) += 1;
     }
@@ -59,12 +59,12 @@ pub async fn install_to_mt(
 ) -> Result<Json<ApiResponse<String>>, String> {
     tracing::info!("Installation request for MT installation ID: {}", id);
 
-    // まず、起動中のMT4/MT5を検出して該当のものを探す
-    let mut detector = MtDetector::new();
-    let installations = match detector.detect_running_installations() {
+    // レジストリから MT4/MT5 を検出して該当のものを探す
+    let detector = MtDetector::new();
+    let installations = match detector.detect() {
         Ok(installs) => installs,
         Err(e) => {
-            tracing::error!("Failed to detect running MT installations: {}", e);
+            tracing::error!("Failed to detect MT installations: {}", e);
             return Ok(Json(ApiResponse::error(format!(
                 "MT4/MT5の検出に失敗しました: {}",
                 e
@@ -79,7 +79,7 @@ pub async fn install_to_mt(
         Some(inst) => inst,
         None => {
             return Ok(Json(ApiResponse::error(format!(
-                "指定されたID ({}) のMT4/MT5が見つかりません。MT4/MT5が起動しているか確認してください。",
+                "指定されたID ({}) のMT4/MT5が見つかりません。",
                 id
             ))));
         }

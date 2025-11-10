@@ -1,0 +1,14 @@
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\deps\serde-9a9dcffbc851fb6a.d: C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\projects\test\forex-copier\sankey-copier-tray\target\debug\build\serde-05bd502ad2228cd6\out/private.rs
+
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\deps\libserde-9a9dcffbc851fb6a.rlib: C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\projects\test\forex-copier\sankey-copier-tray\target\debug\build\serde-05bd502ad2228cd6\out/private.rs
+
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\deps\libserde-9a9dcffbc851fb6a.rmeta: C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\projects\test\forex-copier\sankey-copier-tray\target\debug\build\serde-05bd502ad2228cd6\out/private.rs
+
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:
+C:\Users\AKIRA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs:
+D:\projects\test\forex-copier\sankey-copier-tray\target\debug\build\serde-05bd502ad2228cd6\out/private.rs:
+
+# env-dep:OUT_DIR=D:\\projects\\test\\forex-copier\\sankey-copier-tray\\target\\debug\\build\\serde-05bd502ad2228cd6\\out
