@@ -2,6 +2,9 @@
 rust-server/target/
 rust-server/**/*.rs.bk
 rust-server/Cargo.lock
+mql-zmq-dll/target/
+sankey-copier-tray/target/
+sankey-copier-tray/Cargo.lock
 
 # Database
 *.db

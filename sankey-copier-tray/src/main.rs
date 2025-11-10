@@ -8,17 +8,23 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuEvent, MenuItem, MenuId, PredefinedMenuItem},
     Icon, TrayIconBuilder,
 };
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 const SERVER_SERVICE: &str = "SankeyCopierServer";
 const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
 const WEB_URL: &str = "http://localhost:8080";
 
+// Global menu ID map
+static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
 fn main() -> Result<()> {
     // Create tray icon
-    let tray_icon = create_tray_icon()?;
+    let _tray_icon = create_tray_icon()?;
 
     // Monitor service status and update tray icon
     let _status_thread = thread::spawn(|| {
@@ -31,7 +37,7 @@ fn main() -> Result<()> {
     // Event loop
     loop {
         if let Ok(event) = MenuEvent::receiver().recv() {
-            handle_menu_event(event.id());
+            handle_menu_event(&event.id);
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -58,6 +64,7 @@ fn create_tray_icon() -> Result<tray_icon::TrayIcon> {
 /// Create tray menu
 fn create_menu() -> Result<Menu> {
     let menu = Menu::new();
+    let mut ids = MENU_IDS.lock().unwrap();
 
     // Status item (non-clickable)
     let status_item = MenuItem::new("SANKEY Copier", false, None);
@@ -68,45 +75,57 @@ fn create_menu() -> Result<Menu> {
 
     // Open Web Interface
     let open_item = MenuItem::new("Open Web Interface", true, None);
+    ids.insert(open_item.id().clone(), "open".to_string());
     menu.append(&open_item)?;
 
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
     // Service controls
-    let start_item = MenuItem::new("Start Services", true, Some("start"));
-    let stop_item = MenuItem::new("Stop Services", true, Some("stop"));
-    let restart_item = MenuItem::new("Restart Services", true, Some("restart"));
-
+    let start_item = MenuItem::new("Start Services", true, None);
+    ids.insert(start_item.id().clone(), "start".to_string());
     menu.append(&start_item)?;
+
+    let stop_item = MenuItem::new("Stop Services", true, None);
+    ids.insert(stop_item.id().clone(), "stop".to_string());
     menu.append(&stop_item)?;
+
+    let restart_item = MenuItem::new("Restart Services", true, None);
+    ids.insert(restart_item.id().clone(), "restart".to_string());
     menu.append(&restart_item)?;
 
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
     // Check Status
-    let status_check_item = MenuItem::new("Check Status", true, Some("status"));
+    let status_check_item = MenuItem::new("Check Status", true, None);
+    ids.insert(status_check_item.id().clone(), "status".to_string());
     menu.append(&status_check_item)?;
 
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
     // About
-    let about_item = MenuItem::new("About", true, Some("about"));
+    let about_item = MenuItem::new("About", true, None);
+    ids.insert(about_item.id().clone(), "about".to_string());
     menu.append(&about_item)?;
 
     // Exit
-    menu.append(&PredefinedMenuItem::quit(Some("quit")))?;
+    let quit_item = PredefinedMenuItem::quit(None);
+    ids.insert(quit_item.id().clone(), "quit".to_string());
+    menu.append(&quit_item)?;
 
     Ok(menu)
 }
 
 /// Handle menu events
-fn handle_menu_event(id: &str) {
-    match id {
+fn handle_menu_event(id: &MenuId) {
+    let ids = MENU_IDS.lock().unwrap();
+    let action = ids.get(id).map(|s| s.as_str()).unwrap_or("");
+
+    match action {
         // Open web interface
-        "Open Web Interface" => {
+        "open" => {
             if let Err(e) = open_web_interface() {
                 show_error(&format!("Failed to open web interface: {}", e));
             }
