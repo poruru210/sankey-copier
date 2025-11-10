@@ -1,0 +1,156 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: web-ui/package-lock.json
+
+    - name: Install Inno Setup
+      run: |
+        choco install innosetup -y
+        echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Download and setup NSSM
+      run: |
+        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "nssm.zip"
+        Expand-Archive -Path "nssm.zip" -DestinationPath "."
+        New-Item -ItemType Directory -Force -Path "installer/resources"
+        Copy-Item "nssm-2.24/win64/nssm.exe" -Destination "installer/resources/nssm.exe"
+        Remove-Item "nssm.zip"
+        Remove-Item "nssm-2.24" -Recurse
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          rust-server/target/
+          mql-zmq-dll/target/
+          sankey-copier-tray/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Build Rust server
+      working-directory: rust-server
+      run: cargo build --release
+
+    - name: Build MQL ZMQ DLL (64-bit)
+      working-directory: mql-zmq-dll
+      run: cargo build --release
+
+    - name: Build MQL ZMQ DLL (32-bit)
+      working-directory: mql-zmq-dll
+      run: cargo build --release --target i686-pc-windows-msvc
+
+    - name: Build Tray Application
+      working-directory: sankey-copier-tray
+      run: cargo build --release
+
+    - name: Install Web UI dependencies
+      working-directory: web-ui
+      run: npm ci
+
+    - name: Build Web UI
+      working-directory: web-ui
+      run: npm run build
+      env:
+        NEXT_BUILD_STANDALONE: 'true'
+
+    - name: Verify build artifacts
+      run: |
+        $artifacts = @(
+          "rust-server/target/release/sankey-copier-server.exe",
+          "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
+          "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
+          "sankey-copier-tray/target/release/sankey-copier-tray.exe",
+          "web-ui/.next/standalone",
+          "installer/resources/nssm.exe"
+        )
+
+        foreach ($artifact in $artifacts) {
+          if (-not (Test-Path $artifact)) {
+            Write-Error "Missing artifact: $artifact"
+            exit 1
+          }
+          Write-Host "✓ Found: $artifact" -ForegroundColor Green
+        }
+
+    - name: Compile installer with Inno Setup
+      run: |
+        iscc installer/setup.iss
+
+    - name: Get version
+      id: version
+      run: |
+        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
+          $version = $matches[1]
+        } elseif ($env:INPUT_VERSION) {
+          $version = $env:INPUT_VERSION
+        } else {
+          $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+      env:
+        INPUT_VERSION: ${{ github.event.inputs.version }}
+
+    - name: Rename installer
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        $oldName = "installer/Output/SankeyCopierSetup-1.0.0.exe"
+        $newName = "installer/Output/SankeyCopierSetup-$version.exe"
+        if (Test-Path $oldName) {
+          Rename-Item -Path $oldName -NewName (Split-Path $newName -Leaf)
+          Write-Host "Renamed to: $newName" -ForegroundColor Green
+        }
+
+    - name: Upload installer artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sankey-copier-installer-${{ steps.version.outputs.version }}
+        path: installer/Output/*.exe
+        retention-days: 30
+
+    - name: Create release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: installer/Output/*.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

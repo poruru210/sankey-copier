@@ -29,7 +29,33 @@ Download NSSM from:
 
 ## Building the Installer
 
-### Step 1: Build Components
+### Option 1: Using GitHub Actions (Recommended)
+
+The easiest way to create an installer is using GitHub Actions:
+
+**For tagged releases:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+The workflow will automatically build and create a GitHub release with the installer.
+
+**Manual trigger:**
+1. Go to Actions tab on GitHub
+2. Select "Build Windows Installer" workflow
+3. Click "Run workflow"
+4. Enter version number
+5. Download installer from Artifacts
+
+**Advantages:**
+- Fully automated build process
+- No need to manually download NSSM
+- Consistent build environment
+- Installer automatically attached to GitHub releases
+
+### Option 2: Local Build
+
+#### Step 1: Build Components
 
 Run the PowerShell build script:
 ```powershell
@@ -40,9 +66,10 @@ cd installer
 This script will:
 1. Build Rust server in release mode
 2. Build Next.js web UI in standalone mode
-3. Copy all necessary files to `installer/output/`
+3. Build tray application
+4. Build MQL DLLs (32-bit and 64-bit)
 
-### Step 2: Compile Installer
+#### Step 2: Compile Installer
 
 **Option A: Using Inno Setup GUI**
 1. Open `installer/setup.iss` in Inno Setup Compiler
