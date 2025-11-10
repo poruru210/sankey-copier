@@ -729,6 +729,7 @@ mod tests {
             equity: 10600.25,
             open_positions: 3,
             timestamp: "2025-01-01T00:00:00Z".to_string(),
+            version_git: "test123".to_string(),
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");

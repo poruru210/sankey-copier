@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The Forex Copier system has a **3-port ZeroMQ architecture** with a dedicated CONFIG channel already implemented. The infrastructure is solid, but the ConfigMessage contains only minimal data. This document provides a complete analysis of what exists and what needs to be enhanced.
+The SANKEY Copier system has a **3-port ZeroMQ architecture** with a dedicated CONFIG channel already implemented. The infrastructure is solid, but the ConfigMessage contains only minimal data. This document provides a complete analysis of what exists and what needs to be enhanced.
 
 ---
 
@@ -123,7 +123,7 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
 
 ### ✅ Fully Implemented
 
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 
 **Socket Setup** (lines 31-43, 89-118):
 ```cpp
@@ -188,7 +188,7 @@ string GetJsonValue(string json, string key) {
 
 ### ❌ NOT Implemented
 
-**File**: `mql/MT4/Slave/ForexCopierSlave.mq4`
+**File**: `mql/MT4/Slave/SankeyCopierSlave.mq4`
 
 **Issues Identified**:
 
@@ -449,8 +449,8 @@ pub struct ConfigMessage {
 - `rust-server/src/models/connection.rs` - Extend struct
 - `rust-server/src/api/mod.rs` - Update `send_config_to_ea()`
 - `rust-server/src/zeromq/mod.rs` - Update serialization
-- `mql/MT5/Slave/ForexCopierSlave.mq5` - Parse new fields
-- `mql/MT4/Slave/ForexCopierSlave.mq4` - Implement CONFIG support
+- `mql/MT5/Slave/SankeyCopierSlave.mq5` - Parse new fields
+- `mql/MT4/Slave/SankeyCopierSlave.mq4` - Implement CONFIG support
 
 **Benefit**: EA can filter trades locally, reducing server load
 
@@ -499,7 +499,7 @@ async fn handle_register(&self, msg: RegisterMessage) {
 6. Add dynamic trade group subscription
 
 **Files to modify**:
-- `mql/MT4/Slave/ForexCopierSlave.mq4`
+- `mql/MT4/Slave/SankeyCopierSlave.mq4`
 
 **Benefit**: MT4 and MT5 feature parity
 

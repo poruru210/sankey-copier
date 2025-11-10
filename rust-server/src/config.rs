@@ -49,7 +49,7 @@ impl Config {
                 port: 8080,
             },
             database: DatabaseConfig {
-                url: "sqlite://forex_copier.db?mode=rwc".to_string(),
+                url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
             },
             zeromq: ZeroMqConfig {
                 receiver_port: 5555,

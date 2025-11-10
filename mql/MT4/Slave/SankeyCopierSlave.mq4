@@ -1,17 +1,17 @@
 //+------------------------------------------------------------------+
-//|                                        ForexCopierSlave.mq4      |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                        SankeyCopierSlave.mq4      |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                                                                  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
 #property version   "2.00"
 #property strict
 
 //--- Include common headers
-#include <ForexCopier/ForexCopierCommon.mqh>
-#include <ForexCopier/ForexCopierMessages.mqh>
-#include <ForexCopier/ForexCopierTrade.mqh>
+#include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierMessages.mqh>
+#include <SankeyCopier/SankeyCopierTrade.mqh>
 
 //--- Input parameters
 input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
@@ -58,7 +58,7 @@ int            g_config_version = 0;             // Configuration version
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== ForexCopier Slave EA (MT4) Starting ===");
+   Print("=== SankeyCopier Slave EA (MT4) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
@@ -139,7 +139,7 @@ int OnInit()
    // Set up timer for heartbeat and config messages (1 second interval)
    EventSetTimer(1);
 
-   Print("=== ForexCopier Slave EA Initialized ===");
+   Print("=== SankeyCopier Slave EA Initialized ===");
 
    return INIT_SUCCEEDED;
 }
@@ -149,7 +149,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   Print("=== ForexCopier Slave EA (MT4) Stopping ===");
+   Print("=== SankeyCopier Slave EA (MT4) Stopping ===");
 
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
@@ -161,7 +161,7 @@ void OnDeinit(const int reason)
    if(g_zmq_trade_socket >= 0) zmq_socket_destroy(g_zmq_trade_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
-   Print("=== ForexCopier Slave EA (MT4) Stopped ===");
+   Print("=== SankeyCopier Slave EA (MT4) Stopped ===");
 }
 
 //+------------------------------------------------------------------+

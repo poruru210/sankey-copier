@@ -1,5 +1,5 @@
 # Project Rules & Processes
-## Forex Copier Development Standards
+## SANKEY Copier Development Standards
 
 **Created**: 2025-11-06
 **Status**: Active

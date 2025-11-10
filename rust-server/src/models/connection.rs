@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export shared message types from DLL
-pub use forex_copier_zmq::{RegisterMessage, UnregisterMessage, HeartbeatMessage};
+pub use sankey_copier_zmq::{RegisterMessage, UnregisterMessage, HeartbeatMessage};
 
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,7 +91,7 @@ impl From<RegisterMessage> for EaConnection {
 }
 
 // Re-export ConfigMessage from DLL
-pub use forex_copier_zmq::ConfigMessage;
+pub use sankey_copier_zmq::ConfigMessage;
 
 /// Convert CopySettings to ConfigMessage
 impl From<crate::models::CopySettings> for ConfigMessage {

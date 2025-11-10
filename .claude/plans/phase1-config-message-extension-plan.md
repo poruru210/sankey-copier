@@ -273,7 +273,7 @@ test result: ok. 43 passed; 0 failed
 ### MT5 Slave EA - 6 tasks
 
 #### Task 8: Extend Global Configuration Variables
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 30 minutes
 **Status**: [✓] Completed
 **Started**: 2025-11-06 15:40
@@ -301,7 +301,7 @@ Added initialization in OnInit() (lines 147-152) to resize all arrays to 0.
 ---
 
 #### Task 9: Extend ProcessConfigMessage()
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 1 hour
 **Status**: [✓] Completed
 **Started**: 2025-11-06 16:00
@@ -331,7 +331,7 @@ Integrated with Tasks 10 helper functions:
 ---
 
 #### Task 10: Implement JSON Parsing Helpers
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 1.5 hours
 **Status**: [✓] Completed
 **Started**: 2025-11-06 16:00 (completed together with Task 9)
@@ -376,7 +376,7 @@ Implemented 4 comprehensive JSON parsing helper functions (lines 524-694):
 ---
 
 #### Task 11: Implement Trade Filtering Logic
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 1 hour
 **Status**: [✓] Completed
 **Started**: 2025-11-06 16:30
@@ -407,7 +407,7 @@ Implemented comprehensive `ShouldProcessTrade()` function (lines 238-318, 80 lin
 ---
 
 #### Task 12: Implement Trade Transformation Logic
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 45 minutes
 **Status**: [✓] Completed
 **Started**: 2025-11-06 16:30 (completed together with Task 11)
@@ -448,7 +448,7 @@ Implemented 3 transformation functions (lines 320-375, 56 lines total):
 ---
 
 #### Task 13: Update ProcessTradeSignal()
-**File**: `mql/MT5/Slave/ForexCopierSlave.mq5`
+**File**: `mql/MT5/Slave/SankeyCopierSlave.mq5`
 **Estimated**: 30 minutes
 **Status**: [✓] Completed
 **Started**: 2025-11-06 16:30 (completed together with Tasks 11-12)

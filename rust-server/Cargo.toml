@@ -1,5 +1,5 @@
 [package]
-name = "forex-copier-server"
+name = "sankey-copier-server"
 version = "0.1.0"
 edition = "2021"
 
@@ -21,7 +21,7 @@ toml = "0.8"
 rmp-serde = "1.3"
 
 # Shared message types
-forex_copier_zmq = { path = "../mql-zmq-dll" }
+sankey_copier_zmq = { path = "../mql-zmq-dll" }
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }

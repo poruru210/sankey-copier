@@ -532,7 +532,7 @@ impl Database {
 
 ### 5.3 EA Side Implementation (MQL4/MQL5)
 
-#### File: `mql/MT4/Experts/ForexCopier_Slave.mq4`
+#### File: `mql/MT4/Experts/SankeyCopier_Slave.mq4`
 
 Add configuration storage:
 

@@ -1,4 +1,4 @@
-# SANKEY Forex Copier - Web UI
+# SANKEY SANKEY Copier - Web UI
 
 Next.js 16 + Intlayer による多言語対応Web UI
 
@@ -70,7 +70,7 @@ web-ui/
 │   ├── LanguageSwitcher.tsx # 言語切り替え
 │   └── SettingsDialog.tsx  # 設定ダイアログ
 ├── hooks/
-│   └── useForexCopier.ts   # API統合フック
+│   └── useSankeyCopier.ts   # API統合フック
 ├── lib/
 │   └── utils.ts            # ユーティリティ関数
 ├── types/

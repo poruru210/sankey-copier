@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                     ForexCopierMessages.mqh      |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                     SankeyCopierMessages.mqh      |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                     Message sending utilities                     |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 
-#include "ForexCopierCommon.mqh"
+#include "SankeyCopierCommon.mqh"
 
 //+------------------------------------------------------------------+
 //| Send registration message to server                              |

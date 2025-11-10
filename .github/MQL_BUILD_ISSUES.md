@@ -49,16 +49,16 @@ Error: Unexpected input(s) 'mt-version'
 ### 対象ファイル
 
 **MT4:**
-- `mql/MT4/Master/ForexCopierMaster.mq4`
-- `mql/MT4/Slave/ForexCopierSlave.mq4`
+- `mql/MT4/Master/SankeyCopierMaster.mq4`
+- `mql/MT4/Slave/SankeyCopierSlave.mq4`
 
 **MT5:**
-- `mql/MT5/Master/ForexCopierMaster.mq5`
-- `mql/MT5/Slave/ForexCopierSlave.mq5`
+- `mql/MT5/Master/SankeyCopierMaster.mq5`
+- `mql/MT5/Slave/SankeyCopierSlave.mq5`
 
 ### 期待される出力
-- `ForexCopierMaster.ex4` / `ForexCopierMaster.ex5`
-- `ForexCopierSlave.ex4` / `ForexCopierSlave.ex5`
+- `SankeyCopierMaster.ex4` / `SankeyCopierMaster.ex5`
+- `SankeyCopierSlave.ex4` / `SankeyCopierSlave.ex5`
 
 ## 解決策の選択肢
 
@@ -107,18 +107,18 @@ compile-mql:
 mql/
   MT4/
     Master/
-      ForexCopierMaster.mq4  (ソース)
-      ForexCopierMaster.ex4  (コンパイル済み)
+      SankeyCopierMaster.mq4  (ソース)
+      SankeyCopierMaster.ex4  (コンパイル済み)
     Slave/
-      ForexCopierSlave.mq4   (ソース)
-      ForexCopierSlave.ex4   (コンパイル済み)
+      SankeyCopierSlave.mq4   (ソース)
+      SankeyCopierSlave.ex4   (コンパイル済み)
   MT5/
     Master/
-      ForexCopierMaster.mq5  (ソース)
-      ForexCopierMaster.ex5  (コンパイル済み)
+      SankeyCopierMaster.mq5  (ソース)
+      SankeyCopierMaster.ex5  (コンパイル済み)
     Slave/
-      ForexCopierSlave.mq5   (ソース)
-      ForexCopierSlave.ex5   (コンパイル済み)
+      SankeyCopierSlave.mq5   (ソース)
+      SankeyCopierSlave.ex5   (コンパイル済み)
 ```
 
 ワークフロー更新:

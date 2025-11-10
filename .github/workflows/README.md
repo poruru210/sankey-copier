@@ -1,6 +1,6 @@
 # GitHub Actions ビルドワークフロー
 
-このディレクトリには、Forex Copierプロジェクトの自動ビルドを行うGitHub Actionsワークフローが含まれています。
+このディレクトリには、SANKEY Copierプロジェクトの自動ビルドを行うGitHub Actionsワークフローが含まれています。
 
 ## ワークフロー一覧
 
@@ -14,7 +14,7 @@
 
 1. GitHubリポジトリページにアクセス
 2. 「Actions」タブをクリック
-3. 左サイドバーから「Build Forex Copier」を選択
+3. 左サイドバーから「Build SANKEY Copier」を選択
 4. 「Run workflow」ボタンをクリック
 5. ビルド対象を選択:
    - **all**: すべてのコンポーネントをビルド（推奨）
@@ -30,21 +30,21 @@
 - **ビルド内容**:
   - 32-bit版（MT4用）: `i686-pc-windows-msvc`
   - 64-bit版（MT5用）: `x86_64-pc-windows-msvc`
-- **成果物**: `forex-copier-dll`
-  - `MT4/forex_copier_zmq.dll` (32-bit)
-  - `MT5/forex_copier_zmq.dll` (64-bit)
+- **成果物**: `sankey-copier-dll`
+  - `MT4/sankey_copier_zmq.dll` (32-bit)
+  - `MT5/sankey_copier_zmq.dll` (64-bit)
 - **ランナー**: `windows-latest`
 
 #### `rust-server` - Rust Server
-- **ビルド内容**: メインのForex Copierサーバー
-- **成果物**: `forex-copier-server`
-  - `forex-copier-server.exe`
+- **ビルド内容**: メインのSANKEY Copierサーバー
+- **成果物**: `sankey-copier-server`
+  - `sankey-copier-server.exe`
 - **ランナー**: `windows-latest`
 
 #### `web-ui` - Web UI
 - **ビルド内容**: Next.js 16 + Intlayer Web UI
 - **ビルドツール**: pnpm
-- **成果物**: `forex-copier-web-ui`
+- **成果物**: `sankey-copier-web-ui`
   - `.next/` ディレクトリ（本番ビルド）
 - **ランナー**: `ubuntu-latest`
 
@@ -52,14 +52,14 @@
 - **ビルド内容**: MT4/MT5 EAファイルのコンパイル
 - **使用Action**: `fx31337/mql-compile-action`
 - **成果物**:
-  - `forex-copier-mql-MT4`: MT4のコンパイル済みEA（.ex4）
-  - `forex-copier-mql-MT5`: MT5のコンパイル済みEA（.ex5）
+  - `sankey-copier-mql-MT4`: MT4のコンパイル済みEA（.ex4）
+  - `sankey-copier-mql-MT5`: MT5のコンパイル済みEA（.ex5）
 - **ランナー**: `windows-latest`
 
 #### `all` - Complete Build
 上記すべてのジョブを実行し、最終的に統合リリースパッケージを作成します。
 
-- **成果物**: `forex-copier-release-package`
+- **成果物**: `sankey-copier-release-package`
   - すべてのコンポーネントを含むtar.gzアーカイブ
 
 ### 3. 成果物のダウンロード

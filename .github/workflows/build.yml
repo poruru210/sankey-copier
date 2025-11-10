@@ -1,11 +1,11 @@
-name: Build Forex Copier
+name: Build SANKEY Copier
 
 on:
+  pull_request:
+    branches: [ master ]
   push:
     branches: [ master ]
-    paths:
-      - '.github/workflows/**'
-  workflow_dispatch:  # 手動実行のみ
+  workflow_dispatch:  # 手動実行
     inputs:
       build_target:
         description: 'ビルド対象の選択'
@@ -23,7 +23,7 @@ jobs:
   build-rust-dll:
     name: Build Rust ZeroMQ DLL
     runs-on: windows-latest
-    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-dll' || github.event_name == 'push' }}
+    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-dll' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout code
@@ -40,6 +40,11 @@ jobs:
         with:
           workspaces: mql-zmq-dll
 
+      - name: Run tests
+        working-directory: mql-zmq-dll
+        run: |
+          cargo test --lib
+
       - name: Build 32-bit DLL (MT4用)
         working-directory: mql-zmq-dll
         run: |
@@ -51,23 +56,25 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
-          copy mql-zmq-dll\target\i686-pc-windows-msvc\release\forex_copier_zmq.dll artifacts\dll\MT4\
-          copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\forex_copier_zmq.dll artifacts\dll\MT5\
+          copy mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
+          copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-dll
+          name: sankey-copier-dll
           path: artifacts/dll/
           retention-days: 30
 
   build-rust-server:
     name: Build Rust Server
     runs-on: windows-latest
-    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-server' || github.event_name == 'push' }}
+    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-server' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout code
@@ -81,27 +88,36 @@ jobs:
         with:
           workspaces: rust-server
 
+      - name: Run tests
+        working-directory: rust-server
+        run: |
+          cargo test --lib
+          cargo test --test config_distribution_test
+          cargo test --test performance_benchmark_test
+
       - name: Build server
         working-directory: rust-server
         run: |
           cargo build --release
 
       - name: Prepare server artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/server
-          copy rust-server\target\release\forex-copier-server.exe artifacts\server\
+          copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-server
+          name: sankey-copier-server
           path: artifacts/server/
           retention-days: 30
 
   build-web-ui:
     name: Build Web UI
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'web-ui' || github.event_name == 'push' }}
+    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'web-ui' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout code
@@ -129,6 +145,10 @@ jobs:
         working-directory: web-ui
         run: pnpm install --no-frozen-lockfile
 
+      - name: Run linter
+        working-directory: web-ui
+        run: pnpm lint || true
+
       - name: Build Web UI
         working-directory: web-ui
         env:
@@ -136,9 +156,10 @@ jobs:
         run: pnpm build
 
       - name: Upload Web UI artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-web-ui
+          name: sankey-copier-web-ui
           path: ${{ github.workspace }}/web-ui/.next
           include-hidden-files: true
           if-no-files-found: warn
@@ -147,7 +168,7 @@ jobs:
   compile-mql:
     name: Compile MQL4/MQL5 Files
     runs-on: windows-latest
-    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'mql' || github.event_name == 'push' }}
+    if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'mql' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     strategy:
       matrix:
@@ -476,7 +497,7 @@ jobs:
           }
 
           # Compile Master EA
-          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.mq${{ matrix.version }}"
+          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Master EA ==="
           Write-Host "Source file: $masterFile"
@@ -496,7 +517,7 @@ jobs:
           }
 
           # Compile Slave EA
-          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.mq${{ matrix.version }}"
+          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Slave EA ==="
           Write-Host "Source file: $slaveFile"
@@ -574,8 +595,8 @@ jobs:
         run: |
           Write-Host "Verifying compiled files..."
 
-          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\ForexCopierMaster.ex${{ matrix.version }}"
-          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\ForexCopierSlave.ex${{ matrix.version }}"
+          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.ex${{ matrix.version }}"
 
           $errors = @()
 
@@ -606,9 +627,10 @@ jobs:
           copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-mql-${{ matrix.platform }}
+          name: sankey-copier-mql-${{ matrix.platform }}
           path: artifacts/mql/${{ matrix.platform }}/
           retention-days: 30
 
@@ -616,7 +638,7 @@ jobs:
     name: Create Release Package
     runs-on: ubuntu-latest
     needs: [build-rust-dll, build-rust-server, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
+    if: ${{ github.event.inputs.build_target == 'all' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
 
     steps:
       - name: Checkout code
@@ -629,49 +651,49 @@ jobs:
 
       - name: Create release structure
         run: |
-          mkdir -p release/forex-copier
+          mkdir -p release/sankey-copier
 
           # MT5 structure
-          if [ -d "release-artifacts/forex-copier-mql-MT5" ]; then
-            mkdir -p release/forex-copier/MT5/Experts
-            mkdir -p release/forex-copier/MT5/Libraries
-            cp release-artifacts/forex-copier-mql-MT5/*.ex5 release/forex-copier/MT5/Experts/
+          if [ -d "release-artifacts/sankey-copier-mql-MT5" ]; then
+            mkdir -p release/sankey-copier/MT5/Experts
+            mkdir -p release/sankey-copier/MT5/Libraries
+            cp release-artifacts/sankey-copier-mql-MT5/*.ex5 release/sankey-copier/MT5/Experts/
           fi
 
-          if [ -d "release-artifacts/forex-copier-dll/MT5" ]; then
-            cp release-artifacts/forex-copier-dll/MT5/forex_copier_zmq.dll release/forex-copier/MT5/Libraries/
+          if [ -d "release-artifacts/sankey-copier-dll/MT5" ]; then
+            cp release-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll release/sankey-copier/MT5/Libraries/
           fi
 
           # MT4 structure
-          if [ -d "release-artifacts/forex-copier-mql-MT4" ]; then
-            mkdir -p release/forex-copier/MT4/Experts
-            mkdir -p release/forex-copier/MT4/Libraries
-            cp release-artifacts/forex-copier-mql-MT4/*.ex4 release/forex-copier/MT4/Experts/
+          if [ -d "release-artifacts/sankey-copier-mql-MT4" ]; then
+            mkdir -p release/sankey-copier/MT4/Experts
+            mkdir -p release/sankey-copier/MT4/Libraries
+            cp release-artifacts/sankey-copier-mql-MT4/*.ex4 release/sankey-copier/MT4/Experts/
           fi
 
-          if [ -d "release-artifacts/forex-copier-dll/MT4" ]; then
-            cp release-artifacts/forex-copier-dll/MT4/forex_copier_zmq.dll release/forex-copier/MT4/Libraries/
+          if [ -d "release-artifacts/sankey-copier-dll/MT4" ]; then
+            cp release-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll release/sankey-copier/MT4/Libraries/
           fi
 
           # Server
-          if [ -d "release-artifacts/forex-copier-server" ]; then
-            mkdir -p release/forex-copier/server
-            cp -r release-artifacts/forex-copier-server/* release/forex-copier/server/
+          if [ -d "release-artifacts/sankey-copier-server" ]; then
+            mkdir -p release/sankey-copier/server
+            cp -r release-artifacts/sankey-copier-server/* release/sankey-copier/server/
           fi
 
           # Web UI
-          if [ -d "release-artifacts/forex-copier-web-ui" ]; then
-            mkdir -p release/forex-copier/web-ui
-            cp -r release-artifacts/forex-copier-web-ui/* release/forex-copier/web-ui/
+          if [ -d "release-artifacts/sankey-copier-web-ui" ]; then
+            mkdir -p release/sankey-copier/web-ui
+            cp -r release-artifacts/sankey-copier-web-ui/* release/sankey-copier/web-ui/
           fi
 
           # ドキュメント
-          cp README.md release/forex-copier/
-          cp SETUP_GUIDE.md release/forex-copier/
+          cp README.md release/sankey-copier/
+          cp SETUP_GUIDE.md release/sankey-copier/
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: forex-copier-release-package
-          path: release/forex-copier/
+          name: sankey-copier-release-package
+          path: release/sankey-copier/
           retention-days: 90

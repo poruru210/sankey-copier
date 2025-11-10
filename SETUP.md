@@ -1,4 +1,4 @@
-# Forex Copier セットアップガイド
+# SANKEY Copier セットアップガイド
 
 ## 必要なもの
 
@@ -53,22 +53,22 @@ C:\Program Files\MetaTrader 5\MQL5\Include\
 ### 3. Expert Advisorのコンパイルとインストール
 
 #### Master EA (MT4)
-1. `mql/MT4/Master/ForexCopierMaster.mq4` を MT4 の `MQL4/Experts/` フォルダにコピー
+1. `mql/MT4/Master/SankeyCopierMaster.mq4` を MT4 の `MQL4/Experts/` フォルダにコピー
 2. MetaEditorで開いてコンパイル（F7キー）
 3. エラーがないことを確認
 
 #### Master EA (MT5)
-1. `mql/MT5/Master/ForexCopierMaster.mq5` を MT5 の `MQL5/Experts/` フォルダにコピー
+1. `mql/MT5/Master/SankeyCopierMaster.mq5` を MT5 の `MQL5/Experts/` フォルダにコピー
 2. MetaEditorで開いてコンパイル（F7キー）
 3. エラーがないことを確認
 
 #### Slave EA (MT4)
-1. `mql/MT4/Slave/ForexCopierSlave.mq4` を MT4 の `MQL4/Experts/` フォルダにコピー
+1. `mql/MT4/Slave/SankeyCopierSlave.mq4` を MT4 の `MQL4/Experts/` フォルダにコピー
 2. MetaEditorで開いてコンパイル（F7キー）
 3. エラーがないことを確認
 
 #### Slave EA (MT5)
-1. `mql/MT5/Slave/ForexCopierSlave.mq5` を MT5 の `MQL5/Experts/` フォルダにコピー
+1. `mql/MT5/Slave/SankeyCopierSlave.mq5` を MT5 の `MQL5/Experts/` フォルダにコピー
 2. MetaEditorで開いてコンパイル（F7キー）
 3. エラーがないことを確認
 
@@ -82,7 +82,7 @@ cargo run --release
 
 サーバーが起動すると以下のように表示されます：
 ```
-Starting Forex Copier Server...
+Starting SANKEY Copier Server...
 Database initialized
 Connection manager initialized
 ZeroMQ receiver started on tcp://*:5555
@@ -106,7 +106,7 @@ VITE v5.x.x  ready in XXX ms
 ### 5. Expert Advisorの起動
 
 #### Master EA の設定
-1. MT4/MT5のナビゲーターから `ForexCopierMaster` を選択
+1. MT4/MT5のナビゲーターから `SankeyCopierMaster` を選択
 2. チャートにドラッグ&ドロップ
 3. パラメーター設定：
    - **AccountID**: `master-001` （任意のユニークID）
@@ -117,7 +117,7 @@ VITE v5.x.x  ready in XXX ms
 4. OKをクリック
 
 #### Slave EA の設定
-1. MT4/MT5のナビゲーターから `ForexCopierSlave` を選択
+1. MT4/MT5のナビゲーターから `SankeyCopierSlave` を選択
 2. チャートにドラッグ&ドロップ
 3. パラメーター設定：
    - **AccountID**: `slave-001` （任意のユニークID）

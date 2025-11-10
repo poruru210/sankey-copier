@@ -2,7 +2,7 @@
 """
 MessagePack Integration Tests
 
-Tests the MessagePack serialization/deserialization format used by the Forex Copier.
+Tests the MessagePack serialization/deserialization format used by the SANKEY Copier.
 Ensures that messages can be properly exchanged between Master and Slave EAs.
 """
 

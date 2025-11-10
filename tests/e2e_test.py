@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-E2E Test for Forex Copier System
+E2E Test for SANKEY Copier System
 
 このテストは以下のシナリオを検証します:
 1. Master EAの登録
@@ -258,7 +258,7 @@ def run_e2e_test():
     """E2Eテストを実行"""
     print(f"{Colors.BOLD}{Colors.HEADER}")
     print("=" * 60)
-    print("  Forex Copier E2E Test")
+    print("  SANKEY Copier E2E Test")
     print("=" * 60)
     print(f"{Colors.ENDC}\n")
 

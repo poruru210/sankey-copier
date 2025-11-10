@@ -1,4 +1,4 @@
-# Forex Copier
+# SANKEY Copier
 
 高性能なMT4/MT5トレードコピーシステム。低遅延のローカル通信とスマートフォンからの制御が可能です。
 
@@ -89,7 +89,7 @@ pnpm start
 
 #### ZeroMQ DLLのビルドと配置
 
-このプロジェクトでは、RustでビルドしたカスタムZeroMQ DLL (`forex_copier_zmq.dll`) を使用します。
+このプロジェクトでは、RustでビルドしたカスタムZeroMQ DLL (`sankey_copier_zmq.dll`) を使用します。
 
 **DLLのビルド:**
 
@@ -103,8 +103,8 @@ rustup target add i686-pc-windows-msvc
 cargo build --release --target i686-pc-windows-msvc
 
 # ビルドされたDLLをLibrariesフォルダにコピー
-cp target/i686-pc-windows-msvc/release/forex_copier_zmq.dll ../mql/MT4/Libraries/
-cp target/i686-pc-windows-msvc/release/forex_copier_zmq.dll ../mql/MT5/Libraries/
+cp target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll ../mql/MT4/Libraries/
+cp target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll ../mql/MT5/Libraries/
 ```
 
 **64-bit版のMT5をお使いの場合:**
@@ -114,7 +114,7 @@ cp target/i686-pc-windows-msvc/release/forex_copier_zmq.dll ../mql/MT5/Libraries
 cargo build --release
 
 # ビルドされたDLLをLibrariesフォルダにコピー
-cp target/release/forex_copier_zmq.dll ../mql/MT5/Libraries/
+cp target/release/sankey_copier_zmq.dll ../mql/MT5/Libraries/
 ```
 
 **注意**: MT5のバージョン確認方法:
@@ -122,10 +122,10 @@ cp target/release/forex_copier_zmq.dll ../mql/MT5/Libraries/
 - または、MT5のインストールフォルダに `terminal64.exe` があれば64-bit版です
 
 **MT4への配置:**
-- `mql/MT4/Libraries/forex_copier_zmq.dll` を MT4の `MQL4/Libraries/` フォルダにコピー
+- `mql/MT4/Libraries/sankey_copier_zmq.dll` を MT4の `MQL4/Libraries/` フォルダにコピー
 
 **MT5への配置:**
-- `mql/MT5/Libraries/forex_copier_zmq.dll` を MT5の `MQL5/Libraries/` フォルダにコピー
+- `mql/MT5/Libraries/sankey_copier_zmq.dll` を MT5の `MQL5/Libraries/` フォルダにコピー
 
 **重要**: MT4/MT5の設定で DLL の使用を許可する必要があります:
 1. MT4/MT5の「ツール」→「オプション」を開く
@@ -136,19 +136,19 @@ cp target/release/forex_copier_zmq.dll ../mql/MT5/Libraries/
 
 **MT4の場合:**
 ```
-mql/MT4/Master/ForexCopierMaster.mq4
+mql/MT4/Master/SankeyCopierMaster.mq4
   → [MT4インストールフォルダ]/MQL4/Experts/
 
-mql/MT4/Slave/ForexCopierSlave.mq4
+mql/MT4/Slave/SankeyCopierSlave.mq4
   → [MT4インストールフォルダ]/MQL4/Experts/
 ```
 
 **MT5の場合:**
 ```
-mql/MT5/Master/ForexCopierMaster.mq5
+mql/MT5/Master/SankeyCopierMaster.mq5
   → [MT5インストールフォルダ]/MQL5/Experts/
 
-mql/MT5/Slave/ForexCopierSlave.mq5
+mql/MT5/Slave/SankeyCopierSlave.mq5
   → [MT5インストールフォルダ]/MQL5/Experts/
 ```
 
@@ -261,7 +261,7 @@ Rust側のコードで以下の戦略を実装済み:
 
 1. Rustサーバーが起動しているか確認
 2. MT4/MT5の「ツール」→「オプション」→「エキスパートアドバイザ」で「DLLの使用を許可する」がチェックされているか確認
-3. `forex_copier_zmq.dll` が正しい場所に配置されているか確認
+3. `sankey_copier_zmq.dll` が正しい場所に配置されているか確認
 4. MT4/MT5のエキスパートログで DLL ロードエラーが出ていないか確認
 
 ### トレードがコピーされない

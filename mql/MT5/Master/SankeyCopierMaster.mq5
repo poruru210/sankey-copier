@@ -1,16 +1,16 @@
 //+------------------------------------------------------------------+
-//|                                       ForexCopierMaster.mq5      |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                       SankeyCopierMaster.mq5      |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                                                                  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
 #property version   "1.00"
 
 //--- Include common headers
-#include <ForexCopier/ForexCopierCommon.mqh>
-#include <ForexCopier/ForexCopierMessages.mqh>
-#include <ForexCopier/ForexCopierTrade.mqh>
+#include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierMessages.mqh>
+#include <SankeyCopier/SankeyCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
@@ -38,7 +38,7 @@ datetime      g_last_heartbeat = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== ForexCopier Master EA (MT5) Starting ===");
+   Print("=== SankeyCopier Master EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
@@ -76,7 +76,7 @@ int OnInit()
    // Set up timer for heartbeat (1 second interval)
    EventSetTimer(1);
 
-   Print("=== ForexCopier Master EA (MT5) Initialized ===");
+   Print("=== SankeyCopier Master EA (MT5) Initialized ===");
    return INIT_SUCCEEDED;
 }
 
@@ -94,7 +94,7 @@ void OnDeinit(const int reason)
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
-   Print("=== ForexCopier Master EA (MT5) Stopped ===");
+   Print("=== SankeyCopier Master EA (MT5) Stopped ===");
 }
 
 //+------------------------------------------------------------------+

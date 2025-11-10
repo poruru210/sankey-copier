@@ -1,17 +1,17 @@
 //+------------------------------------------------------------------+
-//|                                       ForexCopierMaster.mq4      |
-//|                        Copyright 2025, Forex Copier Project      |
+//|                                       SankeyCopierMaster.mq4      |
+//|                        Copyright 2025, SANKEY Copier Project      |
 //|                                                                  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Forex Copier Project"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
 #property version   "1.00"
 #property strict
 
 //--- Include common headers
-#include <ForexCopier/ForexCopierCommon.mqh>
-#include <ForexCopier/ForexCopierMessages.mqh>
-#include <ForexCopier/ForexCopierTrade.mqh>
+#include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierMessages.mqh>
+#include <SankeyCopier/SankeyCopierTrade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
@@ -39,7 +39,7 @@ datetime    g_last_heartbeat = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== ForexCopier Master EA (MT4) Starting ===");
+   Print("=== SankeyCopier Master EA (MT4) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
@@ -83,7 +83,7 @@ int OnInit()
    EventSetTimer(1);
 
    g_initialized = true;
-   Print("=== ForexCopier Master EA (MT4) Initialized ===");
+   Print("=== SankeyCopier Master EA (MT4) Initialized ===");
 
    return INIT_SUCCEEDED;
 }
@@ -93,7 +93,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   Print("=== ForexCopier Master EA (MT4) Stopping ===");
+   Print("=== SankeyCopier Master EA (MT4) Stopping ===");
 
    // Send unregister message
    SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
@@ -104,7 +104,7 @@ void OnDeinit(const int reason)
    if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
    if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
 
-   Print("=== ForexCopier Master EA (MT4) Stopped ===");
+   Print("=== SankeyCopier Master EA (MT4) Stopped ===");
 }
 
 //+------------------------------------------------------------------+

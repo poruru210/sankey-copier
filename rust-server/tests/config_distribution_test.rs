@@ -1,5 +1,5 @@
-use forex_copier_server::db::Database;
-use forex_copier_server::models::{CopySettings, SymbolMapping, TradeFilters, ConfigMessage};
+use sankey_copier_server::db::Database;
+use sankey_copier_server::models::{CopySettings, SymbolMapping, TradeFilters, ConfigMessage};
 
 /// Integration test for CONFIG message distribution workflow
 ///

@@ -8,7 +8,7 @@ import '../globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'SANKEY Forex Copier',
+  title: 'SANKEY SANKEY Copier',
   description: 'MT4/MT5 Trade Copier with low latency and remote control',
 };
 
