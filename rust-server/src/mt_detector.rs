@@ -216,10 +216,136 @@ impl Default for MtDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_mt_detector_creation() {
         let detector = MtDetector::new();
         assert!(detector.system.processes().len() > 0);
+    }
+
+    #[test]
+    fn test_check_installed_components_none_installed() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        // Create MQL4 directory structure but no components
+        let mql4_path = mt_path.join("MQL4");
+        fs::create_dir_all(&mql4_path).unwrap();
+
+        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+
+        assert!(!result.dll);
+        assert!(!result.master_ea);
+        assert!(!result.slave_ea);
+        assert!(!result.includes);
+    }
+
+    #[test]
+    fn test_check_installed_components_dll_only() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        // Create MQL4 directory structure with DLL only
+        let libraries_path = mt_path.join("MQL4").join("Libraries");
+        fs::create_dir_all(&libraries_path).unwrap();
+
+        // Create dummy DLL file
+        let dll_path = libraries_path.join("sankey_copier_zmq.dll");
+        fs::write(&dll_path, b"dummy dll content").unwrap();
+
+        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+
+        assert!(result.dll);
+        assert!(!result.master_ea);
+        assert!(!result.slave_ea);
+        assert!(!result.includes);
+    }
+
+    #[test]
+    fn test_check_installed_components_all_installed_mt4() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        // Create MQL4 directory structure
+        let mql4_path = mt_path.join("MQL4");
+        let libraries_path = mql4_path.join("Libraries");
+        let experts_path = mql4_path.join("Experts");
+        let includes_path = mql4_path.join("Include").join("SankeyCopier");
+
+        fs::create_dir_all(&libraries_path).unwrap();
+        fs::create_dir_all(&experts_path).unwrap();
+        fs::create_dir_all(&includes_path).unwrap();
+
+        // Create all component files
+        fs::write(libraries_path.join("sankey_copier_zmq.dll"), b"dll").unwrap();
+        fs::write(experts_path.join("SankeyCopierMaster.ex4"), b"master").unwrap();
+        fs::write(experts_path.join("SankeyCopierSlave.ex4"), b"slave").unwrap();
+        fs::write(includes_path.join("SankeyCopierCommon.mqh"), b"common").unwrap();
+        fs::write(includes_path.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
+        fs::write(includes_path.join("SankeyCopierTrade.mqh"), b"trade").unwrap();
+
+        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+
+        assert!(result.dll);
+        assert!(result.master_ea);
+        assert!(result.slave_ea);
+        assert!(result.includes);
+    }
+
+    #[test]
+    fn test_check_installed_components_all_installed_mt5() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        // Create MQL5 directory structure
+        let mql5_path = mt_path.join("MQL5");
+        let libraries_path = mql5_path.join("Libraries");
+        let experts_path = mql5_path.join("Experts");
+        let includes_path = mql5_path.join("Include").join("SankeyCopier");
+
+        fs::create_dir_all(&libraries_path).unwrap();
+        fs::create_dir_all(&experts_path).unwrap();
+        fs::create_dir_all(&includes_path).unwrap();
+
+        // Create all component files for MT5 (using .ex5 extension)
+        fs::write(libraries_path.join("sankey_copier_zmq.dll"), b"dll").unwrap();
+        fs::write(experts_path.join("SankeyCopierMaster.ex5"), b"master").unwrap();
+        fs::write(experts_path.join("SankeyCopierSlave.ex5"), b"slave").unwrap();
+        fs::write(includes_path.join("SankeyCopierCommon.mqh"), b"common").unwrap();
+        fs::write(includes_path.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
+        fs::write(includes_path.join("SankeyCopierTrade.mqh"), b"trade").unwrap();
+
+        let result = detector.check_installed_components(mt_path, &MtType::MT5).unwrap();
+
+        assert!(result.dll);
+        assert!(result.master_ea);
+        assert!(result.slave_ea);
+        assert!(result.includes);
+    }
+
+    #[test]
+    fn test_check_installed_components_partial_includes() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        // Create MQL4 directory structure with incomplete includes
+        let includes_path = mt_path.join("MQL4").join("Include").join("SankeyCopier");
+        fs::create_dir_all(&includes_path).unwrap();
+
+        // Only create 2 out of 3 include files
+        fs::write(includes_path.join("SankeyCopierCommon.mqh"), b"common").unwrap();
+        fs::write(includes_path.join("SankeyCopierMessages.mqh"), b"messages").unwrap();
+        // Missing: SankeyCopierTrade.mqh
+
+        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+
+        assert!(!result.includes); // Should be false because not all files exist
     }
 }

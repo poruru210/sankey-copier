@@ -77,11 +77,17 @@ impl MtInstallation {
     /// インストールIDを生成
     pub fn generate_id(mt_type: &MtType, path: &str) -> String {
         // パスから識別可能なIDを生成
-        let path_hash = path
+        let mut path_hash = path
             .to_lowercase()
-            .replace(['\\', '/', ' ', ':'], "-")
-            .trim_matches('-')
-            .to_string();
+            .replace(['\\', '/', ' ', ':'], "-");
+
+        // 連続したハイフンを単一のハイフンに置き換え
+        while path_hash.contains("--") {
+            path_hash = path_hash.replace("--", "-");
+        }
+
+        // 前後のハイフンを削除
+        let path_hash = path_hash.trim_matches('-').to_string();
 
         let type_prefix = match mt_type {
             MtType::MT4 => "mt4",
