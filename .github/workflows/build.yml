@@ -689,7 +689,7 @@ jobs:
 
           # ドキュメント
           cp README.md release/sankey-copier/
-          cp SETUP_GUIDE.md release/sankey-copier/
+          cp -r docs release/sankey-copier/
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
