@@ -6,6 +6,7 @@ mod engine;
 mod log_buffer;
 mod message_handler;
 mod models;
+mod mt_detector;
 mod zeromq;
 
 use anyhow::Result;

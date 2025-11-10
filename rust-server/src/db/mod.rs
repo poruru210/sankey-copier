@@ -59,6 +59,22 @@ impl Database {
         .execute(&pool)
         .await?;
 
+        // MT4/MT5 manual installations table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS mt_manual_installations (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                executable TEXT NOT NULL,
+                mt_type TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
         Ok(Self { pool })
     }
 
@@ -376,6 +392,47 @@ impl Database {
 
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
         sqlx::query("DELETE FROM copy_settings WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // MT4/MT5 manual installation methods
+
+    pub async fn save_manual_installation(
+        &self,
+        id: &str,
+        path: &str,
+        executable: &str,
+        mt_type: &str,
+        platform: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO mt_manual_installations (id, path, executable, mt_type, platform)
+             VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(id)
+        .bind(path)
+        .bind(executable)
+        .bind(mt_type)
+        .bind(platform)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_manual_installations(&self) -> Result<Vec<(String, String, String, String, String)>> {
+        let rows = sqlx::query_as::<_, (String, String, String, String, String)>(
+            "SELECT id, path, executable, mt_type, platform FROM mt_manual_installations"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn delete_manual_installation(&self, id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM mt_manual_installations WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
