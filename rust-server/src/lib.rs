@@ -10,4 +10,5 @@ pub mod log_buffer;
 pub mod message_handler;
 pub mod models;
 pub mod mt_detector;
+pub mod mt_installer;
 pub mod zeromq;
