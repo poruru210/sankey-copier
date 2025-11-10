@@ -51,6 +51,18 @@ git tag v1.0.0        # Correct
 git tag 1.0.0         # Won't trigger workflow
 ```
 
+### Version Management
+
+**GitHub Actions automatically updates versions:**
+- All `Cargo.toml` files (rust-server, mql-zmq-dll, sankey-copier-tray)
+- `web-ui/package.json`
+- Inno Setup installer configuration
+
+**Repository versions:**
+- Default version in repository: `1.0.0`
+- During build, GitHub Actions replaces with actual version from git tag
+- Tray app "About" dialog shows version from CARGO_PKG_VERSION (dynamically updated)
+
 ## Building the Installer
 
 ### Option 1: Using GitHub Actions (Recommended)

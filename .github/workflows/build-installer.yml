@@ -48,6 +48,46 @@ jobs:
         Remove-Item "nssm.zip"
         Remove-Item "nssm-2.24" -Recurse
 
+    - name: Get version
+      id: version
+      run: |
+        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
+          $version = $matches[1]
+        } elseif ($env:INPUT_VERSION) {
+          $version = $env:INPUT_VERSION
+        } else {
+          $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        Write-Host "Version: $version" -ForegroundColor Cyan
+      env:
+        INPUT_VERSION: ${{ github.event.inputs.version }}
+
+    - name: Update version in project files
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        Write-Host "Updating version to: $version" -ForegroundColor Cyan
+
+        # Update Cargo.toml files
+        $cargoFiles = @(
+          "rust-server/Cargo.toml",
+          "mql-zmq-dll/Cargo.toml",
+          "sankey-copier-tray/Cargo.toml"
+        )
+
+        foreach ($file in $cargoFiles) {
+          $content = Get-Content $file -Raw
+          $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+          Set-Content $file -Value $content -NoNewline
+          Write-Host "✓ Updated $file" -ForegroundColor Green
+        }
+
+        # Update package.json
+        $packageJson = Get-Content "web-ui/package.json" -Raw | ConvertFrom-Json
+        $packageJson.version = $version
+        $packageJson | ConvertTo-Json -Depth 100 | Set-Content "web-ui/package.json"
+        Write-Host "✓ Updated web-ui/package.json" -ForegroundColor Green
+
     - name: Cache Rust dependencies
       uses: actions/cache@v4
       with:
@@ -88,21 +128,6 @@ jobs:
       run: npm run build
       env:
         NEXT_BUILD_STANDALONE: 'true'
-
-    - name: Get version
-      id: version
-      run: |
-        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
-          $version = $matches[1]
-        } elseif ($env:INPUT_VERSION) {
-          $version = $env:INPUT_VERSION
-        } else {
-          $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        }
-        echo "version=$version" >> $env:GITHUB_OUTPUT
-        echo "Version: $version"
-      env:
-        INPUT_VERSION: ${{ github.event.inputs.version }}
 
     - name: Verify build artifacts
       run: |
