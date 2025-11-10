@@ -656,119 +656,18 @@ npm start
 
 ## トラブルシューティング
 
-### 1. EAが接続できない
+運用中に発生する可能性のある問題と解決方法については、専用のトラブルシューティングガイドを参照してください:
 
-**症状**:
+**📖 [トラブルシューティングガイド](./troubleshooting.md)**
 
-```
-SankeyCopierMaster: Failed to connect to tcp://localhost:5555
-```
-
-**原因と対処**:
-
-| 原因 | 対処方法 |
-|------|----------|
-| **サーバーが起動していない** | サーバーを起動する |
-| **ポートが塞がれている** | `netstat -an | grep 5555` で確認 |
-| **ファイアウォールでブロック** | ポート5555/5556/5557を開放 |
-| **DLLが読み込めない** | DLLが正しい場所にあるか確認 |
-
----
-
-### 2. DLL読み込みエラー
-
-**症状**:
-
-```
-cannot load 'sankey_copier_zmq.dll'
-```
-
-**原因と対処**:
-
-| 原因 | 対処方法 |
-|------|----------|
-| **DLLが存在しない** | DLLを正しいフォルダに配置 |
-| **32/64bitミスマッチ** | MT4=32bit, MT5=32/64bit確認 |
-| **DLL使用許可がない** | 「ツール」→「オプション」で許可 |
-| **依存DLLがない** | Visual C++ Redistributableインストール |
-
----
-
-### 3. トレードがコピーされない
-
-**症状**:
-
-Slave EAがトレードを実行しない
-
-**チェックリスト**:
-
-1. ✅ **Web UIで設定が有効か確認**
-   ```
-   enabled: true
-   ```
-
-2. ✅ **Master/Slave のアカウントIDが一致しているか**
-   ```
-   Master: FXGT-12345
-   Slave: XM-67890
-   Settings: master_account=FXGT-12345, slave_account=XM-67890
-   ```
-
-3. ✅ **Slave EAで設定を受信しているか**
-   ```
-   ログに "CONFIG received" が表示されているか確認
-   ```
-
-4. ✅ **フィルター設定で除外されていないか**
-   ```
-   allowed_symbols: ["EURUSD"] の場合、GBPUSDはコピーされない
-   ```
-
-5. ✅ **Slave EAのパラメータ確認**
-   ```
-   AllowNewOrders: true
-   AllowCloseOrders: true
-   ```
-
----
-
-### 4. Web UIが表示されない
-
-**症状**:
-
-ブラウザで `http://localhost:5173` にアクセスできない
-
-**原因と対処**:
-
-| 原因 | 対処方法 |
-|------|----------|
-| **Next.jsが起動していない** | `pnpm dev` または `pnpm start` を実行 |
-| **ポート5173が使用中** | `PORT=5174 pnpm dev` で別ポート使用 |
-| **ファイアウォール** | ポート5173を開放 |
-
----
-
-### 5. データベースエラー
-
-**症状**:
-
-```
-[ERROR] Failed to connect to database: ...
-```
-
-**対処方法**:
-
-```bash
-# データベースファイルの権限確認
-ls -l sankey_copier.db
-
-# 権限修正
-chmod 644 sankey_copier.db
-
-# データベース再作成（バックアップ後）
-rm sankey_copier.db
-cargo run --release
-```
+主なトピック:
+- EAの接続問題
+- DLL読み込みエラー
+- トレードがコピーされない
+- Web UIの問題
+- データベースエラー
+- パフォーマンスの問題
+- よくある質問（FAQ）
 
 ---
 
