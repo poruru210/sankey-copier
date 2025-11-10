@@ -97,6 +97,7 @@ async fn main() -> Result<()> {
     }
 
     // Spawn ZeroMQ message processing task
+    tracing::info!("Creating MessageHandler...");
     {
         let handler = MessageHandler::new(
             connection_manager.clone(),
@@ -107,15 +108,18 @@ async fn main() -> Result<()> {
             db.clone(),
             zmq_config_sender.clone(),
         );
+        tracing::info!("MessageHandler created, spawning message processing task...");
 
         tokio::spawn(async move {
             while let Some(msg) = zmq_rx.recv().await {
                 handler.handle_message(msg).await;
             }
         });
+        tracing::info!("Message processing task spawned");
     }
 
     // Spawn timeout checker task
+    tracing::info!("Spawning timeout checker task...");
     {
         let conn_mgr = connection_manager.clone();
         tokio::spawn(async move {
@@ -125,9 +129,11 @@ async fn main() -> Result<()> {
                 conn_mgr.check_timeouts().await;
             }
         });
+        tracing::info!("Timeout checker task spawned");
     }
 
     // Create API state
+    tracing::info!("Creating API state...");
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -136,13 +142,36 @@ async fn main() -> Result<()> {
         config_sender: zmq_config_sender.clone(),
         log_buffer: log_buffer.clone(),
     };
+    tracing::info!("API state created");
 
     // Build API router
+    tracing::info!("Building API router...");
     let app = create_router(app_state);
+    tracing::info!("API router built");
 
     // Start HTTP server
+    tracing::info!("Getting bind address...");
     let bind_address = config.server_address();
-    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
+    tracing::info!("Bind address: {}, attempting to bind with 5 second timeout...", bind_address);
+
+    let listener = match tokio::time::timeout(
+        Duration::from_secs(5),
+        tokio::net::TcpListener::bind(&bind_address)
+    ).await {
+        Ok(Ok(listener)) => {
+            tracing::info!("Successfully bound to {}", bind_address);
+            listener
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Failed to bind: {}", e);
+            return Err(e.into());
+        }
+        Err(_) => {
+            tracing::error!("Bind operation timed out after 5 seconds");
+            anyhow::bail!("Failed to bind to {}: timeout", bind_address);
+        }
+    };
+
     tracing::info!("HTTP server listening on http://{}", bind_address);
 
     axum::serve(listener, app).await?;
