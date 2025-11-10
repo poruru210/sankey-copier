@@ -95,41 +95,6 @@ impl MtInstallation {
 
         format!("{}-{}", type_prefix, path_hash)
     }
-
-    /// ブローカー名をパスから抽出
-    pub fn extract_broker_name(path: &str) -> String {
-        // パスからブローカー名を推測
-        // 例: "D:\Trading\IC Markets MT4" -> "IC Markets"
-        // 例: "C:\Program Files\XM MetaTrader 5" -> "XM"
-
-        let path_parts: Vec<&str> = path.split(['\\', '/']).collect();
-
-        for part in path_parts.iter().rev() {
-            if part.to_lowercase().contains("metatrader")
-                || part.to_lowercase().contains("mt4")
-                || part.to_lowercase().contains("mt5")
-            {
-                // ブローカー名を含む可能性が高い部分
-                let cleaned = part
-                    .replace("MetaTrader 4", "")
-                    .replace("MetaTrader 5", "")
-                    .replace("MT4", "")
-                    .replace("MT5", "")
-                    .trim()
-                    .to_string();
-
-                if !cleaned.is_empty() {
-                    return cleaned;
-                }
-            }
-        }
-
-        // ブローカー名が推測できない場合は最後のフォルダ名を使用
-        path_parts
-            .last()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "Unknown".to_string())
-    }
 }
 
 #[cfg(test)]
@@ -143,21 +108,5 @@ mod tests {
 
         let id = MtInstallation::generate_id(&MtType::MT5, "C:\\Program Files\\XM MetaTrader 5");
         assert_eq!(id, "mt5-c-program-files-xm-metatrader-5");
-    }
-
-    #[test]
-    fn test_extract_broker_name() {
-        assert_eq!(
-            MtInstallation::extract_broker_name("D:\\Trading\\IC Markets MT4"),
-            "IC Markets"
-        );
-        assert_eq!(
-            MtInstallation::extract_broker_name("C:\\Program Files\\XM MetaTrader 5"),
-            "XM"
-        );
-        assert_eq!(
-            MtInstallation::extract_broker_name("C:\\Program Files (x86)\\FXGT MT5"),
-            "FXGT"
-        );
     }
 }
