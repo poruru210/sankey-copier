@@ -36,7 +36,7 @@ fn main() {
 
         // Set string version information (StringFileInfo)
         // These are shown in Windows Explorer properties
-        res.set("ProductVersion", &build_info);           // Detailed version with commit info
+        res.set("ProductVersion", &package_version);      // Clean version from Git tag
         res.set("FileVersion", &file_version);            // Windows 4-component version
         res.set("ProductName", "SANKEY Copier Tray");
         res.set("FileDescription", "SANKEY Copier System Tray Application");

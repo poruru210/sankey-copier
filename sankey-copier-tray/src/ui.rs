@@ -72,8 +72,8 @@ pub fn show_info(message: &str) {
 
 /// Show about dialog
 pub fn show_about() {
-    // Use BUILD_INFO which matches the ProductVersion in Windows properties
-    const VERSION: &str = env!("BUILD_INFO");
+    // Use PACKAGE_VERSION which matches the ProductVersion in Windows properties
+    const VERSION: &str = env!("PACKAGE_VERSION");
 
     let message = format!(
         "SANKEY Copier Tray Application\n\n\
