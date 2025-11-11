@@ -294,7 +294,7 @@ begin
 
     if FileExists(ConfigFile) then
     begin
-      LoadStringsFromFile(ConfigContent, ConfigFile);
+      LoadStringsFromFile(ConfigFile, ConfigContent);
       InServerSection := False;
       InWebUISection := False;
       InCorsSection := False;
