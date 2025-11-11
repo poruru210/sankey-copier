@@ -985,16 +985,24 @@ jobs:
             exit 1
           }
 
-          # Run Inno Setup compiler and capture output
+          # Save output to log file for complete capture
+          $logFile = "installer/inno-setup.log"
           Write-Host "Running Inno Setup compiler..." -ForegroundColor Cyan
-          $output = & iscc /DMyAppVersion=$version installer/setup.iss 2>&1
+
+          # Run compiler and capture both stdout and stderr
+          & iscc /DMyAppVersion=$version installer/setup.iss 2>&1 | Tee-Object -FilePath $logFile
           $exitCode = $LASTEXITCODE
 
-          # Display output
-          Write-Host $output
-
           if ($exitCode -ne 0) {
+            Write-Host ""
             Write-Host "❌ Inno Setup compilation failed with exit code: $exitCode" -ForegroundColor Red
+            Write-Host "Full log saved to: $logFile" -ForegroundColor Yellow
+
+            # Display last 100 lines of log
+            Write-Host ""
+            Write-Host "=== Last 100 lines of compilation log ===" -ForegroundColor Yellow
+            Get-Content $logFile -Tail 100
+
             exit $exitCode
           }
 
