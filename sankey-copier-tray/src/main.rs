@@ -4,25 +4,114 @@
 #![windows_subsystem = "windows"] // Hide console window
 
 use anyhow::{Context, Result};
+use serde::Deserialize;
+use std::fs;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem, MenuId, PredefinedMenuItem},
+    menu::{Menu, MenuEvent, MenuItem, MenuId, PredefinedMenuItem, Submenu},
     Icon, TrayIconBuilder,
 };
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
+use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+use windows::Win32::Foundation::HWND;
+use windows::core::{PCWSTR, w};
 
 const SERVER_SERVICE: &str = "SankeyCopierServer";
 const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
-const WEB_URL: &str = "http://localhost:3000";
+const DEFAULT_PORT: u16 = 8080;
+const NSSM_PATH: &str = "C:\\Program Files\\SANKEY Copier\\nssm.exe";
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    #[serde(default)]
+    server: ServerConfig,
+    #[serde(default)]
+    webui: WebUIConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct ServerConfig {
+    #[serde(default = "default_server_port")]
+    port: u16,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self { port: 8080 }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WebUIConfig {
+    #[serde(default = "default_webui_port")]
+    port: u16,
+}
+
+impl Default for WebUIConfig {
+    fn default() -> Self {
+        Self { port: 3000 }
+    }
+}
+
+// Custom event for app control
+#[derive(Debug, Clone)]
+enum AppEvent {
+    Exit,
+}
 
 // Global menu ID map
 static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
     once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
+// Global web URL
+static WEB_URL: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
+    let port = load_port_from_config().unwrap_or(8080);  // Default to WebUI port (8080)
+    // Use 127.0.0.1 instead of localhost to force IPv4
+    format!("http://127.0.0.1:{}", port)
+});
+
+fn default_server_port() -> u16 {
+    8080
+}
+
+fn default_webui_port() -> u16 {
+    3000
+}
+
+/// Load Web UI port number from config.toml
+fn load_port_from_config() -> Option<u16> {
+    // Try to find config.toml in standard locations
+    let config_paths = [
+        "config.toml",
+        "../config.toml",
+        "C:\\Program Files\\SANKEY Copier\\config.toml",
+    ];
+
+    for path in &config_paths {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(config) = toml::from_str::<Config>(&content) {
+                // Return webui.port, not server.port
+                return Some(config.webui.port);
+            }
+        }
+    }
+
+    None
+}
+
 fn main() -> Result<()> {
+    // Create event loop for Windows message pump
+    let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event()
+        .build()
+        .expect("Failed to create event loop");
+
+    let event_loop_proxy = event_loop.create_proxy();
+
     // Create tray icon
     let _tray_icon = create_tray_icon()?;
 
@@ -34,13 +123,26 @@ fn main() -> Result<()> {
         }
     });
 
-    // Event loop
-    loop {
-        if let Ok(event) = MenuEvent::receiver().recv() {
-            handle_menu_event(&event.id);
+    // Run event loop
+    event_loop.run(move |event, elwt| {
+        elwt.set_control_flow(ControlFlow::Poll);
+
+        // Handle user events (like exit)
+        match event {
+            winit::event::Event::UserEvent(AppEvent::Exit) => {
+                elwt.exit();
+                return;
+            }
+            _ => {}
         }
-        thread::sleep(Duration::from_millis(100));
-    }
+
+        // Check for menu events
+        if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
+            handle_menu_event(&menu_event.id, &event_loop_proxy);
+        }
+    }).expect("Event loop error");
+
+    Ok(())
 }
 
 /// Create system tray icon with menu
@@ -56,6 +158,7 @@ fn create_tray_icon() -> Result<tray_icon::TrayIcon> {
         .with_menu(Box::new(menu))
         .with_tooltip("SANKEY Copier")
         .with_icon(icon)
+        .with_menu_on_left_click(true)  // Show menu on left click as well as right click
         .build()?;
 
     Ok(tray_icon)
@@ -73,26 +176,43 @@ fn create_menu() -> Result<Menu> {
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
-    // Open Web Interface
-    let open_item = MenuItem::new("Open Web Interface", true, None);
-    ids.insert(open_item.id().clone(), "open".to_string());
-    menu.append(&open_item)?;
+    // UI Submenu (includes Open Web Interface and service controls for UI)
+    let ui_open_item = MenuItem::new("Open", true, None);
+    ids.insert(ui_open_item.id().clone(), "ui_open".to_string());
 
-    // Separator
-    menu.append(&PredefinedMenuItem::separator())?;
+    let ui_start_item = MenuItem::new("Start", true, None);
+    ids.insert(ui_start_item.id().clone(), "ui_start".to_string());
 
-    // Service controls
-    let start_item = MenuItem::new("Start Services", true, None);
-    ids.insert(start_item.id().clone(), "start".to_string());
-    menu.append(&start_item)?;
+    let ui_stop_item = MenuItem::new("Stop", true, None);
+    ids.insert(ui_stop_item.id().clone(), "ui_stop".to_string());
 
-    let stop_item = MenuItem::new("Stop Services", true, None);
-    ids.insert(stop_item.id().clone(), "stop".to_string());
-    menu.append(&stop_item)?;
+    let ui_restart_item = MenuItem::new("Restart", true, None);
+    ids.insert(ui_restart_item.id().clone(), "ui_restart".to_string());
 
-    let restart_item = MenuItem::new("Restart Services", true, None);
-    ids.insert(restart_item.id().clone(), "restart".to_string());
-    menu.append(&restart_item)?;
+    let ui_submenu = Submenu::with_items("UI", true, &[
+        &ui_open_item,
+        &ui_start_item,
+        &ui_stop_item,
+        &ui_restart_item,
+    ])?;
+    menu.append(&ui_submenu)?;
+
+    // Service Submenu
+    let service_start_item = MenuItem::new("Start", true, None);
+    ids.insert(service_start_item.id().clone(), "service_start".to_string());
+
+    let service_stop_item = MenuItem::new("Stop", true, None);
+    ids.insert(service_stop_item.id().clone(), "service_stop".to_string());
+
+    let service_restart_item = MenuItem::new("Restart", true, None);
+    ids.insert(service_restart_item.id().clone(), "service_restart".to_string());
+
+    let service_submenu = Submenu::with_items("Service", true, &[
+        &service_start_item,
+        &service_stop_item,
+        &service_restart_item,
+    ])?;
+    menu.append(&service_submenu)?;
 
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
@@ -110,8 +230,8 @@ fn create_menu() -> Result<Menu> {
     ids.insert(about_item.id().clone(), "about".to_string());
     menu.append(&about_item)?;
 
-    // Exit
-    let quit_item = PredefinedMenuItem::quit(None);
+    // Exit - use MenuItem instead of PredefinedMenuItem for better control
+    let quit_item = MenuItem::new("Exit", true, None);
     ids.insert(quit_item.id().clone(), "quit".to_string());
     menu.append(&quit_item)?;
 
@@ -119,42 +239,64 @@ fn create_menu() -> Result<Menu> {
 }
 
 /// Handle menu events
-fn handle_menu_event(id: &MenuId) {
+fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent>) {
     let ids = MENU_IDS.lock().unwrap();
     let action = ids.get(id).map(|s| s.as_str()).unwrap_or("");
 
     match action {
-        // Open web interface
-        "open" => {
+        // UI submenu actions
+        "ui_open" => {
             if let Err(e) = open_web_interface() {
                 show_error(&format!("Failed to open web interface: {}", e));
             }
         }
 
-        // Start services
-        "start" => {
-            if let Err(e) = start_services() {
-                show_error(&format!("Failed to start services: {}", e));
+        "ui_start" => {
+            if let Err(e) = start_webui_service() {
+                show_error(&format!("Failed to start Web UI: {}", e));
             } else {
-                show_info("Services started successfully");
+                show_info("Web UI started successfully");
             }
         }
 
-        // Stop services
-        "stop" => {
-            if let Err(e) = stop_services() {
-                show_error(&format!("Failed to stop services: {}", e));
+        "ui_stop" => {
+            if let Err(e) = stop_webui_service() {
+                show_error(&format!("Failed to stop Web UI: {}", e));
             } else {
-                show_info("Services stopped successfully");
+                show_info("Web UI stopped successfully");
             }
         }
 
-        // Restart services
-        "restart" => {
-            if let Err(e) = restart_services() {
-                show_error(&format!("Failed to restart services: {}", e));
+        "ui_restart" => {
+            if let Err(e) = restart_webui_service() {
+                show_error(&format!("Failed to restart Web UI: {}", e));
             } else {
-                show_info("Services restarted successfully");
+                show_info("Web UI restarted successfully");
+            }
+        }
+
+        // Service submenu actions
+        "service_start" => {
+            if let Err(e) = start_server_service() {
+                show_error(&format!("Failed to start Server: {}", e));
+            } else {
+                show_info("Server started successfully");
+            }
+        }
+
+        "service_stop" => {
+            if let Err(e) = stop_server_service() {
+                show_error(&format!("Failed to stop Server: {}", e));
+            } else {
+                show_info("Server stopped successfully");
+            }
+        }
+
+        "service_restart" => {
+            if let Err(e) = restart_server_service() {
+                show_error(&format!("Failed to restart Server: {}", e));
+            } else {
+                show_info("Server restarted successfully");
             }
         }
 
@@ -173,7 +315,7 @@ fn handle_menu_event(id: &MenuId) {
 
         // Quit
         "quit" => {
-            std::process::exit(0);
+            let _ = event_loop_proxy.send_event(AppEvent::Exit);
         }
 
         _ => {}
@@ -182,7 +324,20 @@ fn handle_menu_event(id: &MenuId) {
 
 /// Load application icon
 fn load_icon() -> Result<Icon> {
-    // Try to load icon from file, fall back to embedded icon
+    // Try to load embedded icon first
+    const ICON_DATA: &[u8] = include_bytes!("../icon.ico");
+
+    // Parse ICO file to get the best quality image
+    if let Ok(image) = image::load_from_memory(ICON_DATA) {
+        let rgba = image.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let icon_data = rgba.into_raw();
+
+        return Icon::from_rgba(icon_data, width, height)
+            .context("Failed to create icon from embedded image");
+    }
+
+    // Fall back to loading from file system
     let icon_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|p| p.join("icon.ico")));
@@ -195,12 +350,12 @@ fn load_icon() -> Result<Icon> {
                 let icon_data = rgba.into_raw();
 
                 return Icon::from_rgba(icon_data, width, height)
-                    .context("Failed to create icon from image");
+                    .context("Failed to create icon from file");
             }
         }
     }
 
-    // Fall back to simple colored icon
+    // Final fallback to simple colored icon
     create_default_icon()
 }
 
@@ -226,52 +381,121 @@ fn create_default_icon() -> Result<Icon> {
 
 /// Open web interface in default browser
 fn open_web_interface() -> Result<()> {
-    webbrowser::open(WEB_URL).context("Failed to open browser")
+    webbrowser::open(&*WEB_URL).context("Failed to open browser")
 }
 
-/// Start Windows services
-fn start_services() -> Result<()> {
-    start_service(SERVER_SERVICE)?;
-    thread::sleep(Duration::from_secs(2)); // Wait for server to start
-    start_service(WEBUI_SERVICE)?;
-    Ok(())
+/// Start Web UI service
+fn start_webui_service() -> Result<()> {
+    run_elevated_nssm_command("start", &[WEBUI_SERVICE])
 }
 
-/// Stop Windows services
-fn stop_services() -> Result<()> {
-    stop_service(WEBUI_SERVICE)?;
-    thread::sleep(Duration::from_secs(1));
-    stop_service(SERVER_SERVICE)?;
-    Ok(())
+/// Stop Web UI service
+fn stop_webui_service() -> Result<()> {
+    run_elevated_nssm_command("stop", &[WEBUI_SERVICE])
 }
 
-/// Restart Windows services
-fn restart_services() -> Result<()> {
-    stop_services()?;
-    thread::sleep(Duration::from_secs(2));
-    start_services()?;
-    Ok(())
+/// Restart Web UI service
+fn restart_webui_service() -> Result<()> {
+    run_elevated_nssm_command("restart", &[WEBUI_SERVICE])
 }
 
-/// Start a single Windows service
-fn start_service(service_name: &str) -> Result<()> {
-    let output = Command::new("sc")
-        .args(&["start", service_name])
-        .output()
-        .context("Failed to execute sc command")?;
+/// Start Server service
+fn start_server_service() -> Result<()> {
+    run_elevated_nssm_command("start", &[SERVER_SERVICE])
+}
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Service start failed: {}", stderr);
+/// Stop Server service
+fn stop_server_service() -> Result<()> {
+    run_elevated_nssm_command("stop", &[SERVER_SERVICE])
+}
+
+/// Restart Server service
+fn restart_server_service() -> Result<()> {
+    run_elevated_nssm_command("restart", &[SERVER_SERVICE])
+}
+
+/// Run NSSM command with UAC elevation
+fn run_elevated_nssm_command(action: &str, services: &[&str]) -> Result<()> {
+    // Check if NSSM exists
+    if !std::path::Path::new(NSSM_PATH).exists() {
+        anyhow::bail!("NSSM not found at: {}", NSSM_PATH);
     }
 
+    // Build parameters for NSSM
+    // For multiple services, we need to call nssm multiple times
+    let mut commands = Vec::new();
+    for service in services {
+        commands.push(format!("\"{}\" {} {}", NSSM_PATH, action, service));
+    }
+    let command_string = commands.join(" && timeout /t 1 /nobreak >nul && ");
+
+    // Execute via elevated cmd.exe (NSSM requires this for service control)
+    run_elevated_batch_command(&command_string)
+}
+
+/// Run batch command with UAC elevation
+fn run_elevated_batch_command(commands: &str) -> Result<()> {
+    // Create a temporary batch file to run the commands
+    let temp_dir = std::env::temp_dir();
+    let batch_file = temp_dir.join(format!("sankey_copier_{}.bat",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()));
+
+    // Write commands to batch file
+    fs::write(&batch_file, format!("@echo off\r\n{}\r\n", commands))
+        .context("Failed to create temporary batch file")?;
+
+    // Execute the batch file with elevation
+    unsafe {
+        let operation_w = w!("runas"); // Request elevation
+        let file_w = w!("cmd.exe");
+        let params = format!("/c \"{}\"", batch_file.display());
+        let params_utf16: Vec<u16> = params.encode_utf16().chain(std::iter::once(0)).collect();
+        let params_w = PCWSTR(params_utf16.as_ptr());
+
+        let result = ShellExecuteW(
+            HWND(std::ptr::null_mut()),
+            operation_w,
+            file_w,
+            params_w,
+            PCWSTR::null(),
+            SW_HIDE,
+        );
+
+        // ShellExecute returns a value > 32 on success
+        if result.0 as i32 <= 32 {
+            let _ = fs::remove_file(&batch_file);
+            anyhow::bail!("Failed to elevate command");
+        }
+    }
+
+    // Wait for the command to execute
+    thread::sleep(Duration::from_millis(2000));
+
+    // Clean up temporary batch file
+    let _ = fs::remove_file(&batch_file);
+
     Ok(())
 }
 
-/// Stop a single Windows service
+/// Old single-service functions (now unused)
+#[allow(dead_code)]
+fn start_service(service_name: &str) -> Result<()> {
+    run_elevated_batch_command(&format!("sc start {}", service_name))
+}
+
+#[allow(dead_code)]
 fn stop_service(service_name: &str) -> Result<()> {
+    run_elevated_batch_command(&format!("sc stop {}", service_name))
+}
+
+/// Old implementation for reference (now unused)
+#[allow(dead_code)]
+fn run_sc_command_direct(operation: &str, service_name: &str) -> Result<()> {
     let output = Command::new("sc")
-        .args(&["stop", service_name])
+        .args(&[operation, service_name])
         .output()
         .context("Failed to execute sc command")?;
 
@@ -297,8 +521,34 @@ fn get_service_status() -> Result<String> {
     ))
 }
 
-/// Query status of a single service
+/// Query status of a single service using NSSM
 fn query_service_status(service_name: &str) -> Result<String> {
+    // Try NSSM first if available
+    if std::path::Path::new(NSSM_PATH).exists() {
+        let output = Command::new(NSSM_PATH)
+            .args(&["status", service_name])
+            .output()
+            .context("Failed to execute nssm command")?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let status = stdout.trim();
+
+            // NSSM returns: SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_START_PENDING, etc.
+            return Ok(match status {
+                "SERVICE_RUNNING" => "Running",
+                "SERVICE_STOPPED" => "Stopped",
+                "SERVICE_START_PENDING" => "Starting...",
+                "SERVICE_STOP_PENDING" => "Stopping...",
+                "SERVICE_PAUSE_PENDING" => "Pausing...",
+                "SERVICE_CONTINUE_PENDING" => "Resuming...",
+                "SERVICE_PAUSED" => "Paused",
+                _ => status,
+            }.to_string());
+        }
+    }
+
+    // Fallback to sc.exe if NSSM is not available
     let output = Command::new("sc")
         .args(&["query", service_name])
         .output()

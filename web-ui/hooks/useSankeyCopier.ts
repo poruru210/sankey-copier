@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
+import { useApiClient, useSiteContext } from '@/lib/contexts/site-context';
 
 export function useSankeyCopier() {
+  const apiClient = useApiClient();
+  const { selectedSite } = useSiteContext();
   const [settings, setSettings] = useState<CopySettings[]>([]);
   const [connections, setConnections] = useState<EaConnection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -11,11 +14,7 @@ export function useSankeyCopier() {
   // Fetch connections
   const fetchConnections = useCallback(async () => {
     try {
-      const response = await fetch('/api/connections');
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
+      const data = await apiClient.get<{ success: boolean; data: EaConnection[] }>('/connections');
       if (data.success) {
         setConnections(data.data || []);
       }
@@ -26,17 +25,13 @@ export function useSankeyCopier() {
         console.error('Failed to fetch connections:', err);
       }
     }
-  }, []);
+  }, [apiClient]);
 
   // Fetch settings
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/settings');
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
+      const data = await apiClient.get<{ success: boolean; data: CopySettings[]; error?: string }>('/settings');
       if (data.success) {
         setSettings(data.data || []);
         setError(null);
@@ -49,7 +44,7 @@ export function useSankeyCopier() {
       } else if (err instanceof Error && err.message.includes('JSON')) {
         setError('Invalid server response. Rust Server may not be running correctly.');
       } else if (err instanceof Error && (err.message.includes('500') || err.message.includes('502') || err.message.includes('503'))) {
-        setError('Cannot connect to server. Please check if Rust Server is running. (Proxy error)');
+        setError('Cannot connect to server. Please check if Rust Server is running.');
       } else {
         setError(err instanceof Error ? `Communication error: ${err.message}` : 'Unknown error');
       }
@@ -57,11 +52,13 @@ export function useSankeyCopier() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiClient]);
 
   // WebSocket connection
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.host}/ws`);
+    // Extract host from siteUrl (e.g., "http://localhost:3000" -> "localhost:3000")
+    const siteHost = selectedSite.siteUrl.replace(/^https?:\/\//, '');
+    const ws = new WebSocket(`ws://${siteHost}/ws`);
     let isCleanup = false;
 
     ws.onopen = () => {
@@ -99,7 +96,7 @@ export function useSankeyCopier() {
         ws.close();
       }
     };
-  }, [fetchSettings]);
+  }, [selectedSite.siteUrl, fetchSettings]);
 
   // Initial load and periodic connection refresh
   useEffect(() => {
@@ -112,12 +109,7 @@ export function useSankeyCopier() {
   // Toggle enabled status
   const toggleEnabled = async (id: number, currentStatus: boolean) => {
     try {
-      const response = await fetch(`/api/settings/${id}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !currentStatus }),
-      });
-      const data = await response.json();
+      const data = await apiClient.post<{ success: boolean; error?: string }>(`/settings/${id}/toggle`, { enabled: !currentStatus });
       if (data.success) {
         fetchSettings();
       } else {
@@ -131,12 +123,7 @@ export function useSankeyCopier() {
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
     try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const data = await response.json();
+      const data = await apiClient.post<{ success: boolean; error?: string }>('/settings', formData);
       if (data.success) {
         fetchSettings();
       } else {
@@ -150,12 +137,7 @@ export function useSankeyCopier() {
   // Update setting
   const updateSetting = async (id: number, updatedData: CopySettings) => {
     try {
-      const response = await fetch(`/api/settings/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedData),
-      });
-      const data = await response.json();
+      const data = await apiClient.put<{ success: boolean; error?: string }>(`/settings/${id}`, updatedData);
       if (data.success) {
         fetchSettings();
       } else {
@@ -172,10 +154,7 @@ export function useSankeyCopier() {
       return;
     }
     try {
-      const response = await fetch(`/api/settings/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
+      const data = await apiClient.delete<{ success: boolean; error?: string }>(`/settings/${id}`);
       if (data.success) {
         fetchSettings();
       } else {

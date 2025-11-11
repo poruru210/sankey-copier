@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import type { MtInstallation, MtInstallationsResponse, ApiResponse } from '@/types';
+import { useApiClient } from '@/lib/contexts/site-context';
 
 export function useMtInstallations() {
+  const apiClient = useApiClient();
   const [installations, setInstallations] = useState<MtInstallation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,13 +14,7 @@ export function useMtInstallations() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/mt-installations');
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-
-      const data: ApiResponse<MtInstallationsResponse> = await response.json();
+      const data = await apiClient.get<ApiResponse<MtInstallationsResponse>>('/mt-installations');
 
       if (data.success && data.data) {
         setInstallations(data.data.data || []);
@@ -37,17 +33,13 @@ export function useMtInstallations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiClient]);
 
   // Install components to MT installation
   const installToMt = async (id: string): Promise<{ success: boolean; message?: string }> => {
     try {
       setInstalling(id);
-      const response = await fetch(`/api/mt-installations/${id}/install`, {
-        method: 'POST',
-      });
-
-      const data: ApiResponse<string> = await response.json();
+      const data = await apiClient.post<ApiResponse<string>>(`/mt-installations/${id}/install`);
 
       if (data.success) {
         // Refresh installations to get updated component status

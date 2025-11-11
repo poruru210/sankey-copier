@@ -27,9 +27,31 @@ pub struct AppState {
     pub connection_manager: Arc<ConnectionManager>,
     pub config_sender: Arc<ZmqConfigPublisher>,
     pub log_buffer: LogBuffer,
+    pub allowed_origins: Vec<String>,
 }
 
 pub fn create_router(state: AppState) -> Router {
+    // Create CORS layer from configured allowed origins
+    let cors = CorsLayer::new()
+        .allow_origin(
+            state.allowed_origins
+                .iter()
+                .filter_map(|origin| origin.parse().ok())
+                .collect::<Vec<_>>()
+        )
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ])
+        .allow_credentials(true);
+
     Router::new()
         .route("/api/settings", get(list_settings).post(create_settings))
         .route("/api/settings/:id", get(get_settings).put(update_settings).delete(delete_settings))
@@ -41,7 +63,7 @@ pub fn create_router(state: AppState) -> Router {
         // MT installations API
         .route("/api/mt-installations", get(mt_installations::list_mt_installations))
         .route("/api/mt-installations/:id/install", post(mt_installations::install_to_mt))
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .with_state(state)
 }
 

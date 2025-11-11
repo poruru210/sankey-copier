@@ -6,14 +6,49 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
+    #[serde(default)]
+    pub webui: WebUIConfig,
     pub database: DatabaseConfig,
     pub zeromq: ZeroMqConfig,
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebUIConfig {
+    pub host: String,
+    pub port: u16,
+    pub url: String,
+}
+
+impl Default for WebUIConfig {
+    fn default() -> Self {
+        Self {
+            host: "0.0.0.0".to_string(),
+            port: 3000,
+            url: "http://localhost:3000".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorsConfig {
+    #[serde(default)]
+    pub additional_origins: Vec<String>,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            additional_origins: vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +83,7 @@ impl Config {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
             },
+            webui: WebUIConfig::default(),
             database: DatabaseConfig {
                 url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
             },
@@ -57,6 +93,7 @@ impl Config {
                 config_sender_port: 5557,
                 timeout_seconds: 30,
             },
+            cors: CorsConfig::default(),
         }
     }
 
@@ -78,6 +115,20 @@ impl Config {
     /// Get ZMQ config sender address
     pub fn zmq_config_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.config_sender_port)
+    }
+
+    /// Get all allowed CORS origins
+    /// Auto-generates origins from webui port and includes additional custom origins
+    pub fn allowed_origins(&self) -> Vec<String> {
+        let mut origins = vec![
+            format!("http://localhost:{}", self.webui.port),
+            format!("http://127.0.0.1:{}", self.webui.port),
+        ];
+
+        // Add additional custom origins (e.g., for Vercel deployment)
+        origins.extend(self.cors.additional_origins.clone());
+
+        origins
     }
 }
 
@@ -116,6 +167,7 @@ mod tests {
                 host: "127.0.0.1".to_string(),
                 port: 9090,
             },
+            webui: WebUIConfig::default(),
             database: DatabaseConfig {
                 url: "sqlite://test.db".to_string(),
             },
@@ -125,6 +177,7 @@ mod tests {
                 config_sender_port: 6668,
                 timeout_seconds: 60,
             },
+            cors: CorsConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");

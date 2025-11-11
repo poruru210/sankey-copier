@@ -1,27 +1,52 @@
 import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
+// Rust Server API URL - configurable via environment variable
+// Default: http://127.0.0.1:3000 for production
+// This allows the installer to configure the API endpoint dynamically
+// Use 127.0.0.1 instead of localhost to force IPv4 and avoid IPv6 connection issues
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000';
+
 const nextConfig: NextConfig = {
   // Output standalone for Windows service deployment
   output: 'standalone',
 
-  // Allow external network access during development
-  // Specify the actual IP address of your network interface
-  allowedDevOrigins: [
-    'http://10.5.0.2:5173',
-    'http://localhost:5173',
-    '10.5.0.2:5173',
-    '10.5.0.2',
-  ],
+  // Exclude unnecessary packages from standalone output
+  // Reduces bundle size and eliminates dev dependencies
+  outputFileTracingExcludes: {
+    '*': [
+      // Build tools (not needed at runtime)
+      'esbuild',
+      'webpack',
+      '@swc/core',
+      'typescript',
+
+      // Testing tools
+      '@playwright/test',
+      '@types/*',
+
+      // Linting and formatting
+      'eslint',
+      'eslint-config-next',
+      'prettier',
+
+      // PostCSS and Tailwind build tools
+      'postcss',
+      'autoprefixer',
+      'tailwindcss',
+    ],
+  },
+
+  // Proxy API calls to Rust Server
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:3000/api/:path*',
+        destination: `${apiBaseUrl}/api/:path*`,
       },
       {
         source: '/ws',
-        destination: 'http://127.0.0.1:3000/ws',
+        destination: `${apiBaseUrl}/ws`,
       },
     ];
   },

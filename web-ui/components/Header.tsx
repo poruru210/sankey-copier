@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Button } from './ui/button';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
+import { SiteSelector } from './SiteSelector';
 
 interface HeaderProps {
   isMobile?: boolean;
@@ -67,6 +68,7 @@ export function Header({ isMobile, onOpenMobileFilter }: HeaderProps) {
 
         {/* Controls */}
         <div className="flex items-center gap-2">
+          <SiteSelector />
           <LanguageToggle />
           <ThemeToggle />
         </div>

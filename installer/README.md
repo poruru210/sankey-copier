@@ -91,21 +91,83 @@ The workflow will automatically build and create a GitHub release with the insta
 
 ### Option 2: Local Build
 
-#### Step 1: Build Components
+#### Quick Start - Automated Build (Recommended)
 
-Run the PowerShell build script:
+**ONE-STEP BUILD:** Run the automated PowerShell build script:
+
 ```powershell
 cd installer
-.\build.ps1
+.\build-installer.ps1
+```
+
+**With custom version:**
+```powershell
+.\build-installer.ps1 -Version "1.2.3"
+```
+
+**Skip tests (faster build):**
+```powershell
+.\build-installer.ps1 -Version "1.2.3" -SkipTests
 ```
 
 This script will:
-1. Build Rust server in release mode
-2. Build Next.js web UI in standalone mode
-3. Build tray application
-4. Build MQL DLLs (32-bit and 64-bit)
+1. Build Rust server in release mode (with tests)
+2. Build MQL ZMQ DLL (64-bit for MT5)
+3. Build MQL ZMQ DLL (32-bit for MT4)
+4. Build system tray application
+5. Build Next.js web UI in standalone mode
+6. Verify all required files exist
+7. Compile Windows installer with Inno Setup
+8. Show installer location and size
 
-#### Step 2: Compile Installer
+**⚠️ IMPORTANT:** The build script must complete successfully for the installer to work correctly. If any step fails, the script will stop with an error message.
+
+#### Manual Build (Step by Step)
+
+If you prefer to build components manually or need to troubleshoot:
+
+**Step 1: Build Rust Server**
+```powershell
+cd rust-server
+cargo test --release      # Optional but recommended
+cargo build --release
+```
+
+**Step 2: Build MQL ZMQ DLLs**
+```powershell
+cd mql-zmq-dll
+
+# 64-bit (for MT5)
+cargo build --release
+
+# 32-bit (for MT4)
+cargo build --release --target i686-pc-windows-msvc
+```
+
+**Step 3: Build Tray Application**
+```powershell
+cd sankey-copier-tray
+cargo build --release
+```
+
+**Step 4: Build Web UI (CRITICAL)**
+```powershell
+cd web-ui
+pnpm install
+pnpm run build
+```
+
+**⚠️ CRITICAL:** This step creates the `.next/standalone` directory which is required for the Web UI service to work. If you skip this step or it fails, the Web UI service will not start after installation.
+
+**Verify standalone build:**
+```powershell
+# This directory MUST exist
+Test-Path web-ui\.next\standalone
+
+# Should output: True
+```
+
+**Step 5: Compile Installer**
 
 **Option A: Using Inno Setup GUI**
 1. Open `installer/setup.iss` in Inno Setup Compiler
@@ -250,22 +312,118 @@ The installer includes a full uninstaller that will:
 
 ## Troubleshooting
 
+### Web UI Service in PAUSED State
+
+**Symptoms:**
+- Service shows as "PAUSED" instead of "RUNNING"
+- Web interface not accessible at http://localhost:8080
+- Error in logs: `Cannot find module 'styled-jsx/package.json'` or `Cannot find module 'C:\Program'`
+
+**Root Cause:**
+The Web UI standalone build was not created before compiling the installer.
+
+**Solution:**
+1. Delete the old installer
+2. Build Web UI properly:
+   ```powershell
+   cd web-ui
+   pnpm install
+   pnpm run build
+   ```
+3. Verify standalone build exists:
+   ```powershell
+   Test-Path .next\standalone  # Must return True
+   ```
+4. Rebuild installer using `build-installer.ps1` script
+
 ### Services Won't Start
-1. Check Windows Event Viewer for errors
+1. Check Windows Event Viewer for errors:
+   - Application Log: Look for "SankeyCopier" entries
+   - System Log: Look for Service Control Manager errors
 2. Verify file permissions in installation directory
-3. Check if ports 8080 and 5173 are available
-4. Run `nssm status SankeyCopierServer` for details
+3. Check if ports 8080 and 3000 are available:
+   ```powershell
+   netstat -ano | findstr "8080"
+   netstat -ano | findstr "3000"
+   ```
+4. Check NSSM service configuration:
+   ```cmd
+   nssm get SankeyCopierWebUI Application
+   nssm get SankeyCopierWebUI AppParameters
+   nssm get SankeyCopierWebUI AppDirectory
+   ```
+5. View service logs:
+   ```powershell
+   Get-Content "C:\Program Files\SANKEY Copier\data\logs\webui-stderr.log" -Tail 50
+   Get-Content "C:\Program Files\SANKEY Copier\data\logs\server-stderr.log" -Tail 50
+   ```
+
+### Tray Application Not Responding
+
+**Symptoms:**
+- Clicking tray icon does nothing
+- "Open Web Interface" opens wrong URL
+
+**Solutions:**
+1. Verify tray app is using correct port (8080):
+   - Check `sankey-copier-tray\src\main.rs` line 19
+   - Should be: `const WEB_URL: &str = "http://localhost:8080";`
+2. Rebuild tray application if port was wrong:
+   ```powershell
+   cd sankey-copier-tray
+   cargo build --release
+   ```
+3. Restart tray application:
+   - Close existing tray app (right-click → Quit)
+   - Launch from Start Menu or run manually
 
 ### Web UI Not Accessible
-1. Check if SankeyCopierWebUI service is running
-2. Verify firewall settings
-3. Try accessing http://localhost:8080 directly
-4. Check logs in `C:\Program Files\SANKEY Copier\data\logs\`
+1. Check if SankeyCopierWebUI service is running:
+   ```cmd
+   sc query SankeyCopierWebUI
+   ```
+2. Verify firewall settings allow connections on port 8080
+3. Try accessing http://localhost:8080 directly in browser
+4. Check server is running:
+   ```cmd
+   sc query SankeyCopierServer
+   ```
+5. Check logs in `C:\Program Files\SANKEY Copier\data\logs\`
+
+### Node.js Path Issues with Spaces
+
+**Symptoms:**
+- Error: `Cannot find module 'C:\Program'`
+- Service starts then immediately stops
+
+**Root Cause:**
+NSSM not properly quoting paths with spaces.
+
+**Solution:**
+Use the updated installer (v1.0.1+) which uses `AppParameters` to properly quote the server.js path.
+
+**Manual Fix (if using old installer):**
+```cmd
+"C:\Program Files\SANKEY Copier\nssm.exe" set SankeyCopierWebUI AppParameters "C:\Program Files\SANKEY Copier\web-ui\server.js"
+"C:\Program Files\SANKEY Copier\nssm.exe" start SankeyCopierWebUI
+```
 
 ### Permission Issues
 - Installer requires administrator privileges
 - Services run under SYSTEM account by default
 - MT4/MT5 installation detection requires running MT4/MT5
+
+### Build Script Failures
+
+**If `build-installer.ps1` fails:**
+1. Check error message for which component failed
+2. Try building that component manually to see detailed error
+3. Common issues:
+   - Rust not installed: Install from https://rustup.rs
+   - Node.js not installed: Install from https://nodejs.org
+   - pnpm not installed: Run `npm install -g pnpm`
+   - 32-bit Rust target missing: Run `rustup target add i686-pc-windows-msvc`
+   - Inno Setup not found: Install from https://jrsoftware.org/isdl.php
 
 ## Development Notes
 
