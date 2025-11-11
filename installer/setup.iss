@@ -186,7 +186,7 @@ begin
     'Select the folder in which Setup should store database and log files, then click Next.',
     False, '');
   DataDirPage.Add('');
-  { Default value will be set in CurPageChanged after {app} is initialized }
+  { Default value will be set in CurPageChanged after app constant is initialized }
 
   { Create custom page for server port }
   ServerPortPage := CreateInputQueryPage(wpSelectDir,
