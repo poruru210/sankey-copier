@@ -6,8 +6,6 @@
 #![windows_subsystem = "windows"] // Hide console window
 
 use anyhow::Result;
-use std::thread;
-use std::time::Duration;
 use tray_icon::TrayIconBuilder;
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -28,14 +26,6 @@ fn main() -> Result<()> {
 
     // Create tray icon
     let _tray_icon = create_tray_icon()?;
-
-    // Start background thread to update menu status
-    let _status_thread = thread::spawn(|| {
-        loop {
-            thread::sleep(Duration::from_secs(5));
-            menu::update_menu_status();
-        }
-    });
 
     // Run event loop
     event_loop
