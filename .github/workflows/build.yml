@@ -978,7 +978,26 @@ jobs:
           $version = "${{ needs.version-info.outputs.package_version }}"
           Write-Host "Compiling installer with version: $version" -ForegroundColor Cyan
           Write-Host "Build Info: ${{ needs.version-info.outputs.build_info }}" -ForegroundColor Yellow
-          iscc /DMyAppVersion=$version installer/setup.iss
+
+          # Check if setup.iss exists
+          if (-not (Test-Path "installer/setup.iss")) {
+            Write-Host "❌ setup.iss not found" -ForegroundColor Red
+            exit 1
+          }
+
+          # Run Inno Setup compiler and capture output
+          Write-Host "Running Inno Setup compiler..." -ForegroundColor Cyan
+          $output = & iscc /DMyAppVersion=$version installer/setup.iss 2>&1
+          $exitCode = $LASTEXITCODE
+
+          # Display output
+          Write-Host $output
+
+          if ($exitCode -ne 0) {
+            Write-Host "❌ Inno Setup compilation failed with exit code: $exitCode" -ForegroundColor Red
+            exit $exitCode
+          }
+
           Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
 
       - name: Upload installer artifact
