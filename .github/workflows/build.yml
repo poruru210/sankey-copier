@@ -104,7 +104,6 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
@@ -112,7 +111,6 @@ jobs:
           copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-dll
@@ -150,13 +148,11 @@ jobs:
           cargo build --release
 
       - name: Prepare server artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
           mkdir -p artifacts/server
           copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-server
@@ -191,13 +187,11 @@ jobs:
           cargo build --release
 
       - name: Prepare Tray Application artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
           mkdir -p artifacts/tray
           copy sankey-copier-tray\target\release\sankey-copier-tray.exe artifacts\tray\
 
       - name: Upload Tray Application artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-tray
@@ -247,7 +241,6 @@ jobs:
         run: pnpm build
 
       - name: Upload Web UI artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-web-ui
@@ -796,7 +789,6 @@ jobs:
           copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
@@ -807,7 +799,6 @@ jobs:
     name: Build Windows Installer
     runs-on: windows-latest
     needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout code
