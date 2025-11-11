@@ -12,6 +12,8 @@ pub struct Config {
     pub zeromq: ZeroMqConfig,
     #[serde(default)]
     pub cors: CorsConfig,
+    #[serde(default)]
+    pub logging: LoggingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +49,48 @@ impl Default for CorsConfig {
     fn default() -> Self {
         Self {
             additional_origins: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// Enable file logging
+    #[serde(default = "default_logging_enabled")]
+    pub enabled: bool,
+    /// Directory for log files (relative to executable or absolute path)
+    #[serde(default = "default_log_directory")]
+    pub directory: String,
+    /// Prefix for log file names
+    #[serde(default = "default_log_file_prefix")]
+    pub file_prefix: String,
+    /// Rotation strategy: "daily", "hourly", or "never"
+    #[serde(default = "default_log_rotation")]
+    pub rotation: String,
+    /// Maximum number of log files to keep (0 = unlimited)
+    #[serde(default = "default_max_files")]
+    pub max_files: u32,
+    /// Maximum age of log files in days (0 = unlimited)
+    #[serde(default = "default_max_age_days")]
+    pub max_age_days: u32,
+}
+
+fn default_logging_enabled() -> bool { true }
+fn default_log_directory() -> String { "logs".to_string() }
+fn default_log_file_prefix() -> String { "sankey-copier-server".to_string() }
+fn default_log_rotation() -> String { "daily".to_string() }
+fn default_max_files() -> u32 { 30 }
+fn default_max_age_days() -> u32 { 90 }
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_logging_enabled(),
+            directory: default_log_directory(),
+            file_prefix: default_log_file_prefix(),
+            rotation: default_log_rotation(),
+            max_files: default_max_files(),
+            max_age_days: default_max_age_days(),
         }
     }
 }
@@ -94,6 +138,7 @@ impl Config {
                 timeout_seconds: 30,
             },
             cors: CorsConfig::default(),
+            logging: LoggingConfig::default(),
         }
     }
 
@@ -178,6 +223,7 @@ mod tests {
                 timeout_seconds: 60,
             },
             cors: CorsConfig::default(),
+            logging: LoggingConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");
