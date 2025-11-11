@@ -924,6 +924,14 @@ jobs:
             Write-Host "✓ Copied Web UI public"
           }
 
+          # Copy .env.production to standalone directory
+          if (Test-Path "web-ui/.env.production") {
+            Copy-Item "web-ui/.env.production" -Destination "web-ui/.next/standalone/"
+            Write-Host "✓ Copied .env.production to standalone"
+          } else {
+            Write-Host "⚠️ .env.production not found in web-ui/"
+          }
+
           # Copy MQL compiled files
           New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
           New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
