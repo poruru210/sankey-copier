@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
+use tower_http::trace::{TraceLayer, DefaultMakeSpan, DefaultOnResponse};
+use tower_http::LatencyUnit;
 
 use crate::{
     connection_manager::ConnectionManager,
@@ -52,6 +54,28 @@ pub fn create_router(state: AppState) -> Router {
         ])
         .allow_credentials(true);
 
+    // Create HTTP tracing layer for request/response logging
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(
+            DefaultMakeSpan::new()
+                .level(tracing::Level::INFO)
+                .include_headers(true)
+        )
+        .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
+            tracing::info!(
+                method = %request.method(),
+                uri = %request.uri(),
+                version = ?request.version(),
+                "HTTP request started"
+            );
+        })
+        .on_response(
+            DefaultOnResponse::new()
+                .level(tracing::Level::INFO)
+                .latency_unit(LatencyUnit::Millis)
+                .include_headers(true)
+        );
+
     Router::new()
         .route("/api/settings", get(list_settings).post(create_settings))
         .route("/api/settings/:id", get(get_settings).put(update_settings).delete(delete_settings))
@@ -63,6 +87,7 @@ pub fn create_router(state: AppState) -> Router {
         // MT installations API
         .route("/api/mt-installations", get(mt_installations::list_mt_installations))
         .route("/api/mt-installations/:id/install", post(mt_installations::install_to_mt))
+        .layer(trace_layer)
         .layer(cors)
         .with_state(state)
 }
@@ -123,13 +148,25 @@ impl<T> ApiResponse<T> {
 async fn list_settings(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<CopySettings>>>, Response> {
+    let span = tracing::info_span!("list_settings");
+    let _enter = span.enter();
+
     match state.db.list_copy_settings().await {
         Ok(settings) => {
+            tracing::info!(
+                count = settings.len(),
+                "Successfully retrieved copy settings"
+            );
             refresh_settings_cache(&state).await;
             Ok(Json(ApiResponse::success(settings)))
         }
         Err(e) => {
-            tracing::error!("Failed to list settings: {}", e);
+            tracing::error!(
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to list settings from database"
+            );
             Ok(Json(ApiResponse::error(e.to_string())))
         }
     }
@@ -139,11 +176,35 @@ async fn get_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<ApiResponse<CopySettings>>, Response> {
+    let span = tracing::info_span!("get_settings", settings_id = id);
+    let _enter = span.enter();
+
     match state.db.get_copy_settings(id).await {
-        Ok(Some(settings)) => Ok(Json(ApiResponse::success(settings))),
-        Ok(None) => Ok(Json(ApiResponse::error("Settings not found".to_string()))),
+        Ok(Some(settings)) => {
+            tracing::info!(
+                settings_id = id,
+                master_account = %settings.master_account,
+                slave_account = %settings.slave_account,
+                enabled = settings.enabled,
+                "Successfully retrieved copy settings"
+            );
+            Ok(Json(ApiResponse::success(settings)))
+        }
+        Ok(None) => {
+            tracing::warn!(
+                settings_id = id,
+                "Settings not found"
+            );
+            Ok(Json(ApiResponse::error("Settings not found".to_string())))
+        }
         Err(e) => {
-            tracing::error!("Failed to get settings: {}", e);
+            tracing::error!(
+                settings_id = id,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to get settings from database"
+            );
             Ok(Json(ApiResponse::error(e.to_string())))
         }
     }
@@ -161,11 +222,18 @@ async fn create_settings(
     State(state): State<AppState>,
     Json(req): Json<CreateSettingsRequest>,
 ) -> Result<Json<ApiResponse<i32>>, Response> {
+    let span = tracing::info_span!(
+        "create_settings",
+        master_account = %req.master_account,
+        slave_account = %req.slave_account
+    );
+    let _enter = span.enter();
+
     let settings = CopySettings {
         id: 0,
         enabled: true,
-        master_account: req.master_account,
-        slave_account: req.slave_account,
+        master_account: req.master_account.clone(),
+        slave_account: req.slave_account.clone(),
         lot_multiplier: req.lot_multiplier,
         reverse_trade: req.reverse_trade,
         symbol_mappings: vec![],
@@ -179,6 +247,15 @@ async fn create_settings(
 
     match state.db.save_copy_settings(&settings).await {
         Ok(id) => {
+            tracing::info!(
+                settings_id = id,
+                master_account = %req.master_account,
+                slave_account = %req.slave_account,
+                lot_multiplier = ?req.lot_multiplier,
+                reverse_trade = req.reverse_trade,
+                "Successfully created copy settings"
+            );
+
             refresh_settings_cache(&state).await;
             send_config_to_ea(&state, &settings).await;
 
@@ -189,10 +266,20 @@ async fn create_settings(
         }
         Err(e) => {
             let error_msg = e.to_string();
-            tracing::error!("Failed to create settings: {}", error_msg);
+            let is_duplicate = error_msg.contains("UNIQUE constraint failed");
+
+            tracing::error!(
+                master_account = %req.master_account,
+                slave_account = %req.slave_account,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                is_duplicate_error = is_duplicate,
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to create copy settings"
+            );
 
             // Check for duplicate entry error
-            let user_friendly_msg = if error_msg.contains("UNIQUE constraint failed") {
+            let user_friendly_msg = if is_duplicate {
                 "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
             } else {
                 error_msg
@@ -208,11 +295,29 @@ async fn update_settings(
     Path(id): Path<i32>,
     Json(settings): Json<CopySettings>,
 ) -> Result<Json<ApiResponse<()>>, Response> {
+    let span = tracing::info_span!(
+        "update_settings",
+        settings_id = id,
+        master_account = %settings.master_account,
+        slave_account = %settings.slave_account
+    );
+    let _enter = span.enter();
+
     let mut updated = settings;
     updated.id = id;
 
     match state.db.save_copy_settings(&updated).await {
         Ok(_) => {
+            tracing::info!(
+                settings_id = id,
+                master_account = %updated.master_account,
+                slave_account = %updated.slave_account,
+                enabled = updated.enabled,
+                lot_multiplier = ?updated.lot_multiplier,
+                reverse_trade = updated.reverse_trade,
+                "Successfully updated copy settings"
+            );
+
             refresh_settings_cache(&state).await;
             send_config_to_ea(&state, &updated).await;
 
@@ -223,10 +328,21 @@ async fn update_settings(
         }
         Err(e) => {
             let error_msg = e.to_string();
-            tracing::error!("Failed to update settings: {}", error_msg);
+            let is_duplicate = error_msg.contains("UNIQUE constraint failed");
+
+            tracing::error!(
+                settings_id = id,
+                master_account = %updated.master_account,
+                slave_account = %updated.slave_account,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                is_duplicate_error = is_duplicate,
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to update copy settings"
+            );
 
             // Check for duplicate entry error
-            let user_friendly_msg = if error_msg.contains("UNIQUE constraint failed") {
+            let user_friendly_msg = if is_duplicate {
                 "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
             } else {
                 error_msg
@@ -247,8 +363,21 @@ async fn toggle_settings(
     Path(id): Path<i32>,
     Json(req): Json<ToggleRequest>,
 ) -> Result<Json<ApiResponse<()>>, Response> {
+    let span = tracing::info_span!(
+        "toggle_settings",
+        settings_id = id,
+        enabled = req.enabled
+    );
+    let _enter = span.enter();
+
     match state.db.update_enabled_status(id, req.enabled).await {
         Ok(_) => {
+            tracing::info!(
+                settings_id = id,
+                enabled = req.enabled,
+                "Successfully toggled copy settings"
+            );
+
             refresh_settings_cache(&state).await;
 
             // Notify via WebSocket
@@ -257,7 +386,14 @@ async fn toggle_settings(
             Ok(Json(ApiResponse::success(())))
         }
         Err(e) => {
-            tracing::error!("Failed to toggle settings: {}", e);
+            tracing::error!(
+                settings_id = id,
+                enabled = req.enabled,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to toggle copy settings"
+            );
             Ok(Json(ApiResponse::error(e.to_string())))
         }
     }
@@ -267,8 +403,16 @@ async fn delete_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<ApiResponse<()>>, Response> {
+    let span = tracing::info_span!("delete_settings", settings_id = id);
+    let _enter = span.enter();
+
     match state.db.delete_copy_settings(id).await {
         Ok(_) => {
+            tracing::info!(
+                settings_id = id,
+                "Successfully deleted copy settings"
+            );
+
             refresh_settings_cache(&state).await;
 
             // Notify via WebSocket
@@ -277,7 +421,13 @@ async fn delete_settings(
             Ok(Json(ApiResponse::success(())))
         }
         Err(e) => {
-            tracing::error!("Failed to delete settings: {}", e);
+            tracing::error!(
+                settings_id = id,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to delete copy settings"
+            );
             Ok(Json(ApiResponse::error(e.to_string())))
         }
     }
@@ -304,7 +454,16 @@ async fn handle_websocket(mut socket: WebSocket, state: AppState) {
 async fn list_connections(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<EaConnection>>>, Response> {
+    let span = tracing::info_span!("list_connections");
+    let _enter = span.enter();
+
     let connections = state.connection_manager.get_all_eas().await;
+
+    tracing::info!(
+        count = connections.len(),
+        "Successfully retrieved EA connections"
+    );
+
     Ok(Json(ApiResponse::success(connections)))
 }
 
@@ -313,12 +472,29 @@ async fn get_connection(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
 ) -> Result<Json<ApiResponse<EaConnection>>, Response> {
+    let span = tracing::info_span!("get_connection", account_id = %account_id);
+    let _enter = span.enter();
+
     match state.connection_manager.get_ea(&account_id).await {
-        Some(connection) => Ok(Json(ApiResponse::success(connection))),
-        None => Ok(Json(ApiResponse::error(format!(
-            "Connection not found: {}",
-            account_id
-        )))),
+        Some(connection) => {
+            tracing::info!(
+                account_id = %account_id,
+                ea_type = ?connection.ea_type,
+                status = ?connection.status,
+                "Successfully retrieved EA connection"
+            );
+            Ok(Json(ApiResponse::success(connection)))
+        }
+        None => {
+            tracing::warn!(
+                account_id = %account_id,
+                "EA connection not found"
+            );
+            Ok(Json(ApiResponse::error(format!(
+                "Connection not found: {}",
+                account_id
+            ))))
+        }
     }
 }
 
@@ -326,7 +502,16 @@ async fn get_connection(
 async fn get_logs(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<crate::log_buffer::LogEntry>>>, Response> {
+    let span = tracing::info_span!("get_logs");
+    let _enter = span.enter();
+
     let buffer = state.log_buffer.read().await;
     let logs: Vec<_> = buffer.iter().cloned().collect();
+
+    tracing::debug!(
+        count = logs.len(),
+        "Successfully retrieved server logs"
+    );
+
     Ok(Json(ApiResponse::success(logs)))
 }

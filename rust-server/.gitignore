@@ -1,0 +1,14 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Cargo.lock is committed for binary projects
+# (see root .gitignore note)
+
+# Runtime configuration (if not using root config.toml)
+# config.local.toml
+
+# SQLite database files (covered by root .gitignore)
+# *.db
+# *.db-shm
+# *.db-wal
