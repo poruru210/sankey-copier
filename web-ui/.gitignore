@@ -12,6 +12,7 @@ build/
 .next/
 .next/standalone/
 .next/static/
+.intlayer/
 
 # Vite
 .vite/

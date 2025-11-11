@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 5173 -H 0.0.0.0",
+    "dev": "next dev -p 8080 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -p 5173 -H 0.0.0.0",
+    "start": "next start -p 8080 -H 0.0.0.0",
     "lint": "next lint",
     "intlayer:push": "intlayer push",
     "intlayer:pull": "intlayer pull",
