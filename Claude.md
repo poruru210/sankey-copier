@@ -1,4 +1,4 @@
-# AGENTS.md
+# Claude.md
 
 Motto: "Small, clear, safe steps — always grounded in real docs."
 
@@ -10,8 +10,8 @@ Motto: "Small, clear, safe steps — always grounded in real docs."
 
 ## Knowledge & Libraries
 
-* Use `context7` (MCP server) to fetch current docs before coding.
-* Call `resolve-library-id`, then `get-library-docs` to verify APIs.
+* Always consult official documentation before implementing external APIs or libraries.
+* Verify API signatures and behavior against the latest documentation.
 * If uncertain, pause and request clarification.
 
 ## Workflow
@@ -25,10 +25,10 @@ Motto: "Small, clear, safe steps — always grounded in real docs."
 
 ## Code Style & Limits
 
-* Files ≤ 300 LOC; keep modules single-purpose.
+* **File Size:** Target ≤ 300 LOC when practical; keep modules single-purpose and focused.
 * **Comments:** Add a brief header at the top of every file (where, what, why). Prefer clear, simple explanations; comment non-obvious logic.
 * **Commenting habit:** Err on the side of more comments; include rationale, assumptions, and trade-offs.
-* **Configuration:** Centralize runtime tunables in `config.py`; avoid magic numbers in code and tests. Pull defaults from config when writing dependencies.
+* **Configuration:** Centralize runtime tunables in configuration files; avoid magic numbers in code and tests. Use project-appropriate config mechanisms (e.g., Rust: config files, MQL: input parameters, TypeScript: environment variables).
 * **Simplicity:** Implement exactly what's requested—no extra features.
 
 ## Communication & Language
