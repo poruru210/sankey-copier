@@ -16,9 +16,16 @@ build/
 # Vite
 .vite/
 
+# Intlayer
+.intlayer/
+
 # Development
 .turbo/
 .cache/
+tsconfig.tsbuildinfo
+
+# npm lock file (project uses pnpm)
+package-lock.json
 
 # Testing
 test_*.py
