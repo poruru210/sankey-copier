@@ -4,13 +4,40 @@
 //! the status of Windows services using NSSM.
 
 use anyhow::{Context, Result};
+use std::path::PathBuf;
 use std::process::Command;
 
 use crate::elevation::run_elevated_batch_command;
 
 pub const SERVER_SERVICE: &str = "SankeyCopierServer";
 pub const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
-const NSSM_PATH: &str = "C:\\Program Files\\SANKEY Copier\\nssm.exe";
+
+/// Get the path to nssm.exe
+///
+/// Searches for nssm.exe in the following order:
+/// 1. Same directory as the executable (recommended)
+/// 2. Default installation path
+///
+/// Returns the first valid path found, or None if not found.
+fn get_nssm_path() -> Option<PathBuf> {
+    // Try to find nssm.exe in the same directory as the executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let nssm_path = exe_dir.join("nssm.exe");
+            if nssm_path.exists() {
+                return Some(nssm_path);
+            }
+        }
+    }
+
+    // Fallback to default installation path
+    let default_path = PathBuf::from("C:\\Program Files\\SANKEY Copier\\nssm.exe");
+    if default_path.exists() {
+        return Some(default_path);
+    }
+
+    None
+}
 
 // ============================================================================
 // Web UI Service Control
@@ -68,8 +95,8 @@ pub fn get_service_status() -> Result<String> {
 /// Query status of a single service using NSSM
 fn query_service_status(service_name: &str) -> Result<String> {
     // Try NSSM first if available
-    if std::path::Path::new(NSSM_PATH).exists() {
-        let output = Command::new(NSSM_PATH)
+    if let Some(nssm_path) = get_nssm_path() {
+        let output = Command::new(&nssm_path)
             .args(&["status", service_name])
             .output()
             .context("Failed to execute nssm command")?;
@@ -129,16 +156,15 @@ fn query_service_status(service_name: &str) -> Result<String> {
 
 /// Run NSSM command with UAC elevation
 fn run_elevated_nssm_command(action: &str, services: &[&str]) -> Result<()> {
-    // Check if NSSM exists
-    if !std::path::Path::new(NSSM_PATH).exists() {
-        anyhow::bail!("NSSM not found at: {}", NSSM_PATH);
-    }
+    // Get NSSM path
+    let nssm_path = get_nssm_path()
+        .ok_or_else(|| anyhow::anyhow!("NSSM not found. Please ensure nssm.exe is in the same directory as the tray application or at C:\\Program Files\\SANKEY Copier\\"))?;
 
     // Build parameters for NSSM
     // For multiple services, we need to call nssm multiple times
     let mut commands = Vec::new();
     for service in services {
-        commands.push(format!("\"{}\" {} {}", NSSM_PATH, action, service));
+        commands.push(format!("\"{}\" {} {}", nssm_path.display(), action, service));
     }
     let command_string = commands.join(" && timeout /t 1 /nobreak >nul && ");
 
