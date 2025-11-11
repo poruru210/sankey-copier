@@ -92,13 +92,6 @@ Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dl
 Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
 
-; MQL Source Files (for customization)
-Source: "..\mql\MT4\Master\*.mq4"; DestDir: "{app}\mql\MT4\Master"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT4\Slave\*.mq4"; DestDir: "{app}\mql\MT4\Slave"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT5\Master\*.mq5"; DestDir: "{app}\mql\MT5\Master"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT5\Slave\*.mq5"; DestDir: "{app}\mql\MT5\Slave"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\Include\SankeyCopier\*.mqh"; DestDir: "{app}\mql\Include\SankeyCopier"; Flags: ignoreversion recursesubdirs
-
 ; Documentation
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "resources\license.txt"; DestDir: "{app}"; Flags: ignoreversion

@@ -22,7 +22,7 @@ struct MessageTypeDiscriminator {
     action: Option<String>,
 }
 
-// Flexible struct to extract partial heartbeat data (without version_git)
+// Flexible struct to extract partial heartbeat data
 #[derive(Debug, Deserialize)]
 struct FlexibleHeartbeat {
     #[serde(default)]

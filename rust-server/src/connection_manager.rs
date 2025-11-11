@@ -51,7 +51,7 @@ impl ConnectionManager {
                 conn.balance,
                 conn.currency,
                 conn.equity,
-                msg.version_git
+                msg.version
             );
         } else {
             // 未登録のEA: Heartbeatの情報から自動登録
@@ -141,7 +141,7 @@ mod tests {
             equity: 10000.0,
             open_positions: 0,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            version_git: "test".to_string(),
+            version: "test".to_string(),
             ea_type: "Master".to_string(),
             platform: "MT4".to_string(),
             account_number: 12345,
@@ -188,7 +188,7 @@ mod tests {
             equity: 10000.0,
             open_positions: 0,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            version_git: "test".to_string(),
+            version: "test".to_string(),
             ea_type: "Master".to_string(),
             platform: "MT4".to_string(),
             account_number: 12345,
@@ -208,7 +208,7 @@ mod tests {
             equity: 11500.0,
             open_positions: 3,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            version_git: "test".to_string(),
+            version: "test".to_string(),
             ea_type: "Master".to_string(),
             platform: "MT4".to_string(),
             account_number: 12345,
@@ -282,7 +282,7 @@ mod tests {
             equity: 10000.0,
             open_positions: 0,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            version_git: "test".to_string(),
+            version: "test".to_string(),
             ea_type: "Master".to_string(),
             platform: "MT4".to_string(),
             account_number: 12345,
@@ -316,7 +316,7 @@ mod tests {
             equity: 15500.0,
             open_positions: 2,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            version_git: "test123".to_string(),
+            version: "test123".to_string(),
             ea_type: "Slave".to_string(),
             platform: "MT5".to_string(),
             account_number: 67890,

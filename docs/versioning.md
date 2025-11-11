@@ -149,7 +149,7 @@ tracing::info!("Server Version: {}", env!("BUILD_INFO"));
 
 // Heartbeat message (use BUILD_INFO for traceability)
 HeartbeatMessage {
-    version_git: env!("BUILD_INFO").to_string(),
+    version: env!("BUILD_INFO").to_string(),
     // ...
 }
 ```
