@@ -92,6 +92,14 @@ pub fn get_service_status() -> Result<String> {
     ))
 }
 
+/// Query status of a single service using NSSM (safe version that never fails)
+///
+/// This is a wrapper around query_service_status that returns "Unknown" on error
+/// instead of propagating the error. Useful for non-critical status checks.
+pub fn query_service_status_safe(service_name: &str) -> String {
+    query_service_status(service_name).unwrap_or_else(|_| "Unknown".to_string())
+}
+
 /// Query status of a single service using NSSM
 fn query_service_status(service_name: &str) -> Result<String> {
     // Try NSSM first if available

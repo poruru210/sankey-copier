@@ -16,10 +16,31 @@ use crate::ui;
 static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
     once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
+/// Global menu items for dynamic updates
+static MENU_ITEMS: once_cell::sync::Lazy<Arc<Mutex<Option<MenuItems>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(None)));
+
+/// Menu items that need dynamic updates
+struct MenuItems {
+    ui_submenu: Submenu,
+    service_submenu: Submenu,
+}
+
 /// Custom event for app control
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     Exit,
+}
+
+/// Get status indicator symbol
+fn get_status_indicator(status: &str) -> &str {
+    match status {
+        "Running" => "●",       // Running
+        "Stopped" => "○",       // Stopped
+        "Starting..." => "◐",   // Starting
+        "Stopping..." => "◑",   // Stopping
+        _ => "?",               // Unknown
+    }
 }
 
 /// Create tray menu with all items
@@ -47,8 +68,13 @@ pub fn create_menu() -> Result<Menu> {
     let ui_restart_item = MenuItem::new("Restart", true, None);
     ids.insert(ui_restart_item.id().clone(), "ui_restart".to_string());
 
+    // Get initial status
+    let webui_status = service::query_service_status_safe(service::WEBUI_SERVICE);
+    let server_status = service::query_service_status_safe(service::SERVER_SERVICE);
+
+    let ui_title = format!("UI {}", get_status_indicator(&webui_status));
     let ui_submenu = Submenu::with_items(
-        "UI",
+        &ui_title,
         true,
         &[&ui_open_item, &ui_start_item, &ui_stop_item, &ui_restart_item],
     )?;
@@ -67,12 +93,19 @@ pub fn create_menu() -> Result<Menu> {
         "service_restart".to_string(),
     );
 
+    let service_title = format!("Service {}", get_status_indicator(&server_status));
     let service_submenu = Submenu::with_items(
-        "Service",
+        &service_title,
         true,
         &[&service_start_item, &service_stop_item, &service_restart_item],
     )?;
     menu.append(&service_submenu)?;
+
+    // Store submenu references for later updates
+    *MENU_ITEMS.lock().unwrap() = Some(MenuItems {
+        ui_submenu: ui_submenu.clone(),
+        service_submenu: service_submenu.clone(),
+    });
 
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
@@ -115,18 +148,21 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
             if let Err(e) = service::start_webui_service() {
                 ui::show_error(&format!("Failed to start Web UI: {}", e));
             }
+            update_menu_status();
         }
 
         "ui_stop" => {
             if let Err(e) = service::stop_webui_service() {
                 ui::show_error(&format!("Failed to stop Web UI: {}", e));
             }
+            update_menu_status();
         }
 
         "ui_restart" => {
             if let Err(e) = service::restart_webui_service() {
                 ui::show_error(&format!("Failed to restart Web UI: {}", e));
             }
+            update_menu_status();
         }
 
         // Service submenu actions
@@ -134,18 +170,21 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
             if let Err(e) = service::start_server_service() {
                 ui::show_error(&format!("Failed to start Server: {}", e));
             }
+            update_menu_status();
         }
 
         "service_stop" => {
             if let Err(e) = service::stop_server_service() {
                 ui::show_error(&format!("Failed to stop Server: {}", e));
             }
+            update_menu_status();
         }
 
         "service_restart" => {
             if let Err(e) = service::restart_server_service() {
                 ui::show_error(&format!("Failed to restart Server: {}", e));
             }
+            update_menu_status();
         }
 
         // Check status
@@ -172,6 +211,20 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
 fn open_web_interface() -> Result<()> {
     let web_url = config::get_web_url();
     webbrowser::open(&web_url).map_err(|e| anyhow::anyhow!("Failed to open browser: {}", e))
+}
+
+/// Update menu status indicators
+pub fn update_menu_status() {
+    if let Some(items) = MENU_ITEMS.lock().unwrap().as_ref() {
+        let webui_status = service::query_service_status_safe(service::WEBUI_SERVICE);
+        let server_status = service::query_service_status_safe(service::SERVER_SERVICE);
+
+        let ui_title = format!("UI {}", get_status_indicator(&webui_status));
+        let service_title = format!("Service {}", get_status_indicator(&server_status));
+
+        items.ui_submenu.set_text(&ui_title);
+        items.service_submenu.set_text(&service_title);
+    }
 }
 
 /// Check for menu events and handle them
