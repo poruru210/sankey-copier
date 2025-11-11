@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_detector_creation() {
-        let detector = MtDetector::new();
+        let _detector = MtDetector::new();
         // Just ensure it can be created
         assert!(true);
     }

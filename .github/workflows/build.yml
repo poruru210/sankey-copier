@@ -5,6 +5,8 @@ on:
     branches: [ master ]
   push:
     branches: [ master ]
+    tags:
+      - 'v*'
   workflow_dispatch:  # 手動実行
     inputs:
       build_target:
@@ -20,9 +22,55 @@ on:
           - mql
 
 jobs:
+  version-info:
+    name: Generate Version Information
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+      file_version: ${{ steps.version.outputs.file_version }}
+      build_info: ${{ steps.version.outputs.build_info }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git describe
+
+      - name: Generate version information
+        id: version
+        run: |
+          # Get base version from tag (or fallback to v0.1.0)
+          TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null || echo "v0.1.0")
+          VERSION=${TAG#v}
+
+          # Get commit count
+          BUILD=$(git rev-list --count HEAD)
+
+          # Get commit hash
+          HASH=$(git rev-parse --short HEAD)
+
+          # Generate three version formats
+          PACKAGE_VERSION="$VERSION"
+          FILE_VERSION="$VERSION.$BUILD"
+          BUILD_INFO="$VERSION+build.$BUILD.$HASH"
+
+          # Set outputs
+          echo "package_version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "file_version=$FILE_VERSION" >> $GITHUB_OUTPUT
+          echo "build_info=$BUILD_INFO" >> $GITHUB_OUTPUT
+
+          # Display prominently
+          echo "╔════════════════════════════════════════════════════════════════"
+          echo "║ Version Information"
+          echo "║ PACKAGE_VERSION: $PACKAGE_VERSION"
+          echo "║ FILE_VERSION:    $FILE_VERSION"
+          echo "║ BUILD_INFO:      $BUILD_INFO"
+          echo "╚════════════════════════════════════════════════════════════════"
+
   build-rust-dll:
     name: Build Rust ZeroMQ DLL
     runs-on: windows-latest
+    needs: version-info
     if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-dll' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
@@ -56,7 +104,6 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
@@ -64,7 +111,6 @@ jobs:
           copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-dll
@@ -74,6 +120,7 @@ jobs:
   build-rust-server:
     name: Build Rust Server
     runs-on: windows-latest
+    needs: version-info
     if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'rust-server' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
@@ -101,22 +148,60 @@ jobs:
           cargo build --release
 
       - name: Prepare server artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts/server
           copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-server
           path: artifacts/server/
           retention-days: 30
 
+  build-tray-app:
+    name: Build Tray Application
+    runs-on: windows-latest
+    needs: version-info
+    if: ${{ github.event.inputs.build_target == 'all' || github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git describe in build.rs
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sankey-copier-tray
+
+      - name: Build Tray Application
+        working-directory: sankey-copier-tray
+        run: |
+          cargo build --release
+
+      - name: Prepare Tray Application artifacts
+        run: |
+          mkdir -p artifacts/tray
+          copy sankey-copier-tray\target\release\sankey-copier-tray.exe artifacts\tray\
+
+      - name: Upload Tray Application artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-tray
+          path: artifacts/tray/
+          retention-days: 30
+
   build-web-ui:
     name: Build Web UI
     runs-on: ubuntu-latest
+    needs: version-info
     if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'web-ui' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
@@ -156,7 +241,6 @@ jobs:
         run: pnpm build
 
       - name: Upload Web UI artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-web-ui
@@ -168,6 +252,7 @@ jobs:
   compile-mql:
     name: Compile MQL4/MQL5 Files
     runs-on: windows-latest
+    needs: version-info
     if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == 'mql' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     strategy:
@@ -184,7 +269,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache MetaTrader Installation
+        id: cache-mt
+        uses: actions/cache@v4
+        with:
+          path: D:\MT_Install\${{ matrix.platform }}
+          key: mt-${{ matrix.platform }}-5.0.0.5387-v2
+          restore-keys: |
+            mt-${{ matrix.platform }}-5.0.0.5387-
+            mt-${{ matrix.platform }}-
+
       - name: Download MetaTrader installer from Private Release
+        if: steps.cache-mt.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ secrets.MT_INSTALLER_PAT }}
         run: |
@@ -257,7 +353,21 @@ jobs:
           $installerInfo = Get-Item "${{ matrix.platform }}setup.exe"
           Write-Host "✅ Prepared installer: $($installerInfo.Name) ($($installerInfo.Length) bytes)"
 
+      - name: Skip installation (cache hit)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "✅ Using cached MetaTrader installation for ${{ matrix.platform }}" -ForegroundColor Green
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+          Write-Host "Installation path: $installPath"
+
+          # Verify cache contents
+          if (Test-Path $installPath) {
+            $files = Get-ChildItem $installPath -Recurse -File | Measure-Object
+            Write-Host "Cached files count: $($files.Count)"
+          }
+
       - name: Install MetaTrader
+        if: steps.cache-mt.outputs.cache-hit != 'true'
         run: |
           Write-Host "Installing ${{ matrix.platform }}..."
 
@@ -419,6 +529,58 @@ jobs:
 
           # Save to GitHub environment for next step
           "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Find MetaEditor (for cached installation)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "Locating MetaEditor in cached installation..." -ForegroundColor Cyan
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+
+          # Find MetaEditor
+          $metaeditors = @()
+
+          if ("${{ matrix.version }}" -eq "4") {
+            # MT4: Look for 32-bit version first
+            $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "metaeditor.exe" }
+            if ($me32) {
+              $metaeditors += $me32
+              Write-Host "Found MT4 32-bit MetaEditor: $($me32[0].FullName)"
+            }
+
+            # Fallback to 64-bit if 32-bit not found
+            if ($metaeditors.Count -eq 0) {
+              $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+              if ($me64) {
+                $metaeditors += $me64
+                Write-Host "Using MT4 64-bit MetaEditor: $($me64[0].FullName)"
+              }
+            }
+          } else {
+            # MT5: Use 64-bit version
+            $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+            if ($me64) {
+              $metaeditors += $me64
+              Write-Host "Found MT5 64-bit MetaEditor: $($me64[0].FullName)"
+            }
+
+            # Fallback to 32-bit if needed
+            if ($metaeditors.Count -eq 0) {
+              $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue
+              if ($me32) {
+                $metaeditors += $me32
+                Write-Host "Using MT5 32-bit MetaEditor: $($me32[0].FullName)"
+              }
+            }
+          }
+
+          if ($metaeditors.Count -gt 0) {
+            $global:METAEDITOR_PATH = $metaeditors[0].FullName
+            Write-Host "✅ Selected MetaEditor: $global:METAEDITOR_PATH" -ForegroundColor Green
+            "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            Write-Host "❌ MetaEditor not found in cached installation" -ForegroundColor Red
+            exit 1
+          }
 
       - name: Prepare Include directory
         run: |
@@ -627,73 +789,277 @@ jobs:
           copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
           path: artifacts/mql/${{ matrix.platform }}/
           retention-days: 30
 
-  create-release-package:
-    name: Create Release Package
-    runs-on: ubuntu-latest
-    needs: [build-rust-dll, build-rust-server, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, compile-mql]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for version info
 
-      - name: Download all artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release-artifacts
+          path: build-artifacts
 
-      - name: Create release structure
+      - name: Install Inno Setup
         run: |
-          mkdir -p release/sankey-copier
+          choco install innosetup -y
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          # MT5 structure
-          if [ -d "release-artifacts/sankey-copier-mql-MT5" ]; then
-            mkdir -p release/sankey-copier/MT5/Experts
-            mkdir -p release/sankey-copier/MT5/Libraries
-            cp release-artifacts/sankey-copier-mql-MT5/*.ex5 release/sankey-copier/MT5/Experts/
-          fi
+      - name: Download and setup NSSM
+        run: |
+          Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "nssm.zip"
+          Expand-Archive -Path "nssm.zip" -DestinationPath "."
+          New-Item -ItemType Directory -Force -Path "installer/resources"
+          Copy-Item "nssm-2.24/win64/nssm.exe" -Destination "installer/resources/nssm.exe"
+          Remove-Item "nssm.zip"
+          Remove-Item "nssm-2.24" -Recurse
 
-          if [ -d "release-artifacts/sankey-copier-dll/MT5" ]; then
-            cp release-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll release/sankey-copier/MT5/Libraries/
-          fi
+      - name: Update version in project files
+        run: |
+          $version = "${{ needs.version-info.outputs.package_version }}"
+          Write-Host "Updating version to: $version" -ForegroundColor Cyan
 
-          # MT4 structure
-          if [ -d "release-artifacts/sankey-copier-mql-MT4" ]; then
-            mkdir -p release/sankey-copier/MT4/Experts
-            mkdir -p release/sankey-copier/MT4/Libraries
-            cp release-artifacts/sankey-copier-mql-MT4/*.ex4 release/sankey-copier/MT4/Experts/
-          fi
+          # Update Cargo.toml files
+          $cargoFiles = @(
+            "rust-server/Cargo.toml",
+            "mql-zmq-dll/Cargo.toml",
+            "sankey-copier-tray/Cargo.toml"
+          )
 
-          if [ -d "release-artifacts/sankey-copier-dll/MT4" ]; then
-            cp release-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll release/sankey-copier/MT4/Libraries/
-          fi
+          foreach ($file in $cargoFiles) {
+            $content = Get-Content $file -Raw
+            $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+            Set-Content $file -Value $content -NoNewline
+            Write-Host "✓ Updated $file" -ForegroundColor Green
+          }
 
-          # Server
-          if [ -d "release-artifacts/sankey-copier-server" ]; then
-            mkdir -p release/sankey-copier/server
-            cp -r release-artifacts/sankey-copier-server/* release/sankey-copier/server/
-          fi
+          # Update package.json
+          $packageJson = Get-Content "web-ui/package.json" -Raw | ConvertFrom-Json
+          $packageJson.version = $version
+          $packageJson | ConvertTo-Json -Depth 100 | Set-Content "web-ui/package.json"
+          Write-Host "✓ Updated web-ui/package.json" -ForegroundColor Green
 
-          # Web UI
-          if [ -d "release-artifacts/sankey-copier-web-ui" ]; then
-            mkdir -p release/sankey-copier/web-ui
-            cp -r release-artifacts/sankey-copier-web-ui/* release/sankey-copier/web-ui/
-          fi
+      - name: Organize artifacts for installer
+        run: |
+          Write-Host "Organizing build artifacts for installer..." -ForegroundColor Cyan
 
-          # ドキュメント
-          cp README.md release/sankey-copier/
-          cp -r docs release/sankey-copier/
+          # List downloaded artifacts
+          Write-Host "Downloaded artifacts structure:"
+          Get-ChildItem "build-artifacts" -Recurse | Select-Object -First 50 | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
 
-      - name: Upload release package
+          # Copy DLLs to installer structure
+          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/release"
+          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/i686-pc-windows-msvc/release"
+
+          if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
+            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/release/"
+            Write-Host "✓ Copied MT5 DLL"
+          } else {
+            Write-Host "❌ MT5 DLL not found"
+            exit 1
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
+            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/i686-pc-windows-msvc/release/"
+            Write-Host "✓ Copied MT4 DLL"
+          } else {
+            Write-Host "❌ MT4 DLL not found"
+            exit 1
+          }
+
+          # Copy server exe
+          New-Item -ItemType Directory -Force -Path "rust-server/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-server/sankey-copier-server.exe") {
+            Copy-Item "build-artifacts/sankey-copier-server/sankey-copier-server.exe" -Destination "rust-server/target/release/"
+            Write-Host "✓ Copied server exe"
+          } else {
+            Write-Host "❌ Server exe not found"
+            exit 1
+          }
+
+          # Copy tray exe
+          New-Item -ItemType Directory -Force -Path "sankey-copier-tray/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
+            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "sankey-copier-tray/target/release/"
+            Write-Host "✓ Copied tray exe"
+          } else {
+            Write-Host "❌ Tray exe not found"
+            exit 1
+          }
+
+          # Copy Web UI
+          # Note: Artifact upload uses path: web-ui/.next, so downloaded artifact contains standalone/, static/ directly
+          New-Item -ItemType Directory -Force -Path "web-ui/.next"
+          if (Test-Path "build-artifacts/sankey-copier-web-ui/standalone") {
+            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/standalone" -Destination "web-ui/.next/"
+            Write-Host "✓ Copied Web UI standalone"
+          } else {
+            Write-Host "❌ Web UI standalone not found"
+            exit 1
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-web-ui/static") {
+            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/static" -Destination "web-ui/.next/"
+            Write-Host "✓ Copied Web UI static"
+          } else {
+            Write-Host "❌ Web UI static not found"
+            exit 1
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-web-ui/public") {
+            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/public" -Destination "web-ui/"
+            Write-Host "✓ Copied Web UI public"
+          }
+
+          # Copy MQL compiled files
+          New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
+          New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
+
+          if (Test-Path "build-artifacts/sankey-copier-mql-MT4") {
+            $mt4Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT4/*.ex4" -ErrorAction SilentlyContinue
+            if ($mt4Files) {
+              Copy-Item "build-artifacts/sankey-copier-mql-MT4/*.ex4" -Destination "mql/MT4/Experts/"
+              Write-Host "✓ Copied MT4 MQL files: $($mt4Files.Count) files"
+            } else {
+              Write-Host "⚠️ No MT4 .ex4 files found"
+            }
+          } else {
+            Write-Host "⚠️ MT4 MQL artifacts directory not found"
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-mql-MT5") {
+            $mt5Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT5/*.ex5" -ErrorAction SilentlyContinue
+            if ($mt5Files) {
+              Copy-Item "build-artifacts/sankey-copier-mql-MT5/*.ex5" -Destination "mql/MT5/Experts/"
+              Write-Host "✓ Copied MT5 MQL files: $($mt5Files.Count) files"
+            } else {
+              Write-Host "⚠️ No MT5 .ex5 files found"
+            }
+          } else {
+            Write-Host "⚠️ MT5 MQL artifacts directory not found"
+          }
+
+          Write-Host "✓ Artifacts organized" -ForegroundColor Green
+
+      - name: Verify build artifacts
+        run: |
+          $artifacts = @(
+            "rust-server/target/release/sankey-copier-server.exe",
+            "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
+            "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
+            "sankey-copier-tray/target/release/sankey-copier-tray.exe",
+            "web-ui/.next/standalone",
+            "installer/resources/nssm.exe"
+          )
+
+          foreach ($artifact in $artifacts) {
+            if (-not (Test-Path $artifact)) {
+              Write-Error "Missing artifact: $artifact"
+              exit 1
+            }
+            Write-Host "✓ Found: $artifact" -ForegroundColor Green
+          }
+
+      - name: Compile installer with Inno Setup
+        run: |
+          $version = "${{ needs.version-info.outputs.package_version }}"
+          Write-Host "Compiling installer with version: $version" -ForegroundColor Cyan
+          Write-Host "Build Info: ${{ needs.version-info.outputs.build_info }}" -ForegroundColor Yellow
+
+          # Check if setup.iss exists
+          if (-not (Test-Path "installer/setup.iss")) {
+            Write-Host "❌ setup.iss not found" -ForegroundColor Red
+            exit 1
+          }
+
+          # Save output to log file for complete capture
+          $logFile = "installer/inno-setup.log"
+          Write-Host "Running Inno Setup compiler..." -ForegroundColor Cyan
+
+          # Run compiler and capture both stdout and stderr
+          & iscc /DMyAppVersion=$version installer/setup.iss 2>&1 | Tee-Object -FilePath $logFile
+          $exitCode = $LASTEXITCODE
+
+          if ($exitCode -ne 0) {
+            Write-Host ""
+            Write-Host "❌ Inno Setup compilation failed with exit code: $exitCode" -ForegroundColor Red
+            Write-Host "Full log saved to: $logFile" -ForegroundColor Yellow
+
+            # Display last 100 lines of log
+            Write-Host ""
+            Write-Host "=== Last 100 lines of compilation log ===" -ForegroundColor Yellow
+            Get-Content $logFile -Tail 100
+
+            exit $exitCode
+          }
+
+          Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
+
+      - name: Verify installer output
+        run: |
+          Write-Host "Checking for installer output files..." -ForegroundColor Cyan
+
+          if (Test-Path "installer/Output") {
+            Write-Host "✓ Output directory exists" -ForegroundColor Green
+            $exeFiles = Get-ChildItem "installer/Output/*.exe" -ErrorAction SilentlyContinue
+            if ($exeFiles) {
+              Write-Host "✓ Found installer files:" -ForegroundColor Green
+              $exeFiles | ForEach-Object {
+                $sizeKB = [math]::Round($_.Length / 1KB, 2)
+                Write-Host "  - $($_.Name) ($sizeKB KB)"
+              }
+            } else {
+              Write-Host "❌ No .exe files found in installer/Output/" -ForegroundColor Red
+              Write-Host "Directory contents:"
+              Get-ChildItem "installer/Output" | ForEach-Object {
+                Write-Host "  - $($_.Name)"
+              }
+              exit 1
+            }
+          } else {
+            Write-Host "❌ installer/Output directory does not exist" -ForegroundColor Red
+            Write-Host "Current directory: $(Get-Location)"
+            Write-Host "Installer directory contents:"
+            Get-ChildItem "installer" | ForEach-Object {
+              Write-Host "  - $($_.Name)"
+            }
+            exit 1
+          }
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sankey-copier-release-package
-          path: release/sankey-copier/
-          retention-days: 90
+          name: sankey-copier-installer-${{ needs.version-info.outputs.package_version }}
+          path: installer/Output/*.exe
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installer/Output/*.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Version ${{ needs.version-info.outputs.package_version }}
+
+            Build Information: `${{ needs.version-info.outputs.build_info }}`
+
+            ### Installation
+            Download the installer and run it to install SANKEY Copier on your Windows system.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -79,7 +79,7 @@ Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Web UI (Next.js standalone build)
 Source: "..\web-ui\.next\standalone\*"; DestDir: "{app}\web-ui"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\web-ui\.next\static\*"; DestDir: "{app}\web-ui\.next\static"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\web-ui\public\*"; DestDir: "{app}\web-ui\public"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\web-ui\public\*"; DestDir: "{app}\web-ui\public"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Configuration files
 Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
@@ -87,11 +87,10 @@ Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onl
 ; MT4/MT5 Components
 Source: "..\mql-zmq-dll\target\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x64"; Flags: ignoreversion
 Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x86"; Flags: ignoreversion
-Source: "..\mql\MT4\Master\*.mq4"; DestDir: "{app}\mql\MT4\Master"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT4\Slave\*.mq4"; DestDir: "{app}\mql\MT4\Slave"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT5\Master\*.mq5"; DestDir: "{app}\mql\MT5\Master"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\MT5\Slave\*.mq5"; DestDir: "{app}\mql\MT5\Slave"; Flags: ignoreversion recursesubdirs
-Source: "..\mql\Include\SankeyCopier\*.mqh"; DestDir: "{app}\mql\Include\SankeyCopier"; Flags: ignoreversion recursesubdirs
+
+; MQL Compiled Files (for immediate use)
+Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Documentation
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme

@@ -72,7 +72,7 @@ pub struct HeartbeatMessage {
     pub equity: f64,
     pub open_positions: i32,
     pub timestamp: String,
-    pub version_git: String,  // Git commit short ID
+    pub version: String,  // Build version information
     // EA identification fields (for auto-registration)
     pub ea_type: String,       // "Master" or "Slave"
     pub platform: String,      // "MT4" or "MT5"
@@ -391,7 +391,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
         equity,
         open_positions,
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
-        version_git: env!("GIT_VERSION").to_string(),
+        version: env!("BUILD_INFO").to_string(),
         ea_type: utf16_to_string(ea_type).unwrap_or_default(),
         platform: utf16_to_string(platform).unwrap_or_default(),
         account_number,
@@ -704,7 +704,7 @@ mod tests {
             equity: 10600.25,
             open_positions: 3,
             timestamp: "2025-01-01T00:00:00Z".to_string(),
-            version_git: "test123".to_string(),
+            version: "test123".to_string(),
             ea_type: "Master".to_string(),
             platform: "MT5".to_string(),
             account_number: 12345,
@@ -894,7 +894,7 @@ mod tests {
                         equity: 10000.0 + i as f64,
                         open_positions: i as i32,
                         timestamp: "2025-01-01T00:00:00Z".to_string(),
-                        version_git: "test".to_string(),
+                        version: "test".to_string(),
                         ea_type: "Master".to_string(),
                         platform: "MT5".to_string(),
                         account_number: i as i64,
