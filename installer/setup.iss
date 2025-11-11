@@ -354,13 +354,13 @@ begin
 
         if InWebUISection and (Pos('url = ', ConfigContent[I]) > 0) then
         begin
-          ConfigContent[I] := 'url = "http://localhost:' + WebUIPort + '"';
+          ConfigContent[I] := 'url = "http://127.0.0.1:' + WebUIPort + '"';
           WebUIUrlUpdated := True;
         end;
 
         if InCorsSection and (Pos('allowed_origins = ', ConfigContent[I]) > 0) then
         begin
-          ConfigContent[I] := 'allowed_origins = ["http://localhost:' + WebUIPort + '"]';
+          ConfigContent[I] := 'allowed_origins = ["http://127.0.0.1:' + WebUIPort + '"]';
           CorsOriginsUpdated := True;
         end;
       end;
@@ -370,7 +370,8 @@ begin
 
     { Set NSSM environment variables for Web UI service }
     { Set both PORT and NEXT_PUBLIC_API_URL in a single call }
-    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort + #13#10 + 'NEXT_PUBLIC_API_URL=http://localhost:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Use 127.0.0.1 instead of localhost to force IPv4 and avoid IPv6 connection issues }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort + #13#10 + 'NEXT_PUBLIC_API_URL=http://127.0.0.1:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
