@@ -15,12 +15,26 @@ use super::{ApiResponse, AppState};
 pub async fn list_mt_installations(
     State(_state): State<AppState>,
 ) -> Result<Json<ApiResponse<MtInstallationsResponse>>, String> {
+    let span = tracing::info_span!("list_mt_installations");
+    let _enter = span.enter();
+
     // Windowsレジストリから MT4/MT5 を検出
     let detector = MtDetector::new();
     let installations = match detector.detect() {
-        Ok(installs) => installs,
+        Ok(installs) => {
+            tracing::info!(
+                count = installs.len(),
+                "Successfully detected MT installations"
+            );
+            installs
+        }
         Err(e) => {
-            tracing::error!("Failed to detect MT installations: {}", e);
+            tracing::error!(
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to detect MT installations from registry"
+            );
             Vec::new()
         }
     };
@@ -37,6 +51,14 @@ pub async fn list_mt_installations(
         };
         *by_method.entry(method.to_string()).or_insert(0) += 1;
     }
+
+    tracing::info!(
+        total_found = total_found,
+        running = running,
+        stopped = stopped,
+        detection_methods = ?by_method.keys().collect::<Vec<_>>(),
+        "MT installations detection summary"
+    );
 
     let response = MtInstallationsResponse {
         success: true,
@@ -57,14 +79,26 @@ pub async fn install_to_mt(
     State(_state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<String>>, String> {
-    tracing::info!("Installation request for MT installation ID: {}", id);
+    let span = tracing::info_span!("install_to_mt", installation_id = %id);
+    let _enter = span.enter();
+
+    tracing::info!(
+        installation_id = %id,
+        "Installation request received"
+    );
 
     // レジストリから MT4/MT5 を検出して該当のものを探す
     let detector = MtDetector::new();
     let installations = match detector.detect() {
         Ok(installs) => installs,
         Err(e) => {
-            tracing::error!("Failed to detect MT installations: {}", e);
+            tracing::error!(
+                installation_id = %id,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to detect MT installations for install operation"
+            );
             return Ok(Json(ApiResponse::error(format!(
                 "MT4/MT5の検出に失敗しました: {}",
                 e
@@ -78,6 +112,11 @@ pub async fn install_to_mt(
     let installation = match installation {
         Some(inst) => inst,
         None => {
+            tracing::warn!(
+                installation_id = %id,
+                available_ids = ?installations.iter().map(|i| &i.id).collect::<Vec<_>>(),
+                "MT installation not found"
+            );
             return Ok(Json(ApiResponse::error(format!(
                 "指定されたID ({}) のMT4/MT5が見つかりません。",
                 id
@@ -87,8 +126,23 @@ pub async fn install_to_mt(
 
     // 起動中の場合は警告
     if installation.is_running {
-        tracing::warn!("MT4/MT5 is running. Installation may fail due to file locks.");
+        tracing::warn!(
+            installation_id = %id,
+            installation_name = %installation.name,
+            installation_path = %installation.path,
+            "MT4/MT5 is running. Installation may fail due to file locks"
+        );
     }
+
+    tracing::info!(
+        installation_id = %id,
+        installation_name = %installation.name,
+        installation_path = %installation.path,
+        mt_type = ?installation.mt_type,
+        platform = ?installation.platform,
+        is_running = installation.is_running,
+        "Starting installation process"
+    );
 
     // インストーラーを作成
     let installer = MtInstaller::default();
@@ -97,14 +151,27 @@ pub async fn install_to_mt(
     let mt_path = PathBuf::from(&installation.path);
     match installer.install(&mt_path, &installation.mt_type, &installation.platform) {
         Ok(_) => {
-            tracing::info!("Installation completed successfully for {}", id);
+            tracing::info!(
+                installation_id = %id,
+                installation_name = %installation.name,
+                installation_path = %installation.path,
+                "Installation completed successfully"
+            );
             Ok(Json(ApiResponse::success(format!(
                 "インストールが完了しました: {}",
                 installation.name
             ))))
         }
         Err(e) => {
-            tracing::error!("Installation failed for {}: {}", id, e);
+            tracing::error!(
+                installation_id = %id,
+                installation_name = %installation.name,
+                installation_path = %installation.path,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Installation failed"
+            );
             Ok(Json(ApiResponse::error(format!(
                 "インストールに失敗しました: {}",
                 e
