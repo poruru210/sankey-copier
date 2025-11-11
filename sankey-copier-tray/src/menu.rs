@@ -35,11 +35,11 @@ pub enum AppEvent {
 /// Get status indicator symbol
 fn get_status_indicator(status: &str) -> &str {
     match status {
-        "Running" => "●",       // Running
-        "Stopped" => "○",       // Stopped
-        "Starting..." => "◐",   // Starting
-        "Stopping..." => "◑",   // Stopping
-        _ => "?",               // Unknown
+        "Running" => "🟢",      // Running (green circle)
+        "Stopped" => "🔴",      // Stopped (red circle)
+        "Starting..." => "🟡",  // Starting (yellow circle)
+        "Stopping..." => "🟡",  // Stopping (yellow circle)
+        _ => "⚪",              // Unknown (white circle)
     }
 }
 
