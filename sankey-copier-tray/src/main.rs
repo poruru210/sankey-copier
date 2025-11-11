@@ -58,8 +58,9 @@ static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
 
 // Global web URL
 static WEB_URL: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
-    let port = load_port_from_config().unwrap_or(3000);  // Default to WebUI port
-    format!("http://localhost:{}", port)
+    let port = load_port_from_config().unwrap_or(8080);  // Default to WebUI port (8080)
+    // Use 127.0.0.1 instead of localhost to force IPv4
+    format!("http://127.0.0.1:{}", port)
 });
 
 fn default_server_port() -> u16 {
@@ -125,6 +126,7 @@ fn create_tray_icon() -> Result<tray_icon::TrayIcon> {
         .with_menu(Box::new(menu))
         .with_tooltip("SANKEY Copier")
         .with_icon(icon)
+        .with_menu_on_left_click(true)  // Show menu on left click as well as right click
         .build()?;
 
     Ok(tray_icon)
