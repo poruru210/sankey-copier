@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { RefreshCw } from 'lucide-react';
 import { useApiClient } from '@/lib/contexts/site-context';
 
@@ -25,6 +27,7 @@ export function ServerLog() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
@@ -49,6 +52,19 @@ export function ServerLog() {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  // Auto-refresh logs every 3 seconds when enabled
+  useEffect(() => {
+    if (!autoRefresh) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      fetchLogs();
+    }, 3000); // 3 seconds
+
+    return () => clearInterval(intervalId);
+  }, [autoRefresh, fetchLogs]);
 
   const getLevelColor = (level: string) => {
     switch (level.toUpperCase()) {
@@ -83,16 +99,28 @@ export function ServerLog() {
     <Card className="mb-6 mt-6">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-xl">{title}</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchLogs}
-          disabled={isLoading}
-          className="h-8"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          {refreshButton}
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="auto-refresh"
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+            />
+            <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">
+              自動更新 (3秒)
+            </Label>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchLogs}
+            disabled={isLoading}
+            className="h-8"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {refreshButton}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-1 max-h-60 overflow-y-auto">
