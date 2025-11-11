@@ -134,6 +134,7 @@ async fn main() -> Result<()> {
 
     // Create API state
     tracing::info!("Creating API state...");
+    let allowed_origins = config.allowed_origins();
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -141,9 +142,9 @@ async fn main() -> Result<()> {
         connection_manager: connection_manager.clone(),
         config_sender: zmq_config_sender.clone(),
         log_buffer: log_buffer.clone(),
-        allowed_origins: config.cors.allowed_origins.clone(),
+        allowed_origins: allowed_origins.clone(),
     };
-    tracing::info!("API state created with CORS origins: {:?}", config.cors.allowed_origins);
+    tracing::info!("API state created with CORS origins (auto-generated from webui port {}): {:?}", config.webui.port, allowed_origins);
 
     // Build API router
     tracing::info!("Building API router...");

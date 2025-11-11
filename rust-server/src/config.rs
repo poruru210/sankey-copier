@@ -39,13 +39,14 @@ impl Default for WebUIConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorsConfig {
-    pub allowed_origins: Vec<String>,
+    #[serde(default)]
+    pub additional_origins: Vec<String>,
 }
 
 impl Default for CorsConfig {
     fn default() -> Self {
         Self {
-            allowed_origins: vec!["http://localhost:3000".to_string()],
+            additional_origins: vec![],
         }
     }
 }
@@ -114,6 +115,20 @@ impl Config {
     /// Get ZMQ config sender address
     pub fn zmq_config_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.config_sender_port)
+    }
+
+    /// Get all allowed CORS origins
+    /// Auto-generates origins from webui port and includes additional custom origins
+    pub fn allowed_origins(&self) -> Vec<String> {
+        let mut origins = vec![
+            format!("http://localhost:{}", self.webui.port),
+            format!("http://127.0.0.1:{}", self.webui.port),
+        ];
+
+        // Add additional custom origins (e.g., for Vercel deployment)
+        origins.extend(self.cors.additional_origins.clone());
+
+        origins
     }
 }
 

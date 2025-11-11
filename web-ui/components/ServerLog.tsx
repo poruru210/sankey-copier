@@ -5,6 +5,7 @@ import { useIntlayer } from 'next-intlayer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
+import { useApiClient } from '@/lib/contexts/site-context';
 
 interface LogEntry {
   timestamp: string;
@@ -19,6 +20,7 @@ interface ApiResponse<T> {
 }
 
 export function ServerLog() {
+  const apiClient = useApiClient();
   const { title, noLogs, refreshButton, loading, error: errorText } = useIntlayer('server-log');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,8 +31,7 @@ export function ServerLog() {
     setError(null);
 
     try {
-      const response = await fetch('/api/logs');
-      const data: ApiResponse<LogEntry[]> = await response.json();
+      const data = await apiClient.get<ApiResponse<LogEntry[]>>('/logs');
 
       if (data.success && data.data) {
         setLogs(data.data);
@@ -42,7 +43,7 @@ export function ServerLog() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [apiClient]);
 
   // Fetch logs on component mount
   useEffect(() => {

@@ -14,6 +14,9 @@ winit = "0.30"
 # Windows service control
 windows-service = "0.7"
 
+# Windows API for UAC elevation
+windows = { version = "0.58", features = ["Win32_UI_Shell", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
 # Async runtime
 tokio = { version = "1.42", features = ["full"] }
 
