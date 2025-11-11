@@ -30,29 +30,37 @@ pub struct AppState {
     pub config_sender: Arc<ZmqConfigPublisher>,
     pub log_buffer: LogBuffer,
     pub allowed_origins: Vec<String>,
+    pub cors_disabled: bool,
 }
 
 pub fn create_router(state: AppState) -> Router {
-    // Create CORS layer from configured allowed origins
-    let cors = CorsLayer::new()
-        .allow_origin(
-            state.allowed_origins
-                .iter()
-                .filter_map(|origin| origin.parse().ok())
-                .collect::<Vec<_>>()
-        )
-        .allow_methods([
-            axum::http::Method::GET,
-            axum::http::Method::POST,
-            axum::http::Method::PUT,
-            axum::http::Method::DELETE,
-            axum::http::Method::OPTIONS,
-        ])
-        .allow_headers([
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::AUTHORIZATION,
-        ])
-        .allow_credentials(true);
+    // Create CORS layer - either permissive (all origins) or restricted based on config
+    let cors = if state.cors_disabled {
+        // CORS disabled: allow all origins (development mode)
+        tracing::warn!("CORS is DISABLED - allowing all origins. This should only be used in development!");
+        CorsLayer::permissive()
+    } else {
+        // CORS enabled: restrict to configured origins
+        CorsLayer::new()
+            .allow_origin(
+                state.allowed_origins
+                    .iter()
+                    .filter_map(|origin| origin.parse().ok())
+                    .collect::<Vec<_>>()
+            )
+            .allow_methods([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::PUT,
+                axum::http::Method::DELETE,
+                axum::http::Method::OPTIONS,
+            ])
+            .allow_headers([
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::AUTHORIZATION,
+            ])
+            .allow_credentials(true)
+    };
 
     // Create HTTP tracing layer for request/response logging
     let trace_layer = TraceLayer::new_for_http()

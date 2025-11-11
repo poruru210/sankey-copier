@@ -39,6 +39,9 @@ impl Default for WebUIConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorsConfig {
+    /// Disable CORS restrictions (allows all origins) - use only in development!
+    #[serde(default)]
+    pub disable: bool,
     #[serde(default)]
     pub additional_origins: Vec<String>,
 }
@@ -46,6 +49,7 @@ pub struct CorsConfig {
 impl Default for CorsConfig {
     fn default() -> Self {
         Self {
+            disable: false,
             additional_origins: vec![],
         }
     }
