@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 const SERVER_SERVICE: &str = "SankeyCopierServer";
 const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
-const WEB_URL: &str = "http://localhost:3000";
+const WEB_URL: &str = "http://localhost:8080";
 
 // Global menu ID map
 static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
