@@ -141,8 +141,8 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppStderr ""{app}
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_AUTO_START"; Flags: runhidden; Tasks: autostart
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_DEMAND_START"; Flags: runhidden; Tasks: not autostart
 
-; Set WebUI to depend on Server
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DependOnService SankeyCopierServer"; Flags: runhidden
+; Set WebUI to depend on Server (disabled - services are now independent)
+; Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DependOnService SankeyCopierServer"; Flags: runhidden
 
 ; Environment variables for Web UI service will be set by CurStepChanged procedure
 
