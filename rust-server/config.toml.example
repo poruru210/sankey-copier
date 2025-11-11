@@ -29,3 +29,20 @@ config_sender_port = 5557
 # Connection timeout in seconds
 # EAs that don't send heartbeat within this period will be marked as timed out
 timeout_seconds = 30
+
+[webui]
+# Web UI host and port
+host = "0.0.0.0"
+port = 8080
+# Web UI URL (for tray application)
+url = "http://localhost:8080"
+
+[cors]
+# CORS configuration for Web UI access
+# WARNING: Setting disable=true allows ALL origins - use only in development!
+disable = false  # Set to true to disable CORS restrictions (allows all origins)
+# Origins are automatically generated from [webui] port setting:
+#   - http://localhost:{webui_port}
+#   - http://127.0.0.1:{webui_port}
+# Additional custom origins can be specified below (e.g., for Vercel deployment, development ports)
+additional_origins = []
