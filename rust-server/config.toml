@@ -32,3 +32,12 @@ disable = false  # Set to true to disable CORS restrictions (allows all origins)
 #   - http://127.0.0.1:{webui_port}
 # Additional custom origins can be specified below (e.g., for Vercel deployment, development ports)
 additional_origins = []
+
+[logging]
+# Log file configuration
+enabled = true                          # Enable file logging
+directory = "logs"                      # Directory for log files (relative to executable or absolute path)
+file_prefix = "sankey-copier-server"   # Prefix for log file names
+rotation = "daily"                      # Rotation strategy: "daily", "hourly", or "never"
+max_files = 3                           # Maximum number of log files to keep (0 = unlimited)
+max_age_days = 3                        # Maximum age of log files in days (0 = unlimited)
