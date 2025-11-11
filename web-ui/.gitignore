@@ -23,6 +23,7 @@ build/
 # Testing
 test_*.py
 *.png
+!public/*.png
 debug_*.png
 coverage/
 .nyc_output/

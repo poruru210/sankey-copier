@@ -2,6 +2,7 @@
 
 import { Menu, Settings } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Button } from './ui/button';
 import { LanguageToggle } from './LanguageToggle';
@@ -37,7 +38,14 @@ export function Header({ isMobile, onOpenMobileFilter }: HeaderProps) {
             </Button>
           )}
 
-          <Link href={`/${locale}`}>
+          <Link href={`/${locale}`} className="flex items-center gap-2">
+            <Image
+              src="/logo.png"
+              alt="SANKEY Copier Logo"
+              width={32}
+              height={32}
+              className="object-contain"
+            />
             <h1 className="text-lg font-semibold text-foreground cursor-pointer hover:text-primary transition-colors">
               SANKEY Copier
             </h1>

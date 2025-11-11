@@ -2,6 +2,7 @@
 
 import { Server } from 'lucide-react';
 import { useSiteContext } from '@/lib/contexts/site-context';
+import { SiteManagementDialog } from './SiteManagementDialog';
 
 export function SiteSelector() {
   const { sites, selectedSiteId, selectSite, isLoaded } = useSiteContext();
@@ -24,6 +25,7 @@ export function SiteSelector() {
           </option>
         ))}
       </select>
+      <SiteManagementDialog />
     </div>
   );
 }
