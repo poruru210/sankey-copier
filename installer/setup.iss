@@ -174,16 +174,19 @@ Type: filesandordirs; Name: "{app}\data\logs"
 var
   DataDirPage: TInputDirWizardPage;
   ServerPortPage: TInputQueryWizardPage;
+  DataDirInitialized: Boolean;
 
 procedure InitializeWizard;
 begin
+  DataDirInitialized := False;
+
   { Create custom page for data directory }
   DataDirPage := CreateInputDirPage(wpSelectDir,
     'Select Data Directory', 'Where should application data be stored?',
     'Select the folder in which Setup should store database and log files, then click Next.',
     False, '');
   DataDirPage.Add('');
-  DataDirPage.Values[0] := ExpandConstant('{app}\data');
+  { Default value will be set in CurPageChanged after app constant is initialized }
 
   { Create custom page for server port }
   ServerPortPage := CreateInputQueryPage(wpSelectDir,
@@ -191,6 +194,16 @@ begin
     'Please specify the port number for the server.');
   ServerPortPage.Add('Server Port:', False);
   ServerPortPage.Values[0] := '8080';
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  { Set default data directory after installation directory has been selected }
+  if (CurPageID = DataDirPage.ID) and (not DataDirInitialized) then
+  begin
+    DataDirPage.Values[0] := ExpandConstant('{app}\data');
+    DataDirInitialized := True;
+  end;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
