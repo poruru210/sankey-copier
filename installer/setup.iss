@@ -93,7 +93,6 @@ Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ign
 Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Documentation
-Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "resources\license.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
@@ -106,13 +105,13 @@ Name: "{app}\data\logs"; Permissions: users-full
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SANKEY Copier Tray"; ValueData: """{app}\sankey-copier-tray.exe"""; Flags: uninsdeletevalue; Tasks: trayapp
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "http://localhost:8080"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\Open Web Interface"; Filename: "http://localhost:8080"
+Name: "{group}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Open Web Interface"; Filename: "{code:GetWebUIUrl}"
 Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query SankeyCopierServer"
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
 Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "http://localhost:8080"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 ; Install and start Windows services
@@ -153,7 +152,7 @@ Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierWebUI"; Flags: runhid
 Filename: "{app}\sankey-copier-tray.exe"; Description: "Launch SANKEY Copier Tray Application"; Flags: nowait postinstall skipifsilent; Tasks: trayapp
 
 ; Open web interface
-Filename: "http://localhost:8080"; Description: "Open SANKEY Copier Web Interface"; Flags: shellexec postinstall skipifsilent
+Filename: "{code:GetWebUIUrl}"; Description: "Open SANKEY Copier Web Interface"; Flags: shellexec postinstall skipifsilent
 
 [UninstallRun]
 ; Stop tray application
@@ -180,6 +179,11 @@ var
   ServerPortPage: TInputQueryWizardPage;
   DataDirInitialized: Boolean;
 
+function GetWebUIUrl(Param: String): String;
+begin
+  Result := 'http://localhost:' + ServerPortPage.Values[1];
+end;
+
 procedure InitializeWizard;
 begin
   DataDirInitialized := False;
@@ -198,8 +202,8 @@ begin
     'Please specify the port numbers for the server and web interface.');
   ServerPortPage.Add('Rust Server API Port:', False);
   ServerPortPage.Add('Web UI Port:', False);
-  ServerPortPage.Values[0] := '8080';
-  ServerPortPage.Values[1] := '3000';
+  ServerPortPage.Values[0] := '3000';
+  ServerPortPage.Values[1] := '8080';
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

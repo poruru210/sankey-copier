@@ -2,9 +2,9 @@ import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
 // Rust Server API URL - configurable via environment variable
-// Default: http://localhost:8080 for production
+// Default: http://localhost:3000 for production
 // This allows the installer to configure the API endpoint dynamically
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 const nextConfig: NextConfig = {
   // Output standalone for Windows service deployment

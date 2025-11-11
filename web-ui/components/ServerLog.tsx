@@ -29,7 +29,7 @@ export function ServerLog() {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3000/api/logs');
+      const response = await fetch('/api/logs');
       const data: ApiResponse<LogEntry[]> = await response.json();
 
       if (data.success && data.data) {

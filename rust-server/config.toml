@@ -3,14 +3,14 @@
 [server]
 # Rust Server API host and port
 host = "0.0.0.0"
-port = 8080
+port = 3000
 
 [webui]
 # Web UI host and port
 host = "0.0.0.0"
-port = 3000
+port = 8080
 # Web UI URL (for tray application)
-url = "http://localhost:3000"
+url = "http://localhost:8080"
 
 [database]
 # SQLite database URL
@@ -25,4 +25,4 @@ timeout_seconds = 30      # Connection timeout in seconds
 
 [cors]
 # CORS configuration for Web UI access
-allowed_origins = ["http://localhost:3000"]
+allowed_origins = ["http://localhost:8080"]
