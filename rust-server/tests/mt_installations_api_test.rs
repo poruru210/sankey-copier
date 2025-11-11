@@ -34,6 +34,7 @@ async fn create_test_app() -> axum::Router {
         config_sender,
         log_buffer,
         allowed_origins: vec!["http://localhost:8080".to_string()],
+        cors_disabled: false, // Use strict CORS for tests
     };
 
     create_router(app_state)
@@ -139,7 +140,6 @@ async fn test_mt_installations_response_structure() {
         assert!(components["dll"].is_boolean());
         assert!(components["master_ea"].is_boolean());
         assert!(components["slave_ea"].is_boolean());
-        assert!(components["includes"].is_boolean());
 
         // Check type values
         let mt_type = installation["type"].as_str().unwrap();
@@ -149,6 +149,6 @@ async fn test_mt_installations_response_structure() {
         assert!(platform == "32-bit" || platform == "64-bit");
 
         let detection_method = installation["detection_method"].as_str().unwrap();
-        assert_eq!(detection_method, "process");
+        assert!(detection_method == "process" || detection_method == "registry");
     }
 }

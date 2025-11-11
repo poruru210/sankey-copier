@@ -202,20 +202,20 @@ cp target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll \
 **MT4の場合**:
 
 ```
-mql/MT4/Master/SankeyCopierMaster.mq4
+mql/MT4/SankeyCopierMaster.mq4
   → C:/Program Files (x86)/MetaTrader 4/MQL4/Experts/
 
-mql/MT4/Slave/SankeyCopierSlave.mq4
+mql/MT4/SankeyCopierSlave.mq4
   → C:/Program Files (x86)/MetaTrader 4/MQL4/Experts/
 ```
 
 **MT5の場合**:
 
 ```
-mql/MT5/Master/SankeyCopierMaster.mq5
+mql/MT5/SankeyCopierMaster.mq5
   → C:/Program Files/MetaTrader 5/MQL5/Experts/
 
-mql/MT5/Slave/SankeyCopierSlave.mq5
+mql/MT5/SankeyCopierSlave.mq5
   → C:/Program Files/MetaTrader 5/MQL5/Experts/
 ```
 

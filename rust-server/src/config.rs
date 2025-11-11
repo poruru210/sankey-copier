@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,15 +112,51 @@ pub struct ZeroMqConfig {
 }
 
 impl Config {
-    /// Load config from TOML file
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path.as_ref())
-            .context(format!("Failed to read config file: {:?}", path.as_ref()))?;
+    /// Load config from layered TOML files
+    ///
+    /// Loads configuration files in the following order (later files override earlier):
+    /// 1. {base_name}.toml (required, e.g., config.toml)
+    /// 2. {base_name}.{ENV}.toml (optional, only if CONFIG_ENV is set)
+    /// 3. {base_name}.local.toml (optional, for personal overrides, git-ignored)
+    ///
+    /// # Arguments
+    /// * `base_name` - Base name without extension (e.g., "config" for config.toml)
+    ///
+    /// # Environment Variables
+    /// * `CONFIG_ENV` - If set, loads {base_name}.{CONFIG_ENV}.toml (e.g., config.dev.toml)
+    ///   - No default value - must be explicitly set
+    ///   - Common values: "dev", "prod", "staging"
+    pub fn from_file<P: AsRef<Path>>(base_name: P) -> Result<Self> {
+        let base_path = base_name.as_ref();
+        let base_str = base_path.to_str()
+            .context("Invalid base path")?;
 
-        let config: Config = toml::from_str(&content)
-            .context("Failed to parse config file")?;
+        // Build layered configuration
+        let mut builder = config::Config::builder()
+            // 1. Load base config (required)
+            .add_source(config::File::with_name(base_str));
 
-        Ok(config)
+        // 2. Load environment-specific config (optional)
+        // Only loads if CONFIG_ENV environment variable is explicitly set
+        if let Ok(env) = std::env::var("CONFIG_ENV") {
+            let env_config = format!("{}.{}", base_str, env);
+            builder = builder.add_source(
+                config::File::with_name(&env_config).required(false)
+            );
+        }
+
+        // 3. Load local config (optional, for personal overrides)
+        let local_config = format!("{}.local", base_str);
+        builder = builder.add_source(
+            config::File::with_name(&local_config).required(false)
+        );
+
+        // Build and deserialize
+        let config = builder.build()
+            .context("Failed to build configuration")?;
+
+        config.try_deserialize()
+            .context("Failed to deserialize configuration")
     }
 
     /// Create default config
