@@ -47,7 +47,7 @@ DisableWelcomePage=no
 LicenseFile=resources\license.txt
 
 ; Uninstall
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\sankey-copier-tray.exe
 UninstallDisplayName={#MyAppName}
 
 [Languages]
@@ -141,6 +141,8 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_DEM
 ; Set WebUI to depend on Server
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DependOnService SankeyCopierServer"; Flags: runhidden
 
+; Environment variables for Web UI service will be set by CurStepChanged procedure
+
 ; Start services
 Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden nowait; StatusMsg: "Starting services..."
 Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierWebUI"; Flags: runhidden nowait
@@ -188,21 +190,71 @@ begin
   DataDirPage.Add('');
   { Default value will be set in CurPageChanged after app constant is initialized }
 
-  { Create custom page for server port }
+  { Create custom page for port configuration }
   ServerPortPage := CreateInputQueryPage(wpSelectDir,
-    'Server Configuration', 'Configure server settings',
-    'Please specify the port number for the server.');
-  ServerPortPage.Add('Server Port:', False);
+    'Port Configuration', 'Configure network ports',
+    'Please specify the port numbers for the server and web interface.');
+  ServerPortPage.Add('Rust Server API Port:', False);
+  ServerPortPage.Add('Web UI Port:', False);
   ServerPortPage.Values[0] := '8080';
+  ServerPortPage.Values[1] := '3000';
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
+var
+  ConfigFile: String;
+  ConfigContent: TArrayOfString;
+  I: Integer;
+  Line: String;
+  InServerSection: Boolean;
+  InWebUISection: Boolean;
 begin
   { Set default data directory after installation directory has been selected }
   if (CurPageID = DataDirPage.ID) and (not DataDirInitialized) then
   begin
     DataDirPage.Values[0] := ExpandConstant('{app}\data');
     DataDirInitialized := True;
+  end;
+
+  { Load existing port configuration for upgrades }
+  if CurPageID = ServerPortPage.ID then
+  begin
+    ConfigFile := ExpandConstant('{app}\config.toml');
+    if FileExists(ConfigFile) then
+    begin
+      LoadStringsFromFile(ConfigFile, ConfigContent);
+      InServerSection := False;
+      InWebUISection := False;
+
+      for I := 0 to GetArrayLength(ConfigContent) - 1 do
+      begin
+        Line := Trim(ConfigContent[I]);
+
+        { Track which section we're in }
+        if Line = '[server]' then
+        begin
+          InServerSection := True;
+          InWebUISection := False;
+        end
+        else if Line = '[webui]' then
+        begin
+          InServerSection := False;
+          InWebUISection := True;
+        end
+        else if (Length(Line) > 0) and (Line[1] = '[') then
+        begin
+          InServerSection := False;
+          InWebUISection := False;
+        end;
+
+        { Extract port values }
+        if InServerSection and (Pos('port = ', Line) > 0) then
+          ServerPortPage.Values[0] := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
+
+        if InWebUISection and (Pos('port = ', Line) > 0) then
+          ServerPortPage.Values[1] := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
+      end;
+    end;
   end;
 end;
 
@@ -219,33 +271,103 @@ var
   ConfigFile: String;
   ConfigContent: TArrayOfString;
   I: Integer;
-  Found: Boolean;
+  Line: String;
+  InServerSection: Boolean;
+  InWebUISection: Boolean;
+  InCorsSection: Boolean;
+  ServerPortUpdated: Boolean;
+  WebUIPortUpdated: Boolean;
+  WebUIUrlUpdated: Boolean;
+  CorsOriginsUpdated: Boolean;
+  WebUIPort: String;
+  ServerPort: String;
+  ResultCode: Integer;
+  NssmPath: String;
 begin
   if CurStep = ssPostInstall then
   begin
     { Update config.toml with custom settings }
     ConfigFile := ExpandConstant('{app}\config.toml');
+    WebUIPort := ServerPortPage.Values[1];
+    ServerPort := ServerPortPage.Values[0];
+    NssmPath := ExpandConstant('{app}\nssm.exe');
 
     if FileExists(ConfigFile) then
     begin
-      LoadStringsFromFile(ConfigFile, ConfigContent);
-      Found := False;
+      LoadStringsFromFile(ConfigContent, ConfigFile);
+      InServerSection := False;
+      InWebUISection := False;
+      InCorsSection := False;
+      ServerPortUpdated := False;
+      WebUIPortUpdated := False;
+      WebUIUrlUpdated := False;
+      CorsOriginsUpdated := False;
 
-      { Always update server port (even if it's default 8080) }
-      { This ensures tray app can read the configured port }
       for I := 0 to GetArrayLength(ConfigContent) - 1 do
       begin
-        if Pos('port = ', ConfigContent[I]) > 0 then
+        Line := Trim(ConfigContent[I]);
+
+        { Track which section we're in }
+        if Line = '[server]' then
         begin
-          ConfigContent[I] := 'port = ' + ServerPortPage.Values[0];
-          Found := True;
-          Break;
+          InServerSection := True;
+          InWebUISection := False;
+          InCorsSection := False;
+        end
+        else if Line = '[webui]' then
+        begin
+          InServerSection := False;
+          InWebUISection := True;
+          InCorsSection := False;
+        end
+        else if Line = '[cors]' then
+        begin
+          InServerSection := False;
+          InWebUISection := False;
+          InCorsSection := True;
+        end
+        else if (Length(Line) > 0) and (Line[1] = '[') then
+        begin
+          InServerSection := False;
+          InWebUISection := False;
+          InCorsSection := False;
+        end;
+
+        { Update port values }
+        if InServerSection and (Pos('port = ', ConfigContent[I]) > 0) then
+        begin
+          ConfigContent[I] := 'port = ' + ServerPort;
+          ServerPortUpdated := True;
+        end;
+
+        if InWebUISection and (Pos('port = ', ConfigContent[I]) > 0) then
+        begin
+          ConfigContent[I] := 'port = ' + WebUIPort;
+          WebUIPortUpdated := True;
+        end;
+
+        if InWebUISection and (Pos('url = ', ConfigContent[I]) > 0) then
+        begin
+          ConfigContent[I] := 'url = "http://localhost:' + WebUIPort + '"';
+          WebUIUrlUpdated := True;
+        end;
+
+        if InCorsSection and (Pos('allowed_origins = ', ConfigContent[I]) > 0) then
+        begin
+          ConfigContent[I] := 'allowed_origins = ["http://localhost:' + WebUIPort + '"]';
+          CorsOriginsUpdated := True;
         end;
       end;
 
-      if Found then
-        SaveStringsToFile(ConfigFile, ConfigContent, False);
+      SaveStringsToFile(ConfigFile, ConfigContent, False);
     end;
+
+    { Set NSSM environment variables for Web UI service }
+    { PORT: Web UI port for Next.js standalone }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    { NEXT_PUBLIC_API_URL: Rust Server API URL for Web UI }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra +NEXT_PUBLIC_API_URL=http://localhost:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
