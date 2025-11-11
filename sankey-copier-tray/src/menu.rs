@@ -110,14 +110,6 @@ pub fn create_menu() -> Result<Menu> {
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
-    // Check Status
-    let status_check_item = MenuItem::new("Check Status", true, None);
-    ids.insert(status_check_item.id().clone(), "status".to_string());
-    menu.append(&status_check_item)?;
-
-    // Separator
-    menu.append(&PredefinedMenuItem::separator())?;
-
     // About
     let about_item = MenuItem::new("About", true, None);
     ids.insert(about_item.id().clone(), "about".to_string());
@@ -186,12 +178,6 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
             }
             update_menu_status();
         }
-
-        // Check status
-        "status" => match service::get_service_status() {
-            Ok(status) => ui::show_info(&status),
-            Err(e) => ui::show_error(&format!("Failed to get status: {}", e)),
-        },
 
         // About
         "about" => {
