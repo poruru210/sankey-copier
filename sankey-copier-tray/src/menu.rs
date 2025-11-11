@@ -114,24 +114,18 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
         "ui_start" => {
             if let Err(e) = service::start_webui_service() {
                 ui::show_error(&format!("Failed to start Web UI: {}", e));
-            } else {
-                ui::show_info("Web UI started successfully");
             }
         }
 
         "ui_stop" => {
             if let Err(e) = service::stop_webui_service() {
                 ui::show_error(&format!("Failed to stop Web UI: {}", e));
-            } else {
-                ui::show_info("Web UI stopped successfully");
             }
         }
 
         "ui_restart" => {
             if let Err(e) = service::restart_webui_service() {
                 ui::show_error(&format!("Failed to restart Web UI: {}", e));
-            } else {
-                ui::show_info("Web UI restarted successfully");
             }
         }
 
@@ -139,24 +133,18 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
         "service_start" => {
             if let Err(e) = service::start_server_service() {
                 ui::show_error(&format!("Failed to start Server: {}", e));
-            } else {
-                ui::show_info("Server started successfully");
             }
         }
 
         "service_stop" => {
             if let Err(e) = service::stop_server_service() {
                 ui::show_error(&format!("Failed to stop Server: {}", e));
-            } else {
-                ui::show_info("Server stopped successfully");
             }
         }
 
         "service_restart" => {
             if let Err(e) = service::restart_server_service() {
                 ui::show_error(&format!("Failed to restart Server: {}", e));
-            } else {
-                ui::show_info("Server restarted successfully");
             }
         }
 
