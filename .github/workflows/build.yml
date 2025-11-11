@@ -104,7 +104,7 @@ jobs:
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
@@ -112,7 +112,7 @@ jobs:
           copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-dll
@@ -150,13 +150,13 @@ jobs:
           cargo build --release
 
       - name: Prepare server artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         run: |
           mkdir -p artifacts/server
           copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
 
       - name: Upload server artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-server
@@ -191,13 +191,13 @@ jobs:
           cargo build --release
 
       - name: Prepare Tray Application artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         run: |
           mkdir -p artifacts/tray
           copy sankey-copier-tray\target\release\sankey-copier-tray.exe artifacts\tray\
 
       - name: Upload Tray Application artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-tray
@@ -247,7 +247,7 @@ jobs:
         run: pnpm build
 
       - name: Upload Web UI artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-web-ui
@@ -276,7 +276,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache MetaTrader Installation
+        id: cache-mt
+        uses: actions/cache@v4
+        with:
+          path: D:\MT_Install\${{ matrix.platform }}
+          key: mt-${{ matrix.platform }}-5.0.0.5387-v2
+          restore-keys: |
+            mt-${{ matrix.platform }}-5.0.0.5387-
+            mt-${{ matrix.platform }}-
+
       - name: Download MetaTrader installer from Private Release
+        if: steps.cache-mt.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ secrets.MT_INSTALLER_PAT }}
         run: |
@@ -349,7 +360,21 @@ jobs:
           $installerInfo = Get-Item "${{ matrix.platform }}setup.exe"
           Write-Host "✅ Prepared installer: $($installerInfo.Name) ($($installerInfo.Length) bytes)"
 
+      - name: Skip installation (cache hit)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "✅ Using cached MetaTrader installation for ${{ matrix.platform }}" -ForegroundColor Green
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+          Write-Host "Installation path: $installPath"
+
+          # Verify cache contents
+          if (Test-Path $installPath) {
+            $files = Get-ChildItem $installPath -Recurse -File | Measure-Object
+            Write-Host "Cached files count: $($files.Count)"
+          }
+
       - name: Install MetaTrader
+        if: steps.cache-mt.outputs.cache-hit != 'true'
         run: |
           Write-Host "Installing ${{ matrix.platform }}..."
 
@@ -511,6 +536,58 @@ jobs:
 
           # Save to GitHub environment for next step
           "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Find MetaEditor (for cached installation)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "Locating MetaEditor in cached installation..." -ForegroundColor Cyan
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+
+          # Find MetaEditor
+          $metaeditors = @()
+
+          if ("${{ matrix.version }}" -eq "4") {
+            # MT4: Look for 32-bit version first
+            $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "metaeditor.exe" }
+            if ($me32) {
+              $metaeditors += $me32
+              Write-Host "Found MT4 32-bit MetaEditor: $($me32[0].FullName)"
+            }
+
+            # Fallback to 64-bit if 32-bit not found
+            if ($metaeditors.Count -eq 0) {
+              $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+              if ($me64) {
+                $metaeditors += $me64
+                Write-Host "Using MT4 64-bit MetaEditor: $($me64[0].FullName)"
+              }
+            }
+          } else {
+            # MT5: Use 64-bit version
+            $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+            if ($me64) {
+              $metaeditors += $me64
+              Write-Host "Found MT5 64-bit MetaEditor: $($me64[0].FullName)"
+            }
+
+            # Fallback to 32-bit if needed
+            if ($metaeditors.Count -eq 0) {
+              $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue
+              if ($me32) {
+                $metaeditors += $me32
+                Write-Host "Using MT5 32-bit MetaEditor: $($me32[0].FullName)"
+              }
+            }
+          }
+
+          if ($metaeditors.Count -gt 0) {
+            $global:METAEDITOR_PATH = $metaeditors[0].FullName
+            Write-Host "✅ Selected MetaEditor: $global:METAEDITOR_PATH" -ForegroundColor Green
+            "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            Write-Host "❌ MetaEditor not found in cached installation" -ForegroundColor Red
+            exit 1
+          }
 
       - name: Prepare Include directory
         run: |
@@ -719,7 +796,7 @@ jobs:
           copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
 
       - name: Upload MQL artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
@@ -730,7 +807,7 @@ jobs:
     name: Build Windows Installer
     runs-on: windows-latest
     needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+    if: ${{ github.event.inputs.build_target == 'all' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'push' }}
 
     steps:
       - name: Checkout code
