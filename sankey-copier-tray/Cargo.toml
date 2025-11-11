@@ -8,6 +8,9 @@ edition = "2021"
 tray-icon = "0.19"
 image = "0.25"
 
+# Windows event loop
+winit = "0.30"
+
 # Windows service control
 windows-service = "0.7"
 

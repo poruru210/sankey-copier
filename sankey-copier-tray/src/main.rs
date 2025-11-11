@@ -15,6 +15,8 @@ use tray_icon::{
 };
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
+use winit::platform::windows::EventLoopBuilderExtWindows;
 
 const SERVER_SERVICE: &str = "SankeyCopierServer";
 const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
@@ -50,6 +52,12 @@ impl Default for WebUIConfig {
     fn default() -> Self {
         Self { port: 3000 }
     }
+}
+
+// Custom event for app control
+#[derive(Debug, Clone)]
+enum AppEvent {
+    Exit,
 }
 
 // Global menu ID map
@@ -93,6 +101,13 @@ fn load_port_from_config() -> Option<u16> {
 }
 
 fn main() -> Result<()> {
+    // Create event loop for Windows message pump
+    let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event()
+        .build()
+        .expect("Failed to create event loop");
+
+    let event_loop_proxy = event_loop.create_proxy();
+
     // Create tray icon
     let _tray_icon = create_tray_icon()?;
 
@@ -104,13 +119,26 @@ fn main() -> Result<()> {
         }
     });
 
-    // Event loop
-    loop {
-        if let Ok(event) = MenuEvent::receiver().recv() {
-            handle_menu_event(&event.id);
+    // Run event loop
+    event_loop.run(move |event, elwt| {
+        elwt.set_control_flow(ControlFlow::Poll);
+
+        // Handle user events (like exit)
+        match event {
+            winit::event::Event::UserEvent(AppEvent::Exit) => {
+                elwt.exit();
+                return;
+            }
+            _ => {}
         }
-        thread::sleep(Duration::from_millis(100));
-    }
+
+        // Check for menu events
+        if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
+            handle_menu_event(&menu_event.id, &event_loop_proxy);
+        }
+    }).expect("Event loop error");
+
+    Ok(())
 }
 
 /// Create system tray icon with menu
@@ -181,8 +209,8 @@ fn create_menu() -> Result<Menu> {
     ids.insert(about_item.id().clone(), "about".to_string());
     menu.append(&about_item)?;
 
-    // Exit
-    let quit_item = PredefinedMenuItem::quit(None);
+    // Exit - use MenuItem instead of PredefinedMenuItem for better control
+    let quit_item = MenuItem::new("Exit", true, None);
     ids.insert(quit_item.id().clone(), "quit".to_string());
     menu.append(&quit_item)?;
 
@@ -190,7 +218,7 @@ fn create_menu() -> Result<Menu> {
 }
 
 /// Handle menu events
-fn handle_menu_event(id: &MenuId) {
+fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent>) {
     let ids = MENU_IDS.lock().unwrap();
     let action = ids.get(id).map(|s| s.as_str()).unwrap_or("");
 
@@ -244,7 +272,7 @@ fn handle_menu_event(id: &MenuId) {
 
         // Quit
         "quit" => {
-            std::process::exit(0);
+            let _ = event_loop_proxy.send_event(AppEvent::Exit);
         }
 
         _ => {}
