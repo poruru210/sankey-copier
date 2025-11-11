@@ -1008,6 +1008,37 @@ jobs:
 
           Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
 
+      - name: Verify installer output
+        run: |
+          Write-Host "Checking for installer output files..." -ForegroundColor Cyan
+
+          if (Test-Path "installer/Output") {
+            Write-Host "✓ Output directory exists" -ForegroundColor Green
+            $exeFiles = Get-ChildItem "installer/Output/*.exe" -ErrorAction SilentlyContinue
+            if ($exeFiles) {
+              Write-Host "✓ Found installer files:" -ForegroundColor Green
+              $exeFiles | ForEach-Object {
+                $sizeKB = [math]::Round($_.Length / 1KB, 2)
+                Write-Host "  - $($_.Name) ($sizeKB KB)"
+              }
+            } else {
+              Write-Host "❌ No .exe files found in installer/Output/" -ForegroundColor Red
+              Write-Host "Directory contents:"
+              Get-ChildItem "installer/Output" | ForEach-Object {
+                Write-Host "  - $($_.Name)"
+              }
+              exit 1
+            }
+          } else {
+            Write-Host "❌ installer/Output directory does not exist" -ForegroundColor Red
+            Write-Host "Current directory: $(Get-Location)"
+            Write-Host "Installer directory contents:"
+            Get-ChildItem "installer" | ForEach-Object {
+              Write-Host "  - $($_.Name)"
+            }
+            exit 1
+          }
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
