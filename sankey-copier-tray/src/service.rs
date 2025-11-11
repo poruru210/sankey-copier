@@ -1,0 +1,147 @@
+//! Windows service management for SANKEY Copier.
+//!
+//! This module provides functions to start, stop, restart, and query
+//! the status of Windows services using NSSM.
+
+use anyhow::{Context, Result};
+use std::process::Command;
+
+use crate::elevation::run_elevated_batch_command;
+
+pub const SERVER_SERVICE: &str = "SankeyCopierServer";
+pub const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
+const NSSM_PATH: &str = "C:\\Program Files\\SANKEY Copier\\nssm.exe";
+
+// ============================================================================
+// Web UI Service Control
+// ============================================================================
+
+/// Start Web UI service
+pub fn start_webui_service() -> Result<()> {
+    run_elevated_nssm_command("start", &[WEBUI_SERVICE])
+}
+
+/// Stop Web UI service
+pub fn stop_webui_service() -> Result<()> {
+    run_elevated_nssm_command("stop", &[WEBUI_SERVICE])
+}
+
+/// Restart Web UI service
+pub fn restart_webui_service() -> Result<()> {
+    run_elevated_nssm_command("restart", &[WEBUI_SERVICE])
+}
+
+// ============================================================================
+// Server Service Control
+// ============================================================================
+
+/// Start Server service
+pub fn start_server_service() -> Result<()> {
+    run_elevated_nssm_command("start", &[SERVER_SERVICE])
+}
+
+/// Stop Server service
+pub fn stop_server_service() -> Result<()> {
+    run_elevated_nssm_command("stop", &[SERVER_SERVICE])
+}
+
+/// Restart Server service
+pub fn restart_server_service() -> Result<()> {
+    run_elevated_nssm_command("restart", &[SERVER_SERVICE])
+}
+
+// ============================================================================
+// Service Status
+// ============================================================================
+
+/// Get service status for both services
+pub fn get_service_status() -> Result<String> {
+    let server_status = query_service_status(SERVER_SERVICE)?;
+    let webui_status = query_service_status(WEBUI_SERVICE)?;
+
+    Ok(format!(
+        "Service Status:\n\nServer: {}\nWeb UI: {}",
+        server_status, webui_status
+    ))
+}
+
+/// Query status of a single service using NSSM
+fn query_service_status(service_name: &str) -> Result<String> {
+    // Try NSSM first if available
+    if std::path::Path::new(NSSM_PATH).exists() {
+        let output = Command::new(NSSM_PATH)
+            .args(&["status", service_name])
+            .output()
+            .context("Failed to execute nssm command")?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let status = stdout.trim();
+
+            // NSSM returns: SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_START_PENDING, etc.
+            return Ok(match status {
+                "SERVICE_RUNNING" => "Running",
+                "SERVICE_STOPPED" => "Stopped",
+                "SERVICE_START_PENDING" => "Starting...",
+                "SERVICE_STOP_PENDING" => "Stopping...",
+                "SERVICE_PAUSE_PENDING" => "Pausing...",
+                "SERVICE_CONTINUE_PENDING" => "Resuming...",
+                "SERVICE_PAUSED" => "Paused",
+                _ => status,
+            }
+            .to_string());
+        }
+    }
+
+    // Fallback to sc.exe if NSSM is not available
+    let output = Command::new("sc")
+        .args(&["query", service_name])
+        .output()
+        .context("Failed to execute sc command")?;
+
+    if !output.status.success() {
+        return Ok("Not Installed".to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse state from output
+    for line in stdout.lines() {
+        if line.contains("STATE") {
+            if line.contains("RUNNING") {
+                return Ok("Running".to_string());
+            } else if line.contains("STOPPED") {
+                return Ok("Stopped".to_string());
+            } else if line.contains("START_PENDING") {
+                return Ok("Starting...".to_string());
+            } else if line.contains("STOP_PENDING") {
+                return Ok("Stopping...".to_string());
+            }
+        }
+    }
+
+    Ok("Unknown".to_string())
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/// Run NSSM command with UAC elevation
+fn run_elevated_nssm_command(action: &str, services: &[&str]) -> Result<()> {
+    // Check if NSSM exists
+    if !std::path::Path::new(NSSM_PATH).exists() {
+        anyhow::bail!("NSSM not found at: {}", NSSM_PATH);
+    }
+
+    // Build parameters for NSSM
+    // For multiple services, we need to call nssm multiple times
+    let mut commands = Vec::new();
+    for service in services {
+        commands.push(format!("\"{}\" {} {}", NSSM_PATH, action, service));
+    }
+    let command_string = commands.join(" && timeout /t 1 /nobreak >nul && ");
+
+    // Execute via elevated cmd.exe (NSSM requires this for service control)
+    run_elevated_batch_command(&command_string)
+}
