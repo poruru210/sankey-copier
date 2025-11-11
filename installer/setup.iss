@@ -40,6 +40,7 @@ PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 MinVersion=10.0.17763
 ArchitecturesInstallIn64BitMode=x64
+LongPathsAware=yes
 
 ; UI
 WizardStyle=modern
