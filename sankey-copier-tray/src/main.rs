@@ -4,6 +4,8 @@
 #![windows_subsystem = "windows"] // Hide console window
 
 use anyhow::{Context, Result};
+use serde::Deserialize;
+use std::fs;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -16,11 +18,52 @@ use std::collections::HashMap;
 
 const SERVER_SERVICE: &str = "SankeyCopierServer";
 const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
-const WEB_URL: &str = "http://localhost:8080";
+const DEFAULT_PORT: u16 = 8080;
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    server: ServerConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct ServerConfig {
+    #[serde(default = "default_port")]
+    port: u16,
+}
 
 // Global menu ID map
 static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
     once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+// Global web URL
+static WEB_URL: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
+    let port = load_port_from_config().unwrap_or(DEFAULT_PORT);
+    format!("http://localhost:{}", port)
+});
+
+fn default_port() -> u16 {
+    DEFAULT_PORT
+}
+
+/// Load port number from config.toml
+fn load_port_from_config() -> Option<u16> {
+    // Try to find config.toml in standard locations
+    let config_paths = [
+        "config.toml",
+        "../config.toml",
+        "C:\\Program Files\\SANKEY Copier\\config.toml",
+    ];
+
+    for path in &config_paths {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(config) = toml::from_str::<Config>(&content) {
+                return Some(config.server.port);
+            }
+        }
+    }
+
+    None
+}
 
 fn main() -> Result<()> {
     // Create tray icon
@@ -226,7 +269,7 @@ fn create_default_icon() -> Result<Icon> {
 
 /// Open web interface in default browser
 fn open_web_interface() -> Result<()> {
-    webbrowser::open(WEB_URL).context("Failed to open browser")
+    webbrowser::open(&*WEB_URL).context("Failed to open browser")
 }
 
 /// Start Windows services

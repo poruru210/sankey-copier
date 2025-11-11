@@ -232,22 +232,20 @@ begin
       LoadStringsFromFile(ConfigFile, ConfigContent);
       Found := False;
 
-      { Update server port if different from default }
-      if ServerPortPage.Values[0] <> '8080' then
+      { Always update server port (even if it's default 8080) }
+      { This ensures tray app can read the configured port }
+      for I := 0 to GetArrayLength(ConfigContent) - 1 do
       begin
-        for I := 0 to GetArrayLength(ConfigContent) - 1 do
+        if Pos('port = ', ConfigContent[I]) > 0 then
         begin
-          if Pos('server_address', ConfigContent[I]) > 0 then
-          begin
-            ConfigContent[I] := 'server_address = "0.0.0.0:' + ServerPortPage.Values[0] + '"';
-            Found := True;
-            Break;
-          end;
+          ConfigContent[I] := 'port = ' + ServerPortPage.Values[0];
+          Found := True;
+          Break;
         end;
-
-        if Found then
-          SaveStringsToFile(ConfigFile, ConfigContent, False);
       end;
+
+      if Found then
+        SaveStringsToFile(ConfigFile, ConfigContent, False);
     end;
   end;
 end;
