@@ -730,7 +730,7 @@ jobs:
     name: Build Windows Installer
     runs-on: windows-latest
     needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, compile-mql]
-    if: ${{ github.event.inputs.build_target == 'all' || startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event.inputs.build_target == 'all' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
 
     steps:
       - name: Checkout code
