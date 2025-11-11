@@ -369,11 +369,8 @@ begin
     end;
 
     { Set NSSM environment variables for Web UI service }
-    { PORT: Web UI port for Next.js standalone }
-    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-    { NEXT_PUBLIC_API_URL: Rust Server API URL for Web UI }
-    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra +NEXT_PUBLIC_API_URL=http://localhost:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Set both PORT and NEXT_PUBLIC_API_URL in a single call }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort + #13#10 + 'NEXT_PUBLIC_API_URL=http://localhost:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
