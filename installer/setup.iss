@@ -87,6 +87,12 @@ Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onl
 ; MT4/MT5 Components
 Source: "..\mql-zmq-dll\target\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x64"; Flags: ignoreversion
 Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x86"; Flags: ignoreversion
+
+; MQL Compiled Files (for immediate use)
+Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+
+; MQL Source Files (for customization)
 Source: "..\mql\MT4\Master\*.mq4"; DestDir: "{app}\mql\MT4\Master"; Flags: ignoreversion recursesubdirs
 Source: "..\mql\MT4\Slave\*.mq4"; DestDir: "{app}\mql\MT4\Slave"; Flags: ignoreversion recursesubdirs
 Source: "..\mql\MT5\Master\*.mq5"; DestDir: "{app}\mql\MT5\Master"; Flags: ignoreversion recursesubdirs

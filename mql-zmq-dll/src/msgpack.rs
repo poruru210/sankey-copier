@@ -391,7 +391,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
         equity,
         open_positions,
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
-        version_git: env!("GIT_VERSION").to_string(),
+        version_git: env!("BUILD_INFO").to_string(),
         ea_type: utf16_to_string(ea_type).unwrap_or_default(),
         platform: utf16_to_string(platform).unwrap_or_default(),
         account_number,
