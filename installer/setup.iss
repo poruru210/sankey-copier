@@ -129,11 +129,10 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_AU
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_DEMAND_START"; Flags: runhidden; Tasks: not autostart
 
 ; Install Web UI service (Node.js standalone)
-Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierWebUI node"; Flags: runhidden; StatusMsg: "Installing Web UI service..."
+Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierWebUI node ""{app}\web-ui\server.js"""; Flags: runhidden; StatusMsg: "Installing Web UI service..."
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DisplayName ""SANKEY Copier Web UI"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Description ""Web interface for SANKEY Copier"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppDirectory ""{app}\web-ui"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppParameters """"\""{app}\web-ui\server.js\"""""""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppStdout ""{app}\data\logs\webui-stdout.log"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppStderr ""{app}\data\logs\webui-stderr.log"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_AUTO_START"; Flags: runhidden; Tasks: autostart
