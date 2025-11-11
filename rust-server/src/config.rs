@@ -167,6 +167,7 @@ mod tests {
                 host: "127.0.0.1".to_string(),
                 port: 9090,
             },
+            webui: WebUIConfig::default(),
             database: DatabaseConfig {
                 url: "sqlite://test.db".to_string(),
             },
@@ -176,6 +177,7 @@ mod tests {
                 config_sender_port: 6668,
                 timeout_seconds: 60,
             },
+            cors: CorsConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");

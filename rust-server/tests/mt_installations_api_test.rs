@@ -33,6 +33,7 @@ async fn create_test_app() -> axum::Router {
         connection_manager,
         config_sender,
         log_buffer,
+        allowed_origins: vec!["http://localhost:8080".to_string()],
     };
 
     create_router(app_state)
