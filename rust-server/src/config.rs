@@ -6,14 +6,48 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
+    #[serde(default)]
+    pub webui: WebUIConfig,
     pub database: DatabaseConfig,
     pub zeromq: ZeroMqConfig,
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebUIConfig {
+    pub host: String,
+    pub port: u16,
+    pub url: String,
+}
+
+impl Default for WebUIConfig {
+    fn default() -> Self {
+        Self {
+            host: "0.0.0.0".to_string(),
+            port: 3000,
+            url: "http://localhost:3000".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorsConfig {
+    pub allowed_origins: Vec<String>,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            allowed_origins: vec!["http://localhost:3000".to_string()],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +82,7 @@ impl Config {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
             },
+            webui: WebUIConfig::default(),
             database: DatabaseConfig {
                 url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
             },
@@ -57,6 +92,7 @@ impl Config {
                 config_sender_port: 5557,
                 timeout_seconds: 30,
             },
+            cors: CorsConfig::default(),
         }
     }
 

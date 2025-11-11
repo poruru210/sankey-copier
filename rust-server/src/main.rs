@@ -141,8 +141,9 @@ async fn main() -> Result<()> {
         connection_manager: connection_manager.clone(),
         config_sender: zmq_config_sender.clone(),
         log_buffer: log_buffer.clone(),
+        allowed_origins: config.cors.allowed_origins.clone(),
     };
-    tracing::info!("API state created");
+    tracing::info!("API state created with CORS origins: {:?}", config.cors.allowed_origins);
 
     // Build API router
     tracing::info!("Building API router...");

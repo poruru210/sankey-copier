@@ -22,13 +22,34 @@ const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Debug, Deserialize)]
 struct Config {
+    #[serde(default)]
     server: ServerConfig,
+    #[serde(default)]
+    webui: WebUIConfig,
 }
 
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
-    #[serde(default = "default_port")]
+    #[serde(default = "default_server_port")]
     port: u16,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self { port: 8080 }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WebUIConfig {
+    #[serde(default = "default_webui_port")]
+    port: u16,
+}
+
+impl Default for WebUIConfig {
+    fn default() -> Self {
+        Self { port: 3000 }
+    }
 }
 
 // Global menu ID map
@@ -37,15 +58,19 @@ static MENU_IDS: once_cell::sync::Lazy<Arc<Mutex<HashMap<MenuId, String>>>> =
 
 // Global web URL
 static WEB_URL: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
-    let port = load_port_from_config().unwrap_or(DEFAULT_PORT);
+    let port = load_port_from_config().unwrap_or(3000);  // Default to WebUI port
     format!("http://localhost:{}", port)
 });
 
-fn default_port() -> u16 {
-    DEFAULT_PORT
+fn default_server_port() -> u16 {
+    8080
 }
 
-/// Load port number from config.toml
+fn default_webui_port() -> u16 {
+    3000
+}
+
+/// Load Web UI port number from config.toml
 fn load_port_from_config() -> Option<u16> {
     // Try to find config.toml in standard locations
     let config_paths = [
@@ -57,7 +82,8 @@ fn load_port_from_config() -> Option<u16> {
     for path in &config_paths {
         if let Ok(content) = fs::read_to_string(path) {
             if let Ok(config) = toml::from_str::<Config>(&content) {
-                return Some(config.server.port);
+                // Return webui.port, not server.port
+                return Some(config.webui.port);
             }
         }
     }

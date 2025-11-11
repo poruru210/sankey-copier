@@ -1,27 +1,25 @@
 import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
+// Rust Server API URL - configurable via environment variable
+// Default: http://localhost:8080 for production
+// This allows the installer to configure the API endpoint dynamically
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
 const nextConfig: NextConfig = {
   // Output standalone for Windows service deployment
   output: 'standalone',
 
-  // Allow external network access during development
-  // Specify the actual IP address of your network interface
-  allowedDevOrigins: [
-    'http://10.5.0.2:5173',
-    'http://localhost:5173',
-    '10.5.0.2:5173',
-    '10.5.0.2',
-  ],
+  // Proxy API calls to Rust Server
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:3000/api/:path*',
+        destination: `${apiBaseUrl}/api/:path*`,
       },
       {
         source: '/ws',
-        destination: 'http://127.0.0.1:3000/ws',
+        destination: `${apiBaseUrl}/ws`,
       },
     ];
   },
