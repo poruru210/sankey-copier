@@ -72,15 +72,29 @@ impl MtInstaller {
         fs::create_dir_all(&libraries_path)
             .context("Failed to create Libraries directory")?;
 
-        // DLLソースパスを決定
+        // DLLソースパスを決定（本番環境と開発環境の両方をサポート）
         let dll_source = match architecture {
             Architecture::Bit32 => {
-                self.components_base_path
-                    .join("mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll")
+                // Try production path first (installer package)
+                let prod_path = self.components_base_path.join("mql/MT4/Libraries/sankey_copier_zmq.dll");
+                if prod_path.exists() {
+                    prod_path
+                } else {
+                    // Fall back to development path
+                    self.components_base_path
+                        .join("mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll")
+                }
             }
             Architecture::Bit64 => {
-                self.components_base_path
-                    .join("mql-zmq-dll/target/release/sankey_copier_zmq.dll")
+                // Try production path first (installer package)
+                let prod_path = self.components_base_path.join("mql/MT5/Libraries/sankey_copier_zmq.dll");
+                if prod_path.exists() {
+                    prod_path
+                } else {
+                    // Fall back to development path
+                    self.components_base_path
+                        .join("mql-zmq-dll/target/release/sankey_copier_zmq.dll")
+                }
             }
         };
 
@@ -119,7 +133,7 @@ impl MtInstaller {
         // Master EAをコピー
         let master_source = self
             .components_base_path
-            .join(format!("mql/{}/Master/SankeyCopierMaster.{}", mt_folder, extension));
+            .join(format!("mql/{}/SankeyCopierMaster.{}", mt_folder, extension));
 
         if !master_source.exists() {
             anyhow::bail!(
@@ -142,7 +156,7 @@ impl MtInstaller {
         // Slave EAをコピー
         let slave_source = self
             .components_base_path
-            .join(format!("mql/{}/Slave/SankeyCopierSlave.{}", mt_folder, extension));
+            .join(format!("mql/{}/SankeyCopierSlave.{}", mt_folder, extension));
 
         if !slave_source.exists() {
             anyhow::bail!(
@@ -272,14 +286,12 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA binary files for MT4
-        let source_master_path = temp_components.path().join("mql/MT4/Master");
-        let source_slave_path = temp_components.path().join("mql/MT4/Slave");
-        fs::create_dir_all(&source_master_path).unwrap();
-        fs::create_dir_all(&source_slave_path).unwrap();
+        // Create source EA binary files for MT4 (flattened structure)
+        let source_path = temp_components.path().join("mql/MT4");
+        fs::create_dir_all(&source_path).unwrap();
 
-        fs::write(source_master_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
-        fs::write(source_slave_path.join("SankeyCopierSlave.ex4"), b"slave ea mt4").unwrap();
+        fs::write(source_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
+        fs::write(source_path.join("SankeyCopierSlave.ex4"), b"slave ea mt4").unwrap();
 
         // Create MT4 structure
         let mql_path = temp_mt.path().join("MQL4");
@@ -305,14 +317,12 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA binary files for MT5
-        let source_master_path = temp_components.path().join("mql/MT5/Master");
-        let source_slave_path = temp_components.path().join("mql/MT5/Slave");
-        fs::create_dir_all(&source_master_path).unwrap();
-        fs::create_dir_all(&source_slave_path).unwrap();
+        // Create source EA binary files for MT5 (flattened structure)
+        let source_path = temp_components.path().join("mql/MT5");
+        fs::create_dir_all(&source_path).unwrap();
 
-        fs::write(source_master_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
-        fs::write(source_slave_path.join("SankeyCopierSlave.ex5"), b"slave ea mt5").unwrap();
+        fs::write(source_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
+        fs::write(source_path.join("SankeyCopierSlave.ex5"), b"slave ea mt5").unwrap();
 
         // Create MT5 structure
         let mql_path = temp_mt.path().join("MQL5");
@@ -397,12 +407,10 @@ mod tests {
 
         let (mt_folder, ext) = if is_mt4 { ("MT4", "ex4") } else { ("MT5", "ex5") };
 
-        // EA binary files
-        let master_path = base_path.join(format!("mql/{}/Master", mt_folder));
-        let slave_path = base_path.join(format!("mql/{}/Slave", mt_folder));
-        fs::create_dir_all(&master_path).unwrap();
-        fs::create_dir_all(&slave_path).unwrap();
-        fs::write(master_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
-        fs::write(slave_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();
+        // EA binary files (flattened structure - directly under mql/MT4 or mql/MT5)
+        let ea_path = base_path.join(format!("mql/{}", mt_folder));
+        fs::create_dir_all(&ea_path).unwrap();
+        fs::write(ea_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
+        fs::write(ea_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();
     }
 }

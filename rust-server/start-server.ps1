@@ -59,10 +59,14 @@ Write-Host ""
 
 # Start the server
 Write-Host "[3/3] Starting Rust server on port $PORT..." -ForegroundColor Yellow
+Write-Host "  -> Setting CONFIG_ENV=dev for development environment" -ForegroundColor Cyan
 Write-Host "  -> Running: cargo run --release" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+
+# Set development environment variable
+$env:CONFIG_ENV = "dev"
 
 # Run cargo in release mode
 # Use development mode for faster compilation: cargo run

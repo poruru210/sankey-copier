@@ -32,6 +32,10 @@ nul
 .env.local
 .env.*.local
 
+# Local configuration overrides (Rust server)
+config.local.toml
+config.*.local.toml
+
 # Claude Code
 .claude/settings.local.json
 

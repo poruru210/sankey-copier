@@ -288,25 +288,25 @@ xcopy mql\Include\SankeyCopier "C:\Program Files\[Broker] MetaTrader 5\MQL5\Incl
 **MT4 Master EA:**
 
 ```powershell
-copy mql\MT4\Master\SankeyCopierMaster.mq4 "C:\Program Files (x86)\[Broker] MetaTrader 4\MQL4\Experts\"
+copy mql\MT4\SankeyCopierMaster.mq4 "C:\Program Files (x86)\[Broker] MetaTrader 4\MQL4\Experts\"
 ```
 
 **MT4 Slave EA:**
 
 ```powershell
-copy mql\MT4\Slave\SankeyCopierSlave.mq4 "C:\Program Files (x86)\[Broker] MetaTrader 4\MQL4\Experts\"
+copy mql\MT4\SankeyCopierSlave.mq4 "C:\Program Files (x86)\[Broker] MetaTrader 4\MQL4\Experts\"
 ```
 
 **MT5 Master EA:**
 
 ```powershell
-copy mql\MT5\Master\SankeyCopierMaster.mq5 "C:\Program Files\[Broker] MetaTrader 5\MQL5\Experts\"
+copy mql\MT5\SankeyCopierMaster.mq5 "C:\Program Files\[Broker] MetaTrader 5\MQL5\Experts\"
 ```
 
 **MT5 Slave EA:**
 
 ```powershell
-copy mql\MT5\Slave\SankeyCopierSlave.mq5 "C:\Program Files\[Broker] MetaTrader 5\MQL5\Experts\"
+copy mql\MT5\SankeyCopierSlave.mq5 "C:\Program Files\[Broker] MetaTrader 5\MQL5\Experts\"
 ```
 
 ### EAのコンパイル

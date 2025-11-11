@@ -144,7 +144,12 @@ jobs:
 
       - name: Build server
         working-directory: rust-server
+        env:
+          PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+          FILE_VERSION: ${{ needs.version-info.outputs.file_version }}
         run: |
+          echo "Building with PACKAGE_VERSION=${{ needs.version-info.outputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ needs.version-info.outputs.file_version }}"
           cargo build --release
 
       - name: Prepare server artifacts
@@ -659,7 +664,7 @@ jobs:
           }
 
           # Compile Master EA
-          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.mq${{ matrix.version }}"
+          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Master EA ==="
           Write-Host "Source file: $masterFile"
@@ -679,7 +684,7 @@ jobs:
           }
 
           # Compile Slave EA
-          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.mq${{ matrix.version }}"
+          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Slave EA ==="
           Write-Host "Source file: $slaveFile"
@@ -757,8 +762,8 @@ jobs:
         run: |
           Write-Host "Verifying compiled files..."
 
-          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Master\SankeyCopierMaster.ex${{ matrix.version }}"
-          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\Slave\SankeyCopierSlave.ex${{ matrix.version }}"
+          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.ex${{ matrix.version }}"
 
           $errors = @()
 
@@ -785,8 +790,7 @@ jobs:
       - name: Prepare MQL artifacts
         run: |
           mkdir -p artifacts/mql/${{ matrix.platform }}
-          copy "mql\${{ matrix.platform }}\Master\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Master files"
-          copy "mql\${{ matrix.platform }}\Slave\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No Slave files"
+          copy "mql\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No compiled files found"
 
       - name: Upload MQL artifacts
         uses: actions/upload-artifact@v4

@@ -110,10 +110,11 @@ fn cleanup_old_logs(logging_config: &LoggingConfig) {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load configuration first (needed for file logging setup)
-    let config = match Config::from_file("config.toml") {
+    // Loads config.toml, config.dev.toml, and config.local.toml (if they exist)
+    let config = match Config::from_file("config") {
         Ok(cfg) => cfg,
         Err(e) => {
-            eprintln!("Failed to load config.toml: {}, using defaults", e);
+            eprintln!("Failed to load configuration: {}, using defaults", e);
             Config::default()
         }
     };

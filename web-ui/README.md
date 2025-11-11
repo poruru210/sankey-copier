@@ -119,17 +119,6 @@ export function MyComponent() {
 }
 ```
 
-## 環境変数
-
-必要に応じて `.env.local` を作成：
-
-```env
-# Next.js
-NEXT_PUBLIC_API_URL=http://localhost:8080
-
-# その他の環境変数
-```
-
 ## 既知の問題
 
 ### Windows環境での警告

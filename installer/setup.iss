@@ -85,8 +85,10 @@ Source: "..\web-ui\public\*"; DestDir: "{app}\web-ui\public"; Flags: ignoreversi
 Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
 ; MT4/MT5 Components
-Source: "..\mql-zmq-dll\target\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x64"; Flags: ignoreversion
-Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\dll\x86"; Flags: ignoreversion
+; MT5 uses 64-bit DLL in Libraries folder
+Source: "..\mql-zmq-dll\target\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\MT5\Libraries"; Flags: ignoreversion
+; MT4 uses 32-bit DLL in Libraries folder
+Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\MT4\Libraries"; Flags: ignoreversion
 
 ; MQL Compiled Files (for immediate use)
 Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
@@ -369,9 +371,8 @@ begin
     end;
 
     { Set NSSM environment variables for Web UI service }
-    { Set both PORT and NEXT_PUBLIC_API_URL in a single call }
-    { Use 127.0.0.1 instead of localhost to force IPv4 and avoid IPv6 connection issues }
-    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort + #13#10 + 'NEXT_PUBLIC_API_URL=http://127.0.0.1:' + ServerPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Set PORT environment variable for Next.js }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
