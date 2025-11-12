@@ -61,6 +61,39 @@ pnpm tauri build --debug
    - `public/` - 公開ファイル
 5. Tauriがweb-uiディレクトリをアプリケーションにバンドルします
 
+### スマートキャッシング ⚡
+
+`prepare-web-ui.js`は**インテリジェントなキャッシング**機能を備えています：
+
+**自動スキップ条件：**
+- `package.json`が変更されていない
+- `pnpm-lock.yaml`が変更されていない
+- `next.config.ts`が変更されていない
+- ソースファイル（`app/`, `components/`, `lib/`）が変更されていない
+- `desktop/web-ui/`ディレクトリが存在する
+
+**ビルド時間の短縮：**
+- 初回ビルド: 3-5分（完全ビルド）
+- 2回目以降（変更なし）: **即座にスキップ**
+- コードのみ変更: 1-2分（増分ビルド）
+
+**オプション：**
+```bash
+# 強制的に再ビルド
+node desktop/prepare-web-ui.js --force
+
+# pnpm installをスキップ（依存関係が変わっていない場合）
+node desktop/prepare-web-ui.js --skip-install
+
+# 両方指定
+node desktop/prepare-web-ui.js --force --skip-install
+```
+
+**仕組み：**
+- `.build-cache.json`にファイルハッシュと更新時刻を保存
+- 次回ビルド時にキャッシュと比較して変更を検出
+- 変更がなければビルドをスキップして既存のバンドルを使用
+
 ## 動作
 
 1. アプリ起動時にスプラッシュスクリーンを表示
