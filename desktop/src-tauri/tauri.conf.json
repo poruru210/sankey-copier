@@ -5,14 +5,17 @@
   "identifier": "com.sankey-copier.desktop",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "node ../prepare-web-ui.js",
     "devUrl": "http://localhost:8080",
     "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
     "targets": ["msi"],
-    "resources": ["splash.html"],
+    "resources": [
+      "splash.html",
+      "../web-ui"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
