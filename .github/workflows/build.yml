@@ -299,11 +299,12 @@ jobs:
           $version = "${{ needs.version-info.outputs.package_version }}"
           Write-Host "Updating Tauri app version to: $version" -ForegroundColor Cyan
 
-          # Update Cargo.toml
+          # Update Cargo.toml (only package version in [package] section)
           $cargoToml = "desktop/src-tauri/Cargo.toml"
           if (Test-Path $cargoToml) {
             $content = Get-Content $cargoToml -Raw
-            $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+            # Only replace version in [package] section, not dependency versions
+            $content = $content -replace '(?m)^(\[package\][\s\S]*?^version\s*=\s*")[^"]*"', "`${1}$version`""
             Set-Content $cargoToml -Value $content -NoNewline
             Write-Host "✓ Updated $cargoToml" -ForegroundColor Green
           } else {
