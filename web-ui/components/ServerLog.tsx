@@ -74,10 +74,20 @@ export function ServerLog() {
   // Add padding to main content when expanded to prevent content from being hidden
   useEffect(() => {
     const mainContent = document.querySelector('.relative.z-10') as HTMLElement;
-    if (!mainContent) return;
+    const pageContainer = document.querySelector('.min-h-screen') as HTMLElement;
+    if (!mainContent || !pageContainer) return;
 
     // Collapsed bar height is approximately 40px
     const collapsedBarHeight = 40;
+
+    // Set fixed height on page container to prevent double scrollbars
+    pageContainer.style.height = '100vh';
+    pageContainer.style.overflow = 'hidden';
+
+    // Make main content scrollable
+    mainContent.style.height = '100vh';
+    mainContent.style.overflowY = 'auto';
+    mainContent.style.overflowX = 'hidden';
 
     if (isExpanded) {
       const paddingValue = isMaximized ? window.innerHeight : height;
@@ -89,6 +99,11 @@ export function ServerLog() {
 
     return () => {
       mainContent.style.paddingBottom = '0px';
+      mainContent.style.height = '';
+      mainContent.style.overflowY = '';
+      mainContent.style.overflowX = '';
+      pageContainer.style.height = '';
+      pageContainer.style.overflow = '';
     };
   }, [isExpanded, height, isMaximized]);
 
