@@ -5,7 +5,7 @@ import { useIntlayer } from 'next-intlayer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { RefreshCw, ChevronUp, ChevronDown, X } from 'lucide-react';
+import { RefreshCw, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { useApiClient } from '@/lib/contexts/site-context';
 
 interface LogEntry {
@@ -30,6 +30,8 @@ export function ServerLog() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [height, setHeight] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [previousHeight, setPreviousHeight] = useState(350);
   const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
 
   const fetchLogs = useCallback(async () => {
@@ -101,6 +103,18 @@ export function ServerLog() {
     resizeStartRef.current = { y: e.clientY, height };
   };
 
+  const toggleMaximize = () => {
+    if (isMaximized) {
+      // Restore to previous height
+      setHeight(previousHeight);
+      setIsMaximized(false);
+    } else {
+      // Save current height and maximize
+      setPreviousHeight(height);
+      setIsMaximized(true);
+    }
+  };
+
   const getLevelColor = (level: string) => {
     switch (level.toUpperCase()) {
       case 'ERROR':
@@ -161,13 +175,19 @@ export function ServerLog() {
   return (
     <div
       className="fixed left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-2xl flex flex-col"
-      style={{ bottom: 0, height: `${height}px` }}
+      style={{
+        bottom: 0,
+        height: isMaximized ? 'calc(100vh - 0px)' : `${height}px`,
+        top: isMaximized ? 0 : 'auto'
+      }}
     >
       {/* Resize handle */}
-      <div
-        className="h-1 bg-slate-700 hover:bg-blue-500 cursor-ns-resize transition-colors"
-        onMouseDown={handleResizeStart}
-      />
+      {!isMaximized && (
+        <div
+          className="h-1 bg-slate-700 hover:bg-blue-500 cursor-ns-resize transition-colors"
+          onMouseDown={handleResizeStart}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
@@ -181,12 +201,12 @@ export function ServerLog() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Switch
               id="auto-refresh-expanded"
               checked={autoRefresh}
               onCheckedChange={setAutoRefresh}
-              className="data-[state=checked]:bg-blue-600"
+              className="data-[state=checked]:bg-blue-600 scale-75"
             />
             <Label htmlFor="auto-refresh-expanded" className="text-xs cursor-pointer text-slate-300">
               自動更新 (3秒)
@@ -205,6 +225,16 @@ export function ServerLog() {
           </Button>
 
           <div className="h-4 w-px bg-slate-700" />
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleMaximize}
+            className="h-7 text-slate-300 hover:text-white hover:bg-slate-800"
+            title={isMaximized ? '復元' : '最大化'}
+          >
+            {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
 
           <Button
             variant="ghost"
