@@ -5,7 +5,7 @@
   "identifier": "com.sankey-copier.desktop",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "node ../prepare-web-ui.js",
+    "beforeBuildCommand": "node prepare-web-ui.js",
     "devUrl": "http://localhost:8080",
     "frontendDist": "../dist"
   },
