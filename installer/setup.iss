@@ -167,11 +167,8 @@ Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierWebUI confirm"; Flag
 Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Flags: runhidden; RunOnceId: "RemoveServer"
 
 [UninstallDelete]
-; Clean up all data files
-Type: filesandordirs; Name: "{app}\data"
-Type: filesandordirs; Name: "{app}\logs"
-Type: files; Name: "{app}\sankey_copier.db"
-Type: files; Name: "{app}\config.toml"
+; Clean up all remaining files and directories
+Type: filesandordirs; Name: "{app}\*"
 
 [Code]
 var
