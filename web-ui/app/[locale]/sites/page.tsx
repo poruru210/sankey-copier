@@ -108,7 +108,7 @@ export default function SitesPage() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="container mx-auto p-6 max-w-[1200px]">
+          <div className="w-[80%] mx-auto p-6">
           {/* Page Title */}
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-2">{content.title}</h1>

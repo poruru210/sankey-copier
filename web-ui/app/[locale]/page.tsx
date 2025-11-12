@@ -58,7 +58,15 @@ export default function Home() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="container mx-auto p-6 max-w-[1600px]">
+          <div className="w-[80%] mx-auto p-6 h-full flex flex-col">
+          {/* Page Title */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold mb-2">Trading Connections</h1>
+            <p className="text-muted-foreground">
+              Manage and monitor your master-slave trading connections in real-time
+            </p>
+          </div>
+
           {/* Error Display */}
           {error && (
             <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
@@ -67,14 +75,16 @@ export default function Home() {
           )}
 
           {/* Copy Connections */}
-          <ConnectionsViewReactFlow
-            connections={connections}
-            settings={settings}
-            onToggle={toggleEnabled}
-            onCreate={createSetting}
-            onUpdate={updateSetting}
-            onDelete={deleteSetting}
-          />
+          <div className="flex-1 min-h-0">
+            <ConnectionsViewReactFlow
+              connections={connections}
+              settings={settings}
+              onToggle={toggleEnabled}
+              onCreate={createSetting}
+              onUpdate={updateSetting}
+              onDelete={deleteSetting}
+            />
+          </div>
           </div>
         </div>
       </div>
