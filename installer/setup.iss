@@ -75,8 +75,11 @@ english.TaskAutostart=Start services automatically on Windows startup
 english.OpenWebInterface=Open SANKEY Copier Web Interface
 english.InstallingServerService=Installing Rust server service...
 english.StartingServices=Starting services...
-english.ExistingInstallationTitle=Existing Installation Detected
-english.ExistingInstallationMessage=An existing installation of SANKEY Copier was detected.%n%nPlease uninstall the existing version before installing this version.%n%nWould you like to continue anyway? (Not recommended)
+english.RepairInstallationTitle=Repair Installation
+english.RepairInstallationMessage=The same version of SANKEY Copier is already installed.%n%nDo you want to repair the installation?
+english.UpdateInstallationTitle=Update Installation
+english.UpdateInstallationMessage=A previous version of SANKEY Copier is already installed.%n%nDo you want to update to version {#MyAppVersion}?
+english.StoppingServices=Stopping existing services...
 
 ; Japanese
 japanese.DataDirPageTitle=データディレクトリの選択
@@ -91,8 +94,11 @@ japanese.TaskAutostart=Windows起動時にサービスを自動起動する
 japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
 japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
-japanese.ExistingInstallationTitle=既存のインストールを検出
-japanese.ExistingInstallationMessage=既存のSANKEY Copierのインストールが検出されました。%n%nこのバージョンをインストールする前に、既存のバージョンをアンインストールしてください。%n%nそれでも続行しますか？（非推奨）
+japanese.RepairInstallationTitle=インストールの修復
+japanese.RepairInstallationMessage=同じバージョンのSANKEY Copierが既にインストールされています。%n%nインストールを修復しますか？
+japanese.UpdateInstallationTitle=インストールの更新
+japanese.UpdateInstallationMessage=以前のバージョンのSANKEY Copierが既にインストールされています。%n%nバージョン{#MyAppVersion}に更新しますか？
+japanese.StoppingServices=既存のサービスを停止しています...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -148,39 +154,7 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Install and start Windows services
-; Note: Services will be configured to start automatically
-
-; Install Rust Server service
-Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierServer ""{app}\sankey-copier-server.exe"""; Flags: runhidden; StatusMsg: "{cm:InstallingServerService}"
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer DisplayName ""SANKEY Copier Server"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Description ""Backend server for SANKEY Copier MT4/MT5 trade copying system"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer AppDirectory ""{app}"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer AppStdout ""{app}\data\logs\server-stdout.log"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer AppStderr ""{app}\data\logs\server-stderr.log"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_AUTO_START"; Flags: runhidden; Tasks: autostart
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_DEMAND_START"; Flags: runhidden; Tasks: not autostart
-
-; Install Web UI service (Node.js standalone)
-Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierWebUI node"; Flags: runhidden; StatusMsg: "{cm:InstallingServerService}"
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Application node"; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppParameters \""{app}\web-ui\server.js\"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DisplayName ""SANKEY Copier Web UI"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Description ""Web interface for SANKEY Copier"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppDirectory ""{app}\web-ui"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppStdout ""{app}\data\logs\webui-stdout.log"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppStderr ""{app}\data\logs\webui-stderr.log"""; Flags: runhidden
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_AUTO_START"; Flags: runhidden; Tasks: autostart
-Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_DEMAND_START"; Flags: runhidden; Tasks: not autostart
-
-; Set WebUI to depend on Server (disabled - services are now independent)
-; Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DependOnService SankeyCopierServer"; Flags: runhidden
-
-; Environment variables for Web UI service will be set by CurStepChanged procedure
-
-; Start services
-Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden nowait; StatusMsg: "{cm:StartingServices}"
-Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierWebUI"; Flags: runhidden nowait
+; Services are installed and started by CurStepChanged procedure
 
 ; Launch tray application (always)
 Filename: "{app}\sankey-copier-tray.exe"; Flags: nowait skipifsilent
@@ -212,6 +186,8 @@ var
   DataDirPage: TInputDirWizardPage;
   ServerPortPage: TInputQueryWizardPage;
   DataDirInitialized: Boolean;
+  IsRepairMode: Boolean;
+  IsUpdateMode: Boolean;
 
 function GetWebUIUrl(Param: String): String;
 begin
@@ -221,20 +197,55 @@ end;
 function InitializeSetup(): Boolean;
 var
   ExistingPath: String;
+  InstalledVersion: String;
+  UninstallKey: String;
 begin
   Result := True;
+  IsRepairMode := False;
+  IsUpdateMode := False;
 
   { Check if SANKEY Copier is already installed }
   ExistingPath := ExpandConstant('{autopf}\{#MyAppName}\sankey-copier-server.exe');
 
   if FileExists(ExistingPath) then
   begin
-    { Existing installation detected }
-    if MsgBox(CustomMessage('ExistingInstallationMessage'),
-              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDNO then
+    { Get installed version from registry }
+    UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1';
+
+    if RegQueryStringValue(HKLM, UninstallKey, 'DisplayVersion', InstalledVersion) or
+       RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion) then
     begin
-      { User chose not to continue - cancel installation }
-      Result := False;
+      { Compare versions }
+      if InstalledVersion = '{#MyAppVersion}' then
+      begin
+        { Same version - Repair mode }
+        IsRepairMode := True;
+        if MsgBox(CustomMessage('RepairInstallationMessage'),
+                  mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+        begin
+          Result := False;
+        end;
+      end
+      else
+      begin
+        { Different version - Update mode }
+        IsUpdateMode := True;
+        if MsgBox(CustomMessage('UpdateInstallationMessage'),
+                  mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+        begin
+          Result := False;
+        end;
+      end;
+    end
+    else
+    begin
+      { Version not found in registry, assume update mode }
+      IsUpdateMode := True;
+      if MsgBox(CustomMessage('UpdateInstallationMessage'),
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+      begin
+        Result := False;
+      end;
     end;
   end;
 end;
@@ -368,6 +379,26 @@ var
   ResultCode: Integer;
   NssmPath: String;
 begin
+  if CurStep = ssInstall then
+  begin
+    { Stop existing services and tray app before installing }
+    if IsRepairMode or IsUpdateMode then
+    begin
+      NssmPath := ExpandConstant('{autopf}\{#MyAppName}\nssm.exe');
+
+      { Stop tray application }
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM sankey-copier-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+      { Stop services if nssm.exe exists }
+      if FileExists(NssmPath) then
+      begin
+        Exec(NssmPath, 'stop SankeyCopierWebUI', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Exec(NssmPath, 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(2000); { Wait for services to stop }
+      end;
+    end;
+  end;
+
   if CurStep = ssPostInstall then
   begin
     { Update config.toml with custom settings }
@@ -446,9 +477,51 @@ begin
       SaveStringsToFile(ConfigFile, ConfigContent, False);
     end;
 
-    { Set NSSM environment variables for Web UI service }
-    { Set PORT environment variable for Next.js }
+    { Install or update Windows services }
+    NssmPath := ExpandConstant('{app}\nssm.exe');
+
+    { Server service }
+    if not (IsRepairMode or IsUpdateMode) then
+    begin
+      { Fresh install - create services }
+      Exec(NssmPath, 'install SankeyCopierServer "' + ExpandConstant('{app}\sankey-copier-server.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+
+    { Configure Server service (works for both new and existing) }
+    Exec(NssmPath, 'set SankeyCopierServer DisplayName "SANKEY Copier Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierServer Description "Backend server for SANKEY Copier MT4/MT5 trade copying system"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierServer AppDirectory "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierServer AppStdout "' + ExpandConstant('{app}\data\logs\server-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierServer AppStderr "' + ExpandConstant('{app}\data\logs\server-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if WizardIsTaskSelected('autostart') then
+      Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else
+      Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_DEMAND_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    { WebUI service }
+    if not (IsRepairMode or IsUpdateMode) then
+    begin
+      { Fresh install - create services }
+      Exec(NssmPath, 'install SankeyCopierWebUI node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+
+    { Configure WebUI service (works for both new and existing) }
+    Exec(NssmPath, 'set SankeyCopierWebUI Application node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppParameters "' + ExpandConstant('{app}\web-ui\server.js') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI DisplayName "SANKEY Copier Web UI"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI Description "Web interface for SANKEY Copier"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppDirectory "' + ExpandConstant('{app}\web-ui') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppStdout "' + ExpandConstant('{app}\data\logs\webui-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppStderr "' + ExpandConstant('{app}\data\logs\webui-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if WizardIsTaskSelected('autostart') then
+      Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else
+      Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_DEMAND_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    { Start services }
+    Exec(NssmPath, 'start SankeyCopierServer', '', SW_HIDE, ewNoWait, ResultCode);
+    Exec(NssmPath, 'start SankeyCopierWebUI', '', SW_HIDE, ewNoWait, ResultCode);
   end;
 end;
 
