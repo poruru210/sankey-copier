@@ -27,7 +27,6 @@ const BUILD_INFO: &str = match option_env!("BUILD_INFO") {
 
 struct AppState {
     node_process: Arc<Mutex<Option<Child>>>,
-    web_ui_port: u16,
 }
 
 /// Find an available port by binding to port 0 (OS assigns free port)
@@ -185,7 +184,6 @@ fn main() {
                 // Server is ready, update state and show main window
                 let app_state = AppState {
                     node_process: Arc::new(Mutex::new(Some(node_process))),
-                    web_ui_port: port,
                 };
 
                 app_handle.manage(app_state);
