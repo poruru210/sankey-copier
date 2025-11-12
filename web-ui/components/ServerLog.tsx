@@ -80,36 +80,24 @@ export function ServerLog() {
     // Collapsed bar height is approximately 40px
     const collapsedBarHeight = 40;
 
-    // Set fixed height on page container to prevent double scrollbars
+    // Set fixed height on page container to prevent page scrollbar
     pageContainer.style.height = '100vh';
     pageContainer.style.overflow = 'hidden';
 
-    // Make main content scrollable
-    mainContent.style.height = '100vh';
+    // Make main content scrollable with height adjusted for log viewer
     mainContent.style.overflowY = 'auto';
     mainContent.style.overflowX = 'hidden';
 
     if (isExpanded) {
-      const paddingValue = isMaximized ? window.innerHeight : height;
-      mainContent.style.paddingBottom = `${paddingValue}px`;
+      const logViewerHeight = isMaximized ? window.innerHeight : height;
+      // Adjust main content height to exclude log viewer height
+      mainContent.style.height = isMaximized ? '0px' : `calc(100vh - ${logViewerHeight}px)`;
+      mainContent.style.paddingBottom = '0px';
     } else {
-      // Even when collapsed, add padding for the bottom bar
-      mainContent.style.paddingBottom = `${collapsedBarHeight}px`;
+      // When collapsed, main content height excludes collapsed bar
+      mainContent.style.height = `calc(100vh - ${collapsedBarHeight}px)`;
+      mainContent.style.paddingBottom = '0px';
     }
-
-    // Force browser to recalculate scrollbar by toggling overflow
-    requestAnimationFrame(() => {
-      const currentScrollTop = mainContent.scrollTop;
-      mainContent.style.overflowY = 'hidden';
-
-      // Force reflow
-      void mainContent.offsetHeight;
-
-      requestAnimationFrame(() => {
-        mainContent.style.overflowY = 'auto';
-        mainContent.scrollTop = currentScrollTop;
-      });
-    });
 
     return () => {
       mainContent.style.paddingBottom = '0px';
