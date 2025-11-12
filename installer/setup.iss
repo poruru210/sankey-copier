@@ -61,10 +61,43 @@ english.WelcomeLabel2=This will install [name/ver] on your computer.%n%nVersion:
 ; Japanese
 japanese.WelcomeLabel2=[name/ver] をコンピュータにインストールします。%n%nバージョン: {#MyAppVersion}%n%n続行する前に、他のすべてのアプリケーションを閉じることをお勧めします。
 
+[CustomMessages]
+; English
+english.DataDirPageTitle=Select Data Directory
+english.DataDirPageDescription=Where should application data be stored?
+english.DataDirPageSubDescription=Select the folder in which Setup should store database and log files, then click Next.
+english.PortConfigPageTitle=Port Configuration
+english.PortConfigPageDescription=Configure network ports
+english.PortConfigPageSubDescription=Please specify the port numbers for the server and web interface.
+english.ServerPortLabel=Rust Server API Port:
+english.WebUIPortLabel=Web UI Port:
+english.TaskAutostart=Start services automatically on Windows startup
+english.TaskTrayapp=Launch tray application on Windows startup
+english.LaunchTrayApp=Launch SANKEY Copier Tray Application
+english.OpenWebInterface=Open SANKEY Copier Web Interface
+english.InstallingServerService=Installing Rust server service...
+english.StartingServices=Starting services...
+
+; Japanese
+japanese.DataDirPageTitle=データディレクトリの選択
+japanese.DataDirPageDescription=アプリケーションデータをどこに保存しますか？
+japanese.DataDirPageSubDescription=データベースとログファイルを保存するフォルダを選択し、「次へ」をクリックしてください。
+japanese.PortConfigPageTitle=ポート設定
+japanese.PortConfigPageDescription=ネットワークポートの設定
+japanese.PortConfigPageSubDescription=サーバーとWebインターフェースのポート番号を指定してください。
+japanese.ServerPortLabel=Rust Server APIポート:
+japanese.WebUIPortLabel=Web UIポート:
+japanese.TaskAutostart=Windows起動時にサービスを自動起動する
+japanese.TaskTrayapp=Windows起動時にトレイアプリケーションを起動する
+japanese.LaunchTrayApp=SANKEY Copier トレイアプリケーションを起動
+japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
+japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
+japanese.StartingServices=サービスを起動しています...
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "Start services automatically on Windows startup"; Flags: checkedonce
-Name: "trayapp"; Description: "Launch tray application on Windows startup"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "autostart"; Description: "{cm:TaskAutostart}"; Flags: checkedonce
+Name: "trayapp"; Description: "{cm:TaskTrayapp}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
 ; Rust Server
@@ -120,7 +153,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename
 ; Note: Services will be configured to start automatically
 
 ; Install Rust Server service
-Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierServer ""{app}\sankey-copier-server.exe"""; Flags: runhidden; StatusMsg: "Installing Rust server service..."
+Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierServer ""{app}\sankey-copier-server.exe"""; Flags: runhidden; StatusMsg: "{cm:InstallingServerService}"
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer DisplayName ""SANKEY Copier Server"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Description ""Backend server for SANKEY Copier MT4/MT5 trade copying system"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer AppDirectory ""{app}"""; Flags: runhidden
@@ -130,7 +163,7 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_AU
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_DEMAND_START"; Flags: runhidden; Tasks: not autostart
 
 ; Install Web UI service (Node.js standalone)
-Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierWebUI node"; Flags: runhidden; StatusMsg: "Installing Web UI service..."
+Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierWebUI node"; Flags: runhidden; StatusMsg: "{cm:InstallingServerService}"
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Application node"; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI AppParameters \""{app}\web-ui\server.js\"""; Flags: runhidden
 Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI DisplayName ""SANKEY Copier Web UI"""; Flags: runhidden
@@ -147,14 +180,14 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_DEM
 ; Environment variables for Web UI service will be set by CurStepChanged procedure
 
 ; Start services
-Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden nowait; StatusMsg: "Starting services..."
+Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden nowait; StatusMsg: "{cm:StartingServices}"
 Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierWebUI"; Flags: runhidden nowait
 
 ; Launch tray application
-Filename: "{app}\sankey-copier-tray.exe"; Description: "Launch SANKEY Copier Tray Application"; Flags: nowait postinstall skipifsilent; Tasks: trayapp
+Filename: "{app}\sankey-copier-tray.exe"; Description: "{cm:LaunchTrayApp}"; Flags: nowait postinstall skipifsilent; Tasks: trayapp
 
 ; Open web interface
-Filename: "{code:GetWebUIUrl}"; Description: "Open SANKEY Copier Web Interface"; Flags: shellexec postinstall skipifsilent
+Filename: "{code:GetWebUIUrl}"; Description: "{cm:OpenWebInterface}"; Flags: shellexec postinstall skipifsilent
 
 [UninstallRun]
 ; Stop tray application
@@ -192,18 +225,20 @@ begin
 
   { Create custom page for data directory }
   DataDirPage := CreateInputDirPage(wpSelectDir,
-    'Select Data Directory', 'Where should application data be stored?',
-    'Select the folder in which Setup should store database and log files, then click Next.',
+    CustomMessage('DataDirPageTitle'),
+    CustomMessage('DataDirPageDescription'),
+    CustomMessage('DataDirPageSubDescription'),
     False, '');
   DataDirPage.Add('');
   { Default value will be set in CurPageChanged after app constant is initialized }
 
   { Create custom page for port configuration }
   ServerPortPage := CreateInputQueryPage(wpSelectDir,
-    'Port Configuration', 'Configure network ports',
-    'Please specify the port numbers for the server and web interface.');
-  ServerPortPage.Add('Rust Server API Port:', False);
-  ServerPortPage.Add('Web UI Port:', False);
+    CustomMessage('PortConfigPageTitle'),
+    CustomMessage('PortConfigPageDescription'),
+    CustomMessage('PortConfigPageSubDescription'));
+  ServerPortPage.Add(CustomMessage('ServerPortLabel'), False);
+  ServerPortPage.Add(CustomMessage('WebUIPortLabel'), False);
   ServerPortPage.Values[0] := '3000';
   ServerPortPage.Values[1] := '8080';
 end;
