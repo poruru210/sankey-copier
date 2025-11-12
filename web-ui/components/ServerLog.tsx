@@ -1,21 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RefreshCw, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { useApiClient } from '@/lib/contexts/site-context';
+import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { useServerLogs, useLogViewerResize, useLogViewerLayout } from './ServerLog.hooks';
 import { LOG_LEVEL_COLORS } from './ServerLog.constants';
+import { cn } from '@/lib/utils';
 
 export function ServerLog() {
   const apiClient = useApiClient();
+  const {
+    isOpen: isSidebarOpen,
+    isMobile,
+    serverLogExpanded: isExpanded,
+    setServerLogExpanded: setIsExpanded,
+    setServerLogHeight,
+  } = useSidebar();
   const { title, noLogs, refreshButton, loading, error: errorText, toggleLabel } = useIntlayer('server-log');
-
-  // State
-  const [isExpanded, setIsExpanded] = useState(false);
 
   // Custom hooks
   const { logs, isLoading, error, autoRefresh, setAutoRefresh, fetchLogs } = useServerLogs(apiClient);
@@ -23,6 +29,15 @@ export function ServerLog() {
 
   // Layout adjustments
   useLogViewerLayout(isExpanded, height, isMaximized);
+
+  // Update ServerLog height in context for page padding adjustment
+  useEffect(() => {
+    if (isExpanded) {
+      setServerLogHeight(isMaximized ? window.innerHeight : height);
+    } else {
+      setServerLogHeight(40); // Collapsed bar height
+    }
+  }, [isExpanded, height, isMaximized, setServerLogHeight]);
 
   // Utility functions
   const getLevelColor = (level: string) => {
@@ -47,7 +62,13 @@ export function ServerLog() {
   // Collapsed bar at bottom
   if (!isExpanded) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-700 shadow-2xl">
+      <div
+        className={cn(
+          'fixed bottom-0 right-0 z-[100] bg-slate-900 border-t border-slate-700 shadow-2xl transition-all duration-300',
+          !isMobile && (isSidebarOpen ? 'left-64' : 'left-16'),
+          isMobile && 'left-0'
+        )}
+      >
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-slate-200">{title}</span>
@@ -74,7 +95,11 @@ export function ServerLog() {
   // Expanded terminal view
   return (
     <div
-      className="fixed left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-2xl flex flex-col"
+      className={cn(
+        'fixed right-0 z-[100] bg-slate-950 border-t border-slate-700 shadow-2xl flex flex-col transition-all duration-300',
+        !isMobile && (isSidebarOpen ? 'left-64' : 'left-16'),
+        isMobile && 'left-0'
+      )}
       style={{
         bottom: 0,
         height: isMaximized ? 'calc(100vh - 0px)' : `${height}px`,

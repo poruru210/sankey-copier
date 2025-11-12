@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
+import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { MtInstallation } from '@/types';
 
 export default function InstallationsPage() {
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
+  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -51,14 +54,24 @@ export default function InstallationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-col h-full">
         <Header />
-        <div className="container mx-auto p-6 max-w-[1200px]">
+        <div
+          className={cn(
+            'overflow-y-auto transition-all duration-300',
+            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
+          )}
+          style={{
+            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
+            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
+          }}
+        >
+          <div className="container mx-auto p-6 max-w-[1200px]">
           {/* Page Title */}
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-2">Installation Manager</h1>
@@ -345,6 +358,7 @@ export default function InstallationsPage() {
               })()}
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

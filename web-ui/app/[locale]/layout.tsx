@@ -3,6 +3,8 @@ import { IntlayerClientProvider } from 'next-intlayer';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SiteProvider } from '@/lib/contexts/site-context';
+import { SidebarProvider } from '@/lib/contexts/sidebar-context';
+import { LayoutWrapper } from '@/components/LayoutWrapper';
 import { Toaster } from '@/components/ui/toaster';
 import '../globals.css';
 
@@ -32,10 +34,14 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <SiteProvider>
-            <IntlayerClientProvider locale={locale}>
-              {children}
-              <Toaster />
-            </IntlayerClientProvider>
+            <SidebarProvider>
+              <IntlayerClientProvider locale={locale}>
+                <LayoutWrapper>
+                  {children}
+                </LayoutWrapper>
+                <Toaster />
+              </IntlayerClientProvider>
+            </SidebarProvider>
           </SiteProvider>
         </ThemeProvider>
       </body>
