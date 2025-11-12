@@ -301,17 +301,37 @@ jobs:
 
           # Update Cargo.toml
           $cargoToml = "desktop/src-tauri/Cargo.toml"
-          $content = Get-Content $cargoToml -Raw
-          $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
-          Set-Content $cargoToml -Value $content -NoNewline
-          Write-Host "✓ Updated $cargoToml" -ForegroundColor Green
+          if (Test-Path $cargoToml) {
+            $content = Get-Content $cargoToml -Raw
+            $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+            Set-Content $cargoToml -Value $content -NoNewline
+            Write-Host "✓ Updated $cargoToml" -ForegroundColor Green
+          } else {
+            Write-Host "❌ $cargoToml not found" -ForegroundColor Red
+            exit 1
+          }
 
-          # Update tauri.conf.json
+          # Update tauri.conf.json using regex (safer than JSON parsing)
           $tauriConf = "desktop/src-tauri/tauri.conf.json"
-          $json = Get-Content $tauriConf -Raw | ConvertFrom-Json
-          $json.version = $version
-          $json | ConvertTo-Json -Depth 100 | Set-Content $tauriConf
-          Write-Host "✓ Updated $tauriConf" -ForegroundColor Green
+          if (Test-Path $tauriConf) {
+            $content = Get-Content $tauriConf -Raw
+            # Match "version": "x.x.x" pattern and replace
+            $content = $content -replace '"version"\s*:\s*"[^"]*"', "`"version`": `"$version`""
+            Set-Content $tauriConf -Value $content -NoNewline
+            Write-Host "✓ Updated $tauriConf" -ForegroundColor Green
+
+            # Verify the change
+            $updatedContent = Get-Content $tauriConf -Raw
+            if ($updatedContent -match "`"version`":\s*`"$version`"") {
+              Write-Host "✓ Version verification passed" -ForegroundColor Green
+            } else {
+              Write-Host "❌ Version verification failed" -ForegroundColor Red
+              exit 1
+            }
+          } else {
+            Write-Host "❌ $tauriConf not found" -ForegroundColor Red
+            exit 1
+          }
 
           Write-Host "Version update complete: $version" -ForegroundColor Green
 

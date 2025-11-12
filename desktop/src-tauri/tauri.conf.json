@@ -2,12 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2.0",
   "productName": "SANKEY Copier",
   "version": "1.0.0",
-  "identifier": "com.sankey-copier.app",
+  "identifier": "com.sankey-copier.desktop",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
     "devUrl": "http://localhost:8080",
-    "frontendDist": "../dist"
+    "frontendDist": "."
   },
   "bundle": {
     "active": true,
