@@ -23,16 +23,18 @@ New-Item -ItemType Directory -Path $bundleDir | Out-Null
 Write-Host "Copying standalone build..." -ForegroundColor Yellow
 Copy-Item -Recurse -Path ".next\standalone\*" -Destination $bundleDir
 
-# Copy static files
+# Copy static files to the correct location within standalone structure
+# Next.js standalone expects: web-ui/.next/static (preserving project structure)
 Write-Host "Copying static files..." -ForegroundColor Yellow
-$staticDest = Join-Path $bundleDir ".next"
+$staticDest = Join-Path $bundleDir "web-ui\.next"
 New-Item -ItemType Directory -Path $staticDest -Force | Out-Null
 Copy-Item -Recurse -Path ".next\static" -Destination $staticDest
 
-# Copy public directory
+# Copy public directory to the correct location
 if (Test-Path "public") {
     Write-Host "Copying public directory..." -ForegroundColor Yellow
-    Copy-Item -Recurse -Path "public" -Destination $bundleDir
+    $publicDest = Join-Path $bundleDir "web-ui"
+    Copy-Item -Recurse -Path "public" -Destination $publicDest
 }
 
 Write-Host "Web UI bundle prepared successfully at $bundleDir" -ForegroundColor Green

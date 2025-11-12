@@ -243,18 +243,19 @@ try {
   }
   copyRecursiveSync(standaloneSrc, bundleDir);
 
-  // Copy static files
+  // Copy static files to the correct location within standalone structure
+  // Next.js standalone expects: web-ui/.next/static (preserving project structure)
   log('Copying static files...', 'yellow');
   const staticSrc = path.join(webUiDir, '.next', 'static');
-  const staticDest = path.join(bundleDir, '.next', 'static');
+  const staticDest = path.join(bundleDir, 'web-ui', '.next', 'static');
   fs.mkdirSync(path.dirname(staticDest), { recursive: true });
   copyRecursiveSync(staticSrc, staticDest);
 
-  // Copy public directory
+  // Copy public directory to the correct location
   const publicSrc = path.join(webUiDir, 'public');
   if (fs.existsSync(publicSrc)) {
     log('Copying public directory...', 'yellow');
-    const publicDest = path.join(bundleDir, 'public');
+    const publicDest = path.join(bundleDir, 'web-ui', 'public');
     copyRecursiveSync(publicSrc, publicDest);
   }
 
