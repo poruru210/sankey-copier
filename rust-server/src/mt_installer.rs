@@ -173,7 +173,7 @@ impl MtInstaller {
         // Master EAをコピー
         let master_source = self
             .components_base_path
-            .join(format!("mql/{}/SankeyCopierMaster.{}", mt_folder, extension));
+            .join(format!("mql/{}/Experts/SankeyCopierMaster.{}", mt_folder, extension));
 
         tracing::info!(
             "Looking for Master EA at: {}",
@@ -205,7 +205,7 @@ impl MtInstaller {
         // Slave EAをコピー
         let slave_source = self
             .components_base_path
-            .join(format!("mql/{}/SankeyCopierSlave.{}", mt_folder, extension));
+            .join(format!("mql/{}/Experts/SankeyCopierSlave.{}", mt_folder, extension));
 
         tracing::info!(
             "Looking for Slave EA at: {}",
@@ -354,8 +354,8 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA binary files for MT4 (flattened structure)
-        let source_path = temp_components.path().join("mql/MT4");
+        // Create source EA binary files for MT4 (production structure)
+        let source_path = temp_components.path().join("mql/MT4/Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
@@ -385,8 +385,8 @@ mod tests {
         let temp_components = TempDir::new().unwrap();
         let temp_mt = TempDir::new().unwrap();
 
-        // Create source EA binary files for MT5 (flattened structure)
-        let source_path = temp_components.path().join("mql/MT5");
+        // Create source EA binary files for MT5 (production structure)
+        let source_path = temp_components.path().join("mql/MT5/Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
@@ -471,8 +471,8 @@ mod tests {
         let dll_content = if is_mt4 { b"32-bit dll" } else { b"64-bit dll" };
         fs::write(dll_path.join("sankey_copier_zmq.dll"), dll_content).unwrap();
 
-        // EA binary files
-        let ea_path = base_path.join(format!("mql/{}", mt_folder));
+        // EA binary files (production structure: mql/MT5/Experts/)
+        let ea_path = base_path.join(format!("mql/{}/Experts", mt_folder));
         fs::create_dir_all(&ea_path).unwrap();
         fs::write(ea_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
         fs::write(ea_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();
