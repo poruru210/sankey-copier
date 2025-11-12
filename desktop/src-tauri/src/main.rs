@@ -8,7 +8,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Manager, State, Window, WindowEvent};
 
 struct AppState {
     node_process: Arc<Mutex<Option<Child>>>,
@@ -121,49 +121,169 @@ fn wait_for_server(port: u16, timeout_secs: u64) -> Result<(), String> {
 }
 
 fn main() {
-    // Find available port
-    let port = find_available_port().expect("Failed to find available port");
-    println!("Using port: {}", port);
-
-    // Start Next.js server
-    let node_process = start_nextjs_server(port).expect("Failed to start Next.js server");
-
-    // Wait for server to be ready
-    wait_for_server(port, 30).expect("Server failed to start");
-
-    let app_state = AppState {
-        node_process: Arc::new(Mutex::new(Some(node_process))),
-        web_ui_port: port,
-    };
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(app_state)
-        .setup(move |app| {
-            let window = app.get_webview_window("main").unwrap();
+        .setup(|app| {
+            let app_handle = app.handle().clone();
 
-            // Navigate to the dynamically determined port
-            let url = format!("http://localhost:{}", port);
-            println!("Loading URL: {}", url);
-            window.eval(&format!("window.location.href = '{}';", url))
-                .map_err(|e| format!("Failed to navigate: {}", e))?;
+            // Start server initialization in background
+            thread::spawn(move || {
+                // Find available port
+                let port = match find_available_port() {
+                    Ok(p) => {
+                        println!("Using port: {}", p);
+                        p
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to find available port: {}", e);
+                        show_error(&app_handle, &format!("ポートの検出に失敗しました: {}", e));
+                        return;
+                    }
+                };
+
+                // Start Next.js server
+                let node_process = match start_nextjs_server(port) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Failed to start Next.js server: {}", e);
+                        show_error(&app_handle, &format!("サーバーの起動に失敗しました:\n{}\n\nNode.jsがインストールされているか確認してください。", e));
+                        return;
+                    }
+                };
+
+                // Wait for server to be ready
+                if let Err(e) = wait_for_server(port, 30) {
+                    eprintln!("Server failed to start: {}", e);
+                    show_error(&app_handle, &format!("サーバーの準備に失敗しました: {}", e));
+                    return;
+                }
+
+                // Server is ready, update state and show main window
+                let app_state = AppState {
+                    node_process: Arc::new(Mutex::new(Some(node_process))),
+                    web_ui_port: port,
+                };
+
+                app_handle.manage(app_state);
+
+                // Close splash and show main window
+                if let Some(splash) = app_handle.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                }
+
+                if let Some(main_window) = app_handle.get_webview_window("main") {
+                    let url = format!("http://localhost:{}", port);
+                    println!("Loading URL: {}", url);
+
+                    let _ = main_window.eval(&format!("window.location.href = '{}';", url));
+                    let _ = main_window.show();
+                    let _ = main_window.set_focus();
+                }
+            });
 
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
-                // Cleanup on window close
-                let state: State<AppState> = window.state();
-                if let Ok(mut process) = state.node_process.lock() {
-                    if let Some(mut child) = process.take() {
-                        println!("Terminating Node.js process...");
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        println!("Node.js process terminated");
+                if window.label() == "main" {
+                    // Cleanup on main window close
+                    if let Some(state) = window.try_state::<AppState>() {
+                        if let Ok(mut process) = state.node_process.lock() {
+                            if let Some(mut child) = process.take() {
+                                println!("Terminating Node.js process...");
+                                let _ = child.kill();
+                                let _ = child.wait();
+                                println!("Node.js process terminated");
+                            }
+                        }
                     }
                 }
             }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Show error message in main window
+fn show_error(app: &AppHandle, message: &str) {
+    // Close splash if open
+    if let Some(splash) = app.get_webview_window("splashscreen") {
+        let _ = splash.close();
+    }
+
+    // Show error in main window
+    if let Some(main_window) = app.get_webview_window("main") {
+        let error_html = format!(
+            r#"
+            <html>
+            <head>
+                <style>
+                    body {{
+                        margin: 0;
+                        padding: 0;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        min-height: 100vh;
+                        background: #f5f5f5;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    }}
+                    .error-container {{
+                        background: white;
+                        padding: 40px;
+                        border-radius: 12px;
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                        max-width: 500px;
+                        text-align: center;
+                    }}
+                    .error-icon {{
+                        font-size: 64px;
+                        margin-bottom: 20px;
+                    }}
+                    h1 {{
+                        color: #e53e3e;
+                        margin-bottom: 20px;
+                        font-size: 24px;
+                    }}
+                    p {{
+                        color: #4a5568;
+                        line-height: 1.6;
+                        white-space: pre-wrap;
+                        margin-bottom: 30px;
+                    }}
+                    button {{
+                        background: #667eea;
+                        color: white;
+                        border: none;
+                        padding: 12px 24px;
+                        border-radius: 6px;
+                        font-size: 16px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                    }}
+                    button:hover {{
+                        background: #5568d3;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="error-container">
+                    <div class="error-icon">❌</div>
+                    <h1>起動エラー</h1>
+                    <p>{}</p>
+                    <button onclick="window.close()">閉じる</button>
+                </div>
+            </body>
+            </html>
+            "#,
+            message.replace("\"", "&quot;")
+        );
+
+        let _ = main_window.eval(&format!(
+            "document.open(); document.write(`{}`); document.close();",
+            error_html.replace("`", "\\`")
+        ));
+        let _ = main_window.show();
+        let _ = main_window.set_focus();
+    }
 }
