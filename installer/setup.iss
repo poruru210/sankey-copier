@@ -389,12 +389,16 @@ begin
       { Stop tray application }
       Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM sankey-copier-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-      { Stop services if nssm.exe exists }
+      { Stop and remove services if nssm.exe exists }
       if FileExists(NssmPath) then
       begin
         Exec(NssmPath, 'stop SankeyCopierWebUI', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Exec(NssmPath, 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Sleep(2000); { Wait for services to stop }
+
+        { Remove existing services }
+        Exec(NssmPath, 'remove SankeyCopierWebUI confirm', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Exec(NssmPath, 'remove SankeyCopierServer confirm', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       end;
     end;
   end;
@@ -477,17 +481,13 @@ begin
       SaveStringsToFile(ConfigFile, ConfigContent, False);
     end;
 
-    { Install or update Windows services }
+    { Install Windows services }
     NssmPath := ExpandConstant('{app}\nssm.exe');
 
-    { Server service }
-    if not (IsRepairMode or IsUpdateMode) then
-    begin
-      { Fresh install - create services }
-      Exec(NssmPath, 'install SankeyCopierServer "' + ExpandConstant('{app}\sankey-copier-server.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
+    { Server service - always create }
+    Exec(NssmPath, 'install SankeyCopierServer "' + ExpandConstant('{app}\sankey-copier-server.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    { Configure Server service (works for both new and existing) }
+    { Configure Server service }
     Exec(NssmPath, 'set SankeyCopierServer DisplayName "SANKEY Copier Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer Description "Backend server for SANKEY Copier MT4/MT5 trade copying system"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer AppDirectory "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -498,14 +498,10 @@ begin
     else
       Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_DEMAND_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    { WebUI service }
-    if not (IsRepairMode or IsUpdateMode) then
-    begin
-      { Fresh install - create services }
-      Exec(NssmPath, 'install SankeyCopierWebUI node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
+    { WebUI service - always create }
+    Exec(NssmPath, 'install SankeyCopierWebUI node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    { Configure WebUI service (works for both new and existing) }
+    { Configure WebUI service }
     Exec(NssmPath, 'set SankeyCopierWebUI Application node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppParameters "' + ExpandConstant('{app}\web-ui\server.js') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI DisplayName "SANKEY Copier Web UI"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
