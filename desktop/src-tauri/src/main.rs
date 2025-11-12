@@ -8,13 +8,22 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State, Window, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent};
 
 // Version information from build environment
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const PACKAGE_VERSION: &str = option_env!("PACKAGE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-const FILE_VERSION: &str = option_env!("FILE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-const BUILD_INFO: &str = option_env!("BUILD_INFO").unwrap_or(env!("CARGO_PKG_VERSION"));
+const PACKAGE_VERSION: &str = match option_env!("PACKAGE_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+const FILE_VERSION: &str = match option_env!("FILE_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+const BUILD_INFO: &str = match option_env!("BUILD_INFO") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 struct AppState {
     node_process: Arc<Mutex<Option<Child>>>,
