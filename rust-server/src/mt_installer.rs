@@ -23,11 +23,25 @@ impl MtInstaller {
     /// なければ current_dir() を使用（プロダクション環境）
     pub fn from_config(config: &crate::config::Config) -> Self {
         let base_path = if let Some(path) = &config.installer.components_base_path {
+            tracing::info!(
+                "Using configured components_base_path: {}",
+                path
+            );
             PathBuf::from(path)
         } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
+            let current = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."));
+            tracing::info!(
+                "Using current_dir as components_base_path: {}",
+                current.display()
+            );
+            current
         };
+
+        tracing::info!(
+            "MtInstaller initialized with components_base_path: {}",
+            base_path.display()
+        );
 
         Self::new(base_path)
     }
@@ -71,7 +85,16 @@ impl MtInstaller {
 
     /// DLLをインストール
     fn install_dll(&self, mql_path: &Path, architecture: &Architecture) -> Result<()> {
+        tracing::info!(
+            "Starting DLL installation for {:?} architecture",
+            architecture
+        );
+
         let libraries_path = mql_path.join("Libraries");
+        tracing::debug!(
+            "Creating Libraries directory: {}",
+            libraries_path.display()
+        );
         fs::create_dir_all(&libraries_path)
             .context("Failed to create Libraries directory")?;
 
@@ -85,7 +108,28 @@ impl MtInstaller {
             }
         };
 
+        tracing::info!(
+            "Looking for DLL source at: {}",
+            dll_source.display()
+        );
+        tracing::debug!(
+            "components_base_path: {}",
+            self.components_base_path.display()
+        );
+
         if !dll_source.exists() {
+            tracing::error!(
+                "DLL source not found at: {}",
+                dll_source.display()
+            );
+            tracing::error!(
+                "components_base_path: {}",
+                self.components_base_path.display()
+            );
+            tracing::error!(
+                "Expected full path: {}",
+                dll_source.canonicalize().unwrap_or(dll_source.clone()).display()
+            );
             anyhow::bail!(
                 "DLL source not found: {}. Please check components_base_path configuration.",
                 dll_source.display()
@@ -108,7 +152,16 @@ impl MtInstaller {
 
     /// EAをインストール（コンパイル済みバイナリのみ）
     fn install_eas(&self, mql_path: &Path, mt_type: &MtType) -> Result<()> {
+        tracing::info!(
+            "Starting EA installation for {:?}",
+            mt_type
+        );
+
         let experts_path = mql_path.join("Experts");
+        tracing::debug!(
+            "Creating Experts directory: {}",
+            experts_path.display()
+        );
         fs::create_dir_all(&experts_path)
             .context("Failed to create Experts directory")?;
 
@@ -122,7 +175,16 @@ impl MtInstaller {
             .components_base_path
             .join(format!("mql/{}/SankeyCopierMaster.{}", mt_folder, extension));
 
+        tracing::info!(
+            "Looking for Master EA at: {}",
+            master_source.display()
+        );
+
         if !master_source.exists() {
+            tracing::error!(
+                "Master EA binary not found at: {}",
+                master_source.display()
+            );
             anyhow::bail!(
                 "Master EA binary not found: {}",
                 master_source.display()
@@ -145,7 +207,16 @@ impl MtInstaller {
             .components_base_path
             .join(format!("mql/{}/SankeyCopierSlave.{}", mt_folder, extension));
 
+        tracing::info!(
+            "Looking for Slave EA at: {}",
+            slave_source.display()
+        );
+
         if !slave_source.exists() {
+            tracing::error!(
+                "Slave EA binary not found at: {}",
+                slave_source.display()
+            );
             anyhow::bail!(
                 "Slave EA binary not found: {}",
                 slave_source.display()
