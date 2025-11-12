@@ -170,10 +170,10 @@ Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierWebUI confirm"; Flag
 Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Flags: runhidden; RunOnceId: "RemoveServer"
 
 [UninstallDelete]
-; Clean up log files
-Type: filesandordirs; Name: "{app}\data\logs"
-; Optionally remove database (user will be prompted)
-; Type: files; Name: "{app}\data\sankey_copier.db"
+; Clean up all data files
+Type: filesandordirs; Name: "{app}\data"
+Type: files; Name: "{app}\sankey_copier.db"
+Type: files; Name: "{app}\config.toml"
 
 [Code]
 var
@@ -376,16 +376,3 @@ begin
   end;
 end;
 
-function InitializeUninstall(): Boolean;
-var
-  ResultCode: Integer;
-begin
-  Result := True;
-
-  { Ask user if they want to keep data }
-  if MsgBox('Do you want to remove the database and log files?', mbConfirmation, MB_YESNO) = IDYES then
-  begin
-    { User wants to remove data - will be handled by [UninstallDelete] section }
-    Result := True;
-  end;
-end;
