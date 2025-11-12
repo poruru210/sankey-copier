@@ -13,6 +13,8 @@ pub struct Config {
     pub cors: CorsConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub installer: InstallerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +101,22 @@ impl Default for LoggingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallerConfig {
+    /// Base path for MQL components (DLL, EA files)
+    /// If not set, uses current_dir() (production default)
+    #[serde(default)]
+    pub components_base_path: Option<String>,
+}
+
+impl Default for InstallerConfig {
+    fn default() -> Self {
+        Self {
+            components_base_path: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
 }
@@ -178,6 +196,7 @@ impl Config {
             },
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
+            installer: InstallerConfig::default(),
         }
     }
 
@@ -263,6 +282,7 @@ mod tests {
             },
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
+            installer: InstallerConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");

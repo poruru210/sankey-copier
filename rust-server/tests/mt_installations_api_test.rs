@@ -35,6 +35,7 @@ async fn create_test_app() -> axum::Router {
         log_buffer,
         allowed_origins: vec!["http://localhost:8080".to_string()],
         cors_disabled: false, // Use strict CORS for tests
+        config: Arc::new(sankey_copier_server::config::Config::default()),
     };
 
     create_router(app_state)

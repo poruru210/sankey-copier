@@ -76,7 +76,7 @@ pub async fn list_mt_installations(
 
 /// MT4/MT5にコンポーネントをインストール
 pub async fn install_to_mt(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<String>>, String> {
     let span = tracing::info_span!("install_to_mt", installation_id = %id);
@@ -145,7 +145,7 @@ pub async fn install_to_mt(
     );
 
     // インストーラーを作成
-    let installer = MtInstaller::default();
+    let installer = MtInstaller::from_config(&state.config);
 
     // インストール実行
     let mt_path = PathBuf::from(&installation.path);

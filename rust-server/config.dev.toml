@@ -10,3 +10,8 @@
 # Disable CORS restrictions for local development
 # WARNING: Never set this to true in production!
 disable = true
+
+[installer]
+# Base path for MQL components (DLL, EA files)
+# In development, point to the production installation directory
+components_base_path = "C:\\Program Files\\SANKEY Copier"
