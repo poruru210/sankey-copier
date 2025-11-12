@@ -23,6 +23,14 @@ const serverLogContent = {
       en: 'Error',
       ja: 'エラー',
     }),
+    toggleLabel: t({
+      en: 'Expand',
+      ja: '展開',
+    }),
+    closeLabel: t({
+      en: 'Close',
+      ja: '閉じる',
+    }),
   },
 } satisfies DeclarationContent;
 
