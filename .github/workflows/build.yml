@@ -294,12 +294,38 @@ jobs:
         working-directory: desktop
         run: pnpm install
 
+      - name: Update version in Tauri config
+        run: |
+          $version = "${{ needs.version-info.outputs.package_version }}"
+          Write-Host "Updating Tauri app version to: $version" -ForegroundColor Cyan
+
+          # Update Cargo.toml
+          $cargoToml = "desktop/src-tauri/Cargo.toml"
+          $content = Get-Content $cargoToml -Raw
+          $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+          Set-Content $cargoToml -Value $content -NoNewline
+          Write-Host "✓ Updated $cargoToml" -ForegroundColor Green
+
+          # Update tauri.conf.json
+          $tauriConf = "desktop/src-tauri/tauri.conf.json"
+          $json = Get-Content $tauriConf -Raw | ConvertFrom-Json
+          $json.version = $version
+          $json | ConvertTo-Json -Depth 100 | Set-Content $tauriConf
+          Write-Host "✓ Updated $tauriConf" -ForegroundColor Green
+
+          Write-Host "Version update complete: $version" -ForegroundColor Green
+
       - name: Build Tauri App
         working-directory: desktop
         env:
           PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+          FILE_VERSION: ${{ needs.version-info.outputs.file_version }}
+          BUILD_INFO: ${{ needs.version-info.outputs.build_info }}
         run: |
-          echo "Building Tauri desktop app version ${{ needs.version-info.outputs.package_version }}"
+          echo "Building Tauri desktop app"
+          echo "  Package Version: ${{ needs.version-info.outputs.package_version }}"
+          echo "  File Version: ${{ needs.version-info.outputs.file_version }}"
+          echo "  Build Info: ${{ needs.version-info.outputs.build_info }}"
           pnpm tauri build
 
       - name: Prepare Tauri artifacts

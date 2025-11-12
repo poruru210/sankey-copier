@@ -10,6 +10,12 @@ use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State, Window, WindowEvent};
 
+// Version information from build environment
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const PACKAGE_VERSION: &str = option_env!("PACKAGE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+const FILE_VERSION: &str = option_env!("FILE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+const BUILD_INFO: &str = option_env!("BUILD_INFO").unwrap_or(env!("CARGO_PKG_VERSION"));
+
 struct AppState {
     node_process: Arc<Mutex<Option<Child>>>,
     web_ui_port: u16,
@@ -121,6 +127,15 @@ fn wait_for_server(port: u16, timeout_secs: u64) -> Result<(), String> {
 }
 
 fn main() {
+    // Print version information on startup
+    println!("╔════════════════════════════════════════════════════════════════");
+    println!("║ SANKEY Copier Desktop Application");
+    println!("║ Version: {}", VERSION);
+    println!("║ Package: {}", PACKAGE_VERSION);
+    println!("║ File Version: {}", FILE_VERSION);
+    println!("║ Build Info: {}", BUILD_INFO);
+    println!("╚════════════════════════════════════════════════════════════════");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
@@ -174,6 +189,9 @@ fn main() {
                 if let Some(main_window) = app_handle.get_webview_window("main") {
                     let url = format!("http://localhost:{}", port);
                     println!("Loading URL: {}", url);
+
+                    // Update window title with version
+                    let _ = main_window.set_title(&format!("SANKEY Copier v{}", PACKAGE_VERSION));
 
                     let _ = main_window.eval(&format!("window.location.href = '{}';", url));
                     let _ = main_window.show();
@@ -272,13 +290,21 @@ fn show_error(app: &AppHandle, message: &str) {
                     <h1>起動エラー</h1>
                     <p>{}</p>
                     <button onclick="window.close()">閉じる</button>
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #a0aec0;">
+                        Version: {} ({})<br>
+                        Build: {}
+                    </div>
                 </div>
             </body>
             </html>
             "#,
-            message.replace("\"", "&quot;")
+            message.replace("\"", "&quot;"),
+            PACKAGE_VERSION,
+            FILE_VERSION,
+            BUILD_INFO
         );
 
+        let _ = main_window.set_title(&format!("SANKEY Copier v{} - Error", PACKAGE_VERSION));
         let _ = main_window.eval(&format!(
             "document.open(); document.write(`{}`); document.close();",
             error_html.replace("`", "\\`")
