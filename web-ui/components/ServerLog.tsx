@@ -71,6 +71,23 @@ export function ServerLog() {
     return () => clearInterval(intervalId);
   }, [autoRefresh, fetchLogs]);
 
+  // Add padding to main content when expanded to prevent content from being hidden
+  useEffect(() => {
+    const mainContent = document.querySelector('.relative.z-10') as HTMLElement;
+    if (!mainContent) return;
+
+    if (isExpanded) {
+      const paddingValue = isMaximized ? window.innerHeight : height;
+      mainContent.style.paddingBottom = `${paddingValue}px`;
+    } else {
+      mainContent.style.paddingBottom = '0px';
+    }
+
+    return () => {
+      mainContent.style.paddingBottom = '0px';
+    };
+  }, [isExpanded, height, isMaximized]);
+
   // Handle mouse resize
   useEffect(() => {
     if (!isResizing) return;
