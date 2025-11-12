@@ -598,27 +598,21 @@ begin
     Exec(NssmPath, 'set SankeyCopierServer AppDirectory "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer AppStdout "' + ExpandConstant('{app}\data\logs\server-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer AppStderr "' + ExpandConstant('{app}\data\logs\server-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    if WizardIsTaskSelected('autostart') then
-      Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-    else
-      Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_DEMAND_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { WebUI service - always create }
     Exec(NssmPath, 'install SankeyCopierWebUI node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { Configure WebUI service }
     Exec(NssmPath, 'set SankeyCopierWebUI Application node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppParameters "' + ExpandConstant('{app}\web-ui\server.js') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppParameters "\""' + ExpandConstant('{app}\web-ui\server.js') + '\""', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI DisplayName "SANKEY Copier Web UI"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI Description "Web interface for SANKEY Copier"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppDirectory "' + ExpandConstant('{app}\web-ui') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppStdout "' + ExpandConstant('{app}\data\logs\webui-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppStderr "' + ExpandConstant('{app}\data\logs\webui-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    if WizardIsTaskSelected('autostart') then
-      Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-    else
-      Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_DEMAND_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { Start services }
     Exec(NssmPath, 'start SankeyCopierServer', '', SW_HIDE, ewNoWait, ResultCode);
