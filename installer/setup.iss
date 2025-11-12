@@ -80,6 +80,7 @@ english.RepairInstallationMessage=The same version of SANKEY Copier is already i
 english.UpdateInstallationTitle=Update Installation
 english.UpdateInstallationMessage=A previous version of SANKEY Copier is already installed.%n%nDo you want to update to version {#MyAppVersion}?
 english.StoppingServices=Stopping existing services...
+english.MergingConfig=Merging configuration file...
 
 ; Japanese
 japanese.DataDirPageTitle=データディレクトリの選択
@@ -99,6 +100,7 @@ japanese.RepairInstallationMessage=同じバージョンのSANKEY Copierが既�
 japanese.UpdateInstallationTitle=インストールの更新
 japanese.UpdateInstallationMessage=以前のバージョンのSANKEY Copierが既にインストールされています。%n%nバージョン{#MyAppVersion}に更新しますか？
 japanese.StoppingServices=既存のサービスを停止しています...
+japanese.MergingConfig=設定ファイルをマージしています...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -119,8 +121,8 @@ Source: "..\web-ui\.next\standalone\*"; DestDir: "{app}\web-ui"; Flags: ignoreve
 Source: "..\web-ui\.next\static\*"; DestDir: "{app}\web-ui\.next\static"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\web-ui\public\*"; DestDir: "{app}\web-ui\public"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; Configuration files
-Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+; Configuration files (will be merged with existing config in code)
+Source: "..\rust-server\config.toml"; DestDir: "{app}"; DestName: "config.toml.new"; Flags: ignoreversion
 
 ; MT4/MT5 Components
 ; MT5 uses 64-bit DLL in Libraries folder
@@ -192,6 +194,104 @@ var
 function GetWebUIUrl(Param: String): String;
 begin
   Result := 'http://localhost:' + ServerPortPage.Values[1];
+end;
+
+procedure MergeConfigFiles(ExistingConfigPath: String; NewConfigPath: String);
+var
+  ExistingContent: TArrayOfString;
+  NewContent: TArrayOfString;
+  MergedContent: TArrayOfString;
+  ExistingValues: TStringList;
+  I, J: Integer;
+  CurrentSection: String;
+  ExistingSection: String;
+  Line: String;
+  Key: String;
+  Value: String;
+  FullKey: String;
+begin
+  { Load both config files }
+  LoadStringsFromFile(ExistingConfigPath, ExistingContent);
+  LoadStringsFromFile(NewConfigPath, NewContent);
+
+  { Create map of existing values (section::key -> value) }
+  ExistingValues := TStringList.Create;
+  try
+    { First pass: collect all existing key-value pairs with their sections }
+    ExistingSection := '';
+    for I := 0 to GetArrayLength(ExistingContent) - 1 do
+    begin
+      Line := Trim(ExistingContent[I]);
+
+      { Track current section }
+      if (Length(Line) > 0) and (Line[1] = '[') then
+      begin
+        ExistingSection := Line;
+      end
+      else if (Length(Line) > 0) and (Pos('=', Line) > 0) and (Pos('#', Line) <> 1) then
+      begin
+        { Extract key and value }
+        Key := Trim(Copy(Line, 1, Pos('=', Line) - 1));
+        Value := Copy(ExistingContent[I], Pos('=', ExistingContent[I]), Length(ExistingContent[I]));
+        FullKey := ExistingSection + '::' + Key;
+        ExistingValues.Add(FullKey + '=' + Value);
+      end;
+    end;
+
+    { Second pass: build merged content from new config template }
+    SetArrayLength(MergedContent, 0);
+    CurrentSection := '';
+
+    for I := 0 to GetArrayLength(NewContent) - 1 do
+    begin
+      Line := NewContent[I];
+
+      { Track current section }
+      if (Length(Trim(Line)) > 0) and (Trim(Line)[1] = '[') then
+      begin
+        CurrentSection := Trim(Line);
+        { Add section header }
+        SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+        MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+      end
+      else if (Length(Trim(Line)) > 0) and (Pos('=', Trim(Line)) > 0) and (Pos('#', Trim(Line)) <> 1) then
+      begin
+        { This is a key=value line }
+        Key := Trim(Copy(Trim(Line), 1, Pos('=', Trim(Line)) - 1));
+        FullKey := CurrentSection + '::' + Key;
+
+        { Check if this key exists in old config }
+        J := ExistingValues.IndexOfName(FullKey);
+        if J >= 0 then
+        begin
+          { Use existing value - reconstruct full line }
+          Value := ExistingValues.ValueFromIndex[J];
+          SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+          MergedContent[GetArrayLength(MergedContent) - 1] := Key + Value;
+        end
+        else
+        begin
+          { New key - use default from new config }
+          SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+          MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+        end;
+      end
+      else
+      begin
+        { Comment or empty line - keep from new config }
+        SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+        MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+      end;
+    end;
+
+    { Save merged content }
+    SaveStringsToFile(ExistingConfigPath, MergedContent, False);
+
+    { Delete temporary new config file }
+    DeleteFile(NewConfigPath);
+  finally
+    ExistingValues.Free;
+  end;
 end;
 
 function InitializeSetup(): Boolean;
@@ -405,11 +505,23 @@ begin
 
   if CurStep = ssPostInstall then
   begin
-    { Update config.toml with custom settings }
+    { Merge config.toml }
     ConfigFile := ExpandConstant('{app}\config.toml');
     WebUIPort := ServerPortPage.Values[1];
     ServerPort := ServerPortPage.Values[0];
     NssmPath := ExpandConstant('{app}\nssm.exe');
+
+    { Merge configuration files }
+    if FileExists(ConfigFile) then
+    begin
+      { Existing config.toml found - merge with new version }
+      MergeConfigFiles(ConfigFile, ExpandConstant('{app}\config.toml.new'));
+    end
+    else
+    begin
+      { No existing config - rename new config }
+      RenameFile(ExpandConstant('{app}\config.toml.new'), ConfigFile);
+    end;
 
     if FileExists(ConfigFile) then
     begin
