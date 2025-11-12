@@ -37,7 +37,6 @@ SolidCompression=yes
 
 ; Privileges and compatibility
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
 MinVersion=10.0.17763
 ArchitecturesInstallIn64BitMode=x64
 
@@ -568,6 +567,8 @@ begin
     Exec(NssmPath, 'set SankeyCopierServer DisplayName "SANKEY Copier Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer Description "Backend server for SANKEY Copier MT4/MT5 trade copying system"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer AppDirectory "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Run service as current user to access MT4/MT5 data in user profile }
+    Exec(NssmPath, 'set SankeyCopierServer ObjectName .\' + ExpandConstant('{username}') + ' ' + ExpandConstant('{password}'), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     { Server uses config.toml [logging] settings - no NSSM log redirection needed }
     Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
