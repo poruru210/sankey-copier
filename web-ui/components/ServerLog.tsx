@@ -76,11 +76,15 @@ export function ServerLog() {
     const mainContent = document.querySelector('.relative.z-10') as HTMLElement;
     if (!mainContent) return;
 
+    // Collapsed bar height is approximately 40px
+    const collapsedBarHeight = 40;
+
     if (isExpanded) {
       const paddingValue = isMaximized ? window.innerHeight : height;
       mainContent.style.paddingBottom = `${paddingValue}px`;
     } else {
-      mainContent.style.paddingBottom = '0px';
+      // Even when collapsed, add padding for the bottom bar
+      mainContent.style.paddingBottom = `${collapsedBarHeight}px`;
     }
 
     return () => {
@@ -96,7 +100,8 @@ export function ServerLog() {
       if (!resizeStartRef.current) return;
 
       const deltaY = resizeStartRef.current.y - e.clientY;
-      const newHeight = Math.max(200, Math.min(800, resizeStartRef.current.height + deltaY));
+      const maxHeight = Math.floor(window.innerHeight * 0.9); // 90% of viewport height
+      const newHeight = Math.max(200, Math.min(maxHeight, resizeStartRef.current.height + deltaY));
       setHeight(newHeight);
     };
 
