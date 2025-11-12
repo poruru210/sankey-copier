@@ -1,11 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useOptimistic } from 'react';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import { useApiClient, useSiteContext } from '@/lib/contexts/site-context';
+
+type SettingsAction =
+  | { type: 'add'; data: CopySettings }
+  | { type: 'update'; id: number; data: CopySettings }
+  | { type: 'delete'; id: number }
+  | { type: 'toggle'; id: number };
 
 export function useSankeyCopier() {
   const apiClient = useApiClient();
   const { selectedSite } = useSiteContext();
   const [settings, setSettings] = useState<CopySettings[]>([]);
+  const [optimisticSettings, addOptimisticSettings] = useOptimistic(
+    settings,
+    (state, action: SettingsAction) => {
+      switch (action.type) {
+        case 'add':
+          return [...state, action.data];
+        case 'update':
+          return state.map(s => s.id === action.id ? action.data : s);
+        case 'delete':
+          return state.filter(s => s.id !== action.id);
+        case 'toggle':
+          return state.map(s => s.id === action.id ? { ...s, enabled: !s.enabled } : s);
+        default:
+          return state;
+      }
+    }
+  );
   const [connections, setConnections] = useState<EaConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,43 +131,70 @@ export function useSankeyCopier() {
 
   // Toggle enabled status
   const toggleEnabled = async (id: number, currentStatus: boolean) => {
+    // Optimistically update UI
+    addOptimisticSettings({ type: 'toggle', id });
+
     try {
       const data = await apiClient.post<{ success: boolean; error?: string }>(`/settings/${id}/toggle`, { enabled: !currentStatus });
       if (data.success) {
         fetchSettings();
       } else {
         alert('Failed to toggle: ' + data.error);
+        fetchSettings(); // Revert on error
       }
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      fetchSettings(); // Revert on error
     }
   };
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
+    // Optimistically add to UI with temporary ID
+    const tempSetting: CopySettings = {
+      ...formData,
+      id: Date.now(), // Temporary ID
+      enabled: true,
+      symbol_mappings: [],
+      filters: {
+        allowed_symbols: null,
+        blocked_symbols: null,
+        allowed_magic_numbers: null,
+        blocked_magic_numbers: null,
+      },
+    };
+    addOptimisticSettings({ type: 'add', data: tempSetting });
+
     try {
       const data = await apiClient.post<{ success: boolean; error?: string }>('/settings', formData);
       if (data.success) {
         fetchSettings();
       } else {
         alert('Failed to create: ' + data.error);
+        fetchSettings(); // Revert on error
       }
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      fetchSettings(); // Revert on error
     }
   };
 
   // Update setting
   const updateSetting = async (id: number, updatedData: CopySettings) => {
+    // Optimistically update UI
+    addOptimisticSettings({ type: 'update', id, data: updatedData });
+
     try {
       const data = await apiClient.put<{ success: boolean; error?: string }>(`/settings/${id}`, updatedData);
       if (data.success) {
         fetchSettings();
       } else {
         alert('Failed to update: ' + data.error);
+        fetchSettings(); // Revert on error
       }
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      fetchSettings(); // Revert on error
     }
   };
 
@@ -153,20 +203,26 @@ export function useSankeyCopier() {
     if (!confirm('Are you sure you want to delete this connection?')) {
       return;
     }
+
+    // Optimistically remove from UI
+    addOptimisticSettings({ type: 'delete', id });
+
     try {
       const data = await apiClient.delete<{ success: boolean; error?: string }>(`/settings/${id}`);
       if (data.success) {
         fetchSettings();
       } else {
         alert('Failed to delete: ' + data.error);
+        fetchSettings(); // Revert on error
       }
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      fetchSettings(); // Revert on error
     }
   };
 
   return {
-    settings,
+    settings: optimisticSettings, // Use optimistic settings for instant UI updates
     connections,
     loading,
     error,

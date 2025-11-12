@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { preconnect } from 'react-dom';
 import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
 import { ServerLog } from '@/components/ServerLog';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
+import { useSiteContext } from '@/lib/contexts/site-context';
 
 export default function Home() {
+  const { selectedSite } = useSiteContext();
   const {
     settings,
     connections,
@@ -19,6 +22,13 @@ export default function Home() {
     updateSetting,
     deleteSetting,
   } = useSankeyCopier();
+
+  // Preconnect to API server for faster initial requests
+  useEffect(() => {
+    if (selectedSite?.siteUrl) {
+      preconnect(selectedSite.siteUrl);
+    }
+  }, [selectedSite]);
 
   // Mobile drawer state for filter sidebar
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
