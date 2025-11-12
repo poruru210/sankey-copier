@@ -336,9 +336,8 @@ function ConnectionsViewReactFlowInner({
   return (
     <div className="relative flex flex-col h-full">
       {/* Action Bar with Filter */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
           <MasterAccountFilter
             connections={connections}
             settings={settings}
@@ -359,7 +358,7 @@ function ConnectionsViewReactFlowInner({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
 
         {/* Filter Indicator */}
         {selectedMaster !== 'all' && selectedMasterName && (() => {
@@ -396,7 +395,7 @@ function ConnectionsViewReactFlowInner({
         })()}
 
         {/* React Flow Canvas */}
-        <div className="flex-1 min-h-[800px] bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
+        <div className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
           <ReactFlow
             nodes={nodes}
             edges={edges}

@@ -71,7 +71,7 @@ export default function InstallationsPage() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="container mx-auto p-6 max-w-[1200px]">
+          <div className="w-[80%] mx-auto p-6">
           {/* Page Title */}
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-2">Installation Manager</h1>
@@ -209,7 +209,7 @@ export default function InstallationsPage() {
                               {/* Install Button */}
                               <Button
                                 onClick={() => handleInstall(installation)}
-                                disabled={isInstalling || allComponentsInstalled}
+                                disabled={isInstalling}
                                 className="w-full gap-2"
                                 variant={allComponentsInstalled ? 'outline' : 'default'}
                               >
@@ -220,8 +220,8 @@ export default function InstallationsPage() {
                                   </>
                                 ) : allComponentsInstalled ? (
                                   <>
-                                    <CheckCircle className="h-4 w-4" />
-                                    All Components Installed
+                                    <Download className="h-4 w-4" />
+                                    Reinstall Components
                                   </>
                                 ) : (
                                   <>
@@ -231,7 +231,7 @@ export default function InstallationsPage() {
                                 )}
                               </Button>
 
-                              {installation.is_running && !allComponentsInstalled && (
+                              {installation.is_running && (
                                 <p className="text-xs text-muted-foreground mt-2 text-center">
                                   Warning: MT is running. Installation may require restart.
                                 </p>
@@ -321,7 +321,7 @@ export default function InstallationsPage() {
                               {/* Install Button */}
                               <Button
                                 onClick={() => handleInstall(installation)}
-                                disabled={isInstalling || allComponentsInstalled}
+                                disabled={isInstalling}
                                 className="w-full gap-2"
                                 variant={allComponentsInstalled ? 'outline' : 'default'}
                               >
@@ -332,8 +332,8 @@ export default function InstallationsPage() {
                                   </>
                                 ) : allComponentsInstalled ? (
                                   <>
-                                    <CheckCircle className="h-4 w-4" />
-                                    All Components Installed
+                                    <Download className="h-4 w-4" />
+                                    Reinstall Components
                                   </>
                                 ) : (
                                   <>
@@ -343,7 +343,7 @@ export default function InstallationsPage() {
                                 )}
                               </Button>
 
-                              {installation.is_running && !allComponentsInstalled && (
+                              {installation.is_running && (
                                 <p className="text-xs text-muted-foreground mt-2 text-center">
                                   Warning: MT is running. Installation may require restart.
                                 </p>
