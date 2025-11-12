@@ -1,172 +1,33 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RefreshCw, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { useApiClient } from '@/lib/contexts/site-context';
-
-interface LogEntry {
-  timestamp: string;
-  level: string;
-  message: string;
-}
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+import { useServerLogs, useLogViewerResize, useLogViewerLayout } from './ServerLog.hooks';
+import { LOG_LEVEL_COLORS } from './ServerLog.constants';
 
 export function ServerLog() {
   const apiClient = useApiClient();
-  const { title, noLogs, refreshButton, loading, error: errorText, toggleLabel, closeLabel } = useIntlayer('server-log');
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const { title, noLogs, refreshButton, loading, error: errorText, toggleLabel } = useIntlayer('server-log');
+
+  // State
   const [isExpanded, setIsExpanded] = useState(false);
-  const [height, setHeight] = useState(350);
-  const [isResizing, setIsResizing] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [previousHeight, setPreviousHeight] = useState(350);
-  const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
 
-  const fetchLogs = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // Custom hooks
+  const { logs, isLoading, error, autoRefresh, setAutoRefresh, fetchLogs } = useServerLogs(apiClient);
+  const { height, isMaximized, handleResizeStart, toggleMaximize } = useLogViewerResize();
 
-    try {
-      const data = await apiClient.get<ApiResponse<LogEntry[]>>('/logs');
+  // Layout adjustments
+  useLogViewerLayout(isExpanded, height, isMaximized);
 
-      if (data.success && data.data) {
-        setLogs(data.data);
-      } else {
-        setError(data.error || 'Failed to fetch logs');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch logs');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apiClient]);
-
-  // Fetch logs on component mount
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  // Auto-refresh logs every 3 seconds when enabled
-  useEffect(() => {
-    if (!autoRefresh) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      fetchLogs();
-    }, 3000); // 3 seconds
-
-    return () => clearInterval(intervalId);
-  }, [autoRefresh, fetchLogs]);
-
-  // Add padding to main content when expanded to prevent content from being hidden
-  useEffect(() => {
-    const mainContent = document.querySelector('.relative.z-10') as HTMLElement;
-    const pageContainer = document.querySelector('.min-h-screen') as HTMLElement;
-    if (!mainContent || !pageContainer) return;
-
-    // Collapsed bar height is approximately 40px
-    const collapsedBarHeight = 40;
-
-    // Set fixed height on page container to prevent page scrollbar
-    pageContainer.style.height = '100vh';
-    pageContainer.style.overflow = 'hidden';
-
-    // Make main content scrollable with height adjusted for log viewer
-    mainContent.style.overflowY = 'auto';
-    mainContent.style.overflowX = 'hidden';
-
-    if (isExpanded) {
-      const logViewerHeight = isMaximized ? window.innerHeight : height;
-      // Adjust main content height to exclude log viewer height
-      mainContent.style.height = isMaximized ? '0px' : `calc(100vh - ${logViewerHeight}px)`;
-      mainContent.style.paddingBottom = '0px';
-    } else {
-      // When collapsed, main content height excludes collapsed bar
-      mainContent.style.height = `calc(100vh - ${collapsedBarHeight}px)`;
-      mainContent.style.paddingBottom = '0px';
-    }
-
-    return () => {
-      mainContent.style.paddingBottom = '0px';
-      mainContent.style.height = '';
-      mainContent.style.overflowY = '';
-      mainContent.style.overflowX = '';
-      pageContainer.style.height = '';
-      pageContainer.style.overflow = '';
-    };
-  }, [isExpanded, height, isMaximized]);
-
-  // Handle mouse resize
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizeStartRef.current) return;
-
-      const deltaY = resizeStartRef.current.y - e.clientY;
-      const maxHeight = Math.floor(window.innerHeight * 0.9); // 90% of viewport height
-      const newHeight = Math.max(200, Math.min(maxHeight, resizeStartRef.current.height + deltaY));
-      setHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      resizeStartRef.current = null;
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    resizeStartRef.current = { y: e.clientY, height };
-  };
-
-  const toggleMaximize = () => {
-    if (isMaximized) {
-      // Restore to previous height
-      setHeight(previousHeight);
-      setIsMaximized(false);
-    } else {
-      // Save current height and maximize
-      setPreviousHeight(height);
-      setIsMaximized(true);
-    }
-  };
-
+  // Utility functions
   const getLevelColor = (level: string) => {
-    switch (level.toUpperCase()) {
-      case 'ERROR':
-        return 'text-red-400';
-      case 'WARN':
-        return 'text-yellow-400';
-      case 'INFO':
-        return 'text-blue-400';
-      case 'DEBUG':
-        return 'text-gray-400';
-      default:
-        return 'text-gray-400';
-    }
+    const upperLevel = level.toUpperCase() as keyof typeof LOG_LEVEL_COLORS;
+    return LOG_LEVEL_COLORS[upperLevel] || LOG_LEVEL_COLORS.DEFAULT;
   };
 
   const formatTimestamp = (timestamp: string) => {
