@@ -103,10 +103,13 @@ Source: "..\rust-server\target\release\sankey-copier-server.exe"; DestDir: "{app
 ; System Tray Application
 Source: "..\sankey-copier-tray\target\release\sankey-copier-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 
+; Desktop Application (Tauri)
+Source: "..\desktop\src-tauri\target\release\sankey-copier-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
+
 ; NSSM for service management
 Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; Web UI (Next.js standalone build)
+; Web UI (Next.js standalone build) for Desktop App
 Source: "..\web-ui\.next\standalone\*"; DestDir: "{app}\web-ui"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\web-ui\.next\static\*"; DestDir: "{app}\web-ui\.next\static"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\web-ui\public\*"; DestDir: "{app}\web-ui\public"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -137,11 +140,11 @@ Name: "{app}\logs"; Permissions: users-full
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SANKEY Copier Tray"; ValueData: """{app}\sankey-copier-tray.exe"""; Flags: uninsdeletevalue
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\Open Web Interface"; Filename: "{code:GetWebUIUrl}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\sankey-copier-desktop.exe"; IconFilename: "{app}\sankey-copier-desktop.exe"
+Name: "{group}\Open Desktop App"; Filename: "{app}\sankey-copier-desktop.exe"
 Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query SankeyCopierServer"
-Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
-Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
+Name: "{group}\Stop Server"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
+Name: "{group}\Start Server"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 [Run]
@@ -150,20 +153,21 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 ; Launch tray application (always)
 Filename: "{app}\sankey-copier-tray.exe"; Flags: nowait skipifsilent
 
-; Open web interface
-Filename: "{code:GetWebUIUrl}"; Description: "{cm:OpenWebInterface}"; Flags: shellexec postinstall skipifsilent
+; Launch desktop application
+Filename: "{app}\sankey-copier-desktop.exe"; Description: "{cm:OpenWebInterface}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
+; Stop desktop application
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM sankey-copier-desktop.exe"; Flags: runhidden; RunOnceId: "StopDesktop"
+
 ; Stop tray application
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM sankey-copier-tray.exe"; Flags: runhidden; RunOnceId: "StopTray"
 
-; Stop services before uninstalling
-Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierWebUI"; Flags: runhidden; RunOnceId: "StopWebUI"
+; Stop server service before uninstalling
 Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"; Flags: runhidden; RunOnceId: "StopServer"
 Filename: "{sys}\timeout.exe"; Parameters: "/t 3 /nobreak"; Flags: runhidden; RunOnceId: "WaitForStop"
 
-; Remove services
-Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierWebUI confirm"; Flags: runhidden; RunOnceId: "RemoveWebUI"
+; Remove server service
 Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Flags: runhidden; RunOnceId: "RemoveServer"
 
 [UninstallDelete]
@@ -441,10 +445,13 @@ var
 begin
   if CurStep = ssInstall then
   begin
-    { Stop existing services and tray app before installing }
+    { Stop existing applications and services before installing }
     if IsRepairMode or IsUpdateMode then
     begin
       NssmPath := ExpandConstant('{autopf}\{#MyAppName}\nssm.exe');
+
+      { Stop desktop application }
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM sankey-copier-desktop.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
       { Stop tray application }
       Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM sankey-copier-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -452,6 +459,7 @@ begin
       { Stop and remove services if nssm.exe exists }
       if FileExists(NssmPath) then
       begin
+        { Stop web-ui service (legacy, may not exist in newer installs) }
         Exec(NssmPath, 'stop SankeyCopierWebUI', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Exec(NssmPath, 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
         Sleep(2000); { Wait for services to stop }
@@ -566,27 +574,8 @@ begin
     { Server uses config.toml [logging] settings - no NSSM log redirection needed }
     Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    { WebUI service - always create }
-    Exec(NssmPath, 'install SankeyCopierWebUI node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-    { Configure WebUI service }
-    Exec(NssmPath, 'set SankeyCopierWebUI Application node', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppParameters "\""' + ExpandConstant('{app}\web-ui\server.js') + '\""', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI DisplayName "SANKEY Copier Web UI"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI Description "Web interface for SANKEY Copier"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppDirectory "' + ExpandConstant('{app}\web-ui') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    { WebUI logging with rotation }
-    Exec(NssmPath, 'set SankeyCopierWebUI AppStdout "' + ExpandConstant('{app}\logs\webui-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppStderr "' + ExpandConstant('{app}\logs\webui-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateFiles 1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateSeconds 86400', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateBytes 10485760', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-    { Start services }
+    { Start server service }
     Exec(NssmPath, 'start SankeyCopierServer', '', SW_HIDE, ewNoWait, ResultCode);
-    Exec(NssmPath, 'start SankeyCopierWebUI', '', SW_HIDE, ewNoWait, ResultCode);
   end;
 end;
 

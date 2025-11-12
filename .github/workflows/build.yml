@@ -254,6 +254,75 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  build-tauri-desktop:
+    name: Build Tauri Desktop App
+    runs-on: windows-latest
+    needs: [version-info, build-web-ui]
+    if: ${{ github.event.inputs.build_target == 'all' || github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Download web-ui artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sankey-copier-web-ui
+          path: web-ui/.next
+
+      - name: Install Tauri CLI
+        working-directory: desktop
+        run: pnpm install
+
+      - name: Build Tauri App
+        working-directory: desktop
+        env:
+          PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+        run: |
+          echo "Building Tauri desktop app version ${{ needs.version-info.outputs.package_version }}"
+          pnpm tauri build
+
+      - name: Prepare Tauri artifacts
+        run: |
+          mkdir -p artifacts/desktop
+          # Copy MSI installer
+          if (Test-Path "desktop\src-tauri\target\release\bundle\msi\*.msi") {
+            Copy-Item "desktop\src-tauri\target\release\bundle\msi\*.msi" -Destination "artifacts\desktop\"
+            Write-Host "✓ Copied Tauri MSI installer"
+          }
+          # Copy executable
+          if (Test-Path "desktop\src-tauri\target\release\sankey-copier-desktop.exe") {
+            Copy-Item "desktop\src-tauri\target\release\sankey-copier-desktop.exe" -Destination "artifacts\desktop\"
+            Write-Host "✓ Copied Tauri executable"
+          }
+
+      - name: Upload Tauri artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-desktop
+          path: artifacts/desktop/
+          retention-days: 30
+
   compile-mql:
     name: Compile MQL4/MQL5 Files
     runs-on: windows-latest
@@ -802,7 +871,7 @@ jobs:
   build-installer:
     name: Build Windows Installer
     runs-on: windows-latest
-    needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, compile-mql]
+    needs: [version-info, build-rust-dll, build-rust-server, build-tray-app, build-web-ui, build-tauri-desktop, compile-mql]
 
     steps:
       - name: Checkout code
@@ -901,6 +970,16 @@ jobs:
             Write-Host "✓ Copied tray exe"
           } else {
             Write-Host "❌ Tray exe not found"
+            exit 1
+          }
+
+          # Copy desktop exe
+          New-Item -ItemType Directory -Force -Path "desktop/src-tauri/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe") {
+            Copy-Item "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe" -Destination "desktop/src-tauri/target/release/"
+            Write-Host "✓ Copied desktop exe"
+          } else {
+            Write-Host "❌ Desktop exe not found"
             exit 1
           }
 

@@ -171,10 +171,34 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
     }
 }
 
-/// Open web interface in default browser
+/// Launch desktop application
 fn open_web_interface() -> Result<()> {
-    let web_url = config::get_web_url();
-    webbrowser::open(&web_url).map_err(|e| anyhow::anyhow!("Failed to open browser: {}", e))
+    use std::process::Command;
+    use std::env;
+
+    // Get the directory where the tray executable is located
+    let exe_path = env::current_exe()
+        .map_err(|e| anyhow::anyhow!("Failed to get current executable path: {}", e))?;
+
+    let exe_dir = exe_path.parent()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get executable directory"))?;
+
+    // Desktop app should be in the same directory
+    let desktop_app_path = exe_dir.join("sankey-copier-desktop.exe");
+
+    if !desktop_app_path.exists() {
+        // Fallback: try to open in browser if desktop app not found
+        let web_url = config::get_web_url();
+        return webbrowser::open(&web_url)
+            .map_err(|e| anyhow::anyhow!("Desktop app not found and failed to open browser: {}", e));
+    }
+
+    // Launch the desktop application
+    Command::new(&desktop_app_path)
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to launch desktop app: {}", e))?;
+
+    Ok(())
 }
 
 /// Check for menu events and handle them

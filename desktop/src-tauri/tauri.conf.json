@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0",
+  "productName": "SANKEY Copier",
+  "version": "1.0.0",
+  "identifier": "com.sankey-copier.app",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:8080",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": ["en-US", "ja-JP"],
+        "template": null
+      }
+    },
+    "publisher": "SANKEY Copier Project",
+    "copyright": "Copyright (c) 2024 SANKEY Copier Project",
+    "category": "Finance",
+    "shortDescription": "MT4/MT5 Trade Copier",
+    "longDescription": "Professional trade copying system for MetaTrader 4 and MetaTrader 5"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "SANKEY Copier",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "url": "http://localhost:8080"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

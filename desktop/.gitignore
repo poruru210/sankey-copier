@@ -1,0 +1,14 @@
+# Tauri
+/src-tauri/target
+/src-tauri/Cargo.lock
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
