@@ -97,14 +97,17 @@ export function ServerLog() {
       mainContent.style.paddingBottom = `${collapsedBarHeight}px`;
     }
 
-    // Force browser to recalculate scrollbar after padding change
+    // Force browser to recalculate scrollbar by toggling overflow
     requestAnimationFrame(() => {
-      // Trigger layout recalculation by accessing scrollHeight
-      const _ = mainContent.scrollHeight;
-      // Force a style recalculation
-      mainContent.style.transform = 'translateZ(0)';
+      const currentScrollTop = mainContent.scrollTop;
+      mainContent.style.overflowY = 'hidden';
+
+      // Force reflow
+      void mainContent.offsetHeight;
+
       requestAnimationFrame(() => {
-        mainContent.style.transform = '';
+        mainContent.style.overflowY = 'auto';
+        mainContent.scrollTop = currentScrollTop;
       });
     });
 
