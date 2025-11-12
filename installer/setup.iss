@@ -75,6 +75,8 @@ english.TaskAutostart=Start services automatically on Windows startup
 english.OpenWebInterface=Open SANKEY Copier Web Interface
 english.InstallingServerService=Installing Rust server service...
 english.StartingServices=Starting services...
+english.ExistingInstallationTitle=Existing Installation Detected
+english.ExistingInstallationMessage=An existing installation of SANKEY Copier was detected.%n%nPlease uninstall the existing version before installing this version.%n%nWould you like to continue anyway? (Not recommended)
 
 ; Japanese
 japanese.DataDirPageTitle=データディレクトリの選択
@@ -89,6 +91,8 @@ japanese.TaskAutostart=Windows起動時にサービスを自動起動する
 japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
 japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
+japanese.ExistingInstallationTitle=既存のインストールを検出
+japanese.ExistingInstallationMessage=既存のSANKEY Copierのインストールが検出されました。%n%nこのバージョンをインストールする前に、既存のバージョンをアンインストールしてください。%n%nそれでも続行しますか？（非推奨）
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -212,6 +216,27 @@ var
 function GetWebUIUrl(Param: String): String;
 begin
   Result := 'http://localhost:' + ServerPortPage.Values[1];
+end;
+
+function InitializeSetup(): Boolean;
+var
+  ExistingPath: String;
+begin
+  Result := True;
+
+  { Check if SANKEY Copier is already installed }
+  ExistingPath := ExpandConstant('{autopf}\{#MyAppName}\sankey-copier-server.exe');
+
+  if FileExists(ExistingPath) then
+  begin
+    { Existing installation detected }
+    if MsgBox(CustomMessage('ExistingInstallationMessage'),
+              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDNO then
+    begin
+      { User chose not to continue - cancel installation }
+      Result := False;
+    end;
+  end;
 end;
 
 procedure InitializeWizard;
