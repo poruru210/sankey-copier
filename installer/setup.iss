@@ -201,7 +201,6 @@ var
   ExistingContent: TArrayOfString;
   NewContent: TArrayOfString;
   MergedContent: TArrayOfString;
-  ExistingValues: TStringList;
   I, J: Integer;
   CurrentSection: String;
   ExistingSection: String;
@@ -209,89 +208,83 @@ var
   Key: String;
   Value: String;
   FullKey: String;
+  ExistingKey: String;
+  Found: Boolean;
 begin
   { Load both config files }
   LoadStringsFromFile(ExistingConfigPath, ExistingContent);
   LoadStringsFromFile(NewConfigPath, NewContent);
 
-  { Create map of existing values (section::key -> value) }
-  ExistingValues := TStringList.Create;
-  try
-    { First pass: collect all existing key-value pairs with their sections }
-    ExistingSection := '';
-    for I := 0 to GetArrayLength(ExistingContent) - 1 do
+  { Build merged content from new config template }
+  SetArrayLength(MergedContent, 0);
+  CurrentSection := '';
+
+  for I := 0 to GetArrayLength(NewContent) - 1 do
+  begin
+    Line := NewContent[I];
+
+    { Track current section }
+    if (Length(Trim(Line)) > 0) and (Trim(Line)[1] = '[') then
     begin
-      Line := Trim(ExistingContent[I]);
-
-      { Track current section }
-      if (Length(Line) > 0) and (Line[1] = '[') then
-      begin
-        ExistingSection := Line;
-      end
-      else if (Length(Line) > 0) and (Pos('=', Line) > 0) and (Pos('#', Line) <> 1) then
-      begin
-        { Extract key and value }
-        Key := Trim(Copy(Line, 1, Pos('=', Line) - 1));
-        Value := Copy(ExistingContent[I], Pos('=', ExistingContent[I]), Length(ExistingContent[I]));
-        FullKey := ExistingSection + '::' + Key;
-        ExistingValues.Add(FullKey + '=' + Value);
-      end;
-    end;
-
-    { Second pass: build merged content from new config template }
-    SetArrayLength(MergedContent, 0);
-    CurrentSection := '';
-
-    for I := 0 to GetArrayLength(NewContent) - 1 do
+      CurrentSection := Trim(Line);
+      { Add section header }
+      SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+      MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+    end
+    else if (Length(Trim(Line)) > 0) and (Pos('=', Trim(Line)) > 0) and (Pos('#', Trim(Line)) <> 1) then
     begin
-      Line := NewContent[I];
+      { This is a key=value line }
+      Key := Trim(Copy(Trim(Line), 1, Pos('=', Trim(Line)) - 1));
 
-      { Track current section }
-      if (Length(Trim(Line)) > 0) and (Trim(Line)[1] = '[') then
-      begin
-        CurrentSection := Trim(Line);
-        { Add section header }
-        SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-        MergedContent[GetArrayLength(MergedContent) - 1] := Line;
-      end
-      else if (Length(Trim(Line)) > 0) and (Pos('=', Trim(Line)) > 0) and (Pos('#', Trim(Line)) <> 1) then
-      begin
-        { This is a key=value line }
-        Key := Trim(Copy(Trim(Line), 1, Pos('=', Trim(Line)) - 1));
-        FullKey := CurrentSection + '::' + Key;
+      { Search for this key in existing config within the same section }
+      Found := False;
+      ExistingSection := '';
 
-        { Check if this key exists in old config }
-        J := ExistingValues.IndexOfName(FullKey);
-        if J >= 0 then
+      for J := 0 to GetArrayLength(ExistingContent) - 1 do
+      begin
+        Line := Trim(ExistingContent[J]);
+
+        { Track section in existing config }
+        if (Length(Line) > 0) and (Line[1] = '[') then
         begin
-          { Use existing value - reconstruct full line }
-          Value := ExistingValues.ValueFromIndex[J];
-          SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-          MergedContent[GetArrayLength(MergedContent) - 1] := Key + Value;
+          ExistingSection := Line;
         end
-        else
+        else if (Length(Line) > 0) and (Pos('=', Line) > 0) and (Pos('#', Line) <> 1) then
         begin
-          { New key - use default from new config }
-          SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-          MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+          { Check if this is the same key in the same section }
+          ExistingKey := Trim(Copy(Line, 1, Pos('=', Line) - 1));
+
+          if (ExistingSection = CurrentSection) and (ExistingKey = Key) then
+          begin
+            { Use existing value from old config }
+            SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+            MergedContent[GetArrayLength(MergedContent) - 1] := ExistingContent[J];
+            Found := True;
+            Break;
+          end;
         end;
-      end
-      else
-      begin
-        { Comment or empty line - keep from new config }
-        SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-        MergedContent[GetArrayLength(MergedContent) - 1] := Line;
       end;
+
+      if not Found then
+      begin
+        { New key - use default from new config }
+        SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+        MergedContent[GetArrayLength(MergedContent) - 1] := NewContent[I];
+      end;
+    end
+    else
+    begin
+      { Comment or empty line - keep from new config }
+      SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
+      MergedContent[GetArrayLength(MergedContent) - 1] := Line;
     end;
-
-    { Save merged content }
-    SaveStringsToFile(ExistingConfigPath, MergedContent, False);
-
-    { Delete temporary new config file }
-    DeleteFile(NewConfigPath);
-  finally
-    ExistingValues.Free;
   end;
+
+  { Save merged content }
+  SaveStringsToFile(ExistingConfigPath, MergedContent, False);
+
+  { Delete temporary new config file }
+  DeleteFile(NewConfigPath);
 end;
 
 function InitializeSetup(): Boolean;
