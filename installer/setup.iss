@@ -244,6 +244,7 @@ var
   ConfigContent: TArrayOfString;
   I: Integer;
   Line: String;
+  Value: String;
   InServerSection: Boolean;
   InWebUISection: Boolean;
 begin
@@ -286,11 +287,31 @@ begin
         end;
 
         { Extract port values }
-        if InServerSection and (Pos('port = ', Line) > 0) then
-          ServerPortPage.Values[0] := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
+        if InServerSection and (Pos('port', Line) > 0) and (Pos('=', Line) > 0) then
+        begin
+          { Extract value after '=' and before any comment }
+          Value := Copy(Line, Pos('=', Line) + 1, Length(Line));
+          { Remove comments }
+          if Pos('#', Value) > 0 then
+            Value := Copy(Value, 1, Pos('#', Value) - 1);
+          { Trim whitespace and extract port number }
+          Value := Trim(Value);
+          if Value <> '' then
+            ServerPortPage.Values[0] := Value;
+        end;
 
-        if InWebUISection and (Pos('port = ', Line) > 0) then
-          ServerPortPage.Values[1] := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
+        if InWebUISection and (Pos('port', Line) > 0) and (Pos('=', Line) > 0) then
+        begin
+          { Extract value after '=' and before any comment }
+          Value := Copy(Line, Pos('=', Line) + 1, Length(Line));
+          { Remove comments }
+          if Pos('#', Value) > 0 then
+            Value := Copy(Value, 1, Pos('#', Value) - 1);
+          { Trim whitespace and extract port number }
+          Value := Trim(Value);
+          if Value <> '' then
+            ServerPortPage.Values[1] := Value;
+        end;
       end;
     end;
   end;
