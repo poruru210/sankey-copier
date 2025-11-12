@@ -71,7 +71,6 @@ english.PortConfigPageDescription=Configure network ports
 english.PortConfigPageSubDescription=Please specify the port numbers for the server and web interface.
 english.ServerPortLabel=Rust Server API Port:
 english.WebUIPortLabel=Web UI Port:
-english.TaskAutostart=Start services automatically on Windows startup
 english.OpenWebInterface=Open SANKEY Copier Web Interface
 english.InstallingServerService=Installing Rust server service...
 english.StartingServices=Starting services...
@@ -91,7 +90,6 @@ japanese.PortConfigPageDescription=ネットワークポートの設定
 japanese.PortConfigPageSubDescription=サーバーとWebインターフェースのポート番号を指定してください。
 japanese.ServerPortLabel=Rust Server APIポート:
 japanese.WebUIPortLabel=Web UIポート:
-japanese.TaskAutostart=Windows起動時にサービスを自動起動する
 japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
 japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
@@ -104,7 +102,6 @@ japanese.MergingConfig=設定ファイルをマージしています...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "{cm:TaskAutostart}"; Flags: checkedonce
 
 [Files]
 ; Rust Server
