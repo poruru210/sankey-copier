@@ -97,6 +97,17 @@ export function ServerLog() {
       mainContent.style.paddingBottom = `${collapsedBarHeight}px`;
     }
 
+    // Force browser to recalculate scrollbar after padding change
+    requestAnimationFrame(() => {
+      // Trigger layout recalculation by accessing scrollHeight
+      const _ = mainContent.scrollHeight;
+      // Force a style recalculation
+      mainContent.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => {
+        mainContent.style.transform = '';
+      });
+    });
+
     return () => {
       mainContent.style.paddingBottom = '0px';
       mainContent.style.height = '';
