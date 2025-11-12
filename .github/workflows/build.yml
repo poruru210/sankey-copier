@@ -335,6 +335,12 @@ jobs:
 
           Write-Host "Version update complete: $version" -ForegroundColor Green
 
+      - name: Create placeholder frontend dist
+        run: |
+          New-Item -ItemType Directory -Force -Path "desktop\dist"
+          Set-Content -Path "desktop\dist\index.html" -Value "<!DOCTYPE html><html><body>Loading...</body></html>"
+          Write-Host "✓ Created placeholder frontend dist" -ForegroundColor Green
+
       - name: Build Tauri App
         working-directory: desktop
         env:
