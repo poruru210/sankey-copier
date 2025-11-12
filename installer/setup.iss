@@ -37,7 +37,6 @@ SolidCompression=yes
 
 ; Privileges and compatibility
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
 MinVersion=10.0.17763
 ArchitecturesInstallIn64BitMode=x64
 
@@ -95,7 +94,7 @@ japanese.StoppingServices=既存のサービスを停止しています...
 japanese.MergingConfig=設定ファイルをマージしています...
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+; Removed desktop icon option
 
 [Files]
 ; Rust Server
@@ -144,7 +143,6 @@ Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query Sank
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
 Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 ; Services are installed and started by CurStepChanged procedure
@@ -169,11 +167,8 @@ Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierWebUI confirm"; Flag
 Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Flags: runhidden; RunOnceId: "RemoveServer"
 
 [UninstallDelete]
-; Clean up all data files
-Type: filesandordirs; Name: "{app}\data"
-Type: filesandordirs; Name: "{app}\logs"
-Type: files; Name: "{app}\sankey_copier.db"
-Type: files; Name: "{app}\config.toml"
+; Clean up all remaining files and directories
+Type: filesandordirs; Name: "{app}\*"
 
 [Code]
 var

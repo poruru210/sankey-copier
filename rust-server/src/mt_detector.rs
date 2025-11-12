@@ -58,17 +58,41 @@ impl MtDetector {
         let mut installations = Vec::new();
 
         let hklm = RegKey::predef(hkey);
-        let Ok(uninstall) = hklm.open_subkey(path) else {
-            return Ok(installations);
+        let uninstall = match hklm.open_subkey(path) {
+            Ok(key) => {
+                tracing::debug!("Successfully opened registry key: {}", path);
+                key
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to open registry key '{}': {} (error code: {:?})",
+                    path,
+                    e,
+                    e.kind()
+                );
+                return Ok(installations);
+            }
         };
 
+        let mut total_keys = 0;
+        let mut metatrader_keys = 0;
         for key_name in uninstall.enum_keys().filter_map(|k| k.ok()) {
+            total_keys += 1;
             if let Ok(app_key) = uninstall.open_subkey(&key_name) {
                 if let Some(installation) = self.parse_registry_entry(&app_key) {
+                    metatrader_keys += 1;
+                    tracing::debug!("Found MT installation in key: {}", key_name);
                     installations.push(installation);
                 }
             }
         }
+
+        tracing::info!(
+            "Scanned registry key '{}': {} total keys, {} MT installations found",
+            path,
+            total_keys,
+            metatrader_keys
+        );
 
         Ok(installations)
     }
@@ -86,10 +110,23 @@ impl MtDetector {
             return None;
         }
 
+        tracing::debug!("Parsing MT registry entry: {}", display_name);
+
         // インストールパスを取得
-        let install_location: String = key.get_value("InstallLocation")
-            .or_else(|_| key.get_value("InstallPath"))
-            .ok()?;
+        let install_location: String = match key.get_value("InstallLocation")
+            .or_else(|_| key.get_value("InstallPath")) {
+            Ok(path) => path,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to get InstallLocation/InstallPath for '{}': {}",
+                    display_name,
+                    e
+                );
+                return None;
+            }
+        };
+
+        tracing::debug!("Install location for '{}': {}", display_name, install_location);
 
         let install_path = PathBuf::from(&install_location);
         if !install_path.exists() {
@@ -98,11 +135,44 @@ impl MtDetector {
         }
 
         // MT4/MT5のタイプとアーキテクチャを判定
-        let (mt_type, platform, executable) = self.detect_mt_type_and_platform(&install_path)?;
+        let (mt_type, platform, executable) = match self.detect_mt_type_and_platform(&install_path) {
+            Some(result) => result,
+            None => {
+                tracing::warn!(
+                    "Could not detect MT type/platform for '{}' at {:?}",
+                    display_name,
+                    install_path
+                );
+                return None;
+            }
+        };
+
+        tracing::debug!(
+            "Detected MT type: {:?}, platform: {:?} for '{}'",
+            mt_type,
+            platform,
+            display_name
+        );
 
         // データディレクトリを検出
-        let data_path = self.find_data_directory(&install_path, &mt_type)?;
+        let data_path = match self.find_data_directory(&install_path, &mt_type) {
+            Some(path) => path,
+            None => {
+                tracing::warn!(
+                    "Could not find data directory for '{}' at {:?}",
+                    display_name,
+                    install_path
+                );
+                return None;
+            }
+        };
         let data_path_str = data_path.to_string_lossy().to_string();
+
+        tracing::debug!(
+            "Found data directory for '{}': {}",
+            display_name,
+            data_path_str
+        );
 
         // IDを生成
         let id = MtInstallation::generate_id(&mt_type, &data_path_str);
@@ -191,21 +261,54 @@ impl MtDetector {
         };
 
         let portable_mql = install_path.join(mql_folder);
+        tracing::debug!(
+            "Checking for portable mode: {:?} (exists: {})",
+            portable_mql,
+            portable_mql.exists()
+        );
+
         if portable_mql.exists() {
             tracing::debug!("Detected portable mode at {:?}", install_path);
             return Some(install_path.to_path_buf());
         }
 
+        tracing::debug!("Not portable mode, searching in APPDATA");
         // 通常モード: %APPDATA%\MetaQuotes\Terminal\ から検索
         self.find_data_directory_from_appdata(install_path, mt_type)
     }
 
     /// %APPDATA%\MetaQuotes\Terminal\ からデータディレクトリを検索
+    /// Windows Service (SYSTEM account) で実行される場合、全ユーザーのプロファイルを検索
     fn find_data_directory_from_appdata(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
-        let appdata = std::env::var("APPDATA").ok()?;
-        let terminal_base = PathBuf::from(appdata).join("MetaQuotes").join("Terminal");
+        let appdata = match std::env::var("APPDATA") {
+            Ok(path) => {
+                tracing::debug!("APPDATA environment variable: {}", path);
+                path
+            }
+            Err(e) => {
+                tracing::warn!("Failed to get APPDATA environment variable: {}", e);
+                return None;
+            }
+        };
+
+        // Check if running as SYSTEM account (common for Windows Services)
+        let is_system_account = appdata.contains("system32\\config\\systemprofile");
+
+        if is_system_account {
+            tracing::info!("Running as SYSTEM account, scanning all user profiles for MT data directories");
+            return self.find_data_directory_all_users(install_path, mt_type);
+        }
+
+        let terminal_base = PathBuf::from(&appdata).join("MetaQuotes").join("Terminal");
+
+        tracing::debug!(
+            "Searching for data directory in: {:?} (exists: {})",
+            terminal_base,
+            terminal_base.exists()
+        );
 
         if !terminal_base.exists() {
+            tracing::warn!("Terminal base directory does not exist: {:?}", terminal_base);
             return None;
         }
 
@@ -214,6 +317,7 @@ impl MtDetector {
             MtType::MT5 => "MQL5",
         };
 
+        let mut checked_dirs = 0;
         // origin.txtを使って照合
         for entry in fs::read_dir(&terminal_base).ok()?.flatten() {
             let path = entry.path();
@@ -221,16 +325,144 @@ impl MtDetector {
                 continue;
             }
 
+            checked_dirs += 1;
             let origin_file = path.join("origin.txt");
+
+            if origin_file.exists() {
+                tracing::debug!("Checking origin.txt in: {:?}", path);
+
+                if let Ok(content_bytes) = fs::read(&origin_file) {
+                    if let Some(origin_path) = self.decode_origin_txt(&content_bytes) {
+                        let origin_path_normalized = origin_path.to_lowercase();
+                        let install_path_normalized = install_path.to_string_lossy().to_lowercase();
+
+                        tracing::debug!(
+                            "Comparing origin '{}' with install path '{}'",
+                            origin_path_normalized,
+                            install_path_normalized
+                        );
+
+                        if origin_path_normalized == install_path_normalized {
+                            // MQLフォルダが存在することを確認
+                            let mql_path = path.join(mql_folder);
+                            if mql_path.exists() {
+                                tracing::info!("Found data directory via origin.txt: {:?}", path);
+                                return Some(path);
+                            } else {
+                                tracing::warn!(
+                                    "Found matching origin.txt but {} folder does not exist: {:?}",
+                                    mql_folder,
+                                    mql_path
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        tracing::warn!(
+            "No matching data directory found in {} (checked {} directories)",
+            terminal_base.display(),
+            checked_dirs
+        );
+
+        None
+    }
+
+    /// すべてのユーザープロファイルからデータディレクトリを検索（SYSTEM account用）
+    fn find_data_directory_all_users(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
+        // C:\Users\ 配下の全ユーザーを検索
+        let users_dir = PathBuf::from("C:\\Users");
+        if !users_dir.exists() {
+            tracing::warn!("Users directory does not exist: {:?}", users_dir);
+            return None;
+        }
+
+        let mql_folder = match mt_type {
+            MtType::MT4 => "MQL4",
+            MtType::MT5 => "MQL5",
+        };
+
+        tracing::debug!("Scanning all user profiles in: {:?}", users_dir);
+
+        // Enumerate all user directories
+        let user_entries = match fs::read_dir(&users_dir) {
+            Ok(entries) => entries,
+            Err(e) => {
+                tracing::warn!("Failed to read users directory: {}", e);
+                return None;
+            }
+        };
+
+        for user_entry in user_entries.flatten() {
+            let user_path = user_entry.path();
+            if !user_path.is_dir() {
+                continue;
+            }
+
+            let terminal_base = user_path
+                .join("AppData")
+                .join("Roaming")
+                .join("MetaQuotes")
+                .join("Terminal");
+
+            if !terminal_base.exists() {
+                continue;
+            }
+
+            tracing::debug!(
+                "Checking user profile: {:?}, terminal base: {:?}",
+                user_path.file_name(),
+                terminal_base
+            );
+
+            // Search in this user's terminal directory
+            if let Some(data_path) = self.search_terminal_directory(&terminal_base, install_path, mql_folder) {
+                tracing::info!(
+                    "Found data directory in user profile {:?}: {:?}",
+                    user_path.file_name(),
+                    data_path
+                );
+                return Some(data_path);
+            }
+        }
+
+        tracing::warn!(
+            "No matching data directory found in any user profile for: {:?}",
+            install_path
+        );
+        None
+    }
+
+    /// Terminal ディレクトリ内で origin.txt を使ってデータディレクトリを検索
+    fn search_terminal_directory(
+        &self,
+        terminal_base: &Path,
+        install_path: &Path,
+        mql_folder: &str,
+    ) -> Option<PathBuf> {
+        let entries = fs::read_dir(terminal_base).ok()?;
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let origin_file = path.join("origin.txt");
+            if !origin_file.exists() {
+                continue;
+            }
+
             if let Ok(content_bytes) = fs::read(&origin_file) {
                 if let Some(origin_path) = self.decode_origin_txt(&content_bytes) {
                     let origin_path_normalized = origin_path.to_lowercase();
                     let install_path_normalized = install_path.to_string_lossy().to_lowercase();
 
                     if origin_path_normalized == install_path_normalized {
-                        // MQLフォルダが存在することを確認
-                        if path.join(mql_folder).exists() {
-                            tracing::debug!("Found data directory via origin.txt: {:?}", path);
+                        let mql_path = path.join(mql_folder);
+                        if mql_path.exists() {
                             return Some(path);
                         }
                     }
