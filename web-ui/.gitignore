@@ -35,6 +35,8 @@ test_*.py
 debug_*.png
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
 
 # Environment variables (covered by root .gitignore)
 # .env
