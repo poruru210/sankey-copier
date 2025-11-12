@@ -94,7 +94,7 @@ japanese.StoppingServices=既存のサービスを停止しています...
 japanese.MergingConfig=設定ファイルをマージしています...
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+; Removed desktop icon option
 
 [Files]
 ; Rust Server
@@ -143,7 +143,6 @@ Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query Sank
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
 Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 ; Services are installed and started by CurStepChanged procedure
