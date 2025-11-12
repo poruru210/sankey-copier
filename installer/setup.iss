@@ -63,9 +63,6 @@ japanese.WelcomeLabel2=[name/ver] をコンピュータにインストールし�
 
 [CustomMessages]
 ; English
-english.DataDirPageTitle=Select Data Directory
-english.DataDirPageDescription=Where should application data be stored?
-english.DataDirPageSubDescription=Select the folder in which Setup should store database and log files, then click Next.
 english.PortConfigPageTitle=Port Configuration
 english.PortConfigPageDescription=Configure network ports
 english.PortConfigPageSubDescription=Please specify the port numbers for the server and web interface.
@@ -82,9 +79,6 @@ english.StoppingServices=Stopping existing services...
 english.MergingConfig=Merging configuration file...
 
 ; Japanese
-japanese.DataDirPageTitle=データディレクトリの選択
-japanese.DataDirPageDescription=アプリケーションデータをどこに保存しますか？
-japanese.DataDirPageSubDescription=データベースとログファイルを保存するフォルダを選択し、「次へ」をクリックしてください。
 japanese.PortConfigPageTitle=ポート設定
 japanese.PortConfigPageDescription=ネットワークポートの設定
 japanese.PortConfigPageSubDescription=サーバーとWebインターフェースのポート番号を指定してください。
@@ -182,9 +176,7 @@ Type: files; Name: "{app}\config.toml"
 
 [Code]
 var
-  DataDirPage: TInputDirWizardPage;
   ServerPortPage: TInputQueryWizardPage;
-  DataDirInitialized: Boolean;
   IsRepairMode: Boolean;
   IsUpdateMode: Boolean;
 
@@ -342,17 +334,6 @@ end;
 
 procedure InitializeWizard;
 begin
-  DataDirInitialized := False;
-
-  { Create custom page for data directory }
-  DataDirPage := CreateInputDirPage(wpSelectDir,
-    CustomMessage('DataDirPageTitle'),
-    CustomMessage('DataDirPageDescription'),
-    CustomMessage('DataDirPageSubDescription'),
-    False, '');
-  DataDirPage.Add('');
-  { Default value will be set in CurPageChanged after app constant is initialized }
-
   { Create custom page for port configuration }
   ServerPortPage := CreateInputQueryPage(wpSelectDir,
     CustomMessage('PortConfigPageTitle'),
@@ -374,13 +355,6 @@ var
   InServerSection: Boolean;
   InWebUISection: Boolean;
 begin
-  { Set default data directory after installation directory has been selected }
-  if (CurPageID = DataDirPage.ID) and (not DataDirInitialized) then
-  begin
-    DataDirPage.Values[0] := ExpandConstant('{app}\data');
-    DataDirInitialized := True;
-  end;
-
   { Load existing port configuration for upgrades }
   if CurPageID = ServerPortPage.ID then
   begin
@@ -447,7 +421,7 @@ function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   { Skip custom pages in silent mode }
   Result := False;
-  if (PageID = DataDirPage.ID) or (PageID = ServerPortPage.ID) then
+  if PageID = ServerPortPage.ID then
     Result := WizardSilent();
 end;
 
