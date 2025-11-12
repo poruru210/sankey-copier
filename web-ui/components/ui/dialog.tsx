@@ -24,8 +24,12 @@ const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) => {
   );
 };
 
-const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => (
+interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function DialogContent({ className, children, ref, ...props }: DialogContentProps) {
+  return (
     <div
       ref={ref}
       className={cn(
@@ -37,21 +41,23 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
     >
       {children}
     </div>
-  )
-);
-DialogContent.displayName = 'DialogContent';
+  );
+}
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left mb-4', className)} {...props} />
 );
 DialogHeader.displayName = 'DialogHeader';
 
-const DialogTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
+interface DialogTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  ref?: React.Ref<HTMLHeadingElement>;
+}
+
+function DialogTitle({ className, ref, ...props }: DialogTitleProps) {
+  return (
     <h2 ref={ref} className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props} />
-  )
-);
-DialogTitle.displayName = 'DialogTitle';
+  );
+}
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 mt-4', className)} {...props} />
