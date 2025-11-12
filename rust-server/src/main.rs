@@ -269,6 +269,7 @@ async fn main() -> Result<()> {
         log_buffer: log_buffer.clone(),
         allowed_origins: allowed_origins.clone(),
         cors_disabled,
+        config: Arc::new(config.clone()),
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");

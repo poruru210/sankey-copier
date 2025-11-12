@@ -70,8 +70,8 @@ export function useServerLogs(apiClient: ApiClient) {
 }
 
 // Hook for managing log viewer resize functionality
-export function useLogViewerResize(initialHeight = LOG_VIEWER_CONSTANTS.DEFAULT_HEIGHT) {
-  const [height, setHeight] = useState(initialHeight);
+export function useLogViewerResize(initialHeight: number = LOG_VIEWER_CONSTANTS.DEFAULT_HEIGHT) {
+  const [height, setHeight] = useState<number>(initialHeight);
   const [isResizing, setIsResizing] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [previousHeight, setPreviousHeight] = useState(initialHeight);

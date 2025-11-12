@@ -14,6 +14,7 @@ use tower_http::trace::{TraceLayer, DefaultMakeSpan, DefaultOnResponse};
 use tower_http::LatencyUnit;
 
 use crate::{
+    config::Config,
     connection_manager::ConnectionManager,
     db::Database,
     log_buffer::LogBuffer,
@@ -31,6 +32,7 @@ pub struct AppState {
     pub log_buffer: LogBuffer,
     pub allowed_origins: Vec<String>,
     pub cors_disabled: bool,
+    pub config: Arc<Config>,
 }
 
 pub fn create_router(state: AppState) -> Router {
