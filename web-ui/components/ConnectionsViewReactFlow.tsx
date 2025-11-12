@@ -27,7 +27,7 @@ import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
 import { AccountNode } from '@/components/flow-nodes/AccountNode';
 import { SettingsDialog } from '@/components/SettingsDialog';
-import { MasterAccountSidebarContainer } from '@/components/MasterAccountSidebarContainer';
+import { MasterAccountFilter } from '@/components/MasterAccountFilter';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, RefreshCw } from 'lucide-react';
@@ -39,8 +39,6 @@ interface ConnectionsViewReactFlowProps {
   onCreate: (data: CreateSettingsRequest) => void;
   onUpdate: (id: number, data: CopySettings) => void;
   onDelete: (id: number) => void;
-  isMobileDrawerOpen?: boolean;
-  onCloseMobileDrawer?: () => void;
 }
 
 // Define nodeTypes at module level to prevent recreation warnings
@@ -55,8 +53,6 @@ function ConnectionsViewReactFlowInner({
   onCreate,
   onUpdate,
   onDelete,
-  isMobileDrawerOpen,
-  onCloseMobileDrawer,
 }: ConnectionsViewReactFlowProps) {
   const content = useIntlayer('connections-view');
   const sidebarContent = useIntlayer('master-account-sidebar');
@@ -338,33 +334,32 @@ function ConnectionsViewReactFlowInner({
   }, [nodes.length, reactFlowInstance]);
 
   return (
-    <div className="relative flex gap-6 h-full">
-      {/* Sidebar */}
-      <MasterAccountSidebarContainer
-        connections={connections}
-        settings={settings}
-        selectedMaster={selectedMaster}
-        onSelectMaster={setSelectedMaster}
-        isMobileDrawerOpen={isMobileDrawerOpen}
-        onCloseMobileDrawer={onCloseMobileDrawer}
-      />
+    <div className="relative flex flex-col h-full">
+      {/* Action Bar with Filter */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
+          <MasterAccountFilter
+            connections={connections}
+            settings={settings}
+            selectedMaster={selectedMaster}
+            onSelectMaster={setSelectedMaster}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {content.refresh}
+          </Button>
+          <Button size="sm" onClick={handleOpenDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            {content.createNewLink}
+          </Button>
+        </div>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Action Bar */}
-        <div className="mb-6 flex justify-between items-center">
-          <h2 className="text-2xl font-bold">{content.tradingConnections}</h2>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              {content.refresh}
-            </Button>
-            <Button size="sm" onClick={handleOpenDialog}>
-              <Plus className="h-4 w-4 mr-2" />
-              {content.createNewLink}
-            </Button>
-          </div>
-        </div>
 
         {/* Filter Indicator */}
         {selectedMaster !== 'all' && selectedMasterName && (() => {
