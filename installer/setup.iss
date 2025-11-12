@@ -129,9 +129,9 @@ Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ign
 Source: "resources\license.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
-; Create data directories
+; Create directories
 Name: "{app}\data"; Permissions: users-full
-Name: "{app}\data\logs"; Permissions: users-full
+Name: "{app}\logs"; Permissions: users-full
 
 [Registry]
 ; Add tray application to Windows startup (always enabled)
@@ -171,6 +171,7 @@ Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Fla
 [UninstallDelete]
 ; Clean up all data files
 Type: filesandordirs; Name: "{app}\data"
+Type: filesandordirs; Name: "{app}\logs"
 Type: files; Name: "{app}\sankey_copier.db"
 Type: files; Name: "{app}\config.toml"
 
@@ -567,8 +568,7 @@ begin
     Exec(NssmPath, 'set SankeyCopierServer DisplayName "SANKEY Copier Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer Description "Backend server for SANKEY Copier MT4/MT5 trade copying system"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierServer AppDirectory "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierServer AppStdout "' + ExpandConstant('{app}\data\logs\server-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierServer AppStderr "' + ExpandConstant('{app}\data\logs\server-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Server uses config.toml [logging] settings - no NSSM log redirection needed }
     Exec(NssmPath, 'set SankeyCopierServer Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { WebUI service - always create }
@@ -580,8 +580,12 @@ begin
     Exec(NssmPath, 'set SankeyCopierWebUI DisplayName "SANKEY Copier Web UI"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI Description "Web interface for SANKEY Copier"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppDirectory "' + ExpandConstant('{app}\web-ui') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppStdout "' + ExpandConstant('{app}\data\logs\webui-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(NssmPath, 'set SankeyCopierWebUI AppStderr "' + ExpandConstant('{app}\data\logs\webui-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { WebUI logging with rotation }
+    Exec(NssmPath, 'set SankeyCopierWebUI AppStdout "' + ExpandConstant('{app}\logs\webui-stdout.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppStderr "' + ExpandConstant('{app}\logs\webui-stderr.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateFiles 1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateSeconds 86400', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'set SankeyCopierWebUI AppRotateBytes 10485760', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI AppEnvironmentExtra PORT=' + WebUIPort, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(NssmPath, 'set SankeyCopierWebUI Start SERVICE_AUTO_START', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
