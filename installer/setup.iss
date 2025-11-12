@@ -72,8 +72,6 @@ english.PortConfigPageSubDescription=Please specify the port numbers for the ser
 english.ServerPortLabel=Rust Server API Port:
 english.WebUIPortLabel=Web UI Port:
 english.TaskAutostart=Start services automatically on Windows startup
-english.TaskTrayapp=Launch tray application on Windows startup
-english.LaunchTrayApp=Launch SANKEY Copier Tray Application
 english.OpenWebInterface=Open SANKEY Copier Web Interface
 english.InstallingServerService=Installing Rust server service...
 english.StartingServices=Starting services...
@@ -88,8 +86,6 @@ japanese.PortConfigPageSubDescription=サーバーとWebインターフェース
 japanese.ServerPortLabel=Rust Server APIポート:
 japanese.WebUIPortLabel=Web UIポート:
 japanese.TaskAutostart=Windows起動時にサービスを自動起動する
-japanese.TaskTrayapp=Windows起動時にトレイアプリケーションを起動する
-japanese.LaunchTrayApp=SANKEY Copier トレイアプリケーションを起動
 japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
 japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
@@ -97,7 +93,6 @@ japanese.StartingServices=サービスを起動しています...
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "{cm:TaskAutostart}"; Flags: checkedonce
-Name: "trayapp"; Description: "{cm:TaskTrayapp}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
 ; Rust Server
@@ -136,8 +131,8 @@ Name: "{app}\data"; Permissions: users-full
 Name: "{app}\data\logs"; Permissions: users-full
 
 [Registry]
-; Add tray application to Windows startup
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SANKEY Copier Tray"; ValueData: """{app}\sankey-copier-tray.exe"""; Flags: uninsdeletevalue; Tasks: trayapp
+; Add tray application to Windows startup (always enabled)
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SANKEY Copier Tray"; ValueData: """{app}\sankey-copier-tray.exe"""; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"
@@ -183,8 +178,8 @@ Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierWebUI Start SERVICE_DEM
 Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden nowait; StatusMsg: "{cm:StartingServices}"
 Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierWebUI"; Flags: runhidden nowait
 
-; Launch tray application
-Filename: "{app}\sankey-copier-tray.exe"; Description: "{cm:LaunchTrayApp}"; Flags: nowait postinstall skipifsilent; Tasks: trayapp
+; Launch tray application (always)
+Filename: "{app}\sankey-copier-tray.exe"; Flags: nowait skipifsilent
 
 ; Open web interface
 Filename: "{code:GetWebUIUrl}"; Description: "{cm:OpenWebInterface}"; Flags: shellexec postinstall skipifsilent
