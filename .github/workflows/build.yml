@@ -95,12 +95,22 @@ jobs:
 
       - name: Build 32-bit DLL (MT4用)
         working-directory: mql-zmq-dll
+        env:
+          PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+          FILE_VERSION: ${{ needs.version-info.outputs.file_version }}
         run: |
+          echo "Building with PACKAGE_VERSION=${{ needs.version-info.outputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ needs.version-info.outputs.file_version }}"
           cargo build --release --target i686-pc-windows-msvc
 
       - name: Build 64-bit DLL (MT5用)
         working-directory: mql-zmq-dll
+        env:
+          PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+          FILE_VERSION: ${{ needs.version-info.outputs.file_version }}
         run: |
+          echo "Building with PACKAGE_VERSION=${{ needs.version-info.outputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ needs.version-info.outputs.file_version }}"
           cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Prepare DLL artifacts
@@ -585,6 +595,31 @@ jobs:
           } else {
             Write-Host "❌ MetaEditor not found in cached installation" -ForegroundColor Red
             exit 1
+          }
+
+      - name: Prepare MQL files with version information
+        run: |
+          Write-Host "=== Updating MQL files with version information ===" -ForegroundColor Cyan
+
+          $version = "${{ needs.version-info.outputs.package_version }}"
+          Write-Host "Version: $version" -ForegroundColor Yellow
+
+          # Update version in all MQL files
+          $mqlFiles = @(
+            "mql/${{ matrix.platform }}/SankeyCopierMaster.mq${{ matrix.version }}",
+            "mql/${{ matrix.platform }}/SankeyCopierSlave.mq${{ matrix.version }}"
+          )
+
+          foreach ($file in $mqlFiles) {
+            if (Test-Path $file) {
+              Write-Host "Updating version in: $file"
+              $content = Get-Content $file -Raw -Encoding UTF8
+              $content = $content -replace '#property version\s+"[^"]*"\s*//\s*VERSION_PLACEHOLDER', "#property version   `"$version`""
+              Set-Content $file -Value $content -NoNewline -Encoding UTF8
+              Write-Host "✅ Updated: $file" -ForegroundColor Green
+            } else {
+              Write-Host "⚠️ File not found: $file" -ForegroundColor Yellow
+            }
           }
 
       - name: Prepare Include directory

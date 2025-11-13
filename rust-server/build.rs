@@ -50,7 +50,7 @@ fn embed_windows_resources(package_version: &str, file_version: &str) {
 
     let mut res = winres::WindowsResource::new();
 
-    // Set version information
+    // Set string version information (StringFileInfo)
     res.set("ProductVersion", package_version)
         .set("ProductName", "SANKEY Copier Server")
         .set("FileVersion", &file_ver_string)
@@ -59,12 +59,39 @@ fn embed_windows_resources(package_version: &str, file_version: &str) {
         .set("LegalCopyright", "Copyright (C) 2025 SANKEY Copier Project")
         .set("OriginalFilename", "sankey-copier-server.exe");
 
+    // Set numeric version information (FixedFileInfo)
+    if let Some(version_u64) = parse_version(&file_ver_string) {
+        res.set_version_info(winres::VersionInfo::FILEVERSION, version_u64);
+        res.set_version_info(winres::VersionInfo::PRODUCTVERSION, version_u64);
+    }
+
     // Compile the resource file
     if let Err(e) = res.compile() {
         eprintln!("Failed to compile Windows resources: {}", e);
         // Don't fail the build, just warn
     } else {
         println!("cargo:warning=Successfully embedded Windows resources");
+    }
+}
+
+/// Parse version string (e.g., "1.2.3.169") into u64 for Windows VERSIONINFO
+/// Format: [major.minor.patch.build] -> 0xMMMMmmmmPPPPbbbb
+fn parse_version(version_str: &str) -> Option<u64> {
+    let parts: Vec<u16> = version_str
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    if parts.len() >= 3 {
+        let major = parts.get(0).copied().unwrap_or(0) as u64;
+        let minor = parts.get(1).copied().unwrap_or(0) as u64;
+        let patch = parts.get(2).copied().unwrap_or(0) as u64;
+        let build = parts.get(3).copied().unwrap_or(0) as u64;
+
+        // Pack into u64: high DWORD (major.minor), low DWORD (patch.build)
+        Some((major << 48) | (minor << 32) | (patch << 16) | build)
+    } else {
+        None
     }
 }
 
