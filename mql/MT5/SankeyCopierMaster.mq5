@@ -5,7 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
-#property version   "1.00"
+#property version   "1.00"  // VERSION_PLACEHOLDER
+#property icon      "app.ico"
 
 //--- Include common headers
 #include <SankeyCopier/SankeyCopierCommon.mqh>

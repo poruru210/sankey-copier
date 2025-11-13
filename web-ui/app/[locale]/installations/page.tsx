@@ -255,10 +255,7 @@ export default function InstallationsPage() {
                     </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Platform</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Installation Path</TableHead>
-                    <TableHead>Version</TableHead>
                     <TableHead>Components</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -287,46 +284,42 @@ export default function InstallationsPage() {
                         <TableCell>
                           <Badge variant="outline">{installation.type}</Badge>
                         </TableCell>
-                        <TableCell>{installation.platform}</TableCell>
                         <TableCell>
-                          <Badge variant={installation.is_running ? 'default' : 'secondary'}>
-                            {installation.is_running ? 'Running' : 'Stopped'}
-                          </Badge>
+                          <p className="text-sm font-mono break-all">
+                            {installation.path}
+                          </p>
                         </TableCell>
                         <TableCell>
-                          <div className="max-w-[300px]">
-                            <p className="text-sm font-mono truncate" title={installation.path}>
-                              {installation.path}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{installation.version || '-'}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-sm">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
                               {installation.components.dll ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
                               <span className="text-xs">DLL</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2">
                               {installation.components.master_ea ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
                               <span className="text-xs">Master</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2">
                               {installation.components.slave_ea ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
                               <span className="text-xs">Slave</span>
                             </div>
+                            {installation.version && (
+                              <div className="text-xs text-muted-foreground font-mono mt-1">
+                                v{installation.version}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

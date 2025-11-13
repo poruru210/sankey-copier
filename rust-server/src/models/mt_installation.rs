@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 
 /// MT4/MT5のタイプ
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -17,13 +15,6 @@ pub enum Architecture {
     Bit32,
     #[serde(rename = "64-bit")]
     Bit64,
-}
-
-/// 検出方法（Windowsレジストリベース）
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum DetectionMethod {
-    Registry,
 }
 
 /// インストールされたコンポーネント（実行に必要なもののみ）
@@ -44,24 +35,14 @@ pub struct MtInstallation {
     pub platform: Architecture,
     pub path: String,
     pub executable: String,
-    pub version: Option<String>,
-    pub is_running: bool,
-    pub process_id: Option<u32>,
-    pub detection_method: DetectionMethod,
-    pub is_installed: bool,
-    pub installed_version: Option<String>,
-    pub available_version: String,
+    pub version: Option<String>,  // DLLバージョン = クライアントバージョン
     pub components: InstalledComponents,
-    pub last_updated: Option<DateTime<Utc>>,
 }
 
 /// 検出サマリー
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectionSummary {
     pub total_found: usize,
-    pub by_method: HashMap<String, usize>,
-    pub running: usize,
-    pub stopped: usize,
 }
 
 /// MT4/MT5検出結果のレスポンス
