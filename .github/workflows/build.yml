@@ -976,21 +976,7 @@ jobs:
 
           # Copy MQL compiled files
           New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
-          New-Item -ItemType Directory -Force -Path "mql/MT4/Libraries"
           New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
-          New-Item -ItemType Directory -Force -Path "mql/MT5/Libraries"
-
-          # Copy MT4 DLL to installer structure
-          if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mql/MT4/Libraries/"
-            Write-Host "✓ Copied MT4 DLL to installer structure"
-          }
-
-          # Copy MT5 DLL to installer structure
-          if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mql/MT5/Libraries/"
-            Write-Host "✓ Copied MT5 DLL to installer structure"
-          }
 
           if (Test-Path "build-artifacts/sankey-copier-mql-MT4") {
             $mt4Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT4/*.ex4" -ErrorAction SilentlyContinue
