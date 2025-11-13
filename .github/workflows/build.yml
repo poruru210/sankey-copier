@@ -951,26 +951,36 @@ jobs:
           }
 
           # Copy Web UI
-          # Note: Artifact structure is now .next/standalone/, .next/static/, and public/
+          # Note: Artifact structure is now .next/standalone, .next/static, and public
+          # First, list what we have
+          Write-Host "Listing web-ui artifact contents:"
+          Get-ChildItem "build-artifacts/sankey-copier-web-ui" -Recurse -Depth 2 | Select-Object -First 20 | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
+
           New-Item -ItemType Directory -Force -Path "web-ui/.next"
-          if (Test-Path "build-artifacts/sankey-copier-web-ui/.next/standalone") {
-            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/.next/standalone" -Destination "web-ui/.next/"
+
+          $standalonePath = "build-artifacts\sankey-copier-web-ui\.next\standalone"
+          if (Test-Path $standalonePath) {
+            Copy-Item -Recurse $standalonePath -Destination "web-ui\.next\"
             Write-Host "✓ Copied Web UI standalone"
           } else {
-            Write-Host "❌ Web UI standalone not found"
+            Write-Host "❌ Web UI standalone not found at: $standalonePath"
             exit 1
           }
 
-          if (Test-Path "build-artifacts/sankey-copier-web-ui/.next/static") {
-            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/.next/static" -Destination "web-ui/.next/"
+          $staticPath = "build-artifacts\sankey-copier-web-ui\.next\static"
+          if (Test-Path $staticPath) {
+            Copy-Item -Recurse $staticPath -Destination "web-ui\.next\"
             Write-Host "✓ Copied Web UI static"
           } else {
-            Write-Host "❌ Web UI static not found"
+            Write-Host "❌ Web UI static not found at: $staticPath"
             exit 1
           }
 
-          if (Test-Path "build-artifacts/sankey-copier-web-ui/public") {
-            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/public" -Destination "web-ui/"
+          $publicPath = "build-artifacts\sankey-copier-web-ui\public"
+          if (Test-Path $publicPath) {
+            Copy-Item -Recurse $publicPath -Destination "web-ui\"
             Write-Host "✓ Copied Web UI public"
           }
 
