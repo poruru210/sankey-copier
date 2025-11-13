@@ -951,18 +951,18 @@ jobs:
           }
 
           # Copy Web UI
-          # Note: Artifact upload uses path: web-ui/.next, so downloaded artifact contains standalone/, static/ directly
+          # Note: Artifact structure is now .next/standalone/, .next/static/, and public/
           New-Item -ItemType Directory -Force -Path "web-ui/.next"
-          if (Test-Path "build-artifacts/sankey-copier-web-ui/standalone") {
-            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/standalone" -Destination "web-ui/.next/"
+          if (Test-Path "build-artifacts/sankey-copier-web-ui/.next/standalone") {
+            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/.next/standalone" -Destination "web-ui/.next/"
             Write-Host "✓ Copied Web UI standalone"
           } else {
             Write-Host "❌ Web UI standalone not found"
             exit 1
           }
 
-          if (Test-Path "build-artifacts/sankey-copier-web-ui/static") {
-            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/static" -Destination "web-ui/.next/"
+          if (Test-Path "build-artifacts/sankey-copier-web-ui/.next/static") {
+            Copy-Item -Recurse "build-artifacts/sankey-copier-web-ui/.next/static" -Destination "web-ui/.next/"
             Write-Host "✓ Copied Web UI static"
           } else {
             Write-Host "❌ Web UI static not found"
