@@ -6,7 +6,7 @@
 #property copyright "Copyright 2025, SANKEY Copier Project"
 #property link      ""
 #property version   "1.00"  // VERSION_PLACEHOLDER
-#property icon      "Images\\app.ico"
+#property icon      "app.ico"
 #property strict
 
 //--- Include common headers
