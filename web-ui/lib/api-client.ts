@@ -8,6 +8,31 @@
 import type { Site } from './types/site';
 
 /**
+ * RFC 9457 Problem Details structure
+ * https://www.rfc-editor.org/rfc/rfc9457.html
+ */
+interface ProblemDetails {
+  type: string;
+  title: string;
+  status: number;
+  detail?: string;
+  instance?: string;
+}
+
+/**
+ * Check if response is RFC 9457 Problem Details
+ */
+function isProblemDetails(data: unknown): data is ProblemDetails {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    'title' in data &&
+    'status' in data
+  );
+}
+
+/**
  * API Client class
  */
 export class ApiClient {
@@ -15,6 +40,33 @@ export class ApiClient {
 
   constructor(site: Site) {
     this.baseUrl = site.siteUrl;
+  }
+
+  /**
+   * Handle response and extract error details from RFC 9457 Problem Details
+   */
+  private async handleResponse<T>(response: Response): Promise<T> {
+    // Try to parse JSON body for both success and error responses
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (error) {
+      // If JSON parsing fails, throw a generic error
+      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    }
+
+    // If response is not ok, check for RFC 9457 Problem Details
+    if (!response.ok) {
+      if (isProblemDetails(data)) {
+        // Extract error message from Problem Details
+        const errorMsg = data.detail || data.title || `Server error: ${data.status}`;
+        throw new Error(errorMsg);
+      }
+      // Fallback to generic error
+      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    }
+
+    return data as T;
   }
 
   /**
@@ -28,11 +80,7 @@ export class ApiClient {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return this.handleResponse<T>(response);
   }
 
   /**
@@ -47,11 +95,7 @@ export class ApiClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return this.handleResponse<T>(response);
   }
 
   /**
@@ -66,11 +110,7 @@ export class ApiClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return this.handleResponse<T>(response);
   }
 
   /**
@@ -84,11 +124,7 @@ export class ApiClient {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return this.handleResponse<T>(response);
   }
 
   /**
@@ -103,10 +139,6 @@ export class ApiClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return this.handleResponse<T>(response);
   }
 }
