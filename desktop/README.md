@@ -56,10 +56,13 @@ pnpm tauri build --debug
 3. web-uiのNext.jsスタンドアロンビルドが生成されます
 4. スタンドアロンビルドが`desktop/web-ui/`ディレクトリにコピーされます
    - `server.js` - Next.jsサーバー
+   - `package.json`
    - `node_modules/` - 必要な依存関係のみ
-   - `.next/static/` - 静的アセット
-   - `public/` - 公開ファイル
+   - `forex-copier-ui/.next/static/` - 静的アセット（プロジェクト名のディレクトリ配下）
+   - `forex-copier-ui/public/` - 公開ファイル（プロジェクト名のディレクトリ配下）
 5. Tauriがweb-uiディレクトリをアプリケーションにバンドルします
+
+**Note**: Next.jsのstandalone出力は`package.json`の`name`フィールド（`forex-copier-ui`）を使用してディレクトリ構造を作成します。
 
 ### スマートキャッシング ⚡
 

@@ -23,17 +23,22 @@ New-Item -ItemType Directory -Path $bundleDir | Out-Null
 Write-Host "Copying standalone build..." -ForegroundColor Yellow
 Copy-Item -Recurse -Path ".next\standalone\*" -Destination $bundleDir
 
+# Read project name from package.json
+$packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+$projectName = $packageJson.name
+Write-Host "Project name: $projectName" -ForegroundColor Cyan
+
 # Copy static files to the correct location within standalone structure
-# Next.js standalone expects: web-ui/.next/static (preserving project structure)
+# Next.js standalone expects: <project-name>/.next/static (preserving project structure)
 Write-Host "Copying static files..." -ForegroundColor Yellow
-$staticDest = Join-Path $bundleDir "web-ui\.next"
+$staticDest = Join-Path $bundleDir "$projectName\.next"
 New-Item -ItemType Directory -Path $staticDest -Force | Out-Null
 Copy-Item -Recurse -Path ".next\static" -Destination $staticDest
 
 # Copy public directory to the correct location
 if (Test-Path "public") {
     Write-Host "Copying public directory..." -ForegroundColor Yellow
-    $publicDest = Join-Path $bundleDir "web-ui"
+    $publicDest = Join-Path $bundleDir $projectName
     Copy-Item -Recurse -Path "public" -Destination $publicDest
 }
 
