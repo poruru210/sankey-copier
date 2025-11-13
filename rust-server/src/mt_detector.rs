@@ -184,20 +184,9 @@ impl MtDetector {
         // 名前を生成（DisplayNameから）
         let name = display_name.clone();
 
-        // プロセスが実行中かチェック
-        let (is_running, process_id) = self.check_if_running(&executable);
-
         // インストールされたコンポーネントをチェック
         let components = self.check_installed_components(&data_path, &mt_type)
             .unwrap_or_default();
-
-        let is_installed = components.dll.installed && components.master_ea.installed && components.slave_ea.installed;
-
-        let installed_version = if is_installed {
-            Some("1.0.0".to_string()) // TODO: 実際のバージョンファイルから読み取る
-        } else {
-            None
-        };
 
         tracing::info!(
             "Detected {} installation: {} ({})",
@@ -217,14 +206,8 @@ impl MtDetector {
             path: data_path_str,
             executable: executable.to_string_lossy().to_string(),
             version,
-            is_running,
-            process_id,
             detection_method: DetectionMethod::Registry,
-            is_installed,
-            installed_version,
-            available_version: env!("CARGO_PKG_VERSION").to_string(),
             components,
-            last_updated: None,
         })
     }
 
@@ -489,13 +472,6 @@ impl MtDetector {
         String::from_utf16(&u16_vec)
             .ok()
             .map(|s| s.trim_end_matches('\0').trim().to_string())
-    }
-
-    /// プロセスが実行中かチェック（簡易版 - ファイルロックでチェック）
-    fn check_if_running(&self, _executable: &Path) -> (bool, Option<u32>) {
-        // TODO: より正確なプロセスチェックを実装
-        // 現在はファイルが存在するかのみチェック
-        (false, None)
     }
 
     /// インストールされたコンポーネントをチェック

@@ -93,21 +93,13 @@ export interface MtInstallation {
   path: string;
   executable: string;
   version: string | null;
-  is_running: boolean;
-  process_id: number | null;
   detection_method: DetectionMethod;
-  is_installed: boolean;
-  installed_version: string | null;
-  available_version: string;
   components: InstalledComponents;
-  last_updated: string | null;
 }
 
 export interface DetectionSummary {
   total_found: number;
   by_method: Record<string, number>;
-  running: number;
-  stopped: number;
 }
 
 export interface MtInstallationsResponse {

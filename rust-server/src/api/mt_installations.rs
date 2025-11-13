@@ -41,8 +41,6 @@ pub async fn list_mt_installations(
 
     // 検出サマリーを作成
     let total_found = installations.len();
-    let running = installations.iter().filter(|i| i.is_running).count();
-    let stopped = total_found - running;
 
     let mut by_method: HashMap<String, usize> = HashMap::new();
     for installation in &installations {
@@ -54,8 +52,6 @@ pub async fn list_mt_installations(
 
     tracing::info!(
         total_found = total_found,
-        running = running,
-        stopped = stopped,
         detection_methods = ?by_method.keys().collect::<Vec<_>>(),
         "MT installations detection summary"
     );
@@ -66,8 +62,6 @@ pub async fn list_mt_installations(
         detection_summary: DetectionSummary {
             total_found,
             by_method,
-            running,
-            stopped,
         },
     };
 
@@ -124,23 +118,12 @@ pub async fn install_to_mt(
         }
     };
 
-    // 起動中の場合は警告
-    if installation.is_running {
-        tracing::warn!(
-            installation_id = %id,
-            installation_name = %installation.name,
-            installation_path = %installation.path,
-            "MT4/MT5 is running. Installation may fail due to file locks"
-        );
-    }
-
     tracing::info!(
         installation_id = %id,
         installation_name = %installation.name,
         installation_path = %installation.path,
         mt_type = ?installation.mt_type,
         platform = ?installation.platform,
-        is_running = installation.is_running,
         "Starting installation process"
     );
 

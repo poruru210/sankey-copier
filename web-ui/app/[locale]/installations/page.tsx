@@ -256,7 +256,6 @@ export default function InstallationsPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Platform</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Installation Path</TableHead>
                     <TableHead>Version</TableHead>
                     <TableHead>Components</TableHead>
@@ -288,11 +287,6 @@ export default function InstallationsPage() {
                           <Badge variant="outline">{installation.type}</Badge>
                         </TableCell>
                         <TableCell>{installation.platform}</TableCell>
-                        <TableCell>
-                          <Badge variant={installation.is_running ? 'default' : 'secondary'}>
-                            {installation.is_running ? 'Running' : 'Stopped'}
-                          </Badge>
-                        </TableCell>
                         <TableCell>
                           <div className="max-w-[300px]">
                             <p className="text-sm font-mono truncate" title={installation.path}>
