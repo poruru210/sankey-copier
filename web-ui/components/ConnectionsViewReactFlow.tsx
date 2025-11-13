@@ -127,23 +127,18 @@ function ConnectionsViewReactFlowInner({
 
   const handleDeleteSetting = useCallback(
     async (setting: CopySettings) => {
-      if (window.confirm(`Delete setting: ${setting.master_account} → ${setting.slave_account}?`)) {
-        try {
-          await onDelete(setting.id);
-          toast({
-            title: content.settingsDeleted,
-            description: `${setting.master_account} → ${setting.slave_account}`,
-          });
-        } catch (error) {
-          toast({
-            title: content.deleteFailed,
-            description: error instanceof Error ? error.message : content.unknownError,
-            variant: 'destructive',
-          });
-        }
+      try {
+        await onDelete(setting.id);
+        // Success: no toast needed, UI already updated optimistically
+      } catch (error) {
+        toast({
+          title: content.deleteFailed,
+          description: error instanceof Error ? error.message : content.unknownError,
+          variant: 'destructive',
+        });
       }
     },
-    [onDelete, toast, content.settingsDeleted, content.deleteFailed, content.unknownError]
+    [onDelete, toast, content.deleteFailed, content.unknownError]
   );
 
   const handleSaveSettings = useCallback(

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useOptimistic } from 'react';
+import { useState, useEffect, useCallback, useOptimistic, startTransition } from 'react';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import { useApiClient, useSiteContext } from '@/lib/contexts/site-context';
 
@@ -77,12 +77,22 @@ export function useSankeyCopier() {
   useEffect(() => {
     // Extract host from siteUrl (e.g., "http://localhost:3000" -> "localhost:3000")
     const siteHost = selectedSite.siteUrl.replace(/^https?:\/\//, '');
-    const ws = new WebSocket(`ws://${siteHost}/ws`);
+    const wsUrl = `ws://${siteHost}/ws`;
+    console.log('WebSocket connecting to:', wsUrl);
+
+    let ws: WebSocket | null = null;
     let isCleanup = false;
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error('Failed to create WebSocket:', err);
+      return;
+    }
 
     ws.onopen = () => {
       if (!isCleanup) {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected to', wsUrl);
       }
     };
 
@@ -98,21 +108,30 @@ export function useSankeyCopier() {
     };
 
     ws.onerror = (error) => {
-      if (!isCleanup && ws.readyState !== WebSocket.CLOSING && ws.readyState !== WebSocket.CLOSED) {
-        console.error('WebSocket error:', error);
+      if (!isCleanup) {
+        console.error('WebSocket error:', error, 'URL:', wsUrl, 'ReadyState:', ws?.readyState);
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!isCleanup) {
-        console.log('WebSocket disconnected');
+        console.log('WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
       }
     };
 
     return () => {
       isCleanup = true;
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+      if (ws) {
+        // Remove event handlers to prevent error messages during cleanup
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.onopen = null;
+        ws.onmessage = null;
+
+        // Only close if connection is established
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
       }
     };
   }, [selectedSite.siteUrl, fetchSettings]);
@@ -128,15 +147,17 @@ export function useSankeyCopier() {
   // Toggle enabled status
   const toggleEnabled = async (id: number, currentStatus: boolean) => {
     // Optimistically update UI
-    addOptimisticSettings({ type: 'toggle', id });
+    startTransition(() => {
+      addOptimisticSettings({ type: 'toggle', id });
+    });
 
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.post<void>(`/settings/${id}/toggle`, { enabled: !currentStatus });
       fetchSettings();
     } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
+      throw err; // Re-throw for caller to handle
     }
   };
 
@@ -155,49 +176,51 @@ export function useSankeyCopier() {
         blocked_magic_numbers: null,
       },
     };
-    addOptimisticSettings({ type: 'add', data: tempSetting });
+    startTransition(() => {
+      addOptimisticSettings({ type: 'add', data: tempSetting });
+    });
 
     try {
       // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
       await apiClient.post<number>('/settings', formData);
       fetchSettings();
     } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
+      throw err; // Re-throw for caller to handle
     }
   };
 
   // Update setting
   const updateSetting = async (id: number, updatedData: CopySettings) => {
     // Optimistically update UI
-    addOptimisticSettings({ type: 'update', id, data: updatedData });
+    startTransition(() => {
+      addOptimisticSettings({ type: 'update', id, data: updatedData });
+    });
 
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.put<void>(`/settings/${id}`, updatedData);
       fetchSettings();
     } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
+      throw err; // Re-throw for caller to handle
     }
   };
 
   // Delete setting
   const deleteSetting = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this connection?')) {
-      return;
-    }
-
     // Optimistically remove from UI
-    addOptimisticSettings({ type: 'delete', id });
+    startTransition(() => {
+      addOptimisticSettings({ type: 'delete', id });
+    });
 
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.delete<void>(`/settings/${id}`);
       fetchSettings();
     } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
+      throw err; // Re-throw for caller to handle
     }
   };
 

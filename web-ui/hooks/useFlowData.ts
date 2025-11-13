@@ -194,7 +194,7 @@ export function useFlowData({
 
       // Direct edge from source to receiver
       edgeList.push({
-        id: `${setting.master_account}-${setting.slave_account}`,
+        id: `edge-${setting.id}`,
         source: `source-${setting.master_account}`,
         target: `receiver-${setting.slave_account}`,
         animated: isActive,

@@ -46,7 +46,24 @@ export class ApiClient {
    * Handle response and extract error details from RFC 9457 Problem Details
    */
   private async handleResponse<T>(response: Response): Promise<T> {
-    // Try to parse JSON body for both success and error responses
+    // Handle successful responses (2xx)
+    if (response.ok) {
+      // HTTP 204 No Content and 205 Reset Content have no response body
+      if (response.status === 204 || response.status === 205) {
+        return undefined as T;
+      }
+
+      // Parse JSON for other successful responses
+      try {
+        const data = await response.json();
+        return data as T;
+      } catch (error) {
+        // If JSON parsing fails for a successful response, return undefined
+        return undefined as T;
+      }
+    }
+
+    // Handle error responses (4xx, 5xx)
     let data: unknown;
     try {
       data = await response.json();
@@ -55,18 +72,14 @@ export class ApiClient {
       throw new Error(`Server returned ${response.status}: ${response.statusText}`);
     }
 
-    // If response is not ok, check for RFC 9457 Problem Details
-    if (!response.ok) {
-      if (isProblemDetails(data)) {
-        // Extract error message from Problem Details
-        const errorMsg = data.detail || data.title || `Server error: ${data.status}`;
-        throw new Error(errorMsg);
-      }
-      // Fallback to generic error
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    // Check for RFC 9457 Problem Details
+    if (isProblemDetails(data)) {
+      const errorMsg = data.detail || data.title || `Server error: ${data.status}`;
+      throw new Error(errorMsg);
     }
 
-    return data as T;
+    // Fallback to generic error
+    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
   }
 
   /**

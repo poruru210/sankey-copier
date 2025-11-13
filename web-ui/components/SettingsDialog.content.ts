@@ -39,6 +39,15 @@ const settingsDialogContent = {
       en: 'Copy Settings',
       ja: 'コピー設定',
     }),
+    // Connection display (edit mode)
+    connectionLabel: t({
+      en: 'Connection',
+      ja: '接続',
+    }),
+    connectionDescription: t({
+      en: 'Account connection cannot be changed',
+      ja: 'アカウント間の紐づけは変更できません',
+    }),
     lotMultiplier: t({
       en: 'Lot Multiplier',
       ja: 'ロット倍率',
@@ -66,6 +75,22 @@ const settingsDialogContent = {
     saveAndEnable: t({
       en: 'Save and Enable',
       ja: '保存して有効化',
+    }),
+    delete: t({
+      en: 'Delete',
+      ja: '削除',
+    }),
+    deleteConfirm: t({
+      en: 'Delete this connection?',
+      ja: '接続を削除しますか？',
+    }),
+    deleteConfirmTitle: t({
+      en: 'Delete Connection',
+      ja: '接続を削除',
+    }),
+    deleteConfirmDescription: t({
+      en: 'Are you sure you want to delete this connection? This action cannot be undone.',
+      ja: 'この接続を削除してもよろしいですか？この操作は取り消せません。',
     }),
     backToSelector: t({
       en: 'Back to Selector',

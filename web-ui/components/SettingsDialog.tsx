@@ -3,11 +3,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
+import { BrokerIcon } from '@/components/BrokerIcon';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
 import type { CopySettings, CreateSettingsRequest, EaConnection } from '@/types';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
@@ -59,6 +70,8 @@ export function SettingsDialog({
     lot_multiplier: 1.0,
     reverse_trade: false,
   });
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -118,12 +131,9 @@ export function SettingsDialog({
 
   const handleDelete = () => {
     if (initialData && onDelete) {
-      if (window.confirm(
-        `${content.deleteConfirm?.value || '接続を削除しますか？'}\n${initialData.master_account} → ${initialData.slave_account}`
-      )) {
-        onDelete(initialData);
-        onOpenChange(false);
-      }
+      onDelete(initialData);
+      onOpenChange(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -140,6 +150,7 @@ export function SettingsDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -204,14 +215,14 @@ export function SettingsDialog({
                   <div className="space-y-1">
                     <h3 className="text-sm font-medium flex items-center gap-2">
                       <span className="text-lg">🔗</span>
-                      {content.connectionLabel?.value || '接続'}
+                      {content.connectionLabel.value}
                     </h3>
                   </div>
                   <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                       {/* Master Account */}
                       <div className="flex items-center gap-2 flex-1">
-                        <span className="text-lg">📤</span>
+                        <BrokerIcon brokerName={masterAccount.brokerName} size="sm" />
                         <div className="flex-1">
                           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
                             {masterAccount.brokerName}
@@ -229,7 +240,7 @@ export function SettingsDialog({
 
                       {/* Slave Account */}
                       <div className="flex items-center gap-2 flex-1">
-                        <span className="text-lg">📥</span>
+                        <BrokerIcon brokerName={slaveAccount.brokerName} size="sm" />
                         <div className="flex-1">
                           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
                             {slaveAccount.brokerName}
@@ -243,7 +254,7 @@ export function SettingsDialog({
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                      {content.connectionDescription?.value || 'アカウント間の紐づけは変更できません'}
+                      {content.connectionDescription.value}
                     </p>
                   </div>
                 </div>
@@ -337,8 +348,8 @@ export function SettingsDialog({
             <div className="flex w-full justify-between items-center">
               <div>
                 {initialData && onDelete && (
-                  <Button type="button" variant="destructive" onClick={handleDelete}>
-                    {content.delete?.value || '削除'}
+                  <Button type="button" variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
+                    {content.delete.value}
                   </Button>
                 )}
               </div>
@@ -355,5 +366,27 @@ export function SettingsDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Delete Confirmation Dialog */}
+    <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{content.deleteConfirmTitle.value}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {content.deleteConfirmDescription.value}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{content.cancel.value}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {content.delete.value}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
