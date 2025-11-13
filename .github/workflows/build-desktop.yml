@@ -22,6 +22,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Download Web UI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sankey-copier-web-ui
+          path: desktop-app/src-tauri/resources/web-ui
+
+      - name: Verify Web UI artifact structure
+        run: |
+          Write-Host "Verifying Web UI artifact structure..."
+          if (Test-Path "desktop-app/src-tauri/resources/web-ui/.next/standalone/server.js") {
+            Write-Host "✓ Found server.js"
+          } else {
+            Write-Host "❌ server.js not found"
+            exit 1
+          }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

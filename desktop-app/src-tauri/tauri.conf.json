@@ -15,6 +15,9 @@
     "icon": [
       "icons/icon.ico"
     ],
+    "resources": [
+      "resources/web-ui/**"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

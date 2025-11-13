@@ -96,7 +96,7 @@ jobs:
 
   build-desktop:
     name: Build Desktop App
-    needs: version-info
+    needs: [version-info, build-web]
     uses: ./.github/workflows/build-desktop.yml
     with:
       version: ${{ needs.version-info.outputs.package_version }}

@@ -8,6 +8,7 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
 use std::thread;
+use std::path::PathBuf;
 use tauri::{Manager, State};
 
 // Application state to track the Node.js process
@@ -53,20 +54,51 @@ fn wait_for_server(port: u16, max_attempts: u32) -> bool {
     false
 }
 
-/// Start the Next.js server as a child process
-/// Returns the Child process handle and the port number
-fn start_nextjs_server() -> Result<(Child, u16), String> {
-    let port = find_available_port();
-
-    // Determine the path to the Next.js server
-    // In production, it's relative to the app installation directory
+/// Get the path to the bundled web-ui resources
+/// Returns the path to the web-ui directory within Tauri resources
+fn get_webui_path() -> Result<PathBuf, String> {
+    // Get executable directory
     let exe_dir = std::env::current_exe()
         .map_err(|e| format!("Failed to get exe directory: {}", e))?
         .parent()
         .ok_or("Failed to get parent directory")?
         .to_path_buf();
 
-    let server_path = exe_dir.join("web-ui").join("server.js");
+    // In Tauri bundled apps, resources are in a specific location
+    // Windows: next to the exe or in resources subdirectory
+    let possible_paths = vec![
+        // Bundled resources path (production)
+        exe_dir.join("resources").join("web-ui").join(".next").join("standalone"),
+        // Development path (if running from IDE)
+        exe_dir.join("..").join("..").join("..").join("..").join("web-ui").join(".next").join("standalone"),
+        // Installation directory path (installer deployment)
+        exe_dir.join("web-ui").join(".next").join("standalone"),
+    ];
+
+    for path in possible_paths {
+        let server_path = path.join("server.js");
+        if server_path.exists() {
+            println!("Found web-ui at: {}", path.display());
+            return Ok(path);
+        }
+    }
+
+    Err(format!(
+        "Web UI not found. Searched paths:\n  - {}\n  - {}\n  - {}",
+        exe_dir.join("resources").join("web-ui").display(),
+        exe_dir.join("..").join("..").join("web-ui").display(),
+        exe_dir.join("web-ui").display()
+    ))
+}
+
+/// Start the Next.js server as a child process
+/// Returns the Child process handle and the port number
+fn start_nextjs_server() -> Result<(Child, u16), String> {
+    let port = find_available_port();
+
+    // Get the web-ui directory path
+    let webui_dir = get_webui_path()?;
+    let server_path = webui_dir.join("server.js");
 
     if !server_path.exists() {
         return Err(format!("Server not found at: {}", server_path.display()));
@@ -76,7 +108,8 @@ fn start_nextjs_server() -> Result<(Child, u16), String> {
 
     // Start Node.js process with the server script
     let child = Command::new("node")
-        .arg(server_path)
+        .arg(&server_path)
+        .current_dir(&webui_dir)
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .spawn()
