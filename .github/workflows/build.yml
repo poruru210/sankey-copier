@@ -125,7 +125,7 @@ jobs:
         with:
           name: sankey-copier-dll
           path: artifacts/dll/
-          retention-days: 30
+          retention-days: 1
 
   build-rust-server:
     name: Build Rust Server
@@ -172,7 +172,7 @@ jobs:
         with:
           name: sankey-copier-server
           path: artifacts/server/
-          retention-days: 30
+          retention-days: 1
 
   build-tray-app:
     name: Build Tray Application
@@ -211,7 +211,7 @@ jobs:
         with:
           name: sankey-copier-tray
           path: artifacts/tray/
-          retention-days: 30
+          retention-days: 1
 
   build-web-ui:
     name: Build Web UI
@@ -246,6 +246,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: |
+            web-ui/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('web-ui/**/*.ts', 'web-ui/**/*.tsx', 'web-ui/**/*.js', 'web-ui/**/*.jsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-nextjs-
+
       - name: Install dependencies
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
@@ -270,7 +280,7 @@ jobs:
             ${{ github.workspace }}/web-ui/public/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   compile-mql:
     name: Compile MQL4/MQL5 Files
@@ -843,7 +853,7 @@ jobs:
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
           path: artifacts/mql/${{ matrix.platform }}/
-          retention-days: 30
+          retention-days: 1
 
   build-installer:
     name: Build Windows Installer
@@ -853,20 +863,37 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Needed for version info
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: build-artifacts
 
+      - name: Cache Inno Setup
+        id: cache-inno
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files (x86)\Inno Setup 6
+          key: innosetup-6.3.3
+
       - name: Install Inno Setup
+        if: steps.cache-inno.outputs.cache-hit != 'true'
         run: |
           choco install innosetup -y
+
+      - name: Add Inno Setup to PATH
+        run: |
           echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Cache NSSM
+        id: cache-nssm
+        uses: actions/cache@v4
+        with:
+          path: installer/resources/nssm.exe
+          key: nssm-2.24
+
       - name: Download and setup NSSM
+        if: steps.cache-nssm.outputs.cache-hit != 'true'
         run: |
           Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "nssm.zip"
           Expand-Archive -Path "nssm.zip" -DestinationPath "."
@@ -1115,7 +1142,7 @@ jobs:
         with:
           name: sankey-copier-installer-${{ needs.version-info.outputs.package_version }}
           path: installer/Output/*.exe
-          retention-days: 30
+          retention-days: 90
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
