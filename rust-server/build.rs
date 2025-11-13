@@ -25,8 +25,17 @@ fn main() {
     println!("cargo:warning=╚════════════════════════════════════════════════════════════════");
 
     // Embed version information in Windows executable resources
+    // Only embed for actual binary builds, not for test/bench targets
     #[cfg(windows)]
-    embed_windows_resources(&package_version, &file_version);
+    {
+        let is_bin_build = std::env::var("CARGO_BIN_NAME").is_ok();
+
+        if is_bin_build {
+            embed_windows_resources(&package_version, &file_version);
+        } else {
+            println!("cargo:warning=Skipping Windows resource embedding (not a binary build)");
+        }
+    }
 
     // Rerun if .git/HEAD changes
     println!("cargo:rerun-if-changed=../.git/HEAD");
