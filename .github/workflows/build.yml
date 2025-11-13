@@ -698,11 +698,18 @@ jobs:
             Write-Host "  - $($_.FullName)"
           }
 
-          # Verify icon file exists in source directory
+          # Copy icon file to Images directory (MetaEditor searches here)
+          $imagesDir = Join-Path $mqlBaseDir "Images"
+          if (-not (Test-Path $imagesDir)) {
+            New-Item -ItemType Directory -Path $imagesDir -Force | Out-Null
+            Write-Host "Created Images directory: $imagesDir"
+          }
+
           $iconFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\app.ico"
           if (Test-Path $iconFile) {
+            Copy-Item -Path $iconFile -Destination $imagesDir -Force
             $iconSize = (Get-Item $iconFile).Length
-            Write-Host "✓ Icon file found: $iconFile ($iconSize bytes)"
+            Write-Host "✓ Icon file copied to Images directory: $iconSize bytes"
           } else {
             Write-Host "⚠️ Icon file not found at: $iconFile"
             Write-Host "   This may prevent icon from being embedded in compiled EA"
