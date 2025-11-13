@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { MtInstallation, MtInstallationsResponse, ApiResponse } from '@/types';
+import type { MtInstallation, MtInstallationsResponse } from '@/types';
 import { useApiClient } from '@/lib/contexts/site-context';
 
 export function useMtInstallations() {
@@ -14,12 +14,14 @@ export function useMtInstallations() {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiClient.get<ApiResponse<MtInstallationsResponse>>('/mt-installations');
+      // Rust API returns MtInstallationsResponse directly (not wrapped in ApiResponse)
+      const data = await apiClient.get<MtInstallationsResponse>('/mt-installations');
 
-      if (data.success && data.data) {
-        setInstallations(data.data.data || []);
+      // MtInstallationsResponse has { success, data, detection_summary }
+      if (data.success) {
+        setInstallations(data.data || []);
       } else {
-        setError(data.error || 'Failed to load MT installations');
+        setError('Failed to load MT installations');
       }
     } catch (err) {
       if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('Failed to fetch'))) {
@@ -39,19 +41,16 @@ export function useMtInstallations() {
   const installToMt = async (id: string): Promise<{ success: boolean; message?: string }> => {
     try {
       setInstalling(id);
-      const data = await apiClient.post<ApiResponse<string>>(`/mt-installations/${id}/install`);
+      // Rust API returns a string message directly on success
+      const message = await apiClient.post<string>(`/mt-installations/${id}/install`);
 
-      if (data.success) {
-        // Refresh installations to get updated component status
-        await fetchInstallations();
-        return { success: true, message: data.data };
-      } else {
-        return { success: false, message: data.error || 'Installation failed' };
-      }
+      // Refresh installations to get updated component status
+      await fetchInstallations();
+      return { success: true, message };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.error('Failed to install to MT:', err);
-      return { success: false, message: `Error: ${message}` };
+      return { success: false, message };
     } finally {
       setInstalling(null);
     }
