@@ -1,0 +1,24 @@
+# Desktop App Cargo Configuration
+# Tauri-based desktop application for SANKEY Copier settings management
+# Launches Next.js server on dynamic port and displays in webview
+
+[package]
+name = "sankey-copier-desktop"
+version = "0.1.0"
+description = "SANKEY Copier Desktop Application"
+authors = ["SANKEY Copier Team"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["shell-open"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portpicker = "0.1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

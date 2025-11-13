@@ -1,0 +1,51 @@
+name: Build Desktop App
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version number for the build'
+        required: true
+        type: string
+    outputs:
+      artifact-name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build-desktop.outputs.artifact-name }}
+
+jobs:
+  build-desktop:
+    runs-on: windows-latest
+    outputs:
+      artifact-name: sankey-copier-desktop
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version ^2.0.0
+
+      - name: Build Desktop App
+        working-directory: desktop-app
+        run: cargo tauri build --release
+
+      - name: List build output
+        run: |
+          echo "Listing desktop-app/src-tauri/target/release:"
+          dir desktop-app\src-tauri\target\release
+
+      - name: Upload Desktop App artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-desktop
+          path: |
+            desktop-app/src-tauri/target/release/sankey-copier-desktop.exe
+          retention-days: 7

@@ -189,6 +189,16 @@ jobs:
             Write-Host "⚠️ .env.production not found in web-ui/"
           }
 
+          # Copy Desktop app
+          New-Item -ItemType Directory -Force -Path "desktop-app/src-tauri/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe") {
+            Copy-Item "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe" -Destination "desktop-app/src-tauri/target/release/"
+            Write-Host "✓ Copied Desktop exe"
+          } else {
+            Write-Host "❌ Desktop exe not found"
+            exit 1
+          }
+
           # Copy MQL compiled files
           New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
           New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
@@ -226,6 +236,7 @@ jobs:
             "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
             "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
             "sankey-copier-tray/target/release/sankey-copier-tray.exe",
+            "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe",
             "web-ui/.next/standalone",
             "installer/resources/nssm.exe"
           )

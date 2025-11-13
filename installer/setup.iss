@@ -68,6 +68,7 @@ english.PortConfigPageSubDescription=Please specify the port numbers for the ser
 english.ServerPortLabel=Rust Server API Port:
 english.WebUIPortLabel=Web UI Port:
 english.OpenWebInterface=Open SANKEY Copier Web Interface
+english.OpenDesktopApp=Open SANKEY Copier Desktop App
 english.InstallingServerService=Installing Rust server service...
 english.StartingServices=Starting services...
 english.RepairInstallationTitle=Repair Installation
@@ -76,6 +77,11 @@ english.UpdateInstallationTitle=Update Installation
 english.UpdateInstallationMessage=A previous version of SANKEY Copier is already installed.%n%nDo you want to update to version {#MyAppVersion}?
 english.StoppingServices=Stopping existing services...
 english.MergingConfig=Merging configuration file...
+english.NodeJSRequired=Node.js is required to run SANKEY Copier Desktop and Web UI.
+english.NodeJSNotInstalled=Node.js is not installed.%n%nSANKEY Copier Desktop and Web UI require Node.js.
+english.DownloadNodeJS=Would you like to download and install Node.js now?
+english.InstallNodeJSFirst=Please install Node.js and run this installer again.
+english.InstallationCancelled=Installation cancelled. Node.js is required.
 
 ; Japanese
 japanese.PortConfigPageTitle=ポート設定
@@ -84,6 +90,7 @@ japanese.PortConfigPageSubDescription=サーバーとWebインターフェース
 japanese.ServerPortLabel=Rust Server APIポート:
 japanese.WebUIPortLabel=Web UIポート:
 japanese.OpenWebInterface=SANKEY Copier Webインターフェースを開く
+japanese.OpenDesktopApp=SANKEY Copier Desktop アプリを開く
 japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
 japanese.RepairInstallationTitle=インストールの修復
@@ -92,6 +99,11 @@ japanese.UpdateInstallationTitle=インストールの更新
 japanese.UpdateInstallationMessage=以前のバージョンのSANKEY Copierが既にインストールされています。%n%nバージョン{#MyAppVersion}に更新しますか？
 japanese.StoppingServices=既存のサービスを停止しています...
 japanese.MergingConfig=設定ファイルをマージしています...
+japanese.NodeJSRequired=SANKEY Copier Desktop と Web UI の実行には Node.js が必要です。
+japanese.NodeJSNotInstalled=Node.js がインストールされていません。%n%nSANKEY Copier Desktop と Web UI の実行には Node.js が必要です。
+japanese.DownloadNodeJS=今すぐ Node.js をダウンロードしてインストールしますか？
+japanese.InstallNodeJSFirst=Node.js をインストールしてから、このインストーラーを再度実行してください。
+japanese.InstallationCancelled=インストールがキャンセルされました。Node.js が必要です。
 
 [Tasks]
 ; Removed desktop icon option
@@ -99,6 +111,9 @@ japanese.MergingConfig=設定ファイルをマージしています...
 [Files]
 ; Rust Server
 Source: "..\rust-server\target\release\sankey-copier-server.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; Desktop Application
+Source: "..\desktop-app\src-tauri\target\release\sankey-copier-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; System Tray Application
 Source: "..\sankey-copier-tray\target\release\sankey-copier-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -138,11 +153,13 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Open Desktop App"; Filename: "{app}\sankey-copier-desktop.exe"
 Name: "{group}\Open Web Interface"; Filename: "{code:GetWebUIUrl}"
 Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query SankeyCopierServer"
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
 Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\sankey-copier-desktop.exe"
 
 [Run]
 ; Services are installed and started by CurStepChanged procedure
@@ -272,15 +289,57 @@ begin
   DeleteFile(NewConfigPath);
 end;
 
+function CheckNodeJS(): Boolean;
+var
+  ResultCode: Integer;
+  NodeVersion: String;
+begin
+  { Check if node.exe is available in PATH }
+  Result := Exec('cmd.exe', '/C node --version', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  if not Result or (ResultCode <> 0) then
+  begin
+    Result := False;
+    Log('Node.js not found in PATH or not installed');
+  end
+  else
+  begin
+    Result := True;
+    Log('Node.js is installed and available');
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 var
   ExistingPath: String;
   InstalledVersion: String;
   UninstallKey: String;
+  NodeJSInstallUrl: String;
 begin
   Result := True;
   IsRepairMode := False;
   IsUpdateMode := False;
+
+  { Check for Node.js installation }
+  if not CheckNodeJS() then
+  begin
+    if MsgBox(CustomMessage('NodeJSNotInstalled') + #13#10 + #13#10 +
+              CustomMessage('DownloadNodeJS'),
+              mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES then
+    begin
+      NodeJSInstallUrl := 'https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi';
+      ShellExec('open', NodeJSInstallUrl, '', '', SW_SHOW, ewNoWait, Result);
+      MsgBox(CustomMessage('InstallNodeJSFirst'), mbInformation, MB_OK);
+      Result := False;
+      Exit;
+    end
+    else
+    begin
+      MsgBox(CustomMessage('InstallationCancelled'), mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+  end;
 
   { Check if SANKEY Copier is already installed }
   ExistingPath := ExpandConstant('{autopf}\{#MyAppName}\sankey-copier-server.exe');
