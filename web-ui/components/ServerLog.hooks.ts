@@ -7,12 +7,6 @@ interface LogEntry {
   message: string;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
 interface ApiClient {
   get: <T>(path: string) => Promise<T>;
 }
@@ -29,13 +23,9 @@ export function useServerLogs(apiClient: ApiClient) {
     setError(null);
 
     try {
-      const data = await apiClient.get<ApiResponse<LogEntry[]>>('/logs');
-
-      if (data.success && data.data) {
-        setLogs(data.data);
-      } else {
-        setError(data.error || 'Failed to fetch logs');
-      }
+      // Rust API returns Vec<LogEntry> directly (not wrapped)
+      const logs = await apiClient.get<LogEntry[]>('/logs');
+      setLogs(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch logs');
     } finally {

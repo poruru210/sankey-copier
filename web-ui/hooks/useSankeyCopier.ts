@@ -37,10 +37,9 @@ export function useSankeyCopier() {
   // Fetch connections
   const fetchConnections = useCallback(async () => {
     try {
-      const data = await apiClient.get<{ success: boolean; data: EaConnection[] }>('/connections');
-      if (data.success) {
-        setConnections(data.data || []);
-      }
+      // Rust API returns Vec<EaConnection> directly (not wrapped)
+      const connections = await apiClient.get<EaConnection[]>('/connections');
+      setConnections(connections);
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
         console.error('Cannot connect to server - is rust-server running?');
@@ -54,13 +53,10 @@ export function useSankeyCopier() {
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<{ success: boolean; data: CopySettings[]; error?: string }>('/settings');
-      if (data.success) {
-        setSettings(data.data || []);
-        setError(null);
-      } else {
-        setError(data.error || 'Failed to load settings');
-      }
+      // Rust API returns Vec<CopySettings> directly (not wrapped)
+      const settings = await apiClient.get<CopySettings[]>('/settings');
+      setSettings(settings);
+      setError(null);
     } catch (err) {
       if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('Failed to fetch'))) {
         setError('Cannot connect to server. Please check if Rust Server is running.');
@@ -135,13 +131,9 @@ export function useSankeyCopier() {
     addOptimisticSettings({ type: 'toggle', id });
 
     try {
-      const data = await apiClient.post<{ success: boolean; error?: string }>(`/settings/${id}/toggle`, { enabled: !currentStatus });
-      if (data.success) {
-        fetchSettings();
-      } else {
-        alert('Failed to toggle: ' + data.error);
-        fetchSettings(); // Revert on error
-      }
+      // Rust API returns StatusCode::NO_CONTENT (204) on success
+      await apiClient.post<void>(`/settings/${id}/toggle`, { enabled: !currentStatus });
+      fetchSettings();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
@@ -166,13 +158,9 @@ export function useSankeyCopier() {
     addOptimisticSettings({ type: 'add', data: tempSetting });
 
     try {
-      const data = await apiClient.post<{ success: boolean; error?: string }>('/settings', formData);
-      if (data.success) {
-        fetchSettings();
-      } else {
-        alert('Failed to create: ' + data.error);
-        fetchSettings(); // Revert on error
-      }
+      // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
+      await apiClient.post<number>('/settings', formData);
+      fetchSettings();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
@@ -185,13 +173,9 @@ export function useSankeyCopier() {
     addOptimisticSettings({ type: 'update', id, data: updatedData });
 
     try {
-      const data = await apiClient.put<{ success: boolean; error?: string }>(`/settings/${id}`, updatedData);
-      if (data.success) {
-        fetchSettings();
-      } else {
-        alert('Failed to update: ' + data.error);
-        fetchSettings(); // Revert on error
-      }
+      // Rust API returns StatusCode::NO_CONTENT (204) on success
+      await apiClient.put<void>(`/settings/${id}`, updatedData);
+      fetchSettings();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
@@ -208,13 +192,9 @@ export function useSankeyCopier() {
     addOptimisticSettings({ type: 'delete', id });
 
     try {
-      const data = await apiClient.delete<{ success: boolean; error?: string }>(`/settings/${id}`);
-      if (data.success) {
-        fetchSettings();
-      } else {
-        alert('Failed to delete: ' + data.error);
-        fetchSettings(); // Revert on error
-      }
+      // Rust API returns StatusCode::NO_CONTENT (204) on success
+      await apiClient.delete<void>(`/settings/${id}`);
+      fetchSettings();
     } catch (err) {
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       fetchSettings(); // Revert on error
