@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "powershell -Command \"New-Item -ItemType Directory -Path 'dist' -Force | Out-Null; Set-Content -Path 'dist/index.html' -Value '<!DOCTYPE html><html><head><title>SANKEY Copier</title></head><body>Loading...</body></html>'\"",
-    "frontendDist": "dist"
+    "beforeBuildCommand": "powershell -Command \"if (Test-Path '../dist') { Remove-Item -Recurse -Force '../dist' }; New-Item -ItemType Directory -Path '../dist' -Force | Out-Null; Set-Content -Path '../dist/index.html' -Value '<!DOCTYPE html><html><head><meta charset=\\\"utf-8\\\"><title>SANKEY Copier</title></head><body><div>Initializing...</div></body></html>'\"",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,

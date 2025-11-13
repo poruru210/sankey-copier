@@ -64,7 +64,9 @@ jobs:
 
       - name: Build Desktop App
         working-directory: desktop-app
-        run: cargo tauri build
+        run: |
+          cargo clean
+          cargo tauri build
 
       - name: List build output
         run: |
