@@ -507,7 +507,7 @@ impl MtDetector {
 
         let mql_path = data_path.join(mql_folder);
 
-        // DLLチェック
+        // DLLチェック（DLLはWindows VERSIONリソースを持つ）
         let dll_path = mql_path.join("Libraries").join("sankey_copier_zmq.dll");
         let dll = ComponentInfo {
             installed: dll_path.exists(),
@@ -519,25 +519,18 @@ impl MtDetector {
         };
 
         // Master EAチェック
+        // Note: MQLコンパイル済みファイル(.ex4/.ex5)はWindows VERSIONリソースを持たない
         let master_ea_path = mql_path.join("Experts").join(format!("SankeyCopierMaster.{}", ea_ext));
         let master_ea = ComponentInfo {
             installed: master_ea_path.exists(),
-            version: if master_ea_path.exists() {
-                self.get_file_version(&master_ea_path)
-            } else {
-                None
-            },
+            version: None,  // EAファイルはバージョン情報を持たない
         };
 
         // Slave EAチェック
         let slave_ea_path = mql_path.join("Experts").join(format!("SankeyCopierSlave.{}", ea_ext));
         let slave_ea = ComponentInfo {
             installed: slave_ea_path.exists(),
-            version: if slave_ea_path.exists() {
-                self.get_file_version(&slave_ea_path)
-            } else {
-                None
-            },
+            version: None,  // EAファイルはバージョン情報を持たない
         };
 
         Ok(InstalledComponents {
