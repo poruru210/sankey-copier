@@ -31,12 +31,15 @@ jobs:
       - name: Verify Web UI artifact structure
         run: |
           Write-Host "Verifying Web UI artifact structure..."
+          Get-ChildItem -Path desktop-app/src-tauri/resources/web-ui -Recurse | ForEach-Object { Write-Host $_.FullName }
           if (Test-Path "desktop-app/src-tauri/resources/web-ui/.next/standalone/server.js") {
             Write-Host "✓ Found server.js"
+          } elseif (Test-Path "desktop-app/src-tauri/resources/web-ui/out/index.html") {
+            Write-Host "✓ Found static export out/index.html"
           } else {
-            Write-Host "❌ server.js not found"
-            exit 1
+            Write-Host "⚠️ No recognized web build found yet - proceeding to copy attempt (will fail later if missing)."
           }
+        shell: pwsh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,7 +47,11 @@ jobs:
           node-version: '20'
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -61,27 +68,68 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version ^2.0.0 --locked
-
-      - name: Create dist directory for Tauri
-        working-directory: desktop-app
         run: |
-          Write-Host "Creating dist directory for Tauri build..."
-          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          Set-Content -Path "dist/index.html" -Value '<html><head><title>SANKEY Copier</title></head><body><div>Initializing...</div></body></html>'
-          Write-Host "✓ dist directory created"
-          dir dist
+          cargo install tauri-cli --version ^2.0.0 --locked
+        shell: pwsh
 
-      - name: Build Desktop App
-        working-directory: desktop-app
+      - name: Prepare Tauri dist (copy web build -> src-tauri/dist)
+        working-directory: desktop-app/src-tauri
         run: |
+          $src = "$(Join-Path $PWD '..\src-tauri\resources\web-ui')"
+          $src = "desktop-app/src-tauri/resources/web-ui"
+          $dist = "desktop-app/src-tauri/dist"
+
+          Write-Host "Creating $dist..."
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+
+          # Next.js standalone (server + assets)
+          if (Test-Path "$src\.next\standalone") {
+            Write-Host "Copying Next.js standalone to dist..."
+            Copy-Item -Path "$src\.next\standalone\*" -Destination $dist -Recurse -Force
+            if (Test-Path "$src\.next\static") {
+              Write-Host "Copying .next/static to dist/.next/static"
+              New-Item -ItemType Directory -Path (Join-Path $dist ".next\static") -Force | Out-Null
+              Copy-Item -Path "$src\.next\static\*" -Destination (Join-Path $dist ".next\static") -Recurse -Force
+            }
+          }
+          # Static export (out/)
+          elseif (Test-Path "$src\out") {
+            Write-Host "Copying static export (out) to dist..."
+            Copy-Item -Path "$src\out\*" -Destination $dist -Recurse -Force
+          }
+          else {
+            Write-Host "ERROR: No recognized web build found under $src"
+            Get-ChildItem -Path $src -Recurse | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+
+          Write-Host "Contents of dist after copy:"
+          Get-ChildItem -Path $dist -Recurse | ForEach-Object { Write-Host $_.FullName }
+        shell: pwsh
+
+      - name: Verify Cargo.toml location (debug)
+        run: |
+          Write-Host "Looking for Cargo.toml under desktop-app..."
+          Get-ChildItem -Path desktop-app -Filter Cargo.toml -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+        shell: pwsh
+
+      - name: Build Desktop App (cargo/tauri) in src-tauri
+        working-directory: desktop-app/src-tauri
+        run: |
+          Write-Host "Running from $(Get-Location)"
+          if (-not (Test-Path "Cargo.toml")) {
+            Write-Host "❌ Cargo.toml not found in current working directory: $(Get-Location)"
+            exit 1
+          }
           cargo clean
           cargo tauri build
+        shell: pwsh
 
       - name: List build output
         run: |
-          echo "Listing desktop-app/src-tauri/target/release:"
-          dir desktop-app\src-tauri\target\release
+          Write-Host "Listing desktop-app/src-tauri/target/release:" 
+          Get-ChildItem -Path desktop-app/src-tauri/target/release -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+        shell: pwsh
 
       - name: Upload Desktop App artifact
         uses: actions/upload-artifact@v4
