@@ -526,6 +526,7 @@ impl MtDetector {
             let mut dummy = 0u32;
             let size = GetFileVersionInfoSizeW(wide_path.as_ptr(), &mut dummy);
             if size == 0 {
+                tracing::debug!("GetFileVersionInfoSizeW returned 0 for {:?}", file_path);
                 return None;
             }
 
@@ -538,34 +539,151 @@ impl MtDetector {
                 buffer.as_mut_ptr() as *mut _,
             ) == 0
             {
+                tracing::debug!("GetFileVersionInfoW failed for {:?}", file_path);
                 return None;
             }
 
-            // Query ProductVersion string
-            let sub_block: Vec<u16> = OsStr::new("\\StringFileInfo\\040904b0\\ProductVersion")
+            // First, query the Translation info to get the correct language and codepage
+            let translation_query: Vec<u16> = OsStr::new("\\VarFileInfo\\Translation")
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
 
-            let mut value_ptr: *mut c_void = ptr::null_mut();
-            let mut value_len: u32 = 0;
+            let mut trans_ptr: *mut c_void = ptr::null_mut();
+            let mut trans_len: u32 = 0;
 
             if VerQueryValueW(
                 buffer.as_ptr() as *const _,
-                sub_block.as_ptr() as LPCWSTR,
-                &mut value_ptr,
-                &mut value_len,
-            ) != 0 && !value_ptr.is_null()
+                translation_query.as_ptr() as LPCWSTR,
+                &mut trans_ptr,
+                &mut trans_len,
+            ) != 0 && !trans_ptr.is_null() && trans_len >= 4
             {
-                // Convert wide string to Rust String
-                let value_ptr = value_ptr as *mut u16;
-                let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
-                let version = String::from_utf16_lossy(slice)
-                    .trim_end_matches('\0')
-                    .to_string();
-                if !version.is_empty() {
-                    return Some(version);
+                // Translation data is an array of DWORD values (language_id + codepage)
+                // Each entry is 4 bytes: 2 bytes for language, 2 bytes for codepage
+                let trans_data = trans_ptr as *const u16;
+                let num_translations = (trans_len / 4) as usize;
+
+                tracing::debug!(
+                    "Found {} translation(s) in version info for {:?}",
+                    num_translations,
+                    file_path
+                );
+
+                // Try each translation until we find ProductVersion
+                for i in 0..num_translations {
+                    let lang_id = *trans_data.offset((i * 2) as isize);
+                    let codepage = *trans_data.offset((i * 2 + 1) as isize);
+
+                    let sub_block_str = format!(
+                        "\\StringFileInfo\\{:04x}{:04x}\\ProductVersion",
+                        lang_id, codepage
+                    );
+
+                    tracing::debug!(
+                        "Trying to query version with sub_block: {} for {:?}",
+                        sub_block_str,
+                        file_path
+                    );
+
+                    let sub_block: Vec<u16> = OsStr::new(&sub_block_str)
+                        .encode_wide()
+                        .chain(std::iter::once(0))
+                        .collect();
+
+                    let mut value_ptr: *mut c_void = ptr::null_mut();
+                    let mut value_len: u32 = 0;
+
+                    if VerQueryValueW(
+                        buffer.as_ptr() as *const _,
+                        sub_block.as_ptr() as LPCWSTR,
+                        &mut value_ptr,
+                        &mut value_len,
+                    ) != 0 && !value_ptr.is_null()
+                    {
+                        // Convert wide string to Rust String
+                        let value_ptr = value_ptr as *mut u16;
+                        let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
+                        let version = String::from_utf16_lossy(slice)
+                            .trim_end_matches('\0')
+                            .trim()
+                            .to_string();
+                        if !version.is_empty() {
+                            tracing::info!(
+                                "Successfully retrieved version '{}' from {:?} using {}",
+                                version,
+                                file_path,
+                                sub_block_str
+                            );
+                            return Some(version);
+                        }
+                    }
                 }
+
+                tracing::debug!(
+                    "No ProductVersion found in any translation for {:?}",
+                    file_path
+                );
+            } else {
+                tracing::debug!(
+                    "Failed to query Translation info for {:?}, trying common codepages",
+                    file_path
+                );
+
+                // Fallback: try common language/codepage combinations
+                let common_combinations = [
+                    "040904E4", // US English + Windows Multilingual
+                    "040904B0", // US English + Unicode
+                    "000004B0", // Language neutral + Unicode
+                    "000004E4", // Language neutral + Windows Multilingual
+                ];
+
+                for combo in &common_combinations {
+                    let sub_block_str = format!("\\StringFileInfo\\{}\\ProductVersion", combo);
+
+                    tracing::debug!(
+                        "Fallback: trying sub_block {} for {:?}",
+                        sub_block_str,
+                        file_path
+                    );
+
+                    let sub_block: Vec<u16> = OsStr::new(&sub_block_str)
+                        .encode_wide()
+                        .chain(std::iter::once(0))
+                        .collect();
+
+                    let mut value_ptr: *mut c_void = ptr::null_mut();
+                    let mut value_len: u32 = 0;
+
+                    if VerQueryValueW(
+                        buffer.as_ptr() as *const _,
+                        sub_block.as_ptr() as LPCWSTR,
+                        &mut value_ptr,
+                        &mut value_len,
+                    ) != 0 && !value_ptr.is_null()
+                    {
+                        let value_ptr = value_ptr as *mut u16;
+                        let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
+                        let version = String::from_utf16_lossy(slice)
+                            .trim_end_matches('\0')
+                            .trim()
+                            .to_string();
+                        if !version.is_empty() {
+                            tracing::info!(
+                                "Successfully retrieved version '{}' from {:?} using fallback {}",
+                                version,
+                                file_path,
+                                sub_block_str
+                            );
+                            return Some(version);
+                        }
+                    }
+                }
+
+                tracing::warn!(
+                    "Failed to retrieve ProductVersion from {:?} with all methods",
+                    file_path
+                );
             }
 
             None
