@@ -258,6 +258,7 @@ export default function InstallationsPage() {
                     <TableHead>{content.name}</TableHead>
                     <TableHead>{content.type}</TableHead>
                     <TableHead>{content.installationPath}</TableHead>
+                    <TableHead>{content.version}</TableHead>
                     <TableHead>{content.components}</TableHead>
                     <TableHead className="text-right">{content.actions}</TableHead>
                   </TableRow>
@@ -292,6 +293,13 @@ export default function InstallationsPage() {
                           </p>
                         </TableCell>
                         <TableCell>
+                          {installation.version ? (
+                            <span className="text-sm font-mono">v{installation.version}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
                               {installation.components.dll ? (
@@ -317,11 +325,6 @@ export default function InstallationsPage() {
                               )}
                               <span className="text-xs">{content.slave}</span>
                             </div>
-                            {installation.version && (
-                              <div className="text-xs text-muted-foreground font-mono mt-1">
-                                v{installation.version}
-                              </div>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
