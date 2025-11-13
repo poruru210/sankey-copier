@@ -1,0 +1,330 @@
+# Build Windows Installer
+# Reusable workflow for packaging all components into an installer
+name: Build Windows Installer
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        description: 'Package version (e.g., 0.1.0)'
+        required: true
+        type: string
+      file_version:
+        description: 'File version (e.g., 0.1.0.123)'
+        required: true
+        type: string
+      build_info:
+        description: 'Full build information string'
+        required: true
+        type: string
+      create_release:
+        description: 'Whether to create a GitHub release (for tags)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: build-artifacts
+
+      - name: Cache Inno Setup
+        id: cache-inno
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files (x86)\Inno Setup 6
+          key: innosetup-6.3.3
+
+      - name: Install Inno Setup
+        if: steps.cache-inno.outputs.cache-hit != 'true'
+        run: choco install innosetup -y
+
+      - name: Add Inno Setup to PATH
+        run: |
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache NSSM
+        id: cache-nssm
+        uses: actions/cache@v4
+        with:
+          path: installer/resources/nssm.exe
+          key: nssm-2.24
+
+      - name: Download and setup NSSM
+        if: steps.cache-nssm.outputs.cache-hit != 'true'
+        run: |
+          Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "nssm.zip"
+          Expand-Archive -Path "nssm.zip" -DestinationPath "."
+          New-Item -ItemType Directory -Force -Path "installer/resources"
+          Copy-Item "nssm-2.24/win64/nssm.exe" -Destination "installer/resources/nssm.exe"
+          Remove-Item "nssm.zip"
+          Remove-Item "nssm-2.24" -Recurse
+
+      - name: Update version in project files
+        run: |
+          $version = "${{ inputs.package_version }}"
+          Write-Host "Updating version to: $version" -ForegroundColor Cyan
+
+          # Update Cargo.toml files
+          $cargoFiles = @(
+            "rust-server/Cargo.toml",
+            "mql-zmq-dll/Cargo.toml",
+            "sankey-copier-tray/Cargo.toml"
+          )
+
+          foreach ($file in $cargoFiles) {
+            $content = Get-Content $file -Raw
+            $content = $content -replace 'version = "[^"]*"', "version = `"$version`""
+            Set-Content $file -Value $content -NoNewline
+            Write-Host "✓ Updated $file" -ForegroundColor Green
+          }
+
+          # Update package.json
+          $packageJson = Get-Content "web-ui/package.json" -Raw | ConvertFrom-Json
+          $packageJson.version = $version
+          $packageJson | ConvertTo-Json -Depth 100 | Set-Content "web-ui/package.json"
+          Write-Host "✓ Updated web-ui/package.json" -ForegroundColor Green
+
+      - name: Organize artifacts for installer
+        run: |
+          Write-Host "Organizing build artifacts for installer..." -ForegroundColor Cyan
+
+          # List downloaded artifacts
+          Write-Host "Downloaded artifacts structure:"
+          Get-ChildItem "build-artifacts" -Recurse | Select-Object -First 50 | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
+
+          # Copy DLLs to installer structure
+          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/release"
+          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/i686-pc-windows-msvc/release"
+
+          if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
+            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/release/"
+            Write-Host "✓ Copied MT5 DLL"
+          } else {
+            Write-Host "❌ MT5 DLL not found"
+            exit 1
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
+            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/i686-pc-windows-msvc/release/"
+            Write-Host "✓ Copied MT4 DLL"
+          } else {
+            Write-Host "❌ MT4 DLL not found"
+            exit 1
+          }
+
+          # Copy server exe
+          New-Item -ItemType Directory -Force -Path "rust-server/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-server/sankey-copier-server.exe") {
+            Copy-Item "build-artifacts/sankey-copier-server/sankey-copier-server.exe" -Destination "rust-server/target/release/"
+            Write-Host "✓ Copied server exe"
+          } else {
+            Write-Host "❌ Server exe not found"
+            exit 1
+          }
+
+          # Copy tray exe
+          New-Item -ItemType Directory -Force -Path "sankey-copier-tray/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
+            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "sankey-copier-tray/target/release/"
+            Write-Host "✓ Copied tray exe"
+          } else {
+            Write-Host "❌ Tray exe not found"
+            exit 1
+          }
+
+          # Copy Web UI
+          # Artifact structure: .next/standalone/, .next/static/, public/
+          New-Item -ItemType Directory -Force -Path "web-ui/.next"
+
+          # Copy .next/standalone
+          $standaloneSrc = "build-artifacts/sankey-copier-web-ui/.next/standalone"
+          $standaloneDest = "web-ui/.next/standalone"
+          if (Test-Path -LiteralPath $standaloneSrc) {
+            Copy-Item -Recurse -Force -LiteralPath $standaloneSrc -Destination $standaloneDest
+            Write-Host "✓ Copied Web UI standalone"
+          } else {
+            Write-Host "❌ Web UI standalone not found"
+            Write-Host "Expected path: $standaloneSrc"
+            Write-Host "Listing build-artifacts/sankey-copier-web-ui:"
+            Get-ChildItem "build-artifacts/sankey-copier-web-ui" -Force | ForEach-Object { Write-Host "  $($_.Name)" }
+            exit 1
+          }
+
+          # Copy .next/static
+          $staticSrc = "build-artifacts/sankey-copier-web-ui/.next/static"
+          $staticDest = "web-ui/.next/static"
+          if (Test-Path -LiteralPath $staticSrc) {
+            Copy-Item -Recurse -Force -LiteralPath $staticSrc -Destination $staticDest
+            Write-Host "✓ Copied Web UI static"
+          } else {
+            Write-Host "❌ Web UI static not found"
+            exit 1
+          }
+
+          # Copy public
+          $publicSrc = "build-artifacts/sankey-copier-web-ui/public"
+          $publicDest = "web-ui/public"
+          if (Test-Path -LiteralPath $publicSrc) {
+            Copy-Item -Recurse -Force -LiteralPath $publicSrc -Destination $publicDest
+            Write-Host "✓ Copied Web UI public"
+          }
+
+          # Copy .env.production to standalone directory
+          if (Test-Path "web-ui/.env.production") {
+            Copy-Item "web-ui/.env.production" -Destination "web-ui/.next/standalone/"
+            Write-Host "✓ Copied .env.production to standalone"
+          } else {
+            Write-Host "⚠️ .env.production not found in web-ui/"
+          }
+
+          # Copy MQL compiled files
+          New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
+          New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
+
+          if (Test-Path "build-artifacts/sankey-copier-mql-MT4") {
+            $mt4Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT4/*.ex4" -ErrorAction SilentlyContinue
+            if ($mt4Files) {
+              Copy-Item "build-artifacts/sankey-copier-mql-MT4/*.ex4" -Destination "mql/MT4/Experts/"
+              Write-Host "✓ Copied MT4 MQL files: $($mt4Files.Count) files"
+            } else {
+              Write-Host "⚠️ No MT4 .ex4 files found"
+            }
+          } else {
+            Write-Host "⚠️ MT4 MQL artifacts directory not found"
+          }
+
+          if (Test-Path "build-artifacts/sankey-copier-mql-MT5") {
+            $mt5Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT5/*.ex5" -ErrorAction SilentlyContinue
+            if ($mt5Files) {
+              Copy-Item "build-artifacts/sankey-copier-mql-MT5/*.ex5" -Destination "mql/MT5/Experts/"
+              Write-Host "✓ Copied MT5 MQL files: $($mt5Files.Count) files"
+            } else {
+              Write-Host "⚠️ No MT5 .ex5 files found"
+            }
+          } else {
+            Write-Host "⚠️ MT5 MQL artifacts directory not found"
+          }
+
+          Write-Host "✓ Artifacts organized" -ForegroundColor Green
+
+      - name: Verify build artifacts
+        run: |
+          $artifacts = @(
+            "rust-server/target/release/sankey-copier-server.exe",
+            "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
+            "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
+            "sankey-copier-tray/target/release/sankey-copier-tray.exe",
+            "web-ui/.next/standalone",
+            "installer/resources/nssm.exe"
+          )
+
+          foreach ($artifact in $artifacts) {
+            if (-not (Test-Path $artifact)) {
+              Write-Error "Missing artifact: $artifact"
+              exit 1
+            }
+            Write-Host "✓ Found: $artifact" -ForegroundColor Green
+          }
+
+      - name: Compile installer with Inno Setup
+        run: |
+          $version = "${{ inputs.package_version }}"
+          Write-Host "Compiling installer with version: $version" -ForegroundColor Cyan
+          Write-Host "Build Info: ${{ inputs.build_info }}" -ForegroundColor Yellow
+
+          # Check if setup.iss exists
+          if (-not (Test-Path "installer/setup.iss")) {
+            Write-Host "❌ setup.iss not found" -ForegroundColor Red
+            exit 1
+          }
+
+          # Save output to log file for complete capture
+          $logFile = "installer/inno-setup.log"
+          Write-Host "Running Inno Setup compiler..." -ForegroundColor Cyan
+
+          # Run compiler and capture both stdout and stderr
+          & iscc /DMyAppVersion=$version installer/setup.iss 2>&1 | Tee-Object -FilePath $logFile
+          $exitCode = $LASTEXITCODE
+
+          if ($exitCode -ne 0) {
+            Write-Host ""
+            Write-Host "❌ Inno Setup compilation failed with exit code: $exitCode" -ForegroundColor Red
+            Write-Host "Full log saved to: $logFile" -ForegroundColor Yellow
+
+            # Display last 100 lines of log
+            Write-Host ""
+            Write-Host "=== Last 100 lines of compilation log ===" -ForegroundColor Yellow
+            Get-Content $logFile -Tail 100
+
+            exit $exitCode
+          }
+
+          Write-Host "✓ Installer compiled successfully" -ForegroundColor Green
+
+      - name: Verify installer output
+        run: |
+          Write-Host "Checking for installer output files..." -ForegroundColor Cyan
+
+          if (Test-Path "installer/Output") {
+            Write-Host "✓ Output directory exists" -ForegroundColor Green
+            $exeFiles = Get-ChildItem "installer/Output/*.exe" -ErrorAction SilentlyContinue
+            if ($exeFiles) {
+              Write-Host "✓ Found installer files:" -ForegroundColor Green
+              $exeFiles | ForEach-Object {
+                $sizeKB = [math]::Round($_.Length / 1KB, 2)
+                Write-Host "  - $($_.Name) ($sizeKB KB)"
+              }
+            } else {
+              Write-Host "❌ No .exe files found in installer/Output/" -ForegroundColor Red
+              Write-Host "Directory contents:"
+              Get-ChildItem "installer/Output" | ForEach-Object {
+                Write-Host "  - $($_.Name)"
+              }
+              exit 1
+            }
+          } else {
+            Write-Host "❌ installer/Output directory does not exist" -ForegroundColor Red
+            Write-Host "Current directory: $(Get-Location)"
+            Write-Host "Installer directory contents:"
+            Get-ChildItem "installer" | ForEach-Object {
+              Write-Host "  - $($_.Name)"
+            }
+            exit 1
+          }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-installer-${{ inputs.package_version }}
+          path: installer/Output/*.exe
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installer/Output/*.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Version ${{ inputs.package_version }}
+
+            Build Information: `${{ inputs.build_info }}`
+
+            ### Installation
+            Download the installer and run it to install SANKEY Copier on your Windows system.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
