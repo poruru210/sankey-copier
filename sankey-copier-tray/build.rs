@@ -78,6 +78,14 @@ fn main() {
 }
 
 fn generate_version_info() -> (String, String, String) {
+    // Check if version information is provided via environment variables (from CI/CD)
+    if let (Ok(pkg_ver), Ok(file_ver)) = (std::env::var("PACKAGE_VERSION"), std::env::var("FILE_VERSION")) {
+        // Use versions from environment variables
+        let build_info = format!("{}+ci", file_ver);
+        return (pkg_ver, file_ver, build_info);
+    }
+
+    // Fallback: Generate from Git information
     // 1. Get base version from Git tag
     let base_version = get_tag_version().unwrap_or_else(|| "0.1.0".to_string());
 
