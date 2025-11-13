@@ -13,14 +13,6 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Display version information prominently during build
-    println!("cargo:warning=╔════════════════════════════════════════════════════════════════");
-    println!("cargo:warning=║ Building sankey-copier-tray");
-    println!("cargo:warning=║ PACKAGE_VERSION: {}", package_version);
-    println!("cargo:warning=║ FILE_VERSION:    {}", file_version);
-    println!("cargo:warning=║ BUILD_INFO:      {}", build_info);
-    println!("cargo:warning=╚════════════════════════════════════════════════════════════════");
-
     // Rerun if .git/HEAD changes
     println!("cargo:rerun-if-changed=../.git/HEAD");
     println!("cargo:rerun-if-changed=../.git/refs/heads");
@@ -66,18 +58,19 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    println!("cargo:warning=╔════════════════════════════════════════════════════════════════");
-    println!("cargo:warning=║ Building sankey-copier-tray");
-    println!("cargo:warning=║ PACKAGE_VERSION: {}", package_version);
-    println!("cargo:warning=║ FILE_VERSION:    {}", file_version);
-    println!("cargo:warning=║ BUILD_INFO:      {}", build_info);
-    println!("cargo:warning=╚════════════════════════════════════════════════════════════════");
-
     println!("cargo:rerun-if-changed=../.git/HEAD");
     println!("cargo:rerun-if-changed=../.git/refs/heads");
 }
 
 fn generate_version_info() -> (String, String, String) {
+    // Check if version information is provided via environment variables (from CI/CD)
+    if let (Ok(pkg_ver), Ok(file_ver)) = (std::env::var("PACKAGE_VERSION"), std::env::var("FILE_VERSION")) {
+        // Use versions from environment variables
+        let build_info = format!("{}+ci", file_ver);
+        return (pkg_ver, file_ver, build_info);
+    }
+
+    // Fallback: Generate from Git information
     // 1. Get base version from Git tag
     let base_version = get_tag_version().unwrap_or_else(|| "0.1.0".to_string());
 

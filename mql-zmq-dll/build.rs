@@ -18,14 +18,6 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Display version information prominently during build
-    println!("cargo:warning=╔════════════════════════════════════════════════════════════════");
-    println!("cargo:warning=║ Building mql-zmq-dll");
-    println!("cargo:warning=║ PACKAGE_VERSION: {}", package_version);
-    println!("cargo:warning=║ FILE_VERSION:    {}", file_version);
-    println!("cargo:warning=║ BUILD_INFO:      {}", build_info);
-    println!("cargo:warning=╚════════════════════════════════════════════════════════════════");
-
     // Embed version information in Windows DLL resources
     #[cfg(windows)]
     embed_windows_resources(&package_version, &file_version);

@@ -16,14 +16,6 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Display version information prominently during build
-    println!("cargo:warning=╔════════════════════════════════════════════════════════════════");
-    println!("cargo:warning=║ Building rust-server");
-    println!("cargo:warning=║ PACKAGE_VERSION: {}", package_version);
-    println!("cargo:warning=║ FILE_VERSION:    {}", file_version);
-    println!("cargo:warning=║ BUILD_INFO:      {}", build_info);
-    println!("cargo:warning=╚════════════════════════════════════════════════════════════════");
-
     // Embed version information in Windows executable resources
     // Only embed for actual binary builds, not for test/bench targets
     #[cfg(windows)]
