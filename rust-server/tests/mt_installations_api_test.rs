@@ -59,20 +59,13 @@ async fn test_list_mt_installations_endpoint() {
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
 
-    // Check response structure
+    // Check response structure (no longer wrapped in ApiResponse)
     assert!(json["success"].is_boolean());
-    assert!(json["data"].is_object());
+    assert!(json["data"].is_array());
+    assert!(json["detection_summary"].is_object());
 
-    let data = &json["data"];
-    assert!(data["success"].is_boolean());
-    assert!(data["data"].is_array());
-    assert!(data["detection_summary"].is_object());
-
-    let summary = &data["detection_summary"];
+    let summary = &json["detection_summary"];
     assert!(summary["total_found"].is_number());
-    assert!(summary["by_method"].is_object());
-    assert!(summary["running"].is_number());
-    assert!(summary["stopped"].is_number());
 }
 
 #[tokio::test]
@@ -88,21 +81,24 @@ async fn test_install_to_mt_endpoint_not_found() {
 
     let response = app.oneshot(request).await.unwrap();
 
-    // Should return OK with error in JSON (not HTTP error)
-    assert_eq!(response.status(), StatusCode::OK);
+    // RFC 9457: Should return 404 Not Found with ProblemDetails
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
 
-    // Check that success is false
-    assert_eq!(json["success"], false);
-    assert!(json["error"].is_string());
+    // Check RFC 9457 Problem Details structure
+    assert!(json["type"].is_string());
+    assert!(json["title"].is_string());
+    assert_eq!(json["status"], 404);
+    assert!(json["detail"].is_string());
+    assert!(json["instance"].is_string());
 
     // Error message should indicate MT4/MT5 not found
-    let error = json["error"].as_str().unwrap();
-    assert!(error.contains("見つかりません") || error.contains("not found"));
+    let detail = json["detail"].as_str().unwrap();
+    assert!(detail.contains("見つかりません"));
 }
 
 #[tokio::test]
@@ -120,8 +116,8 @@ async fn test_mt_installations_response_structure() {
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
 
-    let data = &json["data"];
-    let installations = data["data"].as_array().unwrap();
+    // No longer wrapped in ApiResponse
+    let installations = json["data"].as_array().unwrap();
 
     // Check structure of each installation if any are found
     for installation in installations {
