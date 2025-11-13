@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useOptimistic, useTransition } from 'react';
 import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MtInstallation } from '@/types';
@@ -16,6 +18,25 @@ export default function InstallationsPage() {
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isPending, startTransition] = useTransition();
+  const [optimisticInstallations, setOptimisticInstallations] = useOptimistic(
+    installations,
+    (currentInstallations, updatedId: string) => {
+      return currentInstallations.map(inst =>
+        inst.id === updatedId
+          ? {
+              ...inst,
+              components: {
+                dll: true,
+                master_ea: true,
+                slave_ea: true,
+              }
+            }
+          : inst
+      );
+    }
+  );
 
   useEffect(() => {
     fetchInstallations();
@@ -23,6 +44,12 @@ export default function InstallationsPage() {
 
   const handleInstall = async (installation: MtInstallation) => {
     setMessage(null);
+
+    // Optimistically update the UI
+    startTransition(() => {
+      setOptimisticInstallations(installation.id);
+    });
+
     const result = await installToMt(installation.id);
 
     if (result.success) {
@@ -33,6 +60,71 @@ export default function InstallationsPage() {
 
     // Clear message after 5 seconds
     setTimeout(() => setMessage(null), 5000);
+  };
+
+  const handleBatchInstall = async () => {
+    if (selectedIds.size === 0) return;
+
+    setMessage(null);
+
+    const selectedInstallations = optimisticInstallations.filter(inst => selectedIds.has(inst.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    // Optimistically update all selected installations
+    startTransition(() => {
+      selectedInstallations.forEach(installation => {
+        setOptimisticInstallations(installation.id);
+      });
+    });
+
+    for (const installation of selectedInstallations) {
+      const result = await installToMt(installation.id);
+      if (result.success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    setSelectedIds(new Set());
+
+    if (failCount === 0) {
+      setMessage({
+        type: 'success',
+        text: `Successfully installed components to ${successCount} installation(s)`
+      });
+    } else if (successCount === 0) {
+      setMessage({
+        type: 'error',
+        text: `Failed to install components to all ${failCount} installation(s)`
+      });
+    } else {
+      setMessage({
+        type: 'error',
+        text: `Completed with ${successCount} success and ${failCount} failure(s)`
+      });
+    }
+
+    setTimeout(() => setMessage(null), 5000);
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === optimisticInstallations.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(optimisticInstallations.map(inst => inst.id)));
+    }
   };
 
   const getComponentStatus = (installation: MtInstallation) => {
@@ -80,8 +172,8 @@ export default function InstallationsPage() {
             </p>
           </div>
 
-          {/* Refresh Button */}
-          <div className="mb-6">
+          {/* Action Buttons */}
+          <div className="mb-6 flex gap-3">
             <Button
               onClick={fetchInstallations}
               disabled={loading}
@@ -91,6 +183,25 @@ export default function InstallationsPage() {
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh Detection
             </Button>
+            {optimisticInstallations.length > 0 && (
+              <Button
+                onClick={handleBatchInstall}
+                disabled={selectedIds.size === 0 || isPending || installing !== null}
+                className="gap-2"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Installing to {selectedIds.size} installation(s)...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Install to Selected ({selectedIds.size})
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {/* Error Display */}
@@ -119,8 +230,8 @@ export default function InstallationsPage() {
             </div>
           )}
 
-          {/* Installations Grid */}
-          {installations.length === 0 ? (
+          {/* Installations Table */}
+          {optimisticInstallations.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <p className="text-lg text-muted-foreground">
@@ -132,248 +243,121 @@ export default function InstallationsPage() {
               </CardContent>
             </Card>
           ) : (
-            <>
-              {/* MT5 Group */}
-              {(() => {
-                const mt5Installations = installations.filter((i) => i.type === 'MT5');
-                if (mt5Installations.length === 0) return null;
+            <div className="rounded-lg border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={selectedIds.size === optimisticInstallations.length && optimisticInstallations.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Installation Path</TableHead>
+                    <TableHead>Version</TableHead>
+                    <TableHead>Components</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {optimisticInstallations.map((installation) => {
+                    const componentStatus = getComponentStatus(installation);
+                    const isInstalling = installing === installation.id;
+                    const allComponentsInstalled = componentStatus.installed === componentStatus.total;
+                    const isSelected = selectedIds.has(installation.id);
 
-                return (
-                  <div className="mb-8">
-                    <div className="flex items-center gap-3 mb-4">
-                      <h2 className="text-2xl font-bold">MetaTrader 5</h2>
-                      <Badge variant="outline">{mt5Installations.length} found</Badge>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {mt5Installations.map((installation) => {
-                        const componentStatus = getComponentStatus(installation);
-                        const isInstalling = installing === installation.id;
-                        const allComponentsInstalled = componentStatus.installed === componentStatus.total;
-
-                        return (
-                          <Card key={installation.id}>
-                            <CardHeader>
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <CardTitle className="text-lg">{installation.name}</CardTitle>
-                                  <CardDescription className="mt-1">
-                                    {installation.platform}
-                                  </CardDescription>
-                                </div>
-                                <Badge variant={installation.is_running ? 'default' : 'secondary'}>
-                                  {installation.is_running ? 'Running' : 'Stopped'}
-                                </Badge>
-                              </div>
-                            </CardHeader>
-                            <CardContent>
-                              {/* Path */}
-                              <div className="mb-4">
-                                <p className="text-xs text-muted-foreground mb-1">Installation Path</p>
-                                <p className="text-sm font-mono truncate" title={installation.path}>
-                                  {installation.path}
-                                </p>
-                              </div>
-
-                              {/* Version */}
-                              {installation.version && (
-                                <div className="mb-4">
-                                  <p className="text-xs text-muted-foreground mb-1">Version</p>
-                                  <p className="text-sm">{installation.version}</p>
-                                </div>
+                    return (
+                      <TableRow
+                        key={installation.id}
+                        data-state={isSelected ? 'selected' : undefined}
+                        onClick={() => toggleSelection(installation.id)}
+                        className="cursor-pointer"
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelection(installation.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{installation.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{installation.type}</Badge>
+                        </TableCell>
+                        <TableCell>{installation.platform}</TableCell>
+                        <TableCell>
+                          <Badge variant={installation.is_running ? 'default' : 'secondary'}>
+                            {installation.is_running ? 'Running' : 'Stopped'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-[300px]">
+                            <p className="text-sm font-mono truncate" title={installation.path}>
+                              {installation.path}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{installation.version || '-'}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm">
+                              {installation.components.dll ? (
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-
-                              {/* Component Status */}
-                              <div className="mb-4">
-                                <p className="text-xs text-muted-foreground mb-2">Components Status</p>
-                                <div className="space-y-1">
-                                  <ComponentStatusItem
-                                    name="DLL"
-                                    installed={installation.components.dll}
-                                  />
-                                  <ComponentStatusItem
-                                    name="Master EA"
-                                    installed={installation.components.master_ea}
-                                  />
-                                  <ComponentStatusItem
-                                    name="Slave EA"
-                                    installed={installation.components.slave_ea}
-                                  />
-                                </div>
-                                <div className="mt-2">
-                                  <Badge variant={allComponentsInstalled ? 'default' : 'secondary'}>
-                                    {componentStatus.installed}/{componentStatus.total} installed
-                                  </Badge>
-                                </div>
-                              </div>
-
-                              {/* Install Button */}
-                              <Button
-                                onClick={() => handleInstall(installation)}
-                                disabled={isInstalling}
-                                className="w-full gap-2"
-                                variant={allComponentsInstalled ? 'outline' : 'default'}
-                              >
-                                {isInstalling ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Installing...
-                                  </>
-                                ) : allComponentsInstalled ? (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    Reinstall Components
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    Install Components
-                                  </>
-                                )}
-                              </Button>
-
-                              {installation.is_running && (
-                                <p className="text-xs text-muted-foreground mt-2 text-center">
-                                  Warning: MT is running. Installation may require restart.
-                                </p>
+                              <span className="text-xs">DLL</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                              {installation.components.master_ea ? (
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* MT4 Group */}
-              {(() => {
-                const mt4Installations = installations.filter((i) => i.type === 'MT4');
-                if (mt4Installations.length === 0) return null;
-
-                return (
-                  <div className="mb-8">
-                    <div className="flex items-center gap-3 mb-4">
-                      <h2 className="text-2xl font-bold">MetaTrader 4</h2>
-                      <Badge variant="outline">{mt4Installations.length} found</Badge>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {mt4Installations.map((installation) => {
-                        const componentStatus = getComponentStatus(installation);
-                        const isInstalling = installing === installation.id;
-                        const allComponentsInstalled = componentStatus.installed === componentStatus.total;
-
-                        return (
-                          <Card key={installation.id}>
-                            <CardHeader>
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <CardTitle className="text-lg">{installation.name}</CardTitle>
-                                  <CardDescription className="mt-1">
-                                    {installation.platform}
-                                  </CardDescription>
-                                </div>
-                                <Badge variant={installation.is_running ? 'default' : 'secondary'}>
-                                  {installation.is_running ? 'Running' : 'Stopped'}
-                                </Badge>
-                              </div>
-                            </CardHeader>
-                            <CardContent>
-                              {/* Path */}
-                              <div className="mb-4">
-                                <p className="text-xs text-muted-foreground mb-1">Installation Path</p>
-                                <p className="text-sm font-mono truncate" title={installation.path}>
-                                  {installation.path}
-                                </p>
-                              </div>
-
-                              {/* Version */}
-                              {installation.version && (
-                                <div className="mb-4">
-                                  <p className="text-xs text-muted-foreground mb-1">Version</p>
-                                  <p className="text-sm">{installation.version}</p>
-                                </div>
+                              <span className="text-xs">Master</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                              {installation.components.slave_ea ? (
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-
-                              {/* Component Status */}
-                              <div className="mb-4">
-                                <p className="text-xs text-muted-foreground mb-2">Components Status</p>
-                                <div className="space-y-1">
-                                  <ComponentStatusItem
-                                    name="DLL"
-                                    installed={installation.components.dll}
-                                  />
-                                  <ComponentStatusItem
-                                    name="Master EA"
-                                    installed={installation.components.master_ea}
-                                  />
-                                  <ComponentStatusItem
-                                    name="Slave EA"
-                                    installed={installation.components.slave_ea}
-                                  />
-                                </div>
-                                <div className="mt-2">
-                                  <Badge variant={allComponentsInstalled ? 'default' : 'secondary'}>
-                                    {componentStatus.installed}/{componentStatus.total} installed
-                                  </Badge>
-                                </div>
-                              </div>
-
-                              {/* Install Button */}
-                              <Button
-                                onClick={() => handleInstall(installation)}
-                                disabled={isInstalling}
-                                className="w-full gap-2"
-                                variant={allComponentsInstalled ? 'outline' : 'default'}
-                              >
-                                {isInstalling ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Installing...
-                                  </>
-                                ) : allComponentsInstalled ? (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    Reinstall Components
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    Install Components
-                                  </>
-                                )}
-                              </Button>
-
-                              {installation.is_running && (
-                                <p className="text-xs text-muted-foreground mt-2 text-center">
-                                  Warning: MT is running. Installation may require restart.
-                                </p>
-                              )}
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-            </>
+                              <span className="text-xs">Slave</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            onClick={() => handleInstall(installation)}
+                            disabled={isInstalling || isPending}
+                            size="sm"
+                            variant={allComponentsInstalled ? 'outline' : 'default'}
+                          >
+                            {isInstalling ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                Installing...
+                              </>
+                            ) : allComponentsInstalled ? (
+                              'Reinstall'
+                            ) : (
+                              'Install'
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ComponentStatusItem({ name, installed }: { name: string; installed: boolean }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {installed ? (
-        <CheckCircle className="h-4 w-4 text-green-500" />
-      ) : (
-        <div className="h-4 w-4 rounded-full border-2 border-muted" />
-      )}
-      <span className={installed ? 'text-foreground' : 'text-muted-foreground'}>{name}</span>
     </div>
   );
 }
