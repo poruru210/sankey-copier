@@ -124,8 +124,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Needed for git describe in build.rs
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -134,7 +132,13 @@ jobs:
 
       - name: Build Tray Application
         working-directory: sankey-copier-tray
-        run: cargo build --release
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          FILE_VERSION: ${{ inputs.file_version }}
+        run: |
+          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
+          cargo build --release
 
       - name: Prepare Tray Application artifacts
         run: |
