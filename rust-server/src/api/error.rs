@@ -77,6 +77,7 @@ impl ProblemDetails {
     }
 
     /// バリデーションエラー（400 Bad Request）
+    #[allow(dead_code)]
     pub fn validation_error(detail: impl Into<String>) -> Self {
         Self::new(
             "https://sankey-copier.example.com/errors/validation",
@@ -116,6 +117,7 @@ impl IntoResponse for ProblemDetails {
 
 /// APIResult型エイリアス
 /// 成功時はT型の値を返し、エラー時はProblemDetailsを返す
+#[allow(dead_code)]
 pub type ApiResult<T> = Result<T, ProblemDetails>;
 
 #[cfg(test)]
