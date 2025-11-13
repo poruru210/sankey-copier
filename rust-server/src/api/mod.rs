@@ -1,12 +1,16 @@
 mod mt_installations;
+mod error;
+
+pub use error::ProblemDetails;
 
 use axum::{
     extract::{Path, State, ws::WebSocket, ws::WebSocketUpgrade},
+    http::StatusCode,
     response::Response,
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
@@ -130,34 +134,10 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ApiResponse<T> {
-    success: bool,
-    data: Option<T>,
-    error: Option<String>,
-}
-
-impl<T> ApiResponse<T> {
-    fn success(data: T) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-        }
-    }
-
-    fn error(message: String) -> Self {
-        Self {
-            success: false,
-            data: None,
-            error: Some(message),
-        }
-    }
-}
 
 async fn list_settings(
     State(state): State<AppState>,
-) -> Result<Json<ApiResponse<Vec<CopySettings>>>, Response> {
+) -> Result<Json<Vec<CopySettings>>, ProblemDetails> {
     let span = tracing::info_span!("list_settings");
     let _enter = span.enter();
 
@@ -168,7 +148,7 @@ async fn list_settings(
                 "Successfully retrieved copy settings"
             );
             refresh_settings_cache(&state).await;
-            Ok(Json(ApiResponse::success(settings)))
+            Ok(Json(settings))
         }
         Err(e) => {
             tracing::error!(
@@ -177,7 +157,7 @@ async fn list_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to list settings from database"
             );
-            Ok(Json(ApiResponse::error(e.to_string())))
+            Err(ProblemDetails::internal_error(format!("データベースからの設定取得に失敗しました: {}", e)))
         }
     }
 }
@@ -185,7 +165,7 @@ async fn list_settings(
 async fn get_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<Json<ApiResponse<CopySettings>>, Response> {
+) -> Result<Json<CopySettings>, ProblemDetails> {
     let span = tracing::info_span!("get_settings", settings_id = id);
     let _enter = span.enter();
 
@@ -198,14 +178,15 @@ async fn get_settings(
                 enabled = settings.enabled,
                 "Successfully retrieved copy settings"
             );
-            Ok(Json(ApiResponse::success(settings)))
+            Ok(Json(settings))
         }
         Ok(None) => {
             tracing::warn!(
                 settings_id = id,
                 "Settings not found"
             );
-            Ok(Json(ApiResponse::error("Settings not found".to_string())))
+            Err(ProblemDetails::not_found("設定")
+                .with_instance(format!("/api/settings/{}", id)))
         }
         Err(e) => {
             tracing::error!(
@@ -215,7 +196,8 @@ async fn get_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to get settings from database"
             );
-            Ok(Json(ApiResponse::error(e.to_string())))
+            Err(ProblemDetails::internal_error(format!("データベースからの設定取得に失敗しました: {}", e))
+                .with_instance(format!("/api/settings/{}", id)))
         }
     }
 }
@@ -231,7 +213,7 @@ struct CreateSettingsRequest {
 async fn create_settings(
     State(state): State<AppState>,
     Json(req): Json<CreateSettingsRequest>,
-) -> Result<Json<ApiResponse<i32>>, Response> {
+) -> Result<(StatusCode, Json<i32>), ProblemDetails> {
     let span = tracing::info_span!(
         "create_settings",
         master_account = %req.master_account,
@@ -272,7 +254,7 @@ async fn create_settings(
             // Notify via WebSocket
             let _ = state.tx.send(format!("settings_updated:{}", id));
 
-            Ok(Json(ApiResponse::success(id)))
+            Ok((StatusCode::CREATED, Json(id)))
         }
         Err(e) => {
             let error_msg = e.to_string();
@@ -289,13 +271,14 @@ async fn create_settings(
             );
 
             // Check for duplicate entry error
-            let user_friendly_msg = if is_duplicate {
-                "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
+            if is_duplicate {
+                Err(ProblemDetails::conflict(
+                    "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。"
+                ).with_instance("/api/settings"))
             } else {
-                error_msg
-            };
-
-            Ok(Json(ApiResponse::error(user_friendly_msg)))
+                Err(ProblemDetails::internal_error(format!("設定の作成に失敗しました: {}", error_msg))
+                    .with_instance("/api/settings"))
+            }
         }
     }
 }
@@ -304,7 +287,7 @@ async fn update_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(settings): Json<CopySettings>,
-) -> Result<Json<ApiResponse<()>>, Response> {
+) -> Result<StatusCode, ProblemDetails> {
     let span = tracing::info_span!(
         "update_settings",
         settings_id = id,
@@ -334,7 +317,7 @@ async fn update_settings(
             // Notify via WebSocket
             let _ = state.tx.send(format!("settings_updated:{}", id));
 
-            Ok(Json(ApiResponse::success(())))
+            Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             let error_msg = e.to_string();
@@ -352,13 +335,14 @@ async fn update_settings(
             );
 
             // Check for duplicate entry error
-            let user_friendly_msg = if is_duplicate {
-                "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。".to_string()
+            if is_duplicate {
+                Err(ProblemDetails::conflict(
+                    "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。"
+                ).with_instance(format!("/api/settings/{}", id)))
             } else {
-                error_msg
-            };
-
-            Ok(Json(ApiResponse::error(user_friendly_msg)))
+                Err(ProblemDetails::internal_error(format!("設定の更新に失敗しました: {}", error_msg))
+                    .with_instance(format!("/api/settings/{}", id)))
+            }
         }
     }
 }
@@ -372,7 +356,7 @@ async fn toggle_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(req): Json<ToggleRequest>,
-) -> Result<Json<ApiResponse<()>>, Response> {
+) -> Result<StatusCode, ProblemDetails> {
     let span = tracing::info_span!(
         "toggle_settings",
         settings_id = id,
@@ -393,7 +377,7 @@ async fn toggle_settings(
             // Notify via WebSocket
             let _ = state.tx.send(format!("settings_toggled:{}:{}", id, req.enabled));
 
-            Ok(Json(ApiResponse::success(())))
+            Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             tracing::error!(
@@ -404,7 +388,8 @@ async fn toggle_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to toggle copy settings"
             );
-            Ok(Json(ApiResponse::error(e.to_string())))
+            Err(ProblemDetails::internal_error(format!("設定の切り替えに失敗しました: {}", e))
+                .with_instance(format!("/api/settings/{}/toggle", id)))
         }
     }
 }
@@ -412,7 +397,7 @@ async fn toggle_settings(
 async fn delete_settings(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<Json<ApiResponse<()>>, Response> {
+) -> Result<StatusCode, ProblemDetails> {
     let span = tracing::info_span!("delete_settings", settings_id = id);
     let _enter = span.enter();
 
@@ -428,7 +413,7 @@ async fn delete_settings(
             // Notify via WebSocket
             let _ = state.tx.send(format!("settings_deleted:{}", id));
 
-            Ok(Json(ApiResponse::success(())))
+            Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             tracing::error!(
@@ -438,7 +423,8 @@ async fn delete_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to delete copy settings"
             );
-            Ok(Json(ApiResponse::error(e.to_string())))
+            Err(ProblemDetails::internal_error(format!("設定の削除に失敗しました: {}", e))
+                .with_instance(format!("/api/settings/{}", id)))
         }
     }
 }
@@ -463,7 +449,7 @@ async fn handle_websocket(mut socket: WebSocket, state: AppState) {
 // EA接続一覧取得
 async fn list_connections(
     State(state): State<AppState>,
-) -> Result<Json<ApiResponse<Vec<EaConnection>>>, Response> {
+) -> Result<Json<Vec<EaConnection>>, ProblemDetails> {
     let span = tracing::info_span!("list_connections");
     let _enter = span.enter();
 
@@ -474,14 +460,14 @@ async fn list_connections(
         "Successfully retrieved EA connections"
     );
 
-    Ok(Json(ApiResponse::success(connections)))
+    Ok(Json(connections))
 }
 
 // 特定のEA接続情報取得
 async fn get_connection(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
-) -> Result<Json<ApiResponse<EaConnection>>, Response> {
+) -> Result<Json<EaConnection>, ProblemDetails> {
     let span = tracing::info_span!("get_connection", account_id = %account_id);
     let _enter = span.enter();
 
@@ -493,17 +479,15 @@ async fn get_connection(
                 status = ?connection.status,
                 "Successfully retrieved EA connection"
             );
-            Ok(Json(ApiResponse::success(connection)))
+            Ok(Json(connection))
         }
         None => {
             tracing::warn!(
                 account_id = %account_id,
                 "EA connection not found"
             );
-            Ok(Json(ApiResponse::error(format!(
-                "Connection not found: {}",
-                account_id
-            ))))
+            Err(ProblemDetails::not_found("EA接続")
+                .with_instance(format!("/api/connections/{}", account_id)))
         }
     }
 }
@@ -511,7 +495,7 @@ async fn get_connection(
 // サーバーログ取得
 async fn get_logs(
     State(state): State<AppState>,
-) -> Result<Json<ApiResponse<Vec<crate::log_buffer::LogEntry>>>, Response> {
+) -> Result<Json<Vec<crate::log_buffer::LogEntry>>, ProblemDetails> {
     let span = tracing::info_span!("get_logs");
     let _enter = span.enter();
 
@@ -523,5 +507,5 @@ async fn get_logs(
         "Successfully retrieved server logs"
     );
 
-    Ok(Json(ApiResponse::success(logs)))
+    Ok(Json(logs))
 }

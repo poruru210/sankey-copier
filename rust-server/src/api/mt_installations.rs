@@ -8,12 +8,12 @@ use crate::models::{DetectionSummary, MtInstallationsResponse};
 use crate::mt_detector::MtDetector;
 use crate::mt_installer::MtInstaller;
 
-use super::{ApiResponse, AppState};
+use super::{AppState, ProblemDetails};
 
 /// MT4/MT5インストール一覧を取得（レジストリ検出）
 pub async fn list_mt_installations(
     State(_state): State<AppState>,
-) -> Result<Json<ApiResponse<MtInstallationsResponse>>, String> {
+) -> Result<Json<MtInstallationsResponse>, ProblemDetails> {
     let span = tracing::info_span!("list_mt_installations");
     let _enter = span.enter();
 
@@ -54,14 +54,14 @@ pub async fn list_mt_installations(
         },
     };
 
-    Ok(Json(ApiResponse::success(response)))
+    Ok(Json(response))
 }
 
 /// MT4/MT5にコンポーネントをインストール
 pub async fn install_to_mt(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<ApiResponse<String>>, String> {
+) -> Result<Json<String>, ProblemDetails> {
     let span = tracing::info_span!("install_to_mt", installation_id = %id);
     let _enter = span.enter();
 
@@ -82,10 +82,10 @@ pub async fn install_to_mt(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to detect MT installations for install operation"
             );
-            return Ok(Json(ApiResponse::error(format!(
+            return Err(ProblemDetails::internal_error(format!(
                 "MT4/MT5の検出に失敗しました: {}",
                 e
-            ))));
+            )).with_instance(format!("/api/mt-installations/{}/install", id)));
         }
     };
 
@@ -100,10 +100,9 @@ pub async fn install_to_mt(
                 available_ids = ?installations.iter().map(|i| &i.id).collect::<Vec<_>>(),
                 "MT installation not found"
             );
-            return Ok(Json(ApiResponse::error(format!(
-                "指定されたID ({}) のMT4/MT5が見つかりません。",
-                id
-            ))));
+            return Err(ProblemDetails::not_found("MT4/MT5インストール")
+                .with_detail(format!("指定されたID ({}) のMT4/MT5が見つかりません。", id))
+                .with_instance(format!("/api/mt-installations/{}/install", id)));
         }
     };
 
@@ -129,10 +128,10 @@ pub async fn install_to_mt(
                 installation_path = %installation.path,
                 "Installation completed successfully"
             );
-            Ok(Json(ApiResponse::success(format!(
+            Ok(Json(format!(
                 "インストールが完了しました: {}",
                 installation.name
-            ))))
+            )))
         }
         Err(e) => {
             tracing::error!(
@@ -144,10 +143,10 @@ pub async fn install_to_mt(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Installation failed"
             );
-            Ok(Json(ApiResponse::error(format!(
+            Err(ProblemDetails::internal_error(format!(
                 "インストールに失敗しました: {}",
                 e
-            ))))
+            )).with_instance(format!("/api/mt-installations/{}/install", id)))
         }
     }
 }
