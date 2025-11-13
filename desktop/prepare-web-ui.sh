@@ -20,20 +20,15 @@ mkdir -p "$BUNDLE_DIR"
 echo "Copying standalone build..."
 cp -r .next/standalone/* "$BUNDLE_DIR/"
 
-# Read project name from package.json
-PROJECT_NAME=$(node -pe "require('./package.json').name")
-echo "Project name: $PROJECT_NAME"
-
-# Copy static files to the correct location within standalone structure
-# Next.js standalone expects: <project-name>/.next/static (preserving project structure)
+# Copy static files (Next.js standalone uses flat structure)
 echo "Copying static files..."
-mkdir -p "$BUNDLE_DIR/$PROJECT_NAME/.next"
-cp -r .next/static "$BUNDLE_DIR/$PROJECT_NAME/.next/"
+mkdir -p "$BUNDLE_DIR/.next"
+cp -r .next/static "$BUNDLE_DIR/.next/"
 
-# Copy public directory to the correct location
+# Copy public directory
 if [ -d "public" ]; then
   echo "Copying public directory..."
-  cp -r public "$BUNDLE_DIR/$PROJECT_NAME/"
+  cp -r public "$BUNDLE_DIR/"
 fi
 
 echo "Web UI bundle prepared successfully at $BUNDLE_DIR"

@@ -58,11 +58,9 @@ pnpm tauri build --debug
    - `server.js` - Next.jsサーバー
    - `package.json`
    - `node_modules/` - 必要な依存関係のみ
-   - `forex-copier-ui/.next/static/` - 静的アセット（プロジェクト名のディレクトリ配下）
-   - `forex-copier-ui/public/` - 公開ファイル（プロジェクト名のディレクトリ配下）
+   - `.next/static/` - 静的アセット
+   - `public/` - 公開ファイル
 5. Tauriがweb-uiディレクトリをアプリケーションにバンドルします
-
-**Note**: Next.jsのstandalone出力は`package.json`の`name`フィールド（`forex-copier-ui`）を使用してディレクトリ構造を作成します。
 
 ### スマートキャッシング ⚡
 

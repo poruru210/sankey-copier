@@ -243,25 +243,18 @@ try {
   }
   copyRecursiveSync(standaloneSrc, bundleDir);
 
-  // Read project name from package.json
-  const packageJsonPath = path.join(webUiDir, 'package.json');
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const projectName = packageJson.name;
-  log(`Project name: ${projectName}`, 'blue');
-
-  // Copy static files to the correct location within standalone structure
-  // Next.js standalone expects: <project-name>/.next/static (preserving project structure)
+  // Copy static files (Next.js standalone uses flat structure)
   log('Copying static files...', 'yellow');
   const staticSrc = path.join(webUiDir, '.next', 'static');
-  const staticDest = path.join(bundleDir, projectName, '.next', 'static');
+  const staticDest = path.join(bundleDir, '.next', 'static');
   fs.mkdirSync(path.dirname(staticDest), { recursive: true });
   copyRecursiveSync(staticSrc, staticDest);
 
-  // Copy public directory to the correct location
+  // Copy public directory
   const publicSrc = path.join(webUiDir, 'public');
   if (fs.existsSync(publicSrc)) {
     log('Copying public directory...', 'yellow');
-    const publicDest = path.join(bundleDir, projectName, 'public');
+    const publicDest = path.join(bundleDir, 'public');
     copyRecursiveSync(publicSrc, publicDest);
   }
 
