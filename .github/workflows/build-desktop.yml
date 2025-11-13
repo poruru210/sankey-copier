@@ -55,8 +55,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             desktop-app/src-tauri/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('desktop-app/src-tauri/Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-desktop-
             ${{ runner.os }}-cargo-
 
       - name: Install Tauri CLI
