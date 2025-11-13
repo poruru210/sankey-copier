@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "powershell -Command \"if (Test-Path '../dist') { Remove-Item -Recurse -Force '../dist' }; New-Item -ItemType Directory -Path '../dist' -Force | Out-Null; Set-Content -Path '../dist/index.html' -Value '<html><head><title>SANKEY Copier</title></head><body><div>Initializing...</div></body></html>'\"",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "",
+    "frontendDist": "dist"
   },
   "bundle": {
     "active": true,
