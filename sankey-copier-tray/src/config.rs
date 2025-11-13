@@ -9,22 +9,7 @@ use std::fs;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     #[serde(default)]
-    pub server: ServerConfig,
-    #[serde(default)]
     pub webui: WebUIConfig,
-}
-
-/// Server configuration
-#[derive(Debug, Deserialize)]
-pub struct ServerConfig {
-    #[serde(default = "default_server_port")]
-    pub port: u16,
-}
-
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self { port: 8080 }
-    }
 }
 
 /// Web UI configuration
@@ -38,10 +23,6 @@ impl Default for WebUIConfig {
     fn default() -> Self {
         Self { port: 3000 }
     }
-}
-
-fn default_server_port() -> u16 {
-    8080
 }
 
 fn default_webui_port() -> u16 {

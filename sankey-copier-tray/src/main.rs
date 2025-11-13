@@ -7,7 +7,8 @@
 
 use anyhow::Result;
 use tray_icon::TrayIconBuilder;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
+use winit::application::ApplicationHandler;
 
 mod config;
 mod elevation;
@@ -15,6 +16,41 @@ mod icon;
 mod menu;
 mod service;
 mod ui;
+
+struct App {
+    event_loop_proxy: winit::event_loop::EventLoopProxy<menu::AppEvent>,
+}
+
+impl ApplicationHandler<menu::AppEvent> for App {
+    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
+
+    fn user_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        event: menu::AppEvent,
+    ) {
+        match event {
+            menu::AppEvent::Exit => {
+                event_loop.exit();
+            }
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        _event: winit::event::WindowEvent,
+    ) {
+        // Check for menu events
+        menu::check_menu_events(&self.event_loop_proxy);
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        // Check for menu events periodically
+        menu::check_menu_events(&self.event_loop_proxy);
+    }
+}
 
 fn main() -> Result<()> {
     // Create event loop for Windows message pump
@@ -27,23 +63,14 @@ fn main() -> Result<()> {
     // Create tray icon
     let _tray_icon = create_tray_icon()?;
 
-    // Run event loop
+    // Create app handler
+    let mut app = App {
+        event_loop_proxy: event_loop_proxy.clone(),
+    };
+
+    // Run event loop using run_app
     event_loop
-        .run(move |event, elwt| {
-            elwt.set_control_flow(ControlFlow::Poll);
-
-            // Handle user events (like exit)
-            match event {
-                winit::event::Event::UserEvent(menu::AppEvent::Exit) => {
-                    elwt.exit();
-                    return;
-                }
-                _ => {}
-            }
-
-            // Check for menu events
-            menu::check_menu_events(&event_loop_proxy);
-        })
+        .run_app(&mut app)
         .expect("Event loop error");
 
     Ok(())

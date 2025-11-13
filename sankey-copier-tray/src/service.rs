@@ -81,17 +81,6 @@ pub fn restart_server_service() -> Result<()> {
 // Service Status
 // ============================================================================
 
-/// Get service status for both services
-pub fn get_service_status() -> Result<String> {
-    let server_status = query_service_status(SERVER_SERVICE)?;
-    let webui_status = query_service_status(WEBUI_SERVICE)?;
-
-    Ok(format!(
-        "Service Status:\n\nServer: {}\nWeb UI: {}",
-        server_status, webui_status
-    ))
-}
-
 /// Query status of a single service using NSSM (safe version that never fails)
 ///
 /// This is a wrapper around query_service_status that returns "Unknown" on error
