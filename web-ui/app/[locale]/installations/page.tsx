@@ -258,6 +258,7 @@ export default function InstallationsPage() {
                     <TableHead>{content.name}</TableHead>
                     <TableHead>{content.type}</TableHead>
                     <TableHead>{content.installationPath}</TableHead>
+                    <TableHead>{content.version}</TableHead>
                     <TableHead>{content.components}</TableHead>
                     <TableHead className="text-right">{content.actions}</TableHead>
                   </TableRow>
@@ -287,9 +288,16 @@ export default function InstallationsPage() {
                           <Badge variant="outline">{installation.type}</Badge>
                         </TableCell>
                         <TableCell>
-                          <p className="text-sm font-mono break-all">
+                          <p className="text-sm font-mono truncate max-w-xs" title={installation.path}>
                             {installation.path}
                           </p>
+                        </TableCell>
+                        <TableCell>
+                          {installation.version ? (
+                            <span className="text-sm font-mono">v{installation.version}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
@@ -317,11 +325,6 @@ export default function InstallationsPage() {
                               )}
                               <span className="text-xs">{content.slave}</span>
                             </div>
-                            {installation.version && (
-                              <div className="text-xs text-muted-foreground font-mono mt-1">
-                                v{installation.version}
-                              </div>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

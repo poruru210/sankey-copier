@@ -54,6 +54,10 @@ const installationsPageContent = {
       en: 'Installation Path',
       ja: 'インストールパス',
     }),
+    version: t({
+      en: 'Version',
+      ja: 'バージョン',
+    }),
     components: t({
       en: 'Components',
       ja: 'コンポーネント',
