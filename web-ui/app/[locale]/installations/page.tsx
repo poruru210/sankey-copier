@@ -274,8 +274,10 @@ export default function InstallationsPage() {
                       <TableRow
                         key={installation.id}
                         data-state={isSelected ? 'selected' : undefined}
+                        onClick={() => toggleSelection(installation.id)}
+                        className="cursor-pointer"
                       >
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelection(installation.id)}
@@ -327,7 +329,7 @@ export default function InstallationsPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <Button
                             onClick={() => handleInstall(installation)}
                             disabled={isInstalling || isPending}
