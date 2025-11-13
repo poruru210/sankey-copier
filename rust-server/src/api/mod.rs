@@ -157,7 +157,7 @@ async fn list_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to list settings from database"
             );
-            Err(ProblemDetails::internal_error(format!("データベースからの設定取得に失敗しました: {}", e)))
+            Err(ProblemDetails::internal_error(format!("Failed to retrieve settings from database: {}", e)))
         }
     }
 }
@@ -185,7 +185,7 @@ async fn get_settings(
                 settings_id = id,
                 "Settings not found"
             );
-            Err(ProblemDetails::not_found("設定")
+            Err(ProblemDetails::not_found("settings")
                 .with_instance(format!("/api/settings/{}", id)))
         }
         Err(e) => {
@@ -196,7 +196,7 @@ async fn get_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to get settings from database"
             );
-            Err(ProblemDetails::internal_error(format!("データベースからの設定取得に失敗しました: {}", e))
+            Err(ProblemDetails::internal_error(format!("Failed to retrieve settings from database: {}", e))
                 .with_instance(format!("/api/settings/{}", id)))
         }
     }
@@ -273,10 +273,10 @@ async fn create_settings(
             // Check for duplicate entry error
             if is_duplicate {
                 Err(ProblemDetails::conflict(
-                    "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。"
+                    "A connection setting with this combination already exists. Only one master-slave pair can be registered."
                 ).with_instance("/api/settings"))
             } else {
-                Err(ProblemDetails::internal_error(format!("設定の作成に失敗しました: {}", error_msg))
+                Err(ProblemDetails::internal_error(format!("Failed to create settings: {}", error_msg))
                     .with_instance("/api/settings"))
             }
         }
@@ -337,10 +337,10 @@ async fn update_settings(
             // Check for duplicate entry error
             if is_duplicate {
                 Err(ProblemDetails::conflict(
-                    "この組み合わせの接続設定は既に存在します。同じマスターとスレーブのペアは1つのみ登録できます。"
+                    "A connection setting with this combination already exists. Only one master-slave pair can be registered."
                 ).with_instance(format!("/api/settings/{}", id)))
             } else {
-                Err(ProblemDetails::internal_error(format!("設定の更新に失敗しました: {}", error_msg))
+                Err(ProblemDetails::internal_error(format!("Failed to update settings: {}", error_msg))
                     .with_instance(format!("/api/settings/{}", id)))
             }
         }
@@ -388,7 +388,7 @@ async fn toggle_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to toggle copy settings"
             );
-            Err(ProblemDetails::internal_error(format!("設定の切り替えに失敗しました: {}", e))
+            Err(ProblemDetails::internal_error(format!("Failed to toggle settings: {}", e))
                 .with_instance(format!("/api/settings/{}/toggle", id)))
         }
     }
@@ -423,7 +423,7 @@ async fn delete_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to delete copy settings"
             );
-            Err(ProblemDetails::internal_error(format!("設定の削除に失敗しました: {}", e))
+            Err(ProblemDetails::internal_error(format!("Failed to delete settings: {}", e))
                 .with_instance(format!("/api/settings/{}", id)))
         }
     }
@@ -486,7 +486,7 @@ async fn get_connection(
                 account_id = %account_id,
                 "EA connection not found"
             );
-            Err(ProblemDetails::not_found("EA接続")
+            Err(ProblemDetails::not_found("EA connection")
                 .with_instance(format!("/api/connections/{}", account_id)))
         }
     }

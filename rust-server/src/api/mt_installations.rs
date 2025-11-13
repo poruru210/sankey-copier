@@ -83,7 +83,7 @@ pub async fn install_to_mt(
                 "Failed to detect MT installations for install operation"
             );
             return Err(ProblemDetails::internal_error(format!(
-                "MT4/MT5の検出に失敗しました: {}",
+                "Failed to detect MT4/MT5 installations: {}",
                 e
             )).with_instance(format!("/api/mt-installations/{}/install", id)));
         }
@@ -100,8 +100,8 @@ pub async fn install_to_mt(
                 available_ids = ?installations.iter().map(|i| &i.id).collect::<Vec<_>>(),
                 "MT installation not found"
             );
-            return Err(ProblemDetails::not_found("MT4/MT5インストール")
-                .with_detail(format!("指定されたID ({}) のMT4/MT5が見つかりません。", id))
+            return Err(ProblemDetails::not_found("MT4/MT5 installation")
+                .with_detail(format!("The specified MT4/MT5 installation (ID: {}) was not found", id))
                 .with_instance(format!("/api/mt-installations/{}/install", id)));
         }
     };
@@ -129,7 +129,7 @@ pub async fn install_to_mt(
                 "Installation completed successfully"
             );
             Ok(Json(format!(
-                "インストールが完了しました: {}",
+                "Installation completed: {}",
                 installation.name
             )))
         }
@@ -144,7 +144,7 @@ pub async fn install_to_mt(
                 "Installation failed"
             );
             Err(ProblemDetails::internal_error(format!(
-                "インストールに失敗しました: {}",
+                "Installation failed: {}",
                 e
             )).with_instance(format!("/api/mt-installations/{}/install", id)))
         }

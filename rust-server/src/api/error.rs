@@ -58,47 +58,51 @@ impl ProblemDetails {
 
     /// リソースが見つからない（404 Not Found）
     pub fn not_found(resource: impl Into<String>) -> Self {
+        let resource_name = resource.into();
         let status = StatusCode::NOT_FOUND;
         Self::new(
             "https://sankey-copier.example.com/errors/not-found",
             status.canonical_reason().unwrap_or("Not Found"),
             status,
         )
-        .with_detail(format!("{}が見つかりません", resource.into()))
+        .with_detail(format!("The requested {} was not found", resource_name))
     }
 
     /// リソースが既に存在する（409 Conflict）
     pub fn conflict(detail: impl Into<String>) -> Self {
+        let detail_text = detail.into();
         let status = StatusCode::CONFLICT;
         Self::new(
             "https://sankey-copier.example.com/errors/conflict",
             status.canonical_reason().unwrap_or("Conflict"),
             status,
         )
-        .with_detail(detail)
+        .with_detail(detail_text)
     }
 
     /// バリデーションエラー（400 Bad Request）
     #[allow(dead_code)]
     pub fn validation_error(detail: impl Into<String>) -> Self {
+        let detail_text = detail.into();
         let status = StatusCode::BAD_REQUEST;
         Self::new(
             "https://sankey-copier.example.com/errors/validation",
             status.canonical_reason().unwrap_or("Bad Request"),
             status,
         )
-        .with_detail(detail)
+        .with_detail(detail_text)
     }
 
     /// 内部サーバーエラー（500 Internal Server Error）
     pub fn internal_error(detail: impl Into<String>) -> Self {
+        let detail_text = detail.into();
         let status = StatusCode::INTERNAL_SERVER_ERROR;
         Self::new(
             "https://sankey-copier.example.com/errors/internal",
             status.canonical_reason().unwrap_or("Internal Server Error"),
             status,
         )
-        .with_detail(detail)
+        .with_detail(detail_text)
     }
 }
 
