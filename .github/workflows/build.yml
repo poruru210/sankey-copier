@@ -698,6 +698,16 @@ jobs:
             Write-Host "  - $($_.FullName)"
           }
 
+          # Verify icon file exists in source directory
+          $iconFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\app.ico"
+          if (Test-Path $iconFile) {
+            $iconSize = (Get-Item $iconFile).Length
+            Write-Host "✓ Icon file found: $iconFile ($iconSize bytes)"
+          } else {
+            Write-Host "⚠️ Icon file not found at: $iconFile"
+            Write-Host "   This may prevent icon from being embedded in compiled EA"
+          }
+
           # Compile Master EA
           $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.mq${{ matrix.version }}"
           Write-Host ""

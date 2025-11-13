@@ -2,10 +2,9 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::models::{DetectionMethod, DetectionSummary, MtInstallationsResponse};
+use crate::models::{DetectionSummary, MtInstallationsResponse};
 use crate::mt_detector::MtDetector;
 use crate::mt_installer::MtInstaller;
 
@@ -42,17 +41,8 @@ pub async fn list_mt_installations(
     // 検出サマリーを作成
     let total_found = installations.len();
 
-    let mut by_method: HashMap<String, usize> = HashMap::new();
-    for installation in &installations {
-        let method = match installation.detection_method {
-            DetectionMethod::Registry => "registry",
-        };
-        *by_method.entry(method.to_string()).or_insert(0) += 1;
-    }
-
     tracing::info!(
         total_found = total_found,
-        detection_methods = ?by_method.keys().collect::<Vec<_>>(),
         "MT installations detection summary"
     );
 
@@ -61,7 +51,6 @@ pub async fn list_mt_installations(
         data: installations,
         detection_summary: DetectionSummary {
             total_found,
-            by_method,
         },
     };
 

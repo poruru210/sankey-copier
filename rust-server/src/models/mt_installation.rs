@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// MT4/MT5のタイプ
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,35 +17,12 @@ pub enum Architecture {
     Bit64,
 }
 
-/// 検出方法（Windowsレジストリベース）
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum DetectionMethod {
-    Registry,
-}
-
-/// コンポーネント情報（インストール状態とバージョン）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComponentInfo {
-    pub installed: bool,
-    pub version: Option<String>,
-}
-
-impl Default for ComponentInfo {
-    fn default() -> Self {
-        Self {
-            installed: false,
-            version: None,
-        }
-    }
-}
-
 /// インストールされたコンポーネント（実行に必要なもののみ）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstalledComponents {
-    pub dll: ComponentInfo,
-    pub master_ea: ComponentInfo,
-    pub slave_ea: ComponentInfo,
+    pub dll: bool,
+    pub master_ea: bool,
+    pub slave_ea: bool,
 }
 
 /// MT4/MT5インストール情報
@@ -59,8 +35,7 @@ pub struct MtInstallation {
     pub platform: Architecture,
     pub path: String,
     pub executable: String,
-    pub version: Option<String>,
-    pub detection_method: DetectionMethod,
+    pub version: Option<String>,  // DLLバージョン = クライアントバージョン
     pub components: InstalledComponents,
 }
 
@@ -68,7 +43,6 @@ pub struct MtInstallation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectionSummary {
     pub total_found: usize,
-    pub by_method: HashMap<String, usize>,
 }
 
 /// MT4/MT5検出結果のレスポンス

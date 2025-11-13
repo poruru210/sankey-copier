@@ -1,5 +1,5 @@
 use crate::models::{
-    Architecture, ComponentInfo, DetectionMethod, InstalledComponents, MtInstallation, MtType,
+    Architecture, InstalledComponents, MtInstallation, MtType,
 };
 use anyhow::Result;
 use std::fs;
@@ -177,16 +177,12 @@ impl MtDetector {
         // IDを生成
         let id = MtInstallation::generate_id(&mt_type, &data_path_str);
 
-        // バージョン情報
-        let version: Option<String> = key.get_value("DisplayVersion").ok();
-        let _publisher: Option<String> = key.get_value("Publisher").ok();
-
         // 名前を生成（DisplayNameから）
         let name = display_name.clone();
 
         // インストールされたコンポーネントをチェック
-        let components = self.check_installed_components(&data_path, &mt_type)
-            .unwrap_or_default();
+        let (components, version) = self.check_installed_components(&data_path, &mt_type)
+            .unwrap_or_else(|_| (InstalledComponents::default(), None));
 
         tracing::info!(
             "Detected {} installation: {} ({})",
@@ -206,7 +202,6 @@ impl MtDetector {
             path: data_path_str,
             executable: executable.to_string_lossy().to_string(),
             version,
-            detection_method: DetectionMethod::Registry,
             components,
         })
     }
@@ -475,7 +470,8 @@ impl MtDetector {
     }
 
     /// インストールされたコンポーネントをチェック
-    fn check_installed_components(&self, data_path: &Path, mt_type: &MtType) -> Result<InstalledComponents> {
+    /// Returns: (components, client_version)
+    fn check_installed_components(&self, data_path: &Path, mt_type: &MtType) -> Result<(InstalledComponents, Option<String>)> {
         let (mql_folder, ea_ext) = match mt_type {
             MtType::MT4 => ("MQL4", "ex4"),
             MtType::MT5 => ("MQL5", "ex5"),
@@ -483,37 +479,30 @@ impl MtDetector {
 
         let mql_path = data_path.join(mql_folder);
 
-        // DLLチェック（DLLはWindows VERSIONリソースを持つ）
+        // DLLチェック（DLLバージョン = クライアントバージョン）
         let dll_path = mql_path.join("Libraries").join("sankey_copier_zmq.dll");
-        let dll = ComponentInfo {
-            installed: dll_path.exists(),
-            version: if dll_path.exists() {
-                self.get_file_version(&dll_path)
-            } else {
-                None
-            },
+        let dll_installed = dll_path.exists();
+        let version = if dll_installed {
+            self.get_file_version(&dll_path)
+        } else {
+            None
         };
 
         // Master EAチェック
-        // Note: MQLコンパイル済みファイル(.ex4/.ex5)はWindows VERSIONリソースを持たない
         let master_ea_path = mql_path.join("Experts").join(format!("SankeyCopierMaster.{}", ea_ext));
-        let master_ea = ComponentInfo {
-            installed: master_ea_path.exists(),
-            version: None,  // EAファイルはバージョン情報を持たない
-        };
+        let master_ea_installed = master_ea_path.exists();
 
         // Slave EAチェック
         let slave_ea_path = mql_path.join("Experts").join(format!("SankeyCopierSlave.{}", ea_ext));
-        let slave_ea = ComponentInfo {
-            installed: slave_ea_path.exists(),
-            version: None,  // EAファイルはバージョン情報を持たない
+        let slave_ea_installed = slave_ea_path.exists();
+
+        let components = InstalledComponents {
+            dll: dll_installed,
+            master_ea: master_ea_installed,
+            slave_ea: slave_ea_installed,
         };
 
-        Ok(InstalledComponents {
-            dll,
-            master_ea,
-            slave_ea,
-        })
+        Ok((components, version))
     }
 
     /// WindowsファイルのバージョンResourceから ProductVersion を取得
@@ -617,11 +606,12 @@ mod tests {
         let mql4_path = mt_path.join("MQL4");
         fs::create_dir_all(&mql4_path).unwrap();
 
-        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+        let (components, version) = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
 
-        assert!(!result.dll.installed);
-        assert!(!result.master_ea.installed);
-        assert!(!result.slave_ea.installed);
+        assert!(!components.dll);
+        assert!(!components.master_ea);
+        assert!(!components.slave_ea);
+        assert!(version.is_none());
     }
 
     #[test]
@@ -641,11 +631,11 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex4"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex4"), b"slave").unwrap();
 
-        let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+        let (components, _version) = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
 
-        assert!(result.dll.installed);
-        assert!(result.master_ea.installed);
-        assert!(result.slave_ea.installed);
+        assert!(components.dll);
+        assert!(components.master_ea);
+        assert!(components.slave_ea);
     }
 
     #[test]
@@ -665,11 +655,11 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex5"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex5"), b"slave").unwrap();
 
-        let result = detector.check_installed_components(mt_path, &MtType::MT5).unwrap();
+        let (components, _version) = detector.check_installed_components(mt_path, &MtType::MT5).unwrap();
 
-        assert!(result.dll.installed);
-        assert!(result.master_ea.installed);
-        assert!(result.slave_ea.installed);
+        assert!(components.dll);
+        assert!(components.master_ea);
+        assert!(components.slave_ea);
     }
 
     #[test]

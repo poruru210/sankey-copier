@@ -72,17 +72,10 @@ export type MtType = 'MT4' | 'MT5';
 
 export type Architecture = '32-bit' | '64-bit';
 
-export type DetectionMethod = 'registry';
-
-export interface ComponentInfo {
-  installed: boolean;
-  version: string | null;
-}
-
 export interface InstalledComponents {
-  dll: ComponentInfo;
-  master_ea: ComponentInfo;
-  slave_ea: ComponentInfo;
+  dll: boolean;
+  master_ea: boolean;
+  slave_ea: boolean;
 }
 
 export interface MtInstallation {
@@ -92,14 +85,12 @@ export interface MtInstallation {
   platform: Architecture;
   path: string;
   executable: string;
-  version: string | null;
-  detection_method: DetectionMethod;
+  version: string | null;  // DLL version = client version
   components: InstalledComponents;
 }
 
 export interface DetectionSummary {
   total_found: number;
-  by_method: Record<string, number>;
 }
 
 export interface MtInstallationsResponse {
