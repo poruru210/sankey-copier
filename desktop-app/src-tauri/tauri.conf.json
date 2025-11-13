@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "powershell -Command \"if (-not (Test-Path '../dist')) { New-Item -ItemType Directory -Path '../dist' }; Set-Content -Path '../dist/index.html' -Value '<!DOCTYPE html><html><head><title>SANKEY Copier</title></head><body>Loading...</body></html>'\"",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "powershell -Command \"New-Item -ItemType Directory -Path 'dist' -Force | Out-Null; Set-Content -Path 'dist/index.html' -Value '<!DOCTYPE html><html><head><title>SANKEY Copier</title></head><body>Loading...</body></html>'\"",
+    "frontendDist": "dist"
   },
   "bundle": {
     "active": true,
