@@ -16,12 +16,13 @@ export const LOG_VIEWER_CONSTANTS = {
   Z_INDEX: 50,
 } as const;
 
+// Log level colors adapted for both light and dark modes
 export const LOG_LEVEL_COLORS = {
-  ERROR: 'text-red-400',
-  WARN: 'text-yellow-400',
-  INFO: 'text-blue-400',
-  DEBUG: 'text-gray-400',
-  DEFAULT: 'text-gray-400',
+  ERROR: 'text-red-600 dark:text-red-400',
+  WARN: 'text-yellow-600 dark:text-yellow-400',
+  INFO: 'text-blue-600 dark:text-blue-400',
+  DEBUG: 'text-muted-foreground',
+  DEFAULT: 'text-muted-foreground',
 } as const;
 
 export const DOM_SELECTORS = {

@@ -30,6 +30,7 @@ export function Header() {
               alt="SANKEY Copier Logo"
               width={32}
               height={32}
+              priority
               className="object-contain flex-shrink-0"
             />
             {isOpen && (
@@ -50,6 +51,7 @@ export function Header() {
                 alt="SANKEY Copier Logo"
                 width={32}
                 height={32}
+                priority
                 className="object-contain"
               />
               <h1 className="text-lg font-semibold text-foreground whitespace-nowrap">

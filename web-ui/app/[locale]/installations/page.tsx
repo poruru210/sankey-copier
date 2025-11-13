@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useOptimistic, useTransition } from 'react';
-import { Header } from '@/components/Header';
+import { useIntlayer } from 'next-intlayer';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import type { MtInstallation } from '@/types';
 
 export default function InstallationsPage() {
+  const content = useIntlayer('installations-page');
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -53,9 +54,9 @@ export default function InstallationsPage() {
     const result = await installToMt(installation.id);
 
     if (result.success) {
-      setMessage({ type: 'success', text: result.message || 'Installation completed successfully' });
+      setMessage({ type: 'success', text: result.message || content.installationCompleted.value });
     } else {
-      setMessage({ type: 'error', text: result.message || 'Installation failed' });
+      setMessage({ type: 'error', text: result.message || content.installationFailed.value });
     }
 
     // Clear message after 5 seconds
@@ -92,17 +93,19 @@ export default function InstallationsPage() {
     if (failCount === 0) {
       setMessage({
         type: 'success',
-        text: `Successfully installed components to ${successCount} installation(s)`
+        text: content.successfullyInstalled.value.replace('{count}', successCount.toString())
       });
     } else if (successCount === 0) {
       setMessage({
         type: 'error',
-        text: `Failed to install components to all ${failCount} installation(s)`
+        text: content.failedToInstall.value.replace('{count}', failCount.toString())
       });
     } else {
       setMessage({
         type: 'error',
-        text: `Completed with ${successCount} success and ${failCount} failure(s)`
+        text: content.completedWithErrors.value
+          .replace('{successCount}', successCount.toString())
+          .replace('{failCount}', failCount.toString())
       });
     }
 
@@ -139,7 +142,7 @@ export default function InstallationsPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <div className="text-xl">Loading installations...</div>
+          <div className="text-xl">{content.loadingInstallations}</div>
         </div>
       </div>
     );
@@ -152,7 +155,6 @@ export default function InstallationsPage() {
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-col h-full">
-        <Header />
         <div
           className={cn(
             'overflow-y-auto transition-all duration-300',
@@ -166,9 +168,9 @@ export default function InstallationsPage() {
           <div className="w-[80%] mx-auto p-6">
           {/* Page Title */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">Installation Manager</h1>
+            <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
             <p className="text-muted-foreground">
-              Detect and install SANKEY Copier components to your MT4/MT5 platforms
+              {content.description}
             </p>
           </div>
 
@@ -181,7 +183,7 @@ export default function InstallationsPage() {
               className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh Detection
+              {content.refreshDetection}
             </Button>
             {optimisticInstallations.length > 0 && (
               <Button
@@ -192,12 +194,12 @@ export default function InstallationsPage() {
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Installing to {selectedIds.size} installation(s)...
+                    {content.installing} {selectedIds.size} {content.installationsCount}...
                   </>
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    Install to Selected ({selectedIds.size})
+                    {content.installToSelected} ({selectedIds.size})
                   </>
                 )}
               </Button>
@@ -235,10 +237,10 @@ export default function InstallationsPage() {
             <Card>
               <CardContent className="py-12 text-center">
                 <p className="text-lg text-muted-foreground">
-                  No MT4/MT5 installations detected.
+                  {content.noInstallationsDetected}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Click &quot;Refresh Detection&quot; to scan for installations
+                  {content.clickRefreshToScan}
                 </p>
               </CardContent>
             </Card>
@@ -253,11 +255,11 @@ export default function InstallationsPage() {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Installation Path</TableHead>
-                    <TableHead>Components</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{content.name}</TableHead>
+                    <TableHead>{content.type}</TableHead>
+                    <TableHead>{content.installationPath}</TableHead>
+                    <TableHead>{content.components}</TableHead>
+                    <TableHead className="text-right">{content.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -297,7 +299,7 @@ export default function InstallationsPage() {
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">DLL</span>
+                              <span className="text-xs">{content.dll}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               {installation.components.master_ea ? (
@@ -305,7 +307,7 @@ export default function InstallationsPage() {
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">Master</span>
+                              <span className="text-xs">{content.master}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               {installation.components.slave_ea ? (
@@ -313,7 +315,7 @@ export default function InstallationsPage() {
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">Slave</span>
+                              <span className="text-xs">{content.slave}</span>
                             </div>
                             {installation.version && (
                               <div className="text-xs text-muted-foreground font-mono mt-1">
@@ -332,12 +334,12 @@ export default function InstallationsPage() {
                             {isInstalling ? (
                               <>
                                 <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                Installing...
+                                {content.installing}...
                               </>
                             ) : allComponentsInstalled ? (
-                              'Reinstall'
+                              content.reinstall
                             ) : (
-                              'Install'
+                              content.install
                             )}
                           </Button>
                         </TableCell>
