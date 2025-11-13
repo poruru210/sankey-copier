@@ -553,6 +553,7 @@ impl MtDetector {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
         use std::ptr;
+        use winapi::ctypes::c_void;
         use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
         use winapi::um::winnt::LPCWSTR;
 
@@ -588,17 +589,18 @@ impl MtDetector {
                 .chain(std::iter::once(0))
                 .collect();
 
-            let mut value_ptr: *mut u16 = ptr::null_mut();
+            let mut value_ptr: *mut c_void = ptr::null_mut();
             let mut value_len: u32 = 0;
 
             if VerQueryValueW(
                 buffer.as_ptr() as *const _,
                 sub_block.as_ptr() as LPCWSTR,
-                &mut value_ptr as *mut _ as *mut _,
+                &mut value_ptr,
                 &mut value_len,
             ) != 0 && !value_ptr.is_null()
             {
                 // Convert wide string to Rust String
+                let value_ptr = value_ptr as *mut u16;
                 let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
                 let version = String::from_utf16_lossy(slice)
                     .trim_end_matches('\0')
