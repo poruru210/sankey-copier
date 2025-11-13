@@ -288,7 +288,7 @@ export default function InstallationsPage() {
                           <Badge variant="outline">{installation.type}</Badge>
                         </TableCell>
                         <TableCell>
-                          <p className="text-sm font-mono break-all">
+                          <p className="text-sm font-mono truncate max-w-xs" title={installation.path}>
                             {installation.path}
                           </p>
                         </TableCell>
