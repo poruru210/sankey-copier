@@ -58,7 +58,7 @@ export default function Home() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="w-[80%] mx-auto p-6">
+          <div className="w-[80%] mx-auto p-6 h-full flex flex-col">
           {/* Page Title */}
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
@@ -74,8 +74,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* Copy Connections - Large fixed height for scrollable content */}
-          <div style={{ height: '1200px' }}>
+          {/* Copy Connections */}
+          <div className="flex-1 min-h-0">
             <ConnectionsViewReactFlow
               connections={connections}
               settings={settings}
