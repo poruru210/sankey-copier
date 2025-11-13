@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useIntlayer } from 'next-intlayer';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Network, Settings, Globe, Menu, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from './ui/sheet';
@@ -12,6 +13,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context';
 // PC: Fixed sidebar (default open), Mobile: Overlay drawer
 // State is shared via SidebarContext for Header and ServerLog positioning
 export function Sidebar() {
+  const content = useIntlayer('sidebar');
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const { isOpen, isMobile, setIsOpen } = useSidebar();
@@ -25,21 +27,21 @@ export function Sidebar() {
   // Navigation items
   const navItems = [
     {
-      href: `/${locale}`,
+      href: `/${locale}/connections`,
       icon: Network,
-      label: 'Connections',
-      active: pathname === `/${locale}`,
+      label: content.connections,
+      active: pathname === `/${locale}/connections` || pathname === `/${locale}`,
     },
     {
       href: `/${locale}/installations`,
       icon: Settings,
-      label: 'Installations',
+      label: content.installations,
       active: pathname.includes('/installations'),
     },
     {
       href: `/${locale}/sites`,
       icon: Globe,
-      label: 'Sites',
+      label: content.sites,
       active: pathname.includes('/sites'),
     },
   ];
@@ -57,7 +59,7 @@ export function Sidebar() {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed top-3 left-4 z-40 lg:hidden p-2 rounded-md bg-background border border-border hover:bg-accent transition-colors"
-          aria-label="Open menu"
+          aria-label={content.openMenu.value}
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -65,7 +67,7 @@ export function Sidebar() {
         <Sheet open={isOpen} onOpenChange={setIsOpen} side="left">
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Menu</SheetTitle>
+              <SheetTitle>{content.menu}</SheetTitle>
               <SheetClose onClose={() => setIsOpen(false)} />
             </SheetHeader>
 
@@ -113,7 +115,7 @@ export function Sidebar() {
           'hover:bg-accent transition-colors shadow-sm',
           'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2'
         )}
-        aria-label={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        aria-label={isOpen ? content.collapseSidebar.value : content.expandSidebar.value}
       >
         {isOpen ? (
           <ChevronLeft className="h-4 w-4" />

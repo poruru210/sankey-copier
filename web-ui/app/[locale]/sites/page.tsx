@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSiteContext } from '@/lib/contexts/site-context';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
@@ -97,7 +96,6 @@ export default function SitesPage() {
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-col h-full">
-        <Header />
         <div
           className={cn(
             'overflow-y-auto transition-all duration-300',

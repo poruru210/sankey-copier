@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { Site } from '@/lib/types/site';
 import { useSites } from '@/lib/hooks/use-sites';
 import { ApiClient } from '@/lib/api-client';
@@ -21,7 +21,13 @@ const SiteContext = createContext<SiteContextValue | undefined>(undefined);
 
 export function SiteProvider({ children }: { children: ReactNode }) {
   const siteManagement = useSites();
-  const apiClient = new ApiClient(siteManagement.selectedSite);
+
+  // Memoize apiClient to prevent recreating on every render
+  // This ensures stable reference for hooks that depend on it
+  const apiClient = useMemo(
+    () => new ApiClient(siteManagement.selectedSite),
+    [siteManagement.selectedSite.id, siteManagement.selectedSite.siteUrl]
+  );
 
   return (
     <SiteContext.Provider value={{ ...siteManagement, apiClient }}>

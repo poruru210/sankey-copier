@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { preconnect } from 'react-dom';
+import { useIntlayer } from 'next-intlayer';
 import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
-import { Header } from '@/components/Header';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 import { useSiteContext } from '@/lib/contexts/site-context';
@@ -11,6 +11,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
+  const content = useIntlayer('connections-page');
   const { selectedSite } = useSiteContext();
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const {
@@ -35,7 +36,7 @@ export default function Home() {
   if (loading && settings.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl">{content.loading}</div>
       </div>
     );
   }
@@ -47,7 +48,6 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-col h-full">
-        <Header />
         <div
           className={cn(
             'overflow-y-auto transition-all duration-300',
@@ -58,12 +58,12 @@ export default function Home() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="w-[80%] mx-auto p-6 h-full flex flex-col">
+          <div className="w-[80%] mx-auto p-6">
           {/* Page Title */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">Trading Connections</h1>
+            <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
             <p className="text-muted-foreground">
-              Manage and monitor your master-slave trading connections in real-time
+              {content.description}
             </p>
           </div>
 
@@ -74,8 +74,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* Copy Connections */}
-          <div className="flex-1 min-h-0">
+          {/* Copy Connections - Large fixed height for scrollable content */}
+          <div style={{ height: '1200px' }}>
             <ConnectionsViewReactFlow
               connections={connections}
               settings={settings}

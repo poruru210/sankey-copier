@@ -53,7 +53,15 @@
   * {
     @apply border-border;
   }
+  html,
   body {
     @apply bg-background text-foreground;
+    /* Prevent body-level scrolling since pages use fixed height with internal scrolling */
+    overflow: hidden;
+    height: 100%;
+  }
+  /* Allow individual page content to scroll */
+  #__next {
+    height: 100%;
   }
 }
