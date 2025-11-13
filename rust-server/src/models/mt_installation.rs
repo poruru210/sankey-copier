@@ -26,12 +26,28 @@ pub enum DetectionMethod {
     Registry,
 }
 
+/// コンポーネント情報（インストール状態とバージョン）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentInfo {
+    pub installed: bool,
+    pub version: Option<String>,
+}
+
+impl Default for ComponentInfo {
+    fn default() -> Self {
+        Self {
+            installed: false,
+            version: None,
+        }
+    }
+}
+
 /// インストールされたコンポーネント（実行に必要なもののみ）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstalledComponents {
-    pub dll: bool,
-    pub master_ea: bool,
-    pub slave_ea: bool,
+    pub dll: ComponentInfo,
+    pub master_ea: ComponentInfo,
+    pub slave_ea: ComponentInfo,
 }
 
 /// MT4/MT5インストール情報

@@ -74,10 +74,15 @@ export type Architecture = '32-bit' | '64-bit';
 
 export type DetectionMethod = 'registry';
 
+export interface ComponentInfo {
+  installed: boolean;
+  version: string | null;
+}
+
 export interface InstalledComponents {
-  dll: boolean;
-  master_ea: boolean;
-  slave_ea: boolean;
+  dll: ComponentInfo;
+  master_ea: ComponentInfo;
+  slave_ea: ComponentInfo;
 }
 
 export interface MtInstallation {

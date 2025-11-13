@@ -1,5 +1,5 @@
 use crate::models::{
-    Architecture, DetectionMethod, InstalledComponents, MtInstallation, MtType,
+    Architecture, ComponentInfo, DetectionMethod, InstalledComponents, MtInstallation, MtType,
 };
 use anyhow::Result;
 use std::fs;
@@ -191,7 +191,7 @@ impl MtDetector {
         let components = self.check_installed_components(&data_path, &mt_type)
             .unwrap_or_default();
 
-        let is_installed = components.dll && components.master_ea && components.slave_ea;
+        let is_installed = components.dll.installed && components.master_ea.installed && components.slave_ea.installed;
 
         let installed_version = if is_installed {
             Some("1.0.0".to_string()) // TODO: 実際のバージョンファイルから読み取る
@@ -509,21 +509,113 @@ impl MtDetector {
 
         // DLLチェック
         let dll_path = mql_path.join("Libraries").join("sankey_copier_zmq.dll");
-        let dll = dll_path.exists();
+        let dll = ComponentInfo {
+            installed: dll_path.exists(),
+            version: if dll_path.exists() {
+                self.get_file_version(&dll_path)
+            } else {
+                None
+            },
+        };
 
         // Master EAチェック
         let master_ea_path = mql_path.join("Experts").join(format!("SankeyCopierMaster.{}", ea_ext));
-        let master_ea = master_ea_path.exists();
+        let master_ea = ComponentInfo {
+            installed: master_ea_path.exists(),
+            version: if master_ea_path.exists() {
+                self.get_file_version(&master_ea_path)
+            } else {
+                None
+            },
+        };
 
         // Slave EAチェック
         let slave_ea_path = mql_path.join("Experts").join(format!("SankeyCopierSlave.{}", ea_ext));
-        let slave_ea = slave_ea_path.exists();
+        let slave_ea = ComponentInfo {
+            installed: slave_ea_path.exists(),
+            version: if slave_ea_path.exists() {
+                self.get_file_version(&slave_ea_path)
+            } else {
+                None
+            },
+        };
 
         Ok(InstalledComponents {
             dll,
             master_ea,
             slave_ea,
         })
+    }
+
+    /// WindowsファイルのバージョンResourceから ProductVersion を取得
+    #[cfg(windows)]
+    fn get_file_version(&self, file_path: &Path) -> Option<String> {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr;
+        use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
+        use winapi::um::winnt::LPCWSTR;
+
+        unsafe {
+            // Convert path to wide string
+            let wide_path: Vec<u16> = OsStr::new(file_path.as_os_str())
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+
+            // Get version info size
+            let mut dummy = 0u32;
+            let size = GetFileVersionInfoSizeW(wide_path.as_ptr(), &mut dummy);
+            if size == 0 {
+                return None;
+            }
+
+            // Allocate buffer and get version info
+            let mut buffer = vec![0u8; size as usize];
+            if GetFileVersionInfoW(
+                wide_path.as_ptr(),
+                0,
+                size,
+                buffer.as_mut_ptr() as *mut _,
+            ) == 0
+            {
+                return None;
+            }
+
+            // Query ProductVersion string
+            let sub_block: Vec<u16> = OsStr::new("\\StringFileInfo\\040904b0\\ProductVersion")
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let mut value_ptr: *mut u16 = ptr::null_mut();
+            let mut value_len: u32 = 0;
+
+            if VerQueryValueW(
+                buffer.as_ptr() as *const _,
+                sub_block.as_ptr() as LPCWSTR,
+                &mut value_ptr as *mut _ as *mut _,
+                &mut value_len,
+            ) != 0 && !value_ptr.is_null()
+            {
+                // Convert wide string to Rust String
+                let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
+                let version = String::from_utf16_lossy(slice)
+                    .trim_end_matches('\0')
+                    .to_string();
+                if !version.is_empty() {
+                    return Some(version);
+                }
+            }
+
+            None
+        }
+    }
+
+    /// Non-Windows platforms - return None
+    #[cfg(not(windows))]
+    fn get_file_version(&self, _file_path: &Path) -> Option<String> {
+        None
     }
 }
 
@@ -556,9 +648,9 @@ mod tests {
 
         let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
 
-        assert!(!result.dll);
-        assert!(!result.master_ea);
-        assert!(!result.slave_ea);
+        assert!(!result.dll.installed);
+        assert!(!result.master_ea.installed);
+        assert!(!result.slave_ea.installed);
     }
 
     #[test]
@@ -580,9 +672,9 @@ mod tests {
 
         let result = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
 
-        assert!(result.dll);
-        assert!(result.master_ea);
-        assert!(result.slave_ea);
+        assert!(result.dll.installed);
+        assert!(result.master_ea.installed);
+        assert!(result.slave_ea.installed);
     }
 
     #[test]
@@ -604,9 +696,9 @@ mod tests {
 
         let result = detector.check_installed_components(mt_path, &MtType::MT5).unwrap();
 
-        assert!(result.dll);
-        assert!(result.master_ea);
-        assert!(result.slave_ea);
+        assert!(result.dll.installed);
+        assert!(result.master_ea.installed);
+        assert!(result.slave_ea.installed);
     }
 
     #[test]

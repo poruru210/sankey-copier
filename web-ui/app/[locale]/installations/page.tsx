@@ -37,7 +37,7 @@ export default function InstallationsPage() {
 
   const getComponentStatus = (installation: MtInstallation) => {
     const { components } = installation;
-    const installed = [components.dll, components.master_ea, components.slave_ea].filter(Boolean).length;
+    const installed = [components.dll.installed, components.master_ea.installed, components.slave_ea.installed].filter(Boolean).length;
     const total = 3;
     return { installed, total };
   };
@@ -188,15 +188,18 @@ export default function InstallationsPage() {
                                 <div className="space-y-1">
                                   <ComponentStatusItem
                                     name="DLL"
-                                    installed={installation.components.dll}
+                                    installed={installation.components.dll.installed}
+                                    version={installation.components.dll.version}
                                   />
                                   <ComponentStatusItem
                                     name="Master EA"
-                                    installed={installation.components.master_ea}
+                                    installed={installation.components.master_ea.installed}
+                                    version={installation.components.master_ea.version}
                                   />
                                   <ComponentStatusItem
                                     name="Slave EA"
-                                    installed={installation.components.slave_ea}
+                                    installed={installation.components.slave_ea.installed}
+                                    version={installation.components.slave_ea.version}
                                   />
                                 </div>
                                 <div className="mt-2">
@@ -300,15 +303,18 @@ export default function InstallationsPage() {
                                 <div className="space-y-1">
                                   <ComponentStatusItem
                                     name="DLL"
-                                    installed={installation.components.dll}
+                                    installed={installation.components.dll.installed}
+                                    version={installation.components.dll.version}
                                   />
                                   <ComponentStatusItem
                                     name="Master EA"
-                                    installed={installation.components.master_ea}
+                                    installed={installation.components.master_ea.installed}
+                                    version={installation.components.master_ea.version}
                                   />
                                   <ComponentStatusItem
                                     name="Slave EA"
-                                    installed={installation.components.slave_ea}
+                                    installed={installation.components.slave_ea.installed}
+                                    version={installation.components.slave_ea.version}
                                   />
                                 </div>
                                 <div className="mt-2">
@@ -365,15 +371,20 @@ export default function InstallationsPage() {
   );
 }
 
-function ComponentStatusItem({ name, installed }: { name: string; installed: boolean }) {
+function ComponentStatusItem({ name, installed, version }: { name: string; installed: boolean; version: string | null }) {
   return (
-    <div className="flex items-center gap-2 text-sm">
-      {installed ? (
-        <CheckCircle className="h-4 w-4 text-green-500" />
-      ) : (
-        <div className="h-4 w-4 rounded-full border-2 border-muted" />
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <div className="flex items-center gap-2">
+        {installed ? (
+          <CheckCircle className="h-4 w-4 text-green-500" />
+        ) : (
+          <div className="h-4 w-4 rounded-full border-2 border-muted" />
+        )}
+        <span className={installed ? 'text-foreground' : 'text-muted-foreground'}>{name}</span>
+      </div>
+      {installed && version && (
+        <span className="text-xs text-muted-foreground font-mono">{version}</span>
       )}
-      <span className={installed ? 'text-foreground' : 'text-muted-foreground'}>{name}</span>
     </div>
   );
 }
