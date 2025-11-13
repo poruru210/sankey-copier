@@ -12,6 +12,7 @@
 #define MyAppPublisher "SANKEY Copier Project"
 #define MyAppURL "https://github.com/your-org/sankey-copier"
 #define MyAppExeName "sankey-copier-server.exe"
+#define NodeJSVersion "20.18.1"
 
 [Setup]
 ; Basic application information
@@ -327,7 +328,7 @@ begin
               CustomMessage('DownloadNodeJS'),
               mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES then
     begin
-      NodeJSInstallUrl := 'https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi';
+      NodeJSInstallUrl := 'https://nodejs.org/dist/v{#NodeJSVersion}/node-v{#NodeJSVersion}-x64.msi';
       ShellExec('open', NodeJSInstallUrl, '', '', SW_SHOW, ewNoWait, Result);
       MsgBox(CustomMessage('InstallNodeJSFirst'), mbInformation, MB_OK);
       Result := False;

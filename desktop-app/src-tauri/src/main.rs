@@ -33,13 +33,23 @@ fn is_port_ready(port: u16) -> bool {
 /// Wait for the Next.js server to start responding
 /// Tries for up to 30 seconds with 500ms intervals
 fn wait_for_server(port: u16, max_attempts: u32) -> bool {
+    println!("Waiting for Next.js server to start on port {}...", port);
+
     for attempt in 0..max_attempts {
         if is_port_ready(port) {
-            println!("Server ready on port {} after {} attempts", port, attempt + 1);
+            println!("✓ Server ready on port {} after {} attempts", port, attempt + 1);
             return true;
         }
+
+        // Show progress every 2 seconds (4 attempts)
+        if attempt % 4 == 0 && attempt > 0 {
+            println!("  Still waiting... ({}/{} attempts)", attempt + 1, max_attempts);
+        }
+
         thread::sleep(Duration::from_millis(500));
     }
+
+    eprintln!("✗ Server failed to start within {} seconds", max_attempts / 2);
     false
 }
 
@@ -86,7 +96,22 @@ fn main() {
         Ok((child, port)) => (child, port),
         Err(e) => {
             eprintln!("Failed to start server: {}", e);
-            // Show error dialog and exit
+
+            // Show error message to user
+            let error_message = format!(
+                "Failed to start SANKEY Copier Desktop:\n\n{}\n\n\
+                 Please ensure:\n\
+                 - Node.js v20 LTS is installed\n\
+                 - Installation directory contains web-ui folder\n\n\
+                 インストールディレクトリに web-ui フォルダが存在することを確認してください。",
+                e
+            );
+
+            // Note: We can't show a GUI dialog before Tauri initializes,
+            // so we print to stderr and exit. The error will be visible
+            // if the user runs from command line.
+            eprintln!("\n{}\n", error_message);
+
             std::process::exit(1);
         }
     };
@@ -96,6 +121,7 @@ fn main() {
     // Wait for server to be ready (max 30 seconds)
     if !wait_for_server(port, 60) {
         eprintln!("Server failed to start within timeout period");
+        eprintln!("Next.js サーバーが起動しませんでした。Node.js がインストールされているか確認してください。");
         std::process::exit(1);
     }
 
