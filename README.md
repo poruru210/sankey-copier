@@ -170,6 +170,7 @@ SANKEY Copierは2つのデプロイ方法をサポートしています：
 ### セットアップ・運用
 - **[Cloudflare Setup Guide](docs/CLOUDFLARE_SETUP.md)** - Cloudflare Tunnel + Accessの設定手順（WebSocket対応）
 - **[Vercel Deployment Guide](docs/VERCEL_DEPLOYMENT.md)** - VercelへのWeb-UIデプロイ手順
+- **[GitHub Actions Vercel Deploy](docs/GITHUB_ACTIONS_VERCEL.md)** - GitHub Actions経由での自動デプロイ設定
 - **[セットアップガイド](docs/setup.md)** - 初心者向けの詳細なインストール手順（Desktop App版）
 - **[運用・デプロイガイド](docs/operations.md)** - 本番環境へのデプロイ、メンテナンス、バックアップ
 - **[トラブルシューティング](docs/troubleshooting.md)** - よくある問題と解決方法
