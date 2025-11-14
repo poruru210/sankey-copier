@@ -284,7 +284,15 @@ export default function InstallationsPage() {
                         </TableCell>
                         <TableCell className="font-medium py-2 md:py-1">
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs px-1.5 py-0">{installation.type}</Badge>
+                            <Badge
+                              className={`text-xs px-1.5 py-0 ${
+                                installation.type === 'MT4'
+                                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                  : 'bg-purple-500 text-white hover:bg-purple-600'
+                              }`}
+                            >
+                              {installation.type}
+                            </Badge>
                             <span className="text-xs">{installation.name}</span>
                           </div>
                         </TableCell>
