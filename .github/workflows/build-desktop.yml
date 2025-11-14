@@ -75,9 +75,9 @@ jobs:
       - name: Prepare Tauri dist (copy web build -> src-tauri/dist)
         working-directory: desktop-app/src-tauri
         run: |
-          $src = "$(Join-Path $PWD '..\src-tauri\resources\web-ui')"
-          $src = "desktop-app/src-tauri/resources/web-ui"
-          $dist = "desktop-app/src-tauri/dist"
+          # We're already in desktop-app/src-tauri, so use relative paths
+          $src = "resources\web-ui"
+          $dist = "dist"
 
           Write-Host "Creating $dist..."
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
