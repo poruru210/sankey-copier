@@ -19,7 +19,7 @@ jobs:
   compile-mql:
     name: Compile MQL4/MQL5 Files
     runs-on: windows-latest
-    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'mql' }}
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'mql' || inputs.build_target == '' }}
 
     strategy:
       matrix:

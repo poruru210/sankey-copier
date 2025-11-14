@@ -15,7 +15,7 @@ jobs:
   build-web-ui:
     name: Build Web UI
     runs-on: ubuntu-latest
-    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'web-ui' }}
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'web-ui' || inputs.build_target == '' }}
 
     steps:
       - name: Checkout code
