@@ -109,7 +109,7 @@ export default function SitesPage() {
           <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
           <div className="mb-4">
-            <h1 className="text-xl font-bold mb-1">{content.title}</h1>
+            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
             <p className="text-sm text-muted-foreground">{content.description}</p>
           </div>
 
@@ -133,7 +133,7 @@ export default function SitesPage() {
                   size="sm"
                   variant="outline"
                   onClick={handleStartAdd}
-                  className="gap-2"
+                  className="gap-2 min-h-[44px] md:min-h-0"
                 >
                   <Plus className="h-4 w-4" />
                   {content.addButton}
@@ -184,10 +184,11 @@ export default function SitesPage() {
                           size="sm"
                           variant="outline"
                           onClick={handleCancelEdit}
+                          className="min-h-[44px] md:min-h-0"
                         >
                           {content.cancel}
                         </Button>
-                        <Button type="button" size="sm" onClick={handleSave}>
+                        <Button type="button" size="sm" onClick={handleSave} className="min-h-[44px] md:min-h-0">
                           {content.save}
                         </Button>
                       </div>
@@ -214,7 +215,7 @@ export default function SitesPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() => handleStartEdit(site)}
-                          className="h-9 w-9 p-0"
+                          className="h-11 w-11 md:h-9 md:w-9 p-0"
                           title={content.edit.value}
                         >
                           <Edit2 className="h-4 w-4" />
@@ -225,7 +226,7 @@ export default function SitesPage() {
                           variant="ghost"
                           onClick={() => handleDelete(site)}
                           disabled={sites.length === 1}
-                          className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                          className="h-11 w-11 md:h-9 md:w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
                           title={content.delete.value}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -271,10 +272,11 @@ export default function SitesPage() {
                         size="sm"
                         variant="outline"
                         onClick={handleCancelEdit}
+                        className="min-h-[44px] md:min-h-0"
                       >
                         {content.cancel}
                       </Button>
-                      <Button type="button" size="sm" onClick={handleSave}>
+                      <Button type="button" size="sm" onClick={handleSave} className="min-h-[44px] md:min-h-0">
                         {content.add}
                       </Button>
                     </div>

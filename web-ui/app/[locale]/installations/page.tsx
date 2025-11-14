@@ -168,7 +168,7 @@ export default function InstallationsPage() {
           <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
           <div className="mb-4">
-            <h1 className="text-xl font-bold mb-1">{content.title}</h1>
+            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
             <p className="text-sm text-muted-foreground">
               {content.description}
             </p>
@@ -180,7 +180,7 @@ export default function InstallationsPage() {
               onClick={fetchInstallations}
               disabled={loading}
               variant="outline"
-              className="gap-2"
+              className="gap-2 min-h-[44px] md:min-h-0"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               {content.refreshDetection}
@@ -189,7 +189,7 @@ export default function InstallationsPage() {
               <Button
                 onClick={handleBatchInstall}
                 disabled={selectedIds.size === 0 || isPending || installing !== null}
-                className="gap-2"
+                className="gap-2 min-h-[44px] md:min-h-0"
               >
                 {isPending ? (
                   <>
@@ -245,10 +245,10 @@ export default function InstallationsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="rounded-lg border bg-card">
+            <div className="rounded-lg border bg-card overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="h-9">
+                  <TableRow className="h-12 md:h-9">
                     <TableHead className="w-[40px] py-2">
                       <Checkbox
                         checked={selectedIds.size === optimisticInstallations.length && optimisticInstallations.length > 0}
@@ -256,7 +256,7 @@ export default function InstallationsPage() {
                       />
                     </TableHead>
                     <TableHead className="py-2">{content.name}</TableHead>
-                    <TableHead className="py-2">{content.installationPath}</TableHead>
+                    <TableHead className="py-2 hidden md:table-cell">{content.installationPath}</TableHead>
                     <TableHead className="py-2">{content.version}</TableHead>
                     <TableHead className="py-2">{content.components}</TableHead>
                     <TableHead className="text-right py-2">{content.actions}</TableHead>
@@ -274,33 +274,33 @@ export default function InstallationsPage() {
                         key={installation.id}
                         data-state={isSelected ? 'selected' : undefined}
                         onClick={() => toggleSelection(installation.id)}
-                        className="cursor-pointer h-10"
+                        className="cursor-pointer h-14 md:h-10"
                       >
-                        <TableCell onClick={(e) => e.stopPropagation()} className="py-1">
+                        <TableCell onClick={(e) => e.stopPropagation()} className="py-2 md:py-1">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelection(installation.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-medium py-1">
+                        <TableCell className="font-medium py-2 md:py-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-xs px-1.5 py-0">{installation.type}</Badge>
-                            <span>{installation.name}</span>
+                            <span className="text-sm md:text-base">{installation.name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-1">
+                        <TableCell className="py-2 md:py-1 hidden md:table-cell">
                           <p className="text-xs font-mono truncate max-w-xs" title={installation.path}>
                             {installation.path}
                           </p>
                         </TableCell>
-                        <TableCell className="py-1">
+                        <TableCell className="py-2 md:py-1">
                           {installation.version ? (
                             <span className="text-xs font-mono">v{installation.version}</span>
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="py-1">
+                        <TableCell className="py-2 md:py-1">
                           <div className="flex gap-2">
                             <div className="flex items-center gap-1" title={content.dll.value}>
                               {installation.components.dll ? (
@@ -328,12 +328,13 @@ export default function InstallationsPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right py-1" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="text-right py-2 md:py-1" onClick={(e) => e.stopPropagation()}>
                           <Button
                             onClick={() => handleInstall(installation)}
                             disabled={isInstalling || isPending}
                             size="sm"
                             variant={allComponentsInstalled ? 'outline' : 'default'}
+                            className="min-h-[44px] md:min-h-0"
                           >
                             {isInstalling ? (
                               <>
