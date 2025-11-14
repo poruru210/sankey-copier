@@ -151,7 +151,6 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{code:GetWebUIUrl}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\Open Desktop App"; Filename: "{app}\sankey-copier-desktop.exe"
 Name: "{group}\Open Web Interface"; Filename: "{code:GetWebUIUrl}"
 Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query SankeyCopierServer"
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
