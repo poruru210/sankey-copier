@@ -100,6 +100,7 @@ jobs:
     uses: ./.github/workflows/build-desktop.yml
     with:
       version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
 
   build-installer:
     name: Build Installer
