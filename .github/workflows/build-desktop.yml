@@ -91,6 +91,17 @@ jobs:
           pnpm install
         shell: pwsh
 
+      # Modify tauri.conf.json to skip beforeBuildCommand (web-ui already built)
+      - name: Modify tauri.conf.json
+        run: |
+          cd desktop-app
+          $configPath = "src-tauri/tauri.conf.json"
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          $config.build.beforeBuildCommand = ""
+          $config | ConvertTo-Json -Depth 100 | Set-Content $configPath
+          Write-Host "Modified tauri.conf.json to skip beforeBuildCommand" -ForegroundColor Green
+        shell: pwsh
+
       # Build Tauri application (raw EXE for Inno Setup)
       - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
