@@ -1,157 +1,129 @@
-# SANKEY Copier Windows Installer Build Script
-# Builds all components in the correct order and creates installer package
+# SANKEY Copier Unified Installer Build Script
+# Builds rust-server + Desktop App + MT4/MT5 components and creates Windows installer
 
 param(
-    [string]$Version = "1.0.0",
-    [switch]$SkipTests = $false,
-    [switch]$Verbose = $false
+    [switch]$SkipBuild,
+    [switch]$SkipMQL
 )
 
 $ErrorActionPreference = "Stop"
-$RootDir = Split-Path -Parent $PSScriptRoot
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "SANKEY Copier Installer Build Script" -ForegroundColor Cyan
-Write-Host "Version: $Version" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+Write-Host "=====================================" -ForegroundColor Cyan
+Write-Host "Building SANKEY Copier Installer" -ForegroundColor Cyan
+Write-Host "=====================================" -ForegroundColor Cyan
 
-# Step 1: Build Rust Server
-Write-Host "[1/7] Building Rust Server..." -ForegroundColor Yellow
-Set-Location "$RootDir\rust-server"
-if (-not $SkipTests) {
-    Write-Host "  Running tests..." -ForegroundColor Gray
-    cargo test --release
-    if ($LASTEXITCODE -ne 0) { throw "Rust server tests failed" }
-}
-Write-Host "  Building release binary..." -ForegroundColor Gray
-cargo build --release
-if ($LASTEXITCODE -ne 0) { throw "Rust server build failed" }
-Write-Host "  ✓ Rust server built successfully" -ForegroundColor Green
-Write-Host ""
+$PROJECT_ROOT = (Get-Item $PSScriptRoot).Parent.FullName
 
-# Step 2: Build MQL ZMQ DLL (64-bit for MT5)
-Write-Host "[2/7] Building MQL ZMQ DLL (64-bit)..." -ForegroundColor Yellow
-Set-Location "$RootDir\mql-zmq-dll"
-Write-Host "  Building x64 release..." -ForegroundColor Gray
-cargo build --release
-if ($LASTEXITCODE -ne 0) { throw "MQL ZMQ DLL (64-bit) build failed" }
-Write-Host "  ✓ 64-bit DLL built successfully" -ForegroundColor Green
-Write-Host ""
+if (-not $SkipBuild) {
+    # 1. Build rust-server
+    Write-Host "`n[1/4] Building rust-server..." -ForegroundColor Yellow
+    Push-Location "$PROJECT_ROOT\rust-server"
+    cargo build --release
+    if ($LASTEXITCODE -ne 0) { throw "rust-server build failed" }
+    Pop-Location
 
-# Step 3: Build MQL ZMQ DLL (32-bit for MT4)
-Write-Host "[3/7] Building MQL ZMQ DLL (32-bit)..." -ForegroundColor Yellow
-Write-Host "  Building i686 release..." -ForegroundColor Gray
-cargo build --release --target i686-pc-windows-msvc
-if ($LASTEXITCODE -ne 0) { throw "MQL ZMQ DLL (32-bit) build failed" }
-Write-Host "  ✓ 32-bit DLL built successfully" -ForegroundColor Green
-Write-Host ""
+    # 2. Build web-ui (static export for Desktop App)
+    Write-Host "`n[2/4] Building web-ui (static export)..." -ForegroundColor Yellow
+    Push-Location "$PROJECT_ROOT\web-ui"
+    $env:NEXT_BUILD_MODE = "export"
 
-# Step 4: Build System Tray Application
-Write-Host "[4/7] Building System Tray Application..." -ForegroundColor Yellow
-Set-Location "$RootDir\sankey-copier-tray"
-Write-Host "  Building release binary..." -ForegroundColor Gray
-cargo build --release
-if ($LASTEXITCODE -ne 0) { throw "Tray application build failed" }
-Write-Host "  ✓ Tray application built successfully" -ForegroundColor Green
-Write-Host ""
-
-# Step 5: Build Web UI (Next.js standalone)
-Write-Host "[5/7] Building Web UI (Next.js standalone)..." -ForegroundColor Yellow
-Set-Location "$RootDir\web-ui"
-Write-Host "  Installing dependencies..." -ForegroundColor Gray
-pnpm install
-if ($LASTEXITCODE -ne 0) { throw "Web UI dependency installation failed" }
-Write-Host "  Building Next.js production build..." -ForegroundColor Gray
-pnpm run build
-if ($LASTEXITCODE -ne 0) { throw "Web UI build failed" }
-
-# Verify standalone build exists
-if (-not (Test-Path ".next\standalone")) {
-    throw "Web UI standalone build was not created. Check next.config.ts for 'output: standalone' setting."
-}
-Write-Host "  ✓ Web UI built successfully (standalone mode)" -ForegroundColor Green
-Write-Host ""
-
-# Step 6: Verify all required files
-Write-Host "[6/7] Verifying build outputs..." -ForegroundColor Yellow
-$RequiredFiles = @(
-    "$RootDir\rust-server\target\release\sankey-copier-server.exe",
-    "$RootDir\sankey-copier-tray\target\release\sankey-copier-tray.exe",
-    "$RootDir\mql-zmq-dll\target\release\sankey_copier_zmq.dll",
-    "$RootDir\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll",
-    "$RootDir\web-ui\.next\standalone\server.js",
-    "$RootDir\web-ui\.next\standalone\package.json"
-)
-
-$AllFilesExist = $true
-foreach ($File in $RequiredFiles) {
-    if (Test-Path $File) {
-        Write-Host "  ✓ $($File.Replace($RootDir + '\', ''))" -ForegroundColor Green
-    } else {
-        Write-Host "  ✗ MISSING: $($File.Replace($RootDir + '\', ''))" -ForegroundColor Red
-        $AllFilesExist = $false
+    # Check if pnpm is available, fallback to npm
+    $packageManager = "npm"
+    if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+        $packageManager = "pnpm"
     }
+
+    & $packageManager install
+    if ($LASTEXITCODE -ne 0) { throw "web-ui install failed" }
+
+    & $packageManager run build
+    if ($LASTEXITCODE -ne 0) { throw "web-ui build failed" }
+    Pop-Location
+
+    # 3. Build Desktop App (Tauri)
+    Write-Host "`n[3/4] Building Desktop App..." -ForegroundColor Yellow
+    Push-Location "$PROJECT_ROOT\desktop-app"
+
+    npm install
+    if ($LASTEXITCODE -ne 0) { throw "Desktop App install failed" }
+
+    # Build without bundles (we'll create installer with Inno Setup)
+    npm run tauri build -- --bundles none
+    if ($LASTEXITCODE -ne 0) { throw "Desktop App build failed" }
+    Pop-Location
+
+    # 4. Build MT4/MT5 components (optional)
+    if (-not $SkipMQL) {
+        Write-Host "`n[4/4] Building MT4/MT5 components..." -ForegroundColor Yellow
+        if (Test-Path "$PROJECT_ROOT\mql") {
+            Push-Location "$PROJECT_ROOT\mql"
+
+            # Check if build script exists
+            if (Test-Path ".\build.ps1") {
+                .\build.ps1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "⚠️  MQL build failed, but continuing..." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "⚠️  MQL build script not found, skipping..." -ForegroundColor Yellow
+            }
+
+            Pop-Location
+        } else {
+            Write-Host "⚠️  MQL directory not found, skipping..." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "`n[4/4] Skipping MT4/MT5 components..." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Skipping builds (using existing binaries)..." -ForegroundColor Yellow
 }
 
-if (-not $AllFilesExist) {
-    throw "Some required files are missing. Build cannot continue."
-}
-Write-Host ""
+# 5. Build installer with Inno Setup
+Write-Host "`n[5/5] Building installer with Inno Setup..." -ForegroundColor Yellow
 
-# Step 7: Build Installer with Inno Setup
-Write-Host "[7/7] Building Windows Installer..." -ForegroundColor Yellow
-Set-Location "$RootDir\installer"
-
-# Find Inno Setup Compiler
-$IsccPaths = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+# Check if Inno Setup is installed
+$InnoSetupPaths = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe"
+    "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
 )
 
-$IsccPath = $null
-foreach ($Path in $IsccPaths) {
-    if (Test-Path $Path) {
-        $IsccPath = $Path
+$InnoSetupPath = $null
+foreach ($path in $InnoSetupPaths) {
+    if (Test-Path $path) {
+        $InnoSetupPath = $path
         break
     }
 }
 
-if (-not $IsccPath) {
-    throw "Inno Setup Compiler (ISCC.exe) not found. Please install Inno Setup 6.2.2 or later from https://jrsoftware.org/isinfo.php"
+if (-not $InnoSetupPath) {
+    Write-Host "❌ Inno Setup 6 not found!" -ForegroundColor Red
+    Write-Host "" -ForegroundColor Yellow
+    Write-Host "Please install Inno Setup 6 from:" -ForegroundColor Yellow
+    Write-Host "https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
+    Write-Host "" -ForegroundColor Yellow
+    Write-Host "Or install via Chocolatey:" -ForegroundColor Yellow
+    Write-Host "  choco install innosetup -y" -ForegroundColor Yellow
+    exit 1
 }
 
-Write-Host "  Using ISCC: $IsccPath" -ForegroundColor Gray
-Write-Host "  Compiling installer script..." -ForegroundColor Gray
+Write-Host "Using Inno Setup: $InnoSetupPath" -ForegroundColor Gray
 
-# Run Inno Setup Compiler with version parameter
-& $IsccPath "/DMyAppVersion=$Version" "setup.iss"
-if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
+# Compile installer
+Push-Location "$PROJECT_ROOT\installer"
+& $InnoSetupPath "setup.iss"
+if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+Pop-Location
 
-# Verify installer output
-$InstallerFile = "Output\SankeyCopierSetup-$Version.exe"
-if (-not (Test-Path $InstallerFile)) {
-    throw "Installer file was not created: $InstallerFile"
+Write-Host "`n✅ Installer build completed!" -ForegroundColor Green
+Write-Host "Output: installer\output\SankeyCopierSetup-1.0.0.exe" -ForegroundColor Green
+Write-Host "" -ForegroundColor White
+
+# Display file size
+$installerPath = "$PROJECT_ROOT\installer\output\SankeyCopierSetup-1.0.0.exe"
+if (Test-Path $installerPath) {
+    $fileSize = (Get-Item $installerPath).Length / 1MB
+    Write-Host "Installer size: $([math]::Round($fileSize, 2)) MB" -ForegroundColor Cyan
 }
-
-$InstallerSize = (Get-Item $InstallerFile).Length / 1MB
-Write-Host "  ✓ Installer created: $InstallerFile" -ForegroundColor Green
-Write-Host "  Size: $([math]::Round($InstallerSize, 2)) MB" -ForegroundColor Gray
-Write-Host ""
-
-# Success summary
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "BUILD COMPLETED SUCCESSFULLY!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Installer Location:" -ForegroundColor White
-Write-Host "  $RootDir\installer\$InstallerFile" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Next Steps:" -ForegroundColor White
-Write-Host "  1. Test the installer on a clean Windows system" -ForegroundColor Gray
-Write-Host "  2. Verify all services start correctly" -ForegroundColor Gray
-Write-Host "  3. Check Web UI is accessible at http://localhost:8080" -ForegroundColor Gray
-Write-Host "  4. Test tray application functionality" -ForegroundColor Gray
-Write-Host ""

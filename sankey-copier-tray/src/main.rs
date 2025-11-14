@@ -1,7 +1,7 @@
 //! SANKEY Copier System Tray Application
 //!
 //! This application provides a system tray interface for controlling
-//! Windows services for SANKEY Copier, including the server and web UI.
+//! the rust-server Windows service and launching the Desktop App.
 
 #![windows_subsystem = "windows"] // Hide console window
 
@@ -10,7 +10,6 @@ use tray_icon::TrayIconBuilder;
 use winit::event_loop::EventLoop;
 use winit::application::ApplicationHandler;
 
-mod config;
 mod elevation;
 mod icon;
 mod menu;

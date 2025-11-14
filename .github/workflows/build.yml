@@ -100,10 +100,11 @@ jobs:
     uses: ./.github/workflows/build-desktop.yml
     with:
       version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
 
   build-installer:
     name: Build Installer
-    needs: [version-info, build-rust, build-web, build-mql]
+    needs: [version-info, build-rust, build-mql, build-desktop]
     if: ${{ github.event.inputs.build_target == 'all' || github.event.inputs.build_target == null || github.event.inputs.build_target == '' }}
     uses: ./.github/workflows/build-installer.yml
     with:

@@ -6,11 +6,11 @@
   "build": {
     "beforeDevCommand": "cd ../../web-ui && pnpm run dev",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "cd ../../web-ui && cross-env NEXT_BUILD_MODE=export pnpm build",
     "frontendDist": "../../web-ui/out"
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": "all",
     "icon": [
       "icons/icon.ico"

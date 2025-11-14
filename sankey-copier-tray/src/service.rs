@@ -1,7 +1,7 @@
 //! Windows service management for SANKEY Copier.
 //!
 //! This module provides functions to start, stop, restart, and query
-//! the status of Windows services using NSSM.
+//! the status of the rust-server Windows service.
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
@@ -10,7 +10,6 @@ use std::process::Command;
 use crate::elevation::run_elevated_batch_command;
 
 pub const SERVER_SERVICE: &str = "SankeyCopierServer";
-pub const WEBUI_SERVICE: &str = "SankeyCopierWebUI";
 
 /// Get the path to nssm.exe
 ///
@@ -37,25 +36,6 @@ fn get_nssm_path() -> Option<PathBuf> {
     }
 
     None
-}
-
-// ============================================================================
-// Web UI Service Control
-// ============================================================================
-
-/// Start Web UI service
-pub fn start_webui_service() -> Result<()> {
-    run_elevated_nssm_command("start", &[WEBUI_SERVICE])
-}
-
-/// Stop Web UI service
-pub fn stop_webui_service() -> Result<()> {
-    run_elevated_nssm_command("stop", &[WEBUI_SERVICE])
-}
-
-/// Restart Web UI service
-pub fn restart_webui_service() -> Result<()> {
-    run_elevated_nssm_command("restart", &[WEBUI_SERVICE])
 }
 
 // ============================================================================

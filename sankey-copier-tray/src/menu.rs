@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use winit::event_loop::EventLoopProxy;
 
-use crate::config;
 use crate::service;
 use crate::ui;
 
@@ -45,32 +44,18 @@ pub fn create_menu() -> Result<Menu> {
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
-    // UI Submenu (includes Open Web Interface and service controls for UI)
-    let ui_open_item = MenuItem::new("Open", true, None);
-    ids.insert(ui_open_item.id().clone(), "ui_open".to_string());
+    // Open Desktop App
+    let open_desktop_item = MenuItem::new("Open Desktop App", true, None);
+    ids.insert(open_desktop_item.id().clone(), "open_desktop".to_string());
+    menu.append(&open_desktop_item)?;
 
-    let ui_start_item = MenuItem::new("Start", true, None);
-    ids.insert(ui_start_item.id().clone(), "ui_start".to_string());
+    // Separator
+    menu.append(&PredefinedMenuItem::separator())?;
 
-    let ui_stop_item = MenuItem::new("Stop", true, None);
-    ids.insert(ui_stop_item.id().clone(), "ui_stop".to_string());
-
-    let ui_restart_item = MenuItem::new("Restart", true, None);
-    ids.insert(ui_restart_item.id().clone(), "ui_restart".to_string());
-
-    // Get initial status
-    let webui_status = service::query_service_status_safe(service::WEBUI_SERVICE);
+    // Get server status
     let server_status = service::query_service_status_safe(service::SERVER_SERVICE);
 
-    let ui_title = format!("UI {}", get_status_indicator(&webui_status));
-    let ui_submenu = Submenu::with_items(
-        &ui_title,
-        true,
-        &[&ui_open_item, &ui_start_item, &ui_stop_item, &ui_restart_item],
-    )?;
-    menu.append(&ui_submenu)?;
-
-    // Service Submenu
+    // Server Submenu
     let service_start_item = MenuItem::new("Start", true, None);
     ids.insert(service_start_item.id().clone(), "service_start".to_string());
 
@@ -113,32 +98,14 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
     let action = ids.get(id).map(|s| s.as_str()).unwrap_or("");
 
     match action {
-        // UI submenu actions
-        "ui_open" => {
-            if let Err(e) = open_web_interface() {
-                ui::show_error(&format!("Failed to open web interface: {}", e));
+        // Open Desktop App
+        "open_desktop" => {
+            if let Err(e) = open_desktop_app() {
+                ui::show_error(&format!("Failed to open Desktop App: {}", e));
             }
         }
 
-        "ui_start" => {
-            if let Err(e) = service::start_webui_service() {
-                ui::show_error(&format!("Failed to start Web UI: {}", e));
-            }
-        }
-
-        "ui_stop" => {
-            if let Err(e) = service::stop_webui_service() {
-                ui::show_error(&format!("Failed to stop Web UI: {}", e));
-            }
-        }
-
-        "ui_restart" => {
-            if let Err(e) = service::restart_webui_service() {
-                ui::show_error(&format!("Failed to restart Web UI: {}", e));
-            }
-        }
-
-        // Service submenu actions
+        // Server submenu actions
         "service_start" => {
             if let Err(e) = service::start_server_service() {
                 ui::show_error(&format!("Failed to start Server: {}", e));
@@ -171,10 +138,38 @@ pub fn handle_menu_event(id: &MenuId, event_loop_proxy: &EventLoopProxy<AppEvent
     }
 }
 
-/// Open web interface in default browser
-fn open_web_interface() -> Result<()> {
-    let web_url = config::get_web_url();
-    webbrowser::open(&web_url).map_err(|e| anyhow::anyhow!("Failed to open browser: {}", e))
+/// Open Desktop App
+fn open_desktop_app() -> Result<()> {
+    // Get the path to the Desktop App executable
+    let desktop_app_path = get_desktop_app_path()?;
+
+    // Launch the Desktop App
+    std::process::Command::new(&desktop_app_path)
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to launch Desktop App: {}", e))?;
+
+    Ok(())
+}
+
+/// Get the path to the Desktop App executable
+fn get_desktop_app_path() -> Result<std::path::PathBuf> {
+    // Try to find sankey-copier-desktop.exe in the same directory as the tray app
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let desktop_path = exe_dir.join("sankey-copier-desktop.exe");
+            if desktop_path.exists() {
+                return Ok(desktop_path);
+            }
+        }
+    }
+
+    // Fallback to default installation path
+    let default_path = std::path::PathBuf::from("C:\\Program Files\\SANKEY Copier\\sankey-copier-desktop.exe");
+    if default_path.exists() {
+        return Ok(default_path);
+    }
+
+    Err(anyhow::anyhow!("Desktop App executable not found"))
 }
 
 /// Check for menu events and handle them

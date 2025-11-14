@@ -4,7 +4,11 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Version number for the build'
+        description: 'Package version (e.g., 0.1.0)'
+        required: true
+        type: string
+      file_version:
+        description: 'File version (e.g., 0.1.0.123)'
         required: true
         type: string
     outputs:
@@ -56,7 +60,6 @@ jobs:
           path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             desktop-app/src-tauri/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('desktop-app/src-tauri/Cargo.lock') }}
@@ -92,21 +95,41 @@ jobs:
           pnpm install
         shell: pwsh
 
-      # Build Tauri application
+      # Modify tauri.conf.json: inject version and skip beforeBuildCommand
+      - name: Modify tauri.conf.json
+        run: |
+          cd desktop-app
+          $configPath = "src-tauri/tauri.conf.json"
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+
+          # Inject version information
+          $version = "${{ inputs.version }}"
+          $config.version = $version
+          Write-Host "Injected version: $version" -ForegroundColor Cyan
+
+          # Skip beforeBuildCommand (web-ui already built)
+          $config.build.beforeBuildCommand = ""
+
+          $config | ConvertTo-Json -Depth 100 | Set-Content $configPath
+          Write-Host "Modified tauri.conf.json - Version: $version" -ForegroundColor Green
+        shell: pwsh
+
+      # Build Tauri application (raw EXE for Inno Setup)
       - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ inputs.version }}
+          FILE_VERSION: ${{ inputs.file_version }}
         with:
           projectPath: desktop-app
+          args: "--no-bundle"
 
       # Upload artifacts
       - name: Upload Desktop App artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-desktop
-          path: |
-            desktop-app/src-tauri/target/release/bundle/**/*.exe
-            desktop-app/src-tauri/target/release/bundle/**/*.msi
+          path: desktop-app/src-tauri/target/release/sankey-copier-desktop.exe
           retention-days: 7
           if-no-files-found: error
