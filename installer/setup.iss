@@ -6,7 +6,7 @@
 #define MyAppPublisher "SANKEY Copier Team"
 #define MyAppURL "https://github.com/poruru210/sankey-copier"
 #define MyAppExeName "sankey-copier-desktop.exe"
-#define MyServerExeName "rust-server.exe"
+#define MyServerExeName "sankey-copier-server.exe"
 #define MyTrayExeName "sankey-copier-tray.exe"
 
 [Setup]
