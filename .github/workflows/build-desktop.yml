@@ -63,7 +63,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # Build Web UI
+      # Build Web UI (static export)
       - name: Build Web UI
         run: |
           cd web-ui
@@ -71,76 +71,17 @@ jobs:
           Write-Host "Installing dependencies..." -ForegroundColor Cyan
           pnpm install
 
-          Write-Host "Building Next.js application..." -ForegroundColor Cyan
+          Write-Host "Building Next.js application (static export)..." -ForegroundColor Cyan
           pnpm run build
 
-          # Verify build output
-          if (!(Test-Path ".next/standalone")) {
-            Write-Host "Build failed: standalone directory not found" -ForegroundColor Red
+          # Verify static export output
+          if (!(Test-Path "out")) {
+            Write-Host "Build failed: out directory not found" -ForegroundColor Red
             exit 1
           }
 
           Write-Host "Build completed successfully" -ForegroundColor Green
-        shell: pwsh
-
-      # Prepare dist for Tauri
-      - name: Prepare dist for Tauri
-        run: |
-          Write-Host "Preparing dist directory for Tauri..." -ForegroundColor Cyan
-
-          # Clean and create dist directory
-          $distPath = "desktop-app/src-tauri/dist"
-          if (Test-Path $distPath) {
-            Remove-Item -Path $distPath -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $distPath -Force | Out-Null
-
-          # Copy standalone build
-          Write-Host "Copying standalone build..." -ForegroundColor Yellow
-          Copy-Item -Path "web-ui/.next/standalone/*" -Destination $distPath -Recurse -Force
-
-          # Copy static assets
-          Write-Host "Copying static assets..." -ForegroundColor Yellow
-          $staticSource = "web-ui/.next/static"
-          if (Test-Path $staticSource) {
-            $staticDest = "$distPath/.next/static"
-            New-Item -ItemType Directory -Path $staticDest -Force | Out-Null
-            Copy-Item -Path "$staticSource/*" -Destination $staticDest -Recurse -Force
-          }
-
-          # Copy public files
-          Write-Host "Copying public files..." -ForegroundColor Yellow
-          $publicSource = "web-ui/public"
-          if (Test-Path $publicSource) {
-            Copy-Item -Path $publicSource -Destination $distPath -Recurse -Force
-          }
-
-          # Verify critical files
-          Write-Host "`nVerifying dist contents:" -ForegroundColor Cyan
-          $checks = @(
-            @{Path = "$distPath/server.js"; Name = "server.js"},
-            @{Path = "$distPath/package.json"; Name = "package.json"},
-            @{Path = "$distPath/node_modules"; Name = "node_modules"},
-            @{Path = "$distPath/.next"; Name = ".next directory"},
-            @{Path = "$distPath/public"; Name = "public directory"}
-          )
-
-          $allGood = $true
-          foreach ($check in $checks) {
-            if (Test-Path $check.Path) {
-              Write-Host "  ✓ $($check.Name)" -ForegroundColor Green
-            } else {
-              Write-Host "  ✗ $($check.Name) - MISSING" -ForegroundColor Red
-              $allGood = $false
-            }
-          }
-
-          if (!$allGood) {
-            Write-Host "`nSome required files are missing!" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "`nDist preparation complete!" -ForegroundColor Green
+          Write-Host "Output directory size: $((Get-ChildItem -Path out -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB) MB" -ForegroundColor Cyan
         shell: pwsh
 
       # Build Tauri application

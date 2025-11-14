@@ -1,35 +1,22 @@
 import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
+// Static export mode for Tauri - no Node.js runtime required
+// Assets are served directly by Tauri's webview
+const isProd = process.env.NODE_ENV === 'production';
+const internalHost = process.env.TAURI_DEV_HOST || 'localhost';
+
 const nextConfig: NextConfig = {
-  // Output standalone for Windows service deployment
-  output: 'standalone',
+  // Static export mode - pre-renders all pages to HTML/CSS/JS at build time
+  output: 'export',
 
-  // Exclude unnecessary packages from standalone output
-  // Reduces bundle size and eliminates dev dependencies
-  outputFileTracingExcludes: {
-    '*': [
-      // Build tools (not needed at runtime)
-      'esbuild',
-      'webpack',
-      '@swc/core',
-      'typescript',
-
-      // Testing tools
-      '@playwright/test',
-      '@types/*',
-
-      // Linting and formatting
-      'eslint',
-      'eslint-config-next',
-      'prettier',
-
-      // PostCSS and Tailwind build tools
-      'postcss',
-      'autoprefixer',
-      'tailwindcss',
-    ],
+  // Required for static export - Next.js Image Optimization API not available
+  images: {
+    unoptimized: true,
   },
+
+  // For Tauri dev mode - use localhost:8080, for production use relative paths
+  assetPrefix: isProd ? undefined : `http://${internalHost}:8080`,
 
   webpack: (config) => {
     // Filter out problematic environment variables

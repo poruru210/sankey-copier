@@ -4,19 +4,16 @@
   "version": "1.0.0",
   "identifier": "com.sankey.copier.desktop",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "cd ../../web-ui && pnpm run dev",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "",
-    "frontendDist": "dist"
+    "beforeBuildCommand": "cd ../../web-ui && pnpm run build",
+    "frontendDist": "../../web-ui/out"
   },
   "bundle": {
     "active": true,
     "targets": "all",
     "icon": [
       "icons/icon.ico"
-    ],
-    "resources": [
-      "resources/web-ui/**"
     ],
     "windows": {
       "certificateThumbprint": null,
