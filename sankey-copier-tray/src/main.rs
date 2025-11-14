@@ -6,6 +6,7 @@
 #![windows_subsystem = "windows"] // Hide console window
 
 use anyhow::Result;
+use std::time::{Duration, Instant};
 use tray_icon::TrayIconBuilder;
 use winit::event_loop::EventLoop;
 use winit::application::ApplicationHandler;
@@ -21,6 +22,8 @@ mod ui;
 
 struct App {
     event_loop_proxy: winit::event_loop::EventLoopProxy<menu::AppEvent>,
+    tray_icon: tray_icon::TrayIcon,
+    last_status_check: Instant,
 }
 
 impl ApplicationHandler<menu::AppEvent> for App {
@@ -51,6 +54,14 @@ impl ApplicationHandler<menu::AppEvent> for App {
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         // Check for menu events periodically
         menu::check_menu_events(&self.event_loop_proxy);
+
+        // Update service status every 500ms by rebuilding the menu
+        if self.last_status_check.elapsed() >= Duration::from_millis(500) {
+            if let Ok(new_menu) = menu::create_menu() {
+                self.tray_icon.set_menu(Some(Box::new(new_menu)));
+            }
+            self.last_status_check = Instant::now();
+        }
     }
 }
 
@@ -90,11 +101,13 @@ fn main() -> Result<()> {
     let event_loop_proxy = event_loop.create_proxy();
 
     // Create tray icon
-    let _tray_icon = create_tray_icon()?;
+    let tray_icon = create_tray_icon()?;
 
     // Create app handler
     let mut app = App {
         event_loop_proxy: event_loop_proxy.clone(),
+        tray_icon,
+        last_status_check: Instant::now(),
     };
 
     // Run event loop using run_app
