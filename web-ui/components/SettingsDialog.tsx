@@ -157,7 +157,7 @@ export function SettingsDialog({
           <DialogTitle>{initialData ? content.editTitle.value : content.createTitle.value}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
-          <div className="space-y-6 overflow-y-auto pr-2">
+          <div className="space-y-4 overflow-y-auto pr-2">
             {/* Account Selection - Only show in create mode */}
             {!initialData && (
               <>
@@ -263,14 +263,14 @@ export function SettingsDialog({
 
             {/* Validation Messages */}
             {validation.errors.length > 0 && (
-              <div className="rounded-md bg-red-50 dark:bg-red-950 p-4 border border-red-200 dark:border-red-800">
+              <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 border border-red-200 dark:border-red-800">
                 <div className="flex">
-                  <AlertCircle className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="h-4 w-4 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                    <h3 className="text-xs font-medium text-red-800 dark:text-red-200">
                       {content.errorTitle.value}
                     </h3>
-                    <ul className="mt-2 text-sm text-red-700 dark:text-red-300 list-disc list-inside space-y-1">
+                    <ul className="mt-1 text-xs text-red-700 dark:text-red-300 list-disc list-inside space-y-0.5">
                       {validation.errors.map((error, index) => (
                         <li key={index}>{error}</li>
                       ))}
@@ -281,14 +281,14 @@ export function SettingsDialog({
             )}
 
             {validation.warnings.length > 0 && validation.errors.length === 0 && (
-              <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-4 border border-yellow-200 dark:border-yellow-800">
+              <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-3 border border-yellow-200 dark:border-yellow-800">
                 <div className="flex">
-                  <AlertTriangle className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                    <h3 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
                       {content.warningTitle.value}
                     </h3>
-                    <ul className="mt-2 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside space-y-1">
+                    <ul className="mt-1 text-xs text-yellow-700 dark:text-yellow-300 list-disc list-inside space-y-0.5">
                       {validation.warnings.map((warning, index) => (
                         <li key={index}>{warning}</li>
                       ))}
