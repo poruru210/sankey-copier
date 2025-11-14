@@ -69,7 +69,15 @@ jobs:
 
       - name: Install Tauri CLI
         run: |
-          cargo install tauri-cli --version ^2.0.0 --locked
+          # Check if Tauri CLI is already installed
+          if (Get-Command cargo-tauri -ErrorAction SilentlyContinue) {
+            Write-Host "Tauri CLI already installed"
+            cargo tauri --version
+          } else {
+            Write-Host "Installing Tauri CLI..."
+            cargo install tauri-cli --version "^2.0.0" --locked
+            cargo tauri --version
+          }
         shell: pwsh
 
       - name: Prepare Tauri dist (copy web build -> src-tauri/dist)
@@ -121,8 +129,34 @@ jobs:
             Write-Host "❌ Cargo.toml not found in current working directory: $(Get-Location)"
             exit 1
           }
+
+          # Verify dist directory contents
+          Write-Host "Contents of dist directory before build:"
+          if (Test-Path "dist") {
+            Get-ChildItem -Path dist | ForEach-Object { Write-Host $_.FullName }
+          } else {
+            Write-Host "dist directory not found!"
+          }
+
+          # Check for index.html or server.js in dist
+          if (-not ((Test-Path "dist/index.html") -or (Test-Path "dist/server.js"))) {
+            Write-Host "❌ Neither dist/index.html nor dist/server.js found - Web UI build missing!"
+            Write-Host "Contents of dist directory:"
+            Get-ChildItem -Path dist -Recurse | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+
+          # Clean and build with verbose output
           cargo clean
-          cargo tauri build
+          $env:RUST_BACKTRACE = "full"
+          cargo tauri build --verbose 2>&1 | Tee-Object -Variable buildOutput
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            Write-Host "❌ Tauri build failed with exit code: $exitCode"
+            Write-Host "Last 50 lines of build output:"
+            $buildOutput | Select-Object -Last 50
+            exit $exitCode
+          }
         shell: pwsh
 
       - name: List build output
