@@ -249,17 +249,17 @@ export default function InstallationsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="h-12 md:h-9">
-                    <TableHead className="w-[40px] py-2">
+                    <TableHead className="w-[40px] py-2 text-xs">
                       <Checkbox
                         checked={selectedIds.size === optimisticInstallations.length && optimisticInstallations.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead className="py-2">{content.name}</TableHead>
-                    <TableHead className="py-2 hidden md:table-cell">{content.installationPath}</TableHead>
-                    <TableHead className="py-2">{content.version}</TableHead>
-                    <TableHead className="py-2">{content.components}</TableHead>
-                    <TableHead className="text-right py-2">{content.actions}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.name}</TableHead>
+                    <TableHead className="py-2 text-xs hidden md:table-cell">{content.installationPath}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.version}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.components}</TableHead>
+                    <TableHead className="text-right py-2 text-xs">{content.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -285,7 +285,7 @@ export default function InstallationsPage() {
                         <TableCell className="font-medium py-2 md:py-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-xs px-1.5 py-0">{installation.type}</Badge>
-                            <span className="text-sm md:text-base">{installation.name}</span>
+                            <span className="text-xs">{installation.name}</span>
                           </div>
                         </TableCell>
                         <TableCell className="py-2 md:py-1 hidden md:table-cell">
