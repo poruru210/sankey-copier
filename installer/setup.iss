@@ -41,7 +41,6 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startservice"; Description: "Start rust-server service after installation"; GroupDescription: "Service Options:"; Flags: checkedonce
 
 [Files]
 ; Desktop App (Tauri - includes web-ui embedded as static files)
@@ -53,6 +52,9 @@ Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onl
 
 ; Tray App (System tray for service management)
 Source: "..\sankey-copier-tray\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; NSSM (Windows Service Manager for Tray App)
+Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; MT4/MT5 Components (if built)
 Source: "..\mql\build\mt4\Experts\*.ex4"; DestDir: "{app}\mql\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
@@ -72,18 +74,22 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 Name: "{userstartup}\{#MyAppName} Tray"; Filename: "{app}\{#MyTrayExeName}"
 
 [Run]
-; Install rust-server as Windows Service
-Filename: "sc.exe"; Parameters: "create SankeyCopierServer binPath= ""{app}\{#MyServerExeName}"" DisplayName= ""SANKEY Copier Server"" start= auto"; Flags: runhidden; StatusMsg: "Registering Windows Service..."
-Filename: "sc.exe"; Parameters: "description SankeyCopierServer ""Trade copier server for MT4/MT5. Runs 24/7 in background."""; Flags: runhidden
-Filename: "sc.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden; Tasks: startservice; StatusMsg: "Starting rust-server service..."
+; Install rust-server as Windows Service using NSSM
+Filename: "{app}\nssm.exe"; Parameters: "install SankeyCopierServer ""{app}\{#MyServerExeName}"""; Flags: runhidden; StatusMsg: "Registering Windows Service..."
+Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Description ""Trade copier server for MT4/MT5. Runs 24/7 in background."""; Flags: runhidden
+Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer Start SERVICE_DEMAND_START"; Flags: runhidden
+Filename: "{app}\nssm.exe"; Parameters: "set SankeyCopierServer AppDirectory ""{app}"""; Flags: runhidden
+
+; Note: Service startup is handled by Tray App or can be started manually via system tray
+; This prevents installation hang if service fails to start
 
 ; Optionally launch Desktop App
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; Stop and remove service before uninstall
-Filename: "sc.exe"; Parameters: "stop SankeyCopierServer"; Flags: runhidden
-Filename: "sc.exe"; Parameters: "delete SankeyCopierServer"; Flags: runhidden
+; Stop and remove service before uninstall (using NSSM)
+Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"; Flags: runhidden
+Filename: "{app}\nssm.exe"; Parameters: "remove SankeyCopierServer confirm"; Flags: runhidden
 
 [Code]
 function InitializeSetup(): Boolean;
@@ -93,11 +99,12 @@ begin
   Result := True;
 
   // Check if service already exists and stop it
+  // Using sc.exe as nssm.exe is not yet installed at this point
   if Exec('sc.exe', 'query SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
     if ResultCode = 0 then
     begin
-      // Service exists, stop it
+      // Service exists, stop it (works for both sc.exe and nssm-installed services)
       Exec('sc.exe', 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(2000); // Wait for service to stop
     end;
@@ -107,16 +114,29 @@ end;
 function InitializeUninstall(): Boolean;
 var
   ResultCode: Integer;
+  NssmPath: String;
 begin
   Result := True;
 
-  // Stop service before uninstall
-  if Exec('sc.exe', 'query SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  // Try to use nssm.exe if available, otherwise fall back to sc.exe
+  NssmPath := ExpandConstant('{app}\nssm.exe');
+
+  if FileExists(NssmPath) then
   begin
-    if ResultCode = 0 then
+    // Use nssm to stop service
+    Exec(NssmPath, 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(2000);
+  end
+  else
+  begin
+    // Fallback to sc.exe
+    if Exec('sc.exe', 'query SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     begin
-      Exec('sc.exe', 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(2000);
+      if ResultCode = 0 then
+      begin
+        Exec('sc.exe', 'stop SankeyCopierServer', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(2000);
+      end;
     end;
   end;
 end;
