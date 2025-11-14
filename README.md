@@ -106,35 +106,53 @@ SANKEY Copierは2つのデプロイ方法をサポートしています：
    - Web-UIの「Sites」ページで`https://api.yourdomain.com`を登録
    - 認証後、どこからでもアクセス可能
 
-### 2. Desktop App版 - ローカル設定用
+### 2. Desktop App版 - ローカル設定用（Windowsインストーラー）
 
-ローカルネットワーク内で完結するデスクトップアプリ版です。
+ローカルネットワーク内で完結するデスクトップアプリ版です。**1つのインストーラー**でrust-server + Desktop Appをインストールできます。
 
 **メリット:**
-- インターネット接続不要
+- **簡単インストール**: 1つのEXEで完了
+- **自動サービス登録**: rust-serverがWindowsサービスとして24/7稼働
+- **依存関係なし**: Node.js不要、すべて同梱
 - ローカルで高速動作
-- 設定変更が簡単
 
 **必要要件:**
-- Windows 10/11
+- Windows 10/11 (64-bit)
 - MetaTrader 4 または 5
 
 **手順:**
 
-1. **Desktop Appのビルド**
-   ```bash
-   cd desktop-app
-   npm install
-   npm run tauri build
-   ```
+#### A. インストーラーを使用（推奨）
 
-2. **アプリケーションの起動**
-   - `src-tauri/target/release/sankey-copier.exe`を実行
-   - 自動的にrust-serverとweb-uiが起動
+1. **インストーラーをダウンロード**
+   - [GitHubのReleases](https://github.com/poruru210/sankey-copier/releases)から最新版をダウンロード
+   - `SankeyCopierSetup-1.0.0.exe`を実行
 
-3. **MT4/MT5 コンポーネントのインストール**
+2. **インストール**
+   - セットアップウィザードに従う
+   - rust-serverがWindowsサービスとして自動登録
+   - Desktop Appのショートカットがデスクトップに作成される
+
+3. **使用開始**
+   - デスクトップの「SANKEY Copier」アイコンをダブルクリック
+   - Desktop Appが起動し、設定変更が可能
+   - rust-serverはバックグラウンドで常時稼働
+
+4. **MT4/MT5 コンポーネントのインストール**
    - Desktop Appの「MT4/MT5 Installations」ページで自動検出
    - 「Install」ボタンでDLL/EAをインストール
+
+#### B. 開発者向け（手動ビルド）
+
+```powershell
+# インストーラーをビルド
+cd installer
+.\build-installer.ps1
+
+# 出力: installer\output\SankeyCopierSetup-1.0.0.exe
+```
+
+詳細は [installer/README.md](installer/README.md) を参照してください。
 
 ### 3. トレードコピーの設定（共通）
 
