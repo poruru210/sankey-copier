@@ -1,11 +1,10 @@
 //! Windows service management for SANKEY Copier.
 //!
-//! This module provides functions to start, stop, restart, and query
-//! the status of the rust-server Windows service.
+//! This module provides functions to start, stop, and restart
+//! the rust-server Windows service using NSSM.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::PathBuf;
-use std::process::Command;
 
 use crate::elevation::run_elevated_batch_command;
 
@@ -55,90 +54,6 @@ pub fn stop_server_service() -> Result<()> {
 /// Restart Server service
 pub fn restart_server_service() -> Result<()> {
     run_elevated_nssm_command("restart", &[SERVER_SERVICE])
-}
-
-// ============================================================================
-// Service Status
-// ============================================================================
-
-/// Query status of a single service using NSSM (safe version that never fails)
-///
-/// This is a wrapper around query_service_status that returns "Unknown" on error
-/// instead of propagating the error. Useful for non-critical status checks.
-pub fn query_service_status_safe(service_name: &str) -> String {
-    query_service_status(service_name).unwrap_or_else(|_| "Unknown".to_string())
-}
-
-/// Query status of a single service using NSSM
-fn query_service_status(service_name: &str) -> Result<String> {
-    // Try NSSM first if available
-    if let Some(nssm_path) = get_nssm_path() {
-        let output = Command::new(&nssm_path)
-            .args(&["status", service_name])
-            .output()
-            .context("Failed to execute nssm command")?;
-
-        if output.status.success() {
-            // NSSM outputs UTF-16LE encoding, detect and decode it properly
-            let stdout = if output.stdout.len() >= 2
-                && output.stdout.len() % 2 == 0
-                && output.stdout[1] == 0
-            {
-                // Output is UTF-16LE, decode it as UTF-16LE
-                let utf16_data: Vec<u16> = output.stdout
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-                    .collect();
-                String::from_utf16_lossy(&utf16_data)
-            } else {
-                String::from_utf8_lossy(&output.stdout).to_string()
-            };
-
-            let status = stdout.trim();
-
-            // NSSM returns: SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_START_PENDING, etc.
-            return Ok(match status {
-                "SERVICE_RUNNING" => "Running",
-                "SERVICE_STOPPED" => "Stopped",
-                "SERVICE_START_PENDING" => "Starting...",
-                "SERVICE_STOP_PENDING" => "Stopping...",
-                "SERVICE_PAUSE_PENDING" => "Pausing...",
-                "SERVICE_CONTINUE_PENDING" => "Resuming...",
-                "SERVICE_PAUSED" => "Paused",
-                _ => status,
-            }
-            .to_string());
-        }
-    }
-
-    // Fallback to sc.exe if NSSM is not available
-    let output = Command::new("sc")
-        .args(&["query", service_name])
-        .output()
-        .context("Failed to execute sc command")?;
-
-    if !output.status.success() {
-        return Ok("Not Installed".to_string());
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Parse state from output
-    for line in stdout.lines() {
-        if line.contains("STATE") {
-            if line.contains("RUNNING") {
-                return Ok("Running".to_string());
-            } else if line.contains("STOPPED") {
-                return Ok("Stopped".to_string());
-            } else if line.contains("START_PENDING") {
-                return Ok("Starting...".to_string());
-            } else if line.contains("STOP_PENDING") {
-                return Ok("Stopping...".to_string());
-            }
-        }
-    }
-
-    Ok("Unknown".to_string())
 }
 
 // ============================================================================

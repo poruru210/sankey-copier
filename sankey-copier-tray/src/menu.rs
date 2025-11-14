@@ -21,17 +21,6 @@ pub enum AppEvent {
     Exit,
 }
 
-/// Format service status for menu display
-fn format_service_status(status: &str) -> String {
-    match status {
-        "Running" => "Running".to_string(),
-        "Stopped" => "Stopped".to_string(),
-        "Starting..." => "Starting...".to_string(),
-        "Stopping..." => "Stopping...".to_string(),
-        _ => "Unknown".to_string(),
-    }
-}
-
 /// Create tray menu with all items
 pub fn create_menu() -> Result<Menu> {
     let menu = Menu::new();
@@ -52,10 +41,7 @@ pub fn create_menu() -> Result<Menu> {
     // Separator
     menu.append(&PredefinedMenuItem::separator())?;
 
-    // Get server status
-    let server_status = service::query_service_status_safe(service::SERVER_SERVICE);
-
-    // Server Submenu
+    // Service Submenu
     let service_start_item = MenuItem::new("Start", true, None);
     ids.insert(service_start_item.id().clone(), "service_start".to_string());
 
@@ -68,9 +54,8 @@ pub fn create_menu() -> Result<Menu> {
         "service_restart".to_string(),
     );
 
-    let service_title = format!("Service ({})", format_service_status(&server_status));
     let service_submenu = Submenu::with_items(
-        &service_title,
+        "Service",
         true,
         &[&service_start_item, &service_stop_item, &service_restart_item],
     )?;
