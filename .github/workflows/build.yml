@@ -94,6 +94,13 @@ jobs:
       package_version: ${{ needs.version-info.outputs.package_version }}
       build_target: ${{ github.event.inputs.build_target || 'all' }}
 
+  build-desktop:
+    name: Build Desktop App
+    needs: version-info
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      version: ${{ needs.version-info.outputs.package_version }}
+
   build-installer:
     name: Build Installer
     needs: [version-info, build-rust, build-web, build-mql]

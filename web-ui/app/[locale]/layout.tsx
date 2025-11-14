@@ -31,6 +31,15 @@ export const metadata: Metadata = {
   manifest: '/site.webmanifest',
 };
 
+// Generate static pages for each locale at build time
+// Required for Next.js static export with dynamic [locale] route
+export async function generateStaticParams() {
+  return [
+    { locale: 'en' },
+    { locale: 'ja' },
+  ];
+}
+
 export default async function RootLayout({
   children,
   params,

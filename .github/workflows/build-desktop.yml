@@ -1,0 +1,112 @@
+name: Build Desktop App
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version number for the build'
+        required: true
+        type: string
+    outputs:
+      artifact-name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build-desktop.outputs.artifact-name }}
+
+jobs:
+  build-desktop:
+    runs-on: windows-latest
+    outputs:
+      artifact-name: sankey-copier-desktop
+
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Setup pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      # Setup Rust toolchain
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Cache dependencies
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            web-ui/node_modules
+            ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web-ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            desktop-app/src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop-app/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Build Web UI (static export for Tauri)
+      - name: Build Web UI
+        run: |
+          cd web-ui
+
+          Write-Host "Installing dependencies..." -ForegroundColor Cyan
+          pnpm install
+
+          Write-Host "Building Next.js application (static export)..." -ForegroundColor Cyan
+          $env:NEXT_BUILD_MODE = "export"
+          pnpm run build
+
+          # Verify static export output
+          if (!(Test-Path "out")) {
+            Write-Host "Build failed: out directory not found" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "Build completed successfully" -ForegroundColor Green
+          Write-Host "Output directory size: $((Get-ChildItem -Path out -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB) MB" -ForegroundColor Cyan
+        shell: pwsh
+
+      # Install Desktop App dependencies
+      - name: Install Desktop App dependencies
+        run: |
+          cd desktop-app
+          pnpm install
+        shell: pwsh
+
+      # Build Tauri application
+      - name: Build Tauri application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop-app
+
+      # Upload artifacts
+      - name: Upload Desktop App artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-desktop
+          path: |
+            desktop-app/src-tauri/target/release/bundle/**/*.exe
+            desktop-app/src-tauri/target/release/bundle/**/*.msi
+          retention-days: 7
+          if-no-files-found: error
