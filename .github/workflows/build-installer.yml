@@ -77,7 +77,8 @@ jobs:
           # Update Cargo.toml files
           $cargoFiles = @(
             "rust-server/Cargo.toml",
-            "mql-zmq-dll/Cargo.toml"
+            "mql-zmq-dll/Cargo.toml",
+            "sankey-copier-tray/Cargo.toml"
           )
 
           foreach ($file in $cargoFiles) {
@@ -149,6 +150,16 @@ jobs:
             exit 1
           }
 
+          # Copy Tray App exe
+          New-Item -ItemType Directory -Force -Path "sankey-copier-tray/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
+            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "sankey-copier-tray/target/release/"
+            Write-Host "✓ Copied Tray App exe"
+          } else {
+            Write-Host "❌ Tray App exe not found"
+            exit 1
+          }
+
           # Copy MQL compiled files
           New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
           New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
@@ -186,6 +197,7 @@ jobs:
             "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
             "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
             "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe",
+            "sankey-copier-tray/target/release/sankey-copier-tray.exe",
             "installer/resources/nssm.exe"
           )
 

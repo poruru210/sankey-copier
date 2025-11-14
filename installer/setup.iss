@@ -1,5 +1,5 @@
 ; SANKEY Copier Unified Installer
-; Installs rust-server (Windows Service) + Desktop App + MT4/MT5 Components
+; Installs rust-server (Windows Service) + Desktop App + Tray App + MT4/MT5 Components
 
 #define MyAppName "SANKEY Copier"
 #define MyAppVersion "1.0.0"
@@ -7,6 +7,7 @@
 #define MyAppURL "https://github.com/poruru210/sankey-copier"
 #define MyAppExeName "sankey-copier-desktop.exe"
 #define MyServerExeName "rust-server.exe"
+#define MyTrayExeName "sankey-copier-tray.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -44,12 +45,14 @@ Name: "startservice"; Description: "Start rust-server service after installation
 
 [Files]
 ; Desktop App (Tauri - includes web-ui embedded as static files)
-; Built with: npm run tauri build -- --bundles none
 Source: "..\desktop-app\src-tauri\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; rust-server
 Source: "..\rust-server\target\release\{#MyServerExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+
+; Tray App (System tray for service management)
+Source: "..\sankey-copier-tray\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; MT4/MT5 Components (if built)
 Source: "..\mql\build\mt4\Experts\*.ex4"; DestDir: "{app}\mql\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
@@ -66,6 +69,7 @@ Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
+Name: "{userstartup}\{#MyAppName} Tray"; Filename: "{app}\{#MyTrayExeName}"
 
 [Run]
 ; Install rust-server as Windows Service
