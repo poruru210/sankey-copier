@@ -113,9 +113,6 @@ japanese.InstallationCancelled=インストールがキャンセルされまし�
 ; Rust Server
 Source: "..\rust-server\target\release\sankey-copier-server.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; Desktop Application
-Source: "..\desktop-app\src-tauri\target\release\sankey-copier-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
-
 ; System Tray Application
 Source: "..\sankey-copier-tray\target\release\sankey-copier-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -160,7 +157,6 @@ Name: "{group}\Server Status"; Filename: "{sys}\sc.exe"; Parameters: "query Sank
 Name: "{group}\Stop Services"; Filename: "{app}\nssm.exe"; Parameters: "stop SankeyCopierServer"
 Name: "{group}\Start Services"; Filename: "{app}\nssm.exe"; Parameters: "start SankeyCopierServer"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\sankey-copier-desktop.exe"
 
 [Run]
 ; Services are installed and started by CurStepChanged procedure
