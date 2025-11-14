@@ -56,6 +56,13 @@ VersionInfoCopyright={#MyAppCopyright}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
+[Messages]
+; English
+english.WelcomeLabel2=This will install [name/ver] on your computer.%n%nBuild: {#MyBuildInfo}%n%nIt is recommended that you close all other applications before continuing.
+
+; Japanese
+japanese.WelcomeLabel2=[name/ver] をコンピュータにインストールします。%n%nビルド: {#MyBuildInfo}%n%n続行する前に、他のすべてのアプリケーションを閉じることをお勧めします。
+
 [CustomMessages]
 ; English
 english.PortConfigPageTitle=Port Configuration
@@ -118,6 +125,11 @@ Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Create directories with proper permissions
 Name: "{app}\data"; Permissions: users-full
 Name: "{app}\logs"; Permissions: users-full
+
+[Registry]
+; Save detailed build information for troubleshooting and version tracking
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting('AppId')}_is1"; ValueType: string; ValueName: "BuildInfo"; ValueData: "{#MyBuildInfo}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting('AppId')}_is1"; ValueType: string; ValueName: "FileVersion"; ValueData: "{#MyFileVersion}"; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"
