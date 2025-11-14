@@ -26,7 +26,8 @@ import {
 import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
 import { AccountNode } from '@/components/flow-nodes/AccountNode';
-import { SettingsDialog } from '@/components/SettingsDialog';
+import { CreateConnectionDialog } from '@/components/CreateConnectionDialog';
+import { EditCopySettingsDialog } from '@/components/EditCopySettingsDialog';
 import { MasterAccountFilter } from '@/components/MasterAccountFilter';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -57,7 +58,8 @@ function ConnectionsViewReactFlowInner({
   const content = useIntlayer('connections-view');
   const sidebarContent = useIntlayer('master-account-sidebar');
   const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSettings, setEditingSettings] = useState<CopySettings | null>(null);
 
   // Use custom hooks for account data management
@@ -114,15 +116,14 @@ function ConnectionsViewReactFlowInner({
     receiverAccounts,
   });
 
-  // Handle settings dialog
-  const handleOpenDialog = useCallback(() => {
-    setEditingSettings(null);
-    setDialogOpen(true);
+  // Handle dialogs
+  const handleOpenCreateDialog = useCallback(() => {
+    setCreateDialogOpen(true);
   }, []);
 
   const handleEditSetting = useCallback((setting: CopySettings) => {
     setEditingSettings(setting);
-    setDialogOpen(true);
+    setEditDialogOpen(true);
   }, []);
 
   const handleDeleteSetting = useCallback(
@@ -141,25 +142,31 @@ function ConnectionsViewReactFlowInner({
     [onDelete, toast, content.deleteFailed, content.unknownError]
   );
 
-  const handleSaveSettings = useCallback(
-    async (data: CreateSettingsRequest | CopySettings) => {
+  const handleCreateConnection = useCallback(
+    async (data: CreateSettingsRequest) => {
       try {
-        if ('id' in data) {
-          // Update existing settings
-          await onUpdate(data.id, data);
-          toast({
-            title: content.settingsUpdated,
-            description: `${data.master_account} → ${data.slave_account}`,
-          });
-        } else {
-          // Create new settings
-          await onCreate(data);
-          toast({
-            title: content.settingsCreated,
-            description: `${data.master_account} → ${data.slave_account}`,
-          });
-        }
-        setDialogOpen(false);
+        await onCreate(data);
+        // Success: no toast needed, UI already updated optimistically
+      } catch (error) {
+        toast({
+          title: content.createFailed,
+          description: error instanceof Error ? error.message : content.unknownError,
+          variant: 'destructive',
+        });
+      }
+    },
+    [onCreate, toast, content.createFailed, content.unknownError]
+  );
+
+  const handleUpdateSettings = useCallback(
+    async (data: CopySettings) => {
+      try {
+        // Update existing settings
+        await onUpdate(data.id, data);
+        toast({
+          title: content.settingsUpdated,
+          description: `${data.master_account} → ${data.slave_account}`,
+        });
       } catch (error) {
         toast({
           title: content.saveFailed,
@@ -168,7 +175,7 @@ function ConnectionsViewReactFlowInner({
         });
       }
     },
-    [onCreate, onUpdate, toast, content.settingsCreated, content.settingsUpdated, content.saveFailed, content.unknownError]
+    [onUpdate, toast, content.settingsUpdated, content.saveFailed, content.unknownError]
   );
 
   // Memoize content object to prevent unnecessary re-renders
@@ -345,7 +352,7 @@ function ConnectionsViewReactFlowInner({
             <RefreshCw className="h-4 w-4 mr-2" />
             {content.refresh}
           </Button>
-          <Button size="sm" onClick={handleOpenDialog}>
+          <Button size="sm" onClick={handleOpenCreateDialog}>
             <Plus className="h-4 w-4 mr-2" />
             {content.createNewLink}
           </Button>
@@ -423,16 +430,25 @@ function ConnectionsViewReactFlowInner({
           </ReactFlow>
         </div>
 
-        {/* Settings Dialog */}
-        <SettingsDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onSave={handleSaveSettings}
-          onDelete={handleDeleteSetting}
-          initialData={editingSettings}
+        {/* Create Connection Dialog */}
+        <CreateConnectionDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onCreate={handleCreateConnection}
           connections={connections}
           existingSettings={settings}
         />
+
+        {/* Edit Copy Settings Dialog */}
+        {editingSettings && (
+          <EditCopySettingsDialog
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            onSave={handleUpdateSettings}
+            onDelete={handleDeleteSetting}
+            setting={editingSettings}
+          />
+        )}
       </div>
     </div>
   );
