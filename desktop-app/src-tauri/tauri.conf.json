@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "cd ../../web-ui && pnpm run dev",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "cd ../../web-ui && pnpm run build",
+    "beforeBuildCommand": "",
     "frontendDist": "../../web-ui/out"
   },
   "bundle": {

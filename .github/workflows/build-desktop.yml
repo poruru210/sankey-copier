@@ -90,8 +90,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: desktop-app/src-tauri
-          tauriScript: cargo tauri
+          projectPath: desktop-app
 
       # Upload artifacts
       - name: Upload Desktop App artifacts
