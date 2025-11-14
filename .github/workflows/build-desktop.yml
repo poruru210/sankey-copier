@@ -56,7 +56,6 @@ jobs:
           path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             desktop-app/src-tauri/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('desktop-app/src-tauri/Cargo.lock') }}
@@ -92,24 +91,14 @@ jobs:
           pnpm install
         shell: pwsh
 
-      # Build Tauri application (raw EXE without bundles for Inno Setup)
+      # Build Tauri application (raw EXE for Inno Setup)
       - name: Build Tauri application
-        run: |
-          cd desktop-app
-
-          Write-Host "Building Tauri application..." -ForegroundColor Cyan
-          pnpm run tauri build -- --bundles none
-
-          # Verify output
-          $exePath = "src-tauri/target/release/sankey-copier-desktop.exe"
-          if (!(Test-Path $exePath)) {
-            Write-Host "Build failed: $exePath not found" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "Build completed successfully" -ForegroundColor Green
-          Write-Host "EXE size: $((Get-Item $exePath).Length / 1MB) MB" -ForegroundColor Cyan
-        shell: pwsh
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop-app
+          args: "--bundles none"
 
       # Upload artifacts
       - name: Upload Desktop App artifacts
