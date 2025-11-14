@@ -79,18 +79,25 @@ fn query_service_status(service_name: &str) -> Result<String> {
             .context("Failed to execute nssm command")?;
 
         if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // NSSM may output UTF-16LE which appears as "S E R V I C E _ R U N N I N G"
-            // Remove null bytes and extra spaces
-            let status = stdout
-                .chars()
-                .filter(|c| *c != '\0' && *c != ' ')
-                .collect::<String>()
-                .trim()
-                .to_string();
+            // NSSM outputs UTF-16LE encoding, detect and decode it properly
+            let stdout = if output.stdout.len() >= 2
+                && output.stdout.len() % 2 == 0
+                && output.stdout[1] == 0
+            {
+                // Output is UTF-16LE, decode it as UTF-16LE
+                let utf16_data: Vec<u16> = output.stdout
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                    .collect();
+                String::from_utf16_lossy(&utf16_data)
+            } else {
+                String::from_utf8_lossy(&output.stdout).to_string()
+            };
+
+            let status = stdout.trim();
 
             // NSSM returns: SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_START_PENDING, etc.
-            return Ok(match status.as_str() {
+            return Ok(match status {
                 "SERVICE_RUNNING" => "Running",
                 "SERVICE_STOPPED" => "Stopped",
                 "SERVICE_START_PENDING" => "Starting...",
@@ -98,7 +105,7 @@ fn query_service_status(service_name: &str) -> Result<String> {
                 "SERVICE_PAUSE_PENDING" => "Pausing...",
                 "SERVICE_CONTINUE_PENDING" => "Resuming...",
                 "SERVICE_PAUSED" => "Paused",
-                _ => &status,
+                _ => status,
             }
             .to_string());
         }
