@@ -10,7 +10,7 @@
     "frontendDist": "../../web-ui/out"
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": "all",
     "icon": [
       "icons/icon.ico"
