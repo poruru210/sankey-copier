@@ -2,17 +2,17 @@ import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
 // Build mode selection via environment variable
-// - 'standalone': For Windows service (installer) - includes Node.js runtime
-// - 'export': For Tauri desktop app - static HTML/CSS/JS only (default)
-const buildMode = process.env.NEXT_BUILD_MODE || 'export';
+// - 'export': For Tauri desktop app - static HTML/CSS/JS only
+// - undefined (default): For Vercel deployment - standard Next.js SSR/SSG
+const buildMode = process.env.NEXT_BUILD_MODE;
 const isProd = process.env.NODE_ENV === 'production';
 const internalHost = process.env.TAURI_DEV_HOST || 'localhost';
 
 const nextConfig: NextConfig = {
-  // Output mode: standalone for server, export for Tauri
-  output: buildMode === 'standalone' ? 'standalone' : 'export',
+  // Output mode: export for Tauri desktop app, default for Vercel
+  output: buildMode === 'export' ? 'export' : undefined,
 
-  // Image optimization disabled for export mode, auto-configured for standalone
+  // Image optimization disabled for export mode only
   images: {
     unoptimized: buildMode === 'export',
   },
