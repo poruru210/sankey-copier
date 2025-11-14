@@ -1,14 +1,11 @@
 {
   "name": "sankey-copier-desktop",
   "version": "1.0.0",
-  "description": "SANKEY Copier Desktop Application",
-  "type": "module",
+  "private": true,
+  "description": "SANKEY Copier Desktop Application - Tauri v2",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
-    "build:release": "tauri build --release"
+    "tauri": "tauri"
   },
-  "dependencies": {},
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
   }

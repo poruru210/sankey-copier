@@ -84,6 +84,13 @@ jobs:
           Write-Host "Output directory size: $((Get-ChildItem -Path out -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB) MB" -ForegroundColor Cyan
         shell: pwsh
 
+      # Install Desktop App dependencies
+      - name: Install Desktop App dependencies
+        run: |
+          cd desktop-app
+          pnpm install
+        shell: pwsh
+
       # Build Tauri application
       - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
