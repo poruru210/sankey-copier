@@ -1,0 +1,589 @@
+# Build MQL4/MQL5 Files
+# Reusable workflow for compiling MetaTrader Expert Advisors
+name: Compile MQL Files
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        description: 'Package version (e.g., 0.1.0)'
+        required: true
+        type: string
+      build_target:
+        description: 'Build target selection'
+        required: false
+        type: string
+        default: 'all'
+
+jobs:
+  compile-mql:
+    name: Compile MQL4/MQL5 Files
+    runs-on: windows-latest
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'mql' }}
+
+    strategy:
+      matrix:
+        include:
+          - platform: MT4
+            version: '4'
+            exe_name: icmarketssc4setup.exe
+          - platform: MT5
+            version: '5'
+            exe_name: icmarketssc5setup.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache MetaTrader Installation
+        id: cache-mt
+        uses: actions/cache@v4
+        with:
+          path: D:\MT_Install\${{ matrix.platform }}
+          key: mt-${{ matrix.platform }}-5.0.0.5387-v2
+          restore-keys: |
+            mt-${{ matrix.platform }}-5.0.0.5387-
+            mt-${{ matrix.platform }}-
+
+      - name: Download MetaTrader installer from Private Release
+        if: steps.cache-mt.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MT_INSTALLER_PAT }}
+        run: |
+          Write-Host "Downloading IC Markets installer from private release..."
+
+          $token = $env:GH_TOKEN
+          $headers = @{
+              "Authorization" = "Bearer $token"
+              "Accept" = "application/vnd.github+json"
+              "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          # Get release information
+          $releaseUrl = "https://api.github.com/repos/poruru-code/mt-setup/releases/tags/5.0.0.5387"
+          Write-Host "Fetching release info from: $releaseUrl"
+
+          $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers -Method Get
+
+          # Find the icmarkets-setup.zip asset
+          $asset = $release.assets | Where-Object { $_.name -eq "icmarkets-setup.zip" }
+
+          if (-not $asset) {
+              Write-Host "❌ Asset 'icmarkets-setup.zip' not found in release"
+              Write-Host "Available assets:"
+              $release.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+              exit 1
+          }
+
+          Write-Host "Found asset: $($asset.name) (ID: $($asset.id), Size: $($asset.size) bytes)"
+
+          # Download the asset
+          $downloadUrl = "https://api.github.com/repos/poruru-code/mt-setup/releases/assets/$($asset.id)"
+          $downloadHeaders = @{
+              "Authorization" = "Bearer $token"
+              "Accept" = "application/octet-stream"
+          }
+
+          Write-Host "Downloading from: $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -Headers $downloadHeaders -OutFile "icmarkets-setup.zip" -TimeoutSec 120
+
+          if (-not (Test-Path "icmarkets-setup.zip")) {
+              Write-Host "❌ Failed to download icmarkets-setup.zip"
+              exit 1
+          }
+
+          $zipInfo = Get-Item "icmarkets-setup.zip"
+          Write-Host "✅ Downloaded: $($zipInfo.Length) bytes"
+
+          # Extract ZIP
+          Write-Host "Extracting ZIP archive..."
+          Expand-Archive -Path "icmarkets-setup.zip" -DestinationPath . -Force
+
+          # List extracted files
+          Write-Host "Extracted files:"
+          Get-ChildItem *.exe | ForEach-Object {
+              Write-Host "  - $($_.Name) ($($_.Length) bytes)"
+          }
+
+          # Select the appropriate installer for this platform
+          $installerName = "${{ matrix.exe_name }}"
+
+          if (-not (Test-Path $installerName)) {
+              Write-Host "❌ Installer not found: $installerName"
+              exit 1
+          }
+
+          # Rename to standard name for next steps
+          Rename-Item $installerName "${{ matrix.platform }}setup.exe"
+
+          $installerInfo = Get-Item "${{ matrix.platform }}setup.exe"
+          Write-Host "✅ Prepared installer: $($installerInfo.Name) ($($installerInfo.Length) bytes)"
+
+      - name: Skip installation (cache hit)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "✅ Using cached MetaTrader installation for ${{ matrix.platform }}" -ForegroundColor Green
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+          Write-Host "Installation path: $installPath"
+
+          # Verify cache contents
+          if (Test-Path $installPath) {
+            $files = Get-ChildItem $installPath -Recurse -File | Measure-Object
+            Write-Host "Cached files count: $($files.Count)"
+          }
+
+      - name: Install MetaTrader
+        if: steps.cache-mt.outputs.cache-hit != 'true'
+        run: |
+          Write-Host "Installing ${{ matrix.platform }}..."
+
+          # Define installation path
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+          Write-Host "Target installation path: $installPath"
+
+          # Run installer silently with /path parameter
+          $process = Start-Process -FilePath "${{ matrix.platform }}setup.exe" `
+            -ArgumentList "/auto", "/path:$installPath" `
+            -Wait `
+            -PassThru `
+            -NoNewWindow
+
+          Write-Host "Installer exit code: $($process.ExitCode)"
+
+          # Wait for installation to stabilize
+          Start-Sleep -Seconds 30
+
+          # Search for MetaEditor in installation directory
+          Write-Host "Searching for MetaEditor in: $installPath"
+
+          if (Test-Path $installPath) {
+            Write-Host "✅ Installation directory found"
+            Get-ChildItem $installPath -Recurse -File | Select-Object -First 20 | ForEach-Object {
+              Write-Host "  - $($_.FullName)"
+            }
+
+            # Find MetaEditor
+            # For MT4, prioritize 32-bit metaeditor.exe over metaeditor64.exe
+            # MT4 requires 32-bit compiler; MT5 uses 64-bit
+            $metaeditors = @()
+
+            if ("${{ matrix.version }}" -eq "4") {
+              # MT4: Look for 32-bit version first
+              $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "metaeditor.exe" }
+              if ($me32) {
+                $metaeditors += $me32
+                Write-Host "Found MT4 32-bit MetaEditor: $($me32[0].FullName)"
+              }
+
+              # Fallback to 64-bit if 32-bit not found
+              if ($metaeditors.Count -eq 0) {
+                $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+                if ($me64) {
+                  $metaeditors += $me64
+                  Write-Host "⚠️ Using MT4 64-bit MetaEditor (may not support .mq4): $($me64[0].FullName)"
+                }
+              }
+            } else {
+              # MT5: Use 64-bit version
+              $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+              if ($me64) {
+                $metaeditors += $me64
+                Write-Host "Found MT5 64-bit MetaEditor: $($me64[0].FullName)"
+              }
+
+              # Fallback to 32-bit if needed
+              if ($metaeditors.Count -eq 0) {
+                $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue
+                if ($me32) {
+                  $metaeditors += $me32
+                  Write-Host "Using MT5 32-bit MetaEditor: $($me32[0].FullName)"
+                }
+              }
+            }
+
+            if ($metaeditors.Count -gt 0) {
+              $global:METAEDITOR_PATH = $metaeditors[0].FullName
+              Write-Host "✅ Selected MetaEditor: $global:METAEDITOR_PATH"
+            } else {
+              Write-Host "⚠️ MetaEditor not found, listing all exe files..."
+              Get-ChildItem $installPath -Recurse -Filter "*.exe" | ForEach-Object {
+                Write-Host "  EXE: $($_.FullName)"
+              }
+            }
+          } else {
+            Write-Host "❌ Installation directory not found: $installPath"
+          }
+
+          # Fallback: Search in standard locations
+          if (-not $global:METAEDITOR_PATH) {
+            Write-Host "Searching standard locations..."
+            $standardPaths = @(
+              "C:\Program Files\MetaTrader 5",
+              "C:\Program Files (x86)\MetaTrader 5",
+              "C:\Program Files\MetaTrader 4",
+              "C:\Program Files (x86)\MetaTrader 4"
+            )
+
+            foreach ($path in $standardPaths) {
+              if (Test-Path $path) {
+                Write-Host "Checking: $path"
+                $metaeditors = Get-ChildItem $path -Recurse -Filter "metaeditor*.exe" -ErrorAction SilentlyContinue
+                if ($metaeditors) {
+                  $global:METAEDITOR_PATH = $metaeditors[0].FullName
+                  Write-Host "✅ Found at standard location: $global:METAEDITOR_PATH"
+                  break
+                }
+              }
+            }
+          }
+
+          if (-not $global:METAEDITOR_PATH) {
+            Write-Host "❌ MetaEditor not found anywhere"
+            Write-Host "Performing wide search (first 10 results)..."
+            Get-ChildItem "C:\" -Recurse -Filter "metaeditor*.exe" -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object {
+              Write-Host "Found: $($_.FullName)"
+              if (-not $global:METAEDITOR_PATH) {
+                $global:METAEDITOR_PATH = $_.FullName
+              }
+            }
+
+            if (-not $global:METAEDITOR_PATH) {
+              exit 1
+            }
+          }
+
+          Write-Host "Using MetaEditor: $global:METAEDITOR_PATH"
+
+          # Diagnose MT installation structure
+          Write-Host ""
+          Write-Host "=== Diagnosing MT Installation ==="
+          $mtInstallDir = Split-Path (Split-Path $global:METAEDITOR_PATH)
+          $mqlBaseDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}"
+          $includeDir = Join-Path $mqlBaseDir "Include"
+
+          Write-Host "MT Install Dir: $mtInstallDir"
+          Write-Host "MQL Base Dir: $mqlBaseDir"
+          Write-Host "Include Dir: $includeDir"
+
+          if (Test-Path $includeDir) {
+            Write-Host ""
+            Write-Host "Include directory exists. Listing top-level contents:"
+            Get-ChildItem $includeDir -Directory | Select-Object -First 20 | ForEach-Object {
+              Write-Host "  DIR: $($_.Name)"
+            }
+            Get-ChildItem $includeDir -File | Select-Object -First 10 | ForEach-Object {
+              Write-Host "  FILE: $($_.Name)"
+            }
+
+            # Check for Trade directory (MT5 only)
+            if ("${{ matrix.version }}" -eq "5") {
+              $tradeDir = Join-Path $includeDir "Trade"
+              if (Test-Path $tradeDir) {
+                Write-Host ""
+                Write-Host "Trade directory exists:"
+                Get-ChildItem $tradeDir | ForEach-Object {
+                  Write-Host "  - $($_.Name)"
+                }
+              } else {
+                Write-Host ""
+                Write-Host "⚠️ Trade directory NOT found at: $tradeDir"
+              }
+            }
+          } else {
+            Write-Host "❌ Include directory does not exist: $includeDir"
+          }
+
+          # Save to GitHub environment for next step
+          "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Find MetaEditor (for cached installation)
+        if: steps.cache-mt.outputs.cache-hit == 'true'
+        run: |
+          Write-Host "Locating MetaEditor in cached installation..." -ForegroundColor Cyan
+          $installPath = "D:\MT_Install\${{ matrix.platform }}"
+
+          # Find MetaEditor
+          $metaeditors = @()
+
+          if ("${{ matrix.version }}" -eq "4") {
+            # MT4: Look for 32-bit version first
+            $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "metaeditor.exe" }
+            if ($me32) {
+              $metaeditors += $me32
+              Write-Host "Found MT4 32-bit MetaEditor: $($me32[0].FullName)"
+            }
+
+            # Fallback to 64-bit if 32-bit not found
+            if ($metaeditors.Count -eq 0) {
+              $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+              if ($me64) {
+                $metaeditors += $me64
+                Write-Host "Using MT4 64-bit MetaEditor: $($me64[0].FullName)"
+              }
+            }
+          } else {
+            # MT5: Use 64-bit version
+            $me64 = Get-ChildItem $installPath -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue
+            if ($me64) {
+              $metaeditors += $me64
+              Write-Host "Found MT5 64-bit MetaEditor: $($me64[0].FullName)"
+            }
+
+            # Fallback to 32-bit if needed
+            if ($metaeditors.Count -eq 0) {
+              $me32 = Get-ChildItem $installPath -Recurse -Filter "metaeditor.exe" -ErrorAction SilentlyContinue
+              if ($me32) {
+                $metaeditors += $me32
+                Write-Host "Using MT5 32-bit MetaEditor: $($me32[0].FullName)"
+              }
+            }
+          }
+
+          if ($metaeditors.Count -gt 0) {
+            $global:METAEDITOR_PATH = $metaeditors[0].FullName
+            Write-Host "✅ Selected MetaEditor: $global:METAEDITOR_PATH" -ForegroundColor Green
+            "METAEDITOR_PATH=$global:METAEDITOR_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            Write-Host "❌ MetaEditor not found in cached installation" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Prepare MQL files with version information
+        run: |
+          Write-Host "=== Updating MQL files with version information ===" -ForegroundColor Cyan
+
+          $version = "${{ inputs.package_version }}"
+          Write-Host "Version: $version" -ForegroundColor Yellow
+
+          # Update version in all MQL files
+          $mqlFiles = @(
+            "mql/${{ matrix.platform }}/SankeyCopierMaster.mq${{ matrix.version }}",
+            "mql/${{ matrix.platform }}/SankeyCopierSlave.mq${{ matrix.version }}"
+          )
+
+          foreach ($file in $mqlFiles) {
+            if (Test-Path $file) {
+              Write-Host "Updating version in: $file"
+              $content = Get-Content $file -Raw -Encoding UTF8
+              $content = $content -replace '#property version\s+"[^"]*"\s*//\s*VERSION_PLACEHOLDER', "#property version   `"$version`""
+              Set-Content $file -Value $content -NoNewline -Encoding UTF8
+              Write-Host "✅ Updated: $file" -ForegroundColor Green
+            } else {
+              Write-Host "⚠️ File not found: $file" -ForegroundColor Yellow
+            }
+          }
+
+      - name: Prepare Include directory
+        run: |
+          Write-Host "=== Preparing Include directory for custom libraries ==="
+
+          # Read MetaEditor path from environment
+          $metaeditorPath = $env:METAEDITOR_PATH
+
+          if (-not $metaeditorPath) {
+            Write-Host "❌ MetaEditor path not set in environment"
+            exit 1
+          }
+
+          # Determine MetaTrader installation directory
+          $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+          $mqlBaseDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}"
+          $targetIncludeDir = Join-Path $mqlBaseDir "Include"
+
+          Write-Host "MT installation directory: $mtInstallDir"
+          Write-Host "MQL base directory: $mqlBaseDir"
+          Write-Host "Target include directory: $targetIncludeDir"
+
+          # Create Include directory if it doesn't exist
+          if (-not (Test-Path $targetIncludeDir)) {
+            Write-Host "Creating Include directory..."
+            New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
+            Write-Host "✅ Include directory created"
+          } else {
+            Write-Host "✅ Include directory already exists"
+          }
+
+          Write-Host "Will use custom Trade.mqh and other include files from workspace"
+
+      - name: Compile MQL files
+        run: |
+          Write-Host "Compiling ${{ matrix.platform }} files..."
+
+          # Read MetaEditor path from environment
+          $metaeditorPath = $env:METAEDITOR_PATH
+
+          # Verify MetaEditor path
+          if (-not $metaeditorPath) {
+            Write-Host "❌ MetaEditor path not set in environment"
+            exit 1
+          }
+
+          if (-not (Test-Path $metaeditorPath)) {
+            Write-Host "❌ MetaEditor not found at: $metaeditorPath"
+            exit 1
+          }
+
+          Write-Host "Using MetaEditor: $metaeditorPath"
+
+          # Determine MetaTrader installation directory
+          $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+          $mqlBaseDir = Join-Path $mtInstallDir "MQL${{ matrix.version }}"
+          Write-Host "MT installation directory: $mtInstallDir"
+          Write-Host "MQL base directory: $mqlBaseDir"
+
+          # Copy include files to MetaTrader's Include directory
+          $targetIncludeDir = Join-Path $mqlBaseDir "Include"
+          Write-Host "Target include directory: $targetIncludeDir"
+
+          if (-not (Test-Path $targetIncludeDir)) {
+            Write-Host "Creating include directory..."
+            New-Item -ItemType Directory -Path $targetIncludeDir -Force | Out-Null
+          }
+
+          Write-Host "Copying include files..."
+          Copy-Item -Path "${{ github.workspace }}\mql\Include\*" -Destination $targetIncludeDir -Recurse -Force
+
+          # List copied files
+          Write-Host "Include files copied:"
+          Get-ChildItem $targetIncludeDir -Recurse -File | Select-Object -First 10 | ForEach-Object {
+            Write-Host "  - $($_.FullName)"
+          }
+
+          # Icon files are already in the source directory (mql/${{ matrix.platform }}/app.ico)
+          # and will be found by MetaEditor during compilation
+
+          # Compile Master EA
+          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.mq${{ matrix.version }}"
+          Write-Host ""
+          Write-Host "=== Compiling Master EA ==="
+          Write-Host "Source file: $masterFile"
+
+          if (Test-Path $masterFile) {
+            $logFile = "${{ github.workspace }}\master_compile.log"
+            & $metaeditorPath /compile:"$masterFile" /log:"$logFile" /inc:"$mqlBaseDir"
+
+            Start-Sleep -Seconds 3
+
+            if (Test-Path $logFile) {
+              Write-Host "Compilation log:"
+              Get-Content $logFile -Encoding Unicode | Select-Object -First 50
+            }
+          } else {
+            Write-Host "❌ Master source file not found"
+          }
+
+          # Compile Slave EA
+          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.mq${{ matrix.version }}"
+          Write-Host ""
+          Write-Host "=== Compiling Slave EA ==="
+          Write-Host "Source file: $slaveFile"
+
+          if (Test-Path $slaveFile) {
+            $logFile = "${{ github.workspace }}\slave_compile.log"
+            & $metaeditorPath /compile:"$slaveFile" /log:"$logFile" /inc:"$mqlBaseDir"
+
+            Start-Sleep -Seconds 3
+
+            if (Test-Path $logFile) {
+              Write-Host "Compilation log:"
+              Get-Content $logFile -Encoding Unicode | Select-Object -First 50
+            }
+          } else {
+            Write-Host "❌ Slave source file not found"
+          }
+
+          # Wait for compilation to complete
+          Start-Sleep -Seconds 5
+
+      - name: Search for compiled files
+        run: |
+          Write-Host "=== Searching for compiled .ex${{ matrix.version }} files ==="
+          Write-Host ""
+
+          # Search in workspace
+          Write-Host "Searching in workspace (${{ github.workspace }})..."
+          $workspaceFiles = Get-ChildItem "${{ github.workspace }}" -Recurse -Filter "*.ex${{ matrix.version }}" -ErrorAction SilentlyContinue
+          if ($workspaceFiles) {
+            $workspaceFiles | ForEach-Object {
+              Write-Host "  Found: $($_.FullName) ($($_.Length) bytes)"
+            }
+          } else {
+            Write-Host "  No .ex${{ matrix.version }} files found in workspace"
+          }
+
+          Write-Host ""
+
+          # Search in MT installation directory
+          $metaeditorPath = $env:METAEDITOR_PATH
+          if ($metaeditorPath) {
+            $mtInstallDir = Split-Path (Split-Path $metaeditorPath)
+            Write-Host "Searching in MT installation ($mtInstallDir)..."
+            $mtFiles = Get-ChildItem $mtInstallDir -Recurse -Filter "*.ex${{ matrix.version }}" -ErrorAction SilentlyContinue
+            if ($mtFiles) {
+              $mtFiles | ForEach-Object {
+                Write-Host "  Found: $($_.FullName) ($($_.Length) bytes)"
+              }
+            } else {
+              Write-Host "  No .ex${{ matrix.version }} files found in MT installation"
+            }
+          }
+
+          Write-Host ""
+          Write-Host "=== Full compilation logs ==="
+
+          # Show master compilation log
+          $masterLog = "${{ github.workspace }}\master_compile.log"
+          if (Test-Path $masterLog) {
+            Write-Host ""
+            Write-Host "Master compilation log:"
+            Get-Content $masterLog -Encoding Unicode
+          }
+
+          # Show slave compilation log
+          $slaveLog = "${{ github.workspace }}\slave_compile.log"
+          if (Test-Path $slaveLog) {
+            Write-Host ""
+            Write-Host "Slave compilation log:"
+            Get-Content $slaveLog -Encoding Unicode
+          }
+
+      - name: Verify compiled files
+        run: |
+          Write-Host "Verifying compiled files..."
+
+          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.ex${{ matrix.version }}"
+
+          $errors = @()
+
+          if (Test-Path $masterEx) {
+            $size = (Get-Item $masterEx).Length
+            Write-Host "✅ Master compiled: $size bytes"
+          } else {
+            $errors += "Master EX file not found at: $masterEx"
+          }
+
+          if (Test-Path $slaveEx) {
+            $size = (Get-Item $slaveEx).Length
+            Write-Host "✅ Slave compiled: $size bytes"
+          } else {
+            $errors += "Slave EX file not found at: $slaveEx"
+          }
+
+          if ($errors.Count -gt 0) {
+            Write-Host "❌ Compilation errors:"
+            $errors | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+          }
+
+      - name: Prepare MQL artifacts
+        run: |
+          mkdir -p artifacts/mql/${{ matrix.platform }}
+          copy "mql\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No compiled files found"
+
+      - name: Upload MQL artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-mql-${{ matrix.platform }}
+          path: artifacts/mql/${{ matrix.platform }}/
+          retention-days: 1

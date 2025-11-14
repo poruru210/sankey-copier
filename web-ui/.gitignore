@@ -1,0 +1,44 @@
+# Dependencies (pnpm)
+node_modules/
+
+# pnpm-lock.yaml is committed (DO NOT ignore)
+
+# Build output
+dist/
+out/
+build/
+
+# Next.js
+.next/
+.next/standalone/
+.next/static/
+.intlayer/
+
+# Vite
+.vite/
+
+# Intlayer
+.intlayer/
+
+# Development
+.turbo/
+.cache/
+tsconfig.tsbuildinfo
+
+# npm lock file (project uses pnpm)
+package-lock.json
+
+# Testing
+test_*.py
+*.png
+!public/*.png
+debug_*.png
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Environment variables (covered by root .gitignore)
+# .env
+# .env.local
+# .env.*.local

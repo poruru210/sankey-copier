@@ -1,0 +1,17 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Cargo.lock is committed (part of monorepo workspace)
+# Even though this is a library, we commit it for reproducibility
+# within this monorepo context
+
+# DLL output (built artifacts)
+*.dll
+*.dll.a
+*.pdb
+*.ilk
+
+# Windows link library files
+*.lib
+*.exp

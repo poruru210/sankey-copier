@@ -1,0 +1,48 @@
+# Forex Copier Server Configuration Example
+# Copy this file to config.toml and modify as needed
+
+[server]
+# Server bind address and port
+# Use "0.0.0.0" to listen on all network interfaces
+# Use "127.0.0.1" to listen only on localhost
+host = "0.0.0.0"
+port = 8080
+
+[database]
+# SQLite database connection URL
+# The database file will be created automatically if it doesn't exist
+url = "sqlite://forex_copier.db?mode=rwc"
+
+[zeromq]
+# ZeroMQ port configuration
+# Each port serves a different purpose and must be unique
+
+# Port for receiving trade signals and heartbeat messages from MT4/MT5 EAs
+receiver_port = 5555
+
+# Port for sending trade signals to slave accounts (PUB/SUB pattern)
+sender_port = 5556
+
+# Port for sending configuration updates to EAs (PUB/SUB pattern)
+config_sender_port = 5557
+
+# Connection timeout in seconds
+# EAs that don't send heartbeat within this period will be marked as timed out
+timeout_seconds = 30
+
+[webui]
+# Web UI host and port
+host = "0.0.0.0"
+port = 8080
+# Web UI URL (for tray application)
+url = "http://localhost:8080"
+
+[cors]
+# CORS configuration for Web UI access
+# WARNING: Setting disable=true allows ALL origins - use only in development!
+disable = false  # Set to true to disable CORS restrictions (allows all origins)
+# Origins are automatically generated from [webui] port setting:
+#   - http://localhost:{webui_port}
+#   - http://127.0.0.1:{webui_port}
+# Additional custom origins can be specified below (e.g., for Vercel deployment, development ports)
+additional_origins = []

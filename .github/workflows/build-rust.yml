@@ -1,0 +1,153 @@
+# Build Rust Components (DLL, Server, Tray App)
+# Reusable workflow for building all Rust-based components
+name: Build Rust Components
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        description: 'Package version (e.g., 0.1.0)'
+        required: true
+        type: string
+      file_version:
+        description: 'File version (e.g., 0.1.0.123)'
+        required: true
+        type: string
+      build_target:
+        description: 'Build target selection'
+        required: false
+        type: string
+        default: 'all'
+
+jobs:
+  build-rust-dll:
+    name: Build Rust ZeroMQ DLL
+    runs-on: windows-latest
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'rust-dll' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: i686-pc-windows-msvc, x86_64-pc-windows-msvc
+          workspace: mql-zmq-dll
+
+      - name: Run tests
+        working-directory: mql-zmq-dll
+        run: cargo test --lib
+
+      - name: Build 32-bit DLL (MT4用)
+        working-directory: mql-zmq-dll
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          FILE_VERSION: ${{ inputs.file_version }}
+        run: |
+          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
+          cargo build --release --target i686-pc-windows-msvc
+
+      - name: Build 64-bit DLL (MT5用)
+        working-directory: mql-zmq-dll
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          FILE_VERSION: ${{ inputs.file_version }}
+        run: |
+          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
+          cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Prepare DLL artifacts
+        run: |
+          mkdir -p artifacts/dll/MT4
+          mkdir -p artifacts/dll/MT5
+          copy mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
+          copy mql-zmq-dll\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
+
+      - name: Upload DLL artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-dll
+          path: artifacts/dll/
+          retention-days: 1
+
+  build-rust-server:
+    name: Build Rust Server
+    runs-on: windows-latest
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'rust-server' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          workspace: rust-server
+
+      - name: Run tests
+        working-directory: rust-server
+        run: |
+          cargo test --lib
+          cargo test --test config_distribution_test
+          cargo test --test performance_benchmark_test
+
+      - name: Build server
+        working-directory: rust-server
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          FILE_VERSION: ${{ inputs.file_version }}
+        run: |
+          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
+          cargo build --release
+
+      - name: Prepare server artifacts
+        run: |
+          mkdir -p artifacts/server
+          copy rust-server\target\release\sankey-copier-server.exe artifacts\server\
+
+      - name: Upload server artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-server
+          path: artifacts/server/
+          retention-days: 1
+
+  build-tray-app:
+    name: Build Tray Application
+    runs-on: windows-latest
+    if: ${{ inputs.build_target == 'all' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          workspace: sankey-copier-tray
+
+      - name: Build Tray Application
+        working-directory: sankey-copier-tray
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          FILE_VERSION: ${{ inputs.file_version }}
+        run: |
+          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
+          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
+          cargo build --release
+
+      - name: Prepare Tray Application artifacts
+        run: |
+          mkdir -p artifacts/tray
+          copy sankey-copier-tray\target\release\sankey-copier-tray.exe artifacts\tray\
+
+      - name: Upload Tray Application artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-tray
+          path: artifacts/tray/
+          retention-days: 1

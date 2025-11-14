@@ -1,0 +1,48 @@
+# Set default behavior to automatically normalize line endings to LF
+* text=auto eol=lf
+
+# Windows script files should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files
+*.dll binary
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Explicit text files
+*.rs text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.xml text eol=lf
+*.mq4 text eol=lf
+*.mq5 text eol=lf
+*.mqh text eol=lf
+
+# Git config files
+.gitignore text eol=lf
+.gitattributes text eol=lf

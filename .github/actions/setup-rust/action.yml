@@ -1,0 +1,32 @@
+# Setup Rust toolchain with caching
+# Reusable composite action for Rust projects
+name: 'Setup Rust'
+description: 'Setup Rust toolchain with dependency caching'
+
+inputs:
+  toolchain:
+    description: 'Rust toolchain version'
+    required: false
+    default: 'stable'
+  targets:
+    description: 'Additional targets to install (comma-separated)'
+    required: false
+    default: ''
+  workspace:
+    description: 'Workspace directory for caching'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        targets: ${{ inputs.targets }}
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: ${{ inputs.workspace }}

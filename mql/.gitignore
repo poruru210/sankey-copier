@@ -1,0 +1,19 @@
+# MQL compiled files
+*.ex4
+*.ex5
+
+# MQL Libraries - DLL files (build artifacts from Rust)
+MT4/Libraries/*.dll
+MT5/Libraries/*.dll
+
+# Keep the .gitkeep or README files
+!MT4/Libraries/.gitkeep
+!MT5/Libraries/.gitkeep
+!MT4/Libraries/README.md
+!MT5/Libraries/README.md
+
+# MQL Editor temp files
+*.mqproj
+
+# MetaEditor backups
+*.bak

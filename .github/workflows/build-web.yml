@@ -1,0 +1,64 @@
+# Build Web UI
+# Reusable workflow for building the Next.js web interface
+name: Build Web UI
+
+on:
+  workflow_call:
+    inputs:
+      build_target:
+        description: 'Build target selection'
+        required: false
+        type: string
+        default: 'all'
+
+jobs:
+  build-web-ui:
+    name: Build Web UI
+    runs-on: ubuntu-latest
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'web-ui' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with pnpm
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: web-ui
+
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: |
+            web-ui/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('web-ui/**/*.ts', 'web-ui/**/*.tsx', 'web-ui/**/*.js', 'web-ui/**/*.jsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Install dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Run linter
+        working-directory: web-ui
+        run: pnpm lint || true
+
+      - name: Build Web UI
+        working-directory: web-ui
+        env:
+          CI: false
+          NEXT_BUILD_MODE: standalone
+        run: pnpm build
+
+      - name: Upload Web UI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-web-ui
+          path: |
+            ${{ github.workspace }}/web-ui/.next/standalone/
+            ${{ github.workspace }}/web-ui/.next/static/
+            ${{ github.workspace }}/web-ui/public/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1

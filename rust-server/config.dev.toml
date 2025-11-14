@@ -1,0 +1,17 @@
+# Development Environment Configuration
+#
+# This file contains development-specific overrides for config.toml
+# These settings are automatically loaded when CONFIG_ENV=dev (default)
+#
+# Note: Individual developers can create config.local.toml for personal
+# overrides without affecting this shared development configuration.
+
+[cors]
+# Disable CORS restrictions for local development
+# WARNING: Never set this to true in production!
+disable = true
+
+[installer]
+# Base path for MQL components (DLL, EA files)
+# In development, point to the production installation directory
+components_base_path = "C:\\Program Files\\SANKEY Copier"
