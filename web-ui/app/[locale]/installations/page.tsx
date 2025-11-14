@@ -176,15 +176,6 @@ export default function InstallationsPage() {
 
           {/* Action Buttons */}
           <div className="mb-6 flex gap-3">
-            <Button
-              onClick={fetchInstallations}
-              disabled={loading}
-              variant="outline"
-              className="gap-2 min-h-[44px] md:min-h-0"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              {content.refreshDetection}
-            </Button>
             {optimisticInstallations.length > 0 && (
               <Button
                 onClick={handleBatchInstall}
@@ -199,11 +190,20 @@ export default function InstallationsPage() {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    {content.installToSelected} ({selectedIds.size})
+                    インストール ({selectedIds.size})
                   </>
                 )}
               </Button>
             )}
+            <Button
+              onClick={fetchInstallations}
+              disabled={loading}
+              variant="outline"
+              className="gap-2 min-h-[44px] md:min-h-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              更新
+            </Button>
           </div>
 
           {/* Error Display */}
@@ -259,7 +259,6 @@ export default function InstallationsPage() {
                     <TableHead className="py-2 text-xs hidden md:table-cell">{content.installationPath}</TableHead>
                     <TableHead className="py-2 text-xs">{content.version}</TableHead>
                     <TableHead className="py-2 text-xs">{content.components}</TableHead>
-                    <TableHead className="text-right py-2 text-xs">{content.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -335,26 +334,6 @@ export default function InstallationsPage() {
                               <span className="text-xs">S</span>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right py-2 md:py-1" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            onClick={() => handleInstall(installation)}
-                            disabled={isInstalling || isPending}
-                            size="sm"
-                            variant={allComponentsInstalled ? 'outline' : 'default'}
-                            className="min-h-[44px] md:min-h-0"
-                          >
-                            {isInstalling ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                {content.installing}...
-                              </>
-                            ) : allComponentsInstalled ? (
-                              content.reinstall
-                            ) : (
-                              content.install
-                            )}
-                          </Button>
                         </TableCell>
                       </TableRow>
                     );
