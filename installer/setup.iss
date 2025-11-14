@@ -311,6 +311,7 @@ var
   InstalledVersion: String;
   UninstallKey: String;
   NodeJSInstallUrl: String;
+  ErrorCode: Integer;
 begin
   Result := True;
   IsRepairMode := False;
@@ -323,7 +324,6 @@ begin
               CustomMessage('DownloadNodeJS'),
               mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES then
     begin
-      var ErrorCode: Integer;
       NodeJSInstallUrl := 'https://nodejs.org/dist/v{#NodeJSVersion}/node-v{#NodeJSVersion}-x64.msi';
       ShellExec('open', NodeJSInstallUrl, '', '', SW_SHOW, ewNoWait, ErrorCode);
       MsgBox(CustomMessage('InstallNodeJSFirst'), mbInformation, MB_OK);
