@@ -106,11 +106,11 @@ export default function SitesPage() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="w-[80%] mx-auto p-6">
+          <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
-            <p className="text-muted-foreground">{content.description}</p>
+          <div className="mb-4">
+            <h1 className="text-xl font-bold mb-1">{content.title}</h1>
+            <p className="text-sm text-muted-foreground">{content.description}</p>
           </div>
 
           {/* Error Message */}

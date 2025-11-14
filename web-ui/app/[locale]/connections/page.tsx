@@ -58,11 +58,11 @@ export default function Home() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="w-[80%] mx-auto p-6 h-full flex flex-col">
+          <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
           {/* Page Title */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
-            <p className="text-muted-foreground">
+          <div className="mb-4">
+            <h1 className="text-xl font-bold mb-1">{content.title}</h1>
+            <p className="text-sm text-muted-foreground">
               {content.description}
             </p>
           </div>
