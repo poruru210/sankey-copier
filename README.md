@@ -15,76 +15,162 @@
 
 ## アーキテクチャ
 
+### クラウド版（推奨）
+
+```
+[ スマホ / PC / タブレット ]
+         │
+         ↓ HTTPS
+┌─────────────────────────┐
+│  Cloudflare Access      │ ← 認証（Google/GitHub/Email）
+│  (認証ゲートウェイ)      │
+└────────┬────────────────┘
+         │
+    ┌────┴─────┐
+    │          │
+    ↓          ↓
+┌─────────┐  ┌────────────────────┐
+│ Vercel  │  │ Cloudflare Tunnel  │
+│ Web UI  │  │ (暗号化トンネル)    │
+└─────────┘  └──────────┬─────────┘
+                        │
+                        ↓ localhost:3000
+              ┌──────────────────┐
+              │  Rust中継サーバー  │
+              │  + SQLite DB     │
+              └──────┬───────────┘
+                     │
+         ┌───────────┴───────────┐
+         │ ZeroMQ                │ ZeroMQ
+         ↓ (5555)                ↓ (5556)
+┌─────────────────┐      ┌─────────────────┐
+│  MT4/MT5 Master │      │  MT4/MT5 Slave  │
+│       EA        │      │       EA        │
+└─────────────────┘      └─────────────────┘
+```
+
+### Desktop App版（ローカル設定用）
+
 ```
 ┌─────────────────┐      ZeroMQ        ┌──────────────────┐      ZeroMQ        ┌─────────────────┐
 │  MT4/MT5 Master │ ───────────────> │  Rust中継サーバー  │ ───────────────> │  MT4/MT5 Slave  │
 │       EA        │   ポート: 5555    │  + SQLite DB     │   ポート: 5556    │       EA        │
 └─────────────────┘                  └──────────────────┘                  └─────────────────┘
-                                             │ ▲
-                                             │ │ HTTP/WebSocket
-                                             │ │ ポート: 8080
-                                             ▼ │
-                                      ┌──────────────────┐
-                                      │   Web UI         │
-                                      │  (Next.js 16)    │
-                                      └──────────────────┘
-                                             ▲
-                                             │
-                                      [ スマホ / PC ]
+                                            │ ▲
+                                            │ │ HTTP/WebSocket
+                                            │ │ ポート: 3000
+                                            ▼ │
+                                     ┌──────────────────┐
+                                     │   Desktop App    │
+                                     │  (Tauri + Next)  │
+                                     └──────────────────┘
 ```
 
-## インストール
+## セットアップ
 
-### Windowsインストーラー（推奨）
+SANKEY Copierは2つのデプロイ方法をサポートしています：
 
-最も簡単な方法は、Windowsインストーラーを使用することです：
+### 1. クラウド版（推奨） - どこからでもアクセス可能
 
-1. **インストーラーをダウンロード**
-   - [GitHubのReleases](https://github.com/your-org/sankey-copier/releases)から最新版をダウンロード
-   - `SankeyCopierSetup-x.x.x.exe` を実行
+イントラネット内のrust-serverをCloudflare Tunnelで公開し、Web-UIをVercelにデプロイします。
 
-2. **インストール完了後**
-   - サービスが自動的に起動します
-   - システムトレイにアイコンが表示されます
-   - ブラウザで http://localhost:8080 を開く
+**メリット:**
+- スマホ・タブレットから**どこからでも**アクセス可能
+- 固定IPアドレス不要
+- Cloudflare Accessによる強固な認証（Google/GitHub/メール）
+- 自動SSL証明書、無料で始められる
 
-3. **MT4/MT5 コンポーネントのインストール**
-   - WebUIの「MT4/MT5 Installations」ページで自動検出
-   - 「Install」ボタンをクリックしてDLL/EAをインストール
+**必要要件:**
+- Cloudflareアカウント（無料プランでOK）
+- Cloudflareでドメイン管理（既存ドメインをCloudflareに移管）
+- Vercelアカウント（無料プランでOK）
 
-4. **トレードコピーの設定**
-   - Master EA (`SankeyCopierMaster`) をMaster口座のチャートにアタッチ
-   - Slave EA (`SankeyCopierSlave`) をSlave口座のチャートにアタッチ
-   - WebUIで「+ New Setting」からコピー設定を作成・有効化
+**手順:**
 
-**インストーラーの機能:**
-- Rustサーバーを Windows サービスとして自動登録
-- WebUIを Windows サービスとして自動登録
-- システムトレイアプリケーションを自動起動
-- MT4/MT5のDLL/EAコンポーネントを含む
-- ワンクリックでのアンインストール
+1. **Rust-Serverのセットアップ（イントラネット内のPC）**
+   ```bash
+   cd rust-server
+   cargo run --release
+   ```
 
-### 開発者向けセットアップ
+2. **Cloudflare Tunnelのセットアップ**
+   - 詳細は [docs/CLOUDFLARE_SETUP.md](docs/CLOUDFLARE_SETUP.md) を参照
+   - Cloudflare Tunnelでrust-serverを公開（例: `https://api.yourdomain.com`）
+   - Cloudflare Accessで認証を設定
 
-開発やカスタマイズを行う場合は、手動でセットアップできます：
+3. **VercelにWeb-UIをデプロイ**
+   - 詳細は [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md) を参照
+   - VercelにWeb-UIをデプロイ（例: `https://app.yourdomain.com`）
+
+4. **Web-UIでrust-serverを登録**
+   - Web-UIの「Sites」ページで`https://api.yourdomain.com`を登録
+   - 認証後、どこからでもアクセス可能
+
+### 2. Desktop App版 - ローカル設定用
+
+ローカルネットワーク内で完結するデスクトップアプリ版です。
+
+**メリット:**
+- インターネット接続不要
+- ローカルで高速動作
+- 設定変更が簡単
 
 **必要要件:**
 - Windows 10/11
-- Rust 1.70以上
-- Node.js 18以上
 - MetaTrader 4 または 5
 
 **手順:**
-1. Rustサーバーの起動: `cd rust-server && cargo run --release`
-2. WebUIの起動: `cd web-ui && npm install && npm run dev`
-3. http://localhost:5173 でWebUIにアクセス
 
-詳細は [docs/setup.md](docs/setup.md) と [installer/README.md](installer/README.md) を参照してください。
+1. **Desktop Appのビルド**
+   ```bash
+   cd desktop-app
+   npm install
+   npm run tauri build
+   ```
+
+2. **アプリケーションの起動**
+   - `src-tauri/target/release/sankey-copier.exe`を実行
+   - 自動的にrust-serverとweb-uiが起動
+
+3. **MT4/MT5 コンポーネントのインストール**
+   - Desktop Appの「MT4/MT5 Installations」ページで自動検出
+   - 「Install」ボタンでDLL/EAをインストール
+
+### 3. トレードコピーの設定（共通）
+
+1. **Master EA をアタッチ**
+   - MT4/MT5のチャートに`SankeyCopierMaster.ex4/.ex5`をドロップ
+   - EAパラメータは基本的にデフォルトでOK
+
+2. **Slave EA をアタッチ**
+   - Slave口座のチャートに`SankeyCopierSlave.ex4/.ex5`をドロップ
+
+3. **Web-UIでコピー設定を作成**
+   - 「+ New Setting」をクリック
+   - Master/Slave口座を選択
+   - ロット倍率、シンボル変換等を設定
+   - 「Enable」でコピー開始
+
+### 開発者向けセットアップ
+
+開発やカスタマイズを行う場合：
+
+**必要要件:**
+- Rust 1.70以上
+- Node.js 20以上
+- MetaTrader 4 または 5
+
+**手順:**
+1. Rustサーバー: `cd rust-server && cargo run --release`
+2. Web-UI開発サーバー: `cd web-ui && npm install && npm run dev`
+3. http://localhost:8080 でアクセス
 
 ## ドキュメント
 
 ### セットアップ・運用
-- **[セットアップガイド](docs/setup.md)** - 初心者向けの詳細なインストール手順
+- **[Cloudflare Setup Guide](docs/CLOUDFLARE_SETUP.md)** - Cloudflare Tunnel + Accessの設定手順（WebSocket対応）
+- **[Vercel Deployment Guide](docs/VERCEL_DEPLOYMENT.md)** - VercelへのWeb-UIデプロイ手順
+- **[セットアップガイド](docs/setup.md)** - 初心者向けの詳細なインストール手順（Desktop App版）
 - **[運用・デプロイガイド](docs/operations.md)** - 本番環境へのデプロイ、メンテナンス、バックアップ
 - **[トラブルシューティング](docs/troubleshooting.md)** - よくある問題と解決方法
 
@@ -154,9 +240,16 @@ MIT License
 
 ## セキュリティ
 
-- 本番環境では適切なファイアウォール設定を行ってください
-- WebUIには認証機能がないため、外部に公開しないでください
-- 外部アクセスが必要な場合はVPN（Tailscale、WireGuardなど）の使用を推奨します
+### クラウド版
+- **Cloudflare Access**による認証を必ず設定してください
+- Google/GitHub/メールアドレスによるSSO認証に対応
+- 許可されたユーザーのみがアクセス可能
+- WebSocket通信も自動的に保護されます
+
+### Desktop App版
+- ローカルネットワーク内でのみ使用してください
+- 外部に公開する場合は適切なファイアウォール設定を行ってください
+- VPN（Tailscale、WireGuardなど）の使用を推奨します
 
 ## サポート
 
@@ -172,10 +265,10 @@ MIT License
 
 ## ロードマップ
 
-- [ ] WebUI認証機能
+- [x] クラウド版の提供（Vercel + Cloudflare Tunnel）
+- [x] WebUI認証機能（Cloudflare Access）
 - [ ] 詳細なトレード履歴とパフォーマンス分析
 - [ ] Telegram/Discord通知
-- [ ] クラウド版の提供
 - [ ] スマホアプリ (iOS/Android)
 
 ---
