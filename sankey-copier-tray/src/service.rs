@@ -80,10 +80,17 @@ fn query_service_status(service_name: &str) -> Result<String> {
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let status = stdout.trim();
+            // NSSM may output UTF-16LE which appears as "S E R V I C E _ R U N N I N G"
+            // Remove null bytes and extra spaces
+            let status = stdout
+                .chars()
+                .filter(|c| *c != '\0' && *c != ' ')
+                .collect::<String>()
+                .trim()
+                .to_string();
 
             // NSSM returns: SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_START_PENDING, etc.
-            return Ok(match status {
+            return Ok(match status.as_str() {
                 "SERVICE_RUNNING" => "Running",
                 "SERVICE_STOPPED" => "Stopped",
                 "SERVICE_START_PENDING" => "Starting...",
@@ -91,7 +98,7 @@ fn query_service_status(service_name: &str) -> Result<String> {
                 "SERVICE_PAUSE_PENDING" => "Pausing...",
                 "SERVICE_CONTINUE_PENDING" => "Resuming...",
                 "SERVICE_PAUSED" => "Paused",
-                _ => status,
+                _ => &status,
             }
             .to_string());
         }
