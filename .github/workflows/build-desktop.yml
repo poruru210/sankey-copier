@@ -63,7 +63,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # Build Web UI (static export)
+      # Build Web UI (static export for Tauri)
       - name: Build Web UI
         run: |
           cd web-ui
@@ -72,6 +72,7 @@ jobs:
           pnpm install
 
           Write-Host "Building Next.js application (static export)..." -ForegroundColor Cyan
+          $env:NEXT_BUILD_MODE = "export"
           pnpm run build
 
           # Verify static export output

@@ -48,6 +48,7 @@ jobs:
         working-directory: web-ui
         env:
           CI: false
+          NEXT_BUILD_MODE: standalone
         run: pnpm build
 
       - name: Upload Web UI artifacts
