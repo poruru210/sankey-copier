@@ -10,7 +10,7 @@
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
-AppId={{8F9B3C2E-5D7A-4B1C-9E2F-6A8D3C5B7E9F}
+AppId={{8F9B3C2E-5D7A-4B1C-9E2F-6A8D3C5B7E9F}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -22,6 +22,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
+InfoBeforeFile=..\installer\README.md
 OutputDir=output
 OutputBaseFilename=SankeyCopierSetup-{#MyAppVersion}
 SetupIconFile=..\app.ico
