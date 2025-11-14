@@ -114,11 +114,15 @@ Source: "..\sankey-copier-tray\target\release\{#MyTrayExeName}"; DestDir: "{app}
 ; NSSM (Windows Service Manager for Tray App)
 Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; MT4/MT5 Components (if built)
-Source: "..\mql\build\mt4\Experts\*.ex4"; DestDir: "{app}\mql\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt4\Libraries\*.dll"; DestDir: "{app}\mql\mt4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt5\Experts\*.ex5"; DestDir: "{app}\mql\mt5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt5\Libraries\*.dll"; DestDir: "{app}\mql\mt5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+; MT4/MT5 Components
+; MT5 uses 64-bit DLL in Libraries folder
+Source: "..\mql-zmq-dll\target\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\MT5\Libraries"; Flags: ignoreversion
+; MT4 uses 32-bit DLL in Libraries folder
+Source: "..\mql-zmq-dll\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"; DestDir: "{app}\mql\MT4\Libraries"; Flags: ignoreversion
+
+; MQL Compiled Files (for immediate use)
+Source: "..\mql\MT4\Experts\*.ex4"; DestDir: "{app}\mql\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mql\MT5\Experts\*.ex5"; DestDir: "{app}\mql\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Icon
 Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion
