@@ -77,8 +77,7 @@ jobs:
           # Update Cargo.toml files
           $cargoFiles = @(
             "rust-server/Cargo.toml",
-            "mql-zmq-dll/Cargo.toml",
-            "sankey-copier-tray/Cargo.toml"
+            "mql-zmq-dll/Cargo.toml"
           )
 
           foreach ($file in $cargoFiles) {
