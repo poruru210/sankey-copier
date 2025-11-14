@@ -72,17 +72,17 @@ pub fn show_info(message: &str) {
 
 /// Show about dialog
 pub fn show_about() {
-    // Use PACKAGE_VERSION which matches the ProductVersion in Windows properties
-    const VERSION: &str = env!("PACKAGE_VERSION");
+    // Use FILE_VERSION which is the Windows file version (4-component)
+    const FILE_VERSION: &str = env!("FILE_VERSION");
 
     let message = format!(
         "SANKEY Copier Tray Application\n\n\
-         Version: {}\n\n\
+         File Version: {}\n\n\
          MT4/MT5 Trade Copy System\n\
          Low-latency local communication with remote control\n\n\
          Copyright © 2024 SANKEY Copier Project\n\
          Licensed under MIT License",
-        VERSION
+        FILE_VERSION
     );
 
     show_info(&message);
