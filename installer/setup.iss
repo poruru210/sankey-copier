@@ -58,39 +58,43 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Messages]
 ; English
-english.WelcomeLabel2=This will install [name/ver] on your computer.%n%nBuild: {#MyBuildInfo}%n%nIt is recommended that you close all other applications before continuing.
+english.WelcomeLabel2=Welcome to the [name] Setup Wizard%n%nThis wizard will install [name/ver] on your computer.%n%n[name] is a trade copying tool for MT4/MT5 that automatically replicates trades from a master account to multiple follower accounts.%n%nIt is recommended that you close MT4/MT5 and all other applications before continuing.%n%nClick Next to continue.
 
 ; Japanese
-japanese.WelcomeLabel2=[name/ver] をコンピュータにインストールします。%n%nビルド: {#MyBuildInfo}%n%n続行する前に、他のすべてのアプリケーションを閉じることをお勧めします。
+japanese.WelcomeLabel2=[name] セットアップウィザードへようこそ%n%nこのウィザードは [name/ver] をコンピュータにインストールします。%n%n[name] は MT4/MT5 のトレードコピーツールです。マスター口座の取引を複数のフォロワー口座に自動的にコピーします。%n%n続行する前に、MT4/MT5 および他のすべてのアプリケーションを閉じることをお勧めします。%n%n[次へ] をクリックして続行してください。
 
 [CustomMessages]
 ; English
 english.PortConfigPageTitle=Port Configuration
-english.PortConfigPageDescription=Configure network port
-english.PortConfigPageSubDescription=Please specify the port number for the server API.
-english.ServerPortLabel=Rust Server API Port:
-english.InstallingServerService=Installing Rust server service...
+english.PortConfigPageDescription=Configure server communication port
+english.PortConfigPageSubDescription=The default port (3000) is usually fine. Only change this if another software is using the same port.
+english.ServerPortLabel=Server Port:
+english.InstallingServerService=Installing server service...
 english.StartingServices=Starting services...
 english.RepairInstallationTitle=Repair Installation
 english.RepairInstallationMessage=The same version of SANKEY Copier is already installed.%n%nDo you want to repair the installation?
 english.UpdateInstallationTitle=Update Installation
-english.UpdateInstallationMessage=A previous version of SANKEY Copier is already installed.%n%nDo you want to update to version {#MyAppVersion}?
+english.UpdateInstallationMessage=SANKEY Copier %1 is already installed.%n%nDo you want to update to version {#MyFileVersion}?
+english.DowngradeInstallationTitle=Downgrade Warning
+english.DowngradeInstallationMessage=A newer version (%1) is already installed.%n%nYou are trying to install an older version ({#MyFileVersion}).%n%nDowngrading is not recommended and may cause issues.%n%nDo you want to continue anyway?
 english.StoppingServices=Stopping existing services...
-english.MergingConfig=Merging configuration file...
+english.MergingConfig=Updating configuration...
 
 ; Japanese
 japanese.PortConfigPageTitle=ポート設定
-japanese.PortConfigPageDescription=ネットワークポートの設定
-japanese.PortConfigPageSubDescription=サーバーAPIのポート番号を指定してください。
-japanese.ServerPortLabel=Rust Server APIポート:
-japanese.InstallingServerService=Rustサーバーサービスをインストールしています...
+japanese.PortConfigPageDescription=サーバーの通信ポートを設定します
+japanese.PortConfigPageSubDescription=通常はデフォルト値（3000）のままで問題ありません。他のソフトウェアとポートが競合する場合のみ変更してください。
+japanese.ServerPortLabel=サーバーポート:
+japanese.InstallingServerService=サーバーサービスをインストールしています...
 japanese.StartingServices=サービスを起動しています...
 japanese.RepairInstallationTitle=インストールの修復
 japanese.RepairInstallationMessage=同じバージョンのSANKEY Copierが既にインストールされています。%n%nインストールを修復しますか？
 japanese.UpdateInstallationTitle=インストールの更新
-japanese.UpdateInstallationMessage=以前のバージョンのSANKEY Copierが既にインストールされています。%n%nバージョン{#MyAppVersion}に更新しますか？
+japanese.UpdateInstallationMessage=SANKEY Copier %1 が既にインストールされています。%n%nバージョン {#MyFileVersion} に更新しますか？
+japanese.DowngradeInstallationTitle=ダウングレード警告
+japanese.DowngradeInstallationMessage=より新しいバージョン (%1) が既にインストールされています。%n%n古いバージョン ({#MyFileVersion}) をインストールしようとしています。%n%nダウングレードは推奨されず、問題を引き起こす可能性があります。%n%nそれでも続行しますか？
 japanese.StoppingServices=既存のサービスを停止しています...
-japanese.MergingConfig=設定ファイルをマージしています...
+japanese.MergingConfig=設定を更新しています...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -128,6 +132,8 @@ Name: "{app}\logs"; Permissions: users-full
 
 [Registry]
 ; Save detailed build information for troubleshooting and version tracking
+; DisplayVersion is used for version comparison during updates
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting('AppId')}_is1"; ValueType: string; ValueName: "DisplayVersion"; ValueData: "{#MyFileVersion}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting('AppId')}_is1"; ValueType: string; ValueName: "BuildInfo"; ValueData: "{#MyBuildInfo}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting('AppId')}_is1"; ValueType: string; ValueName: "FileVersion"; ValueData: "{#MyFileVersion}"; Flags: uninsdeletevalue
 
@@ -164,6 +170,75 @@ var
   ServerPortPage: TInputQueryWizardPage;
   IsRepairMode: Boolean;
   IsUpdateMode: Boolean;
+
+{ Compare two version strings in format "X.Y.Z.B" (e.g., "0.1.0.169")
+  Returns: -1 if Version1 < Version2
+            0 if Version1 = Version2
+            1 if Version1 > Version2 }
+function CompareVersion(Version1, Version2: String): Integer;
+var
+  V1Parts, V2Parts: array[0..3] of Integer;
+  P1, P2: Integer;
+  I, DotPos: Integer;
+  S1, S2: String;
+begin
+  { Initialize arrays }
+  for I := 0 to 3 do
+  begin
+    V1Parts[I] := 0;
+    V2Parts[I] := 0;
+  end;
+
+  { Parse Version1 }
+  S1 := Version1;
+  for I := 0 to 3 do
+  begin
+    DotPos := Pos('.', S1);
+    if DotPos > 0 then
+    begin
+      V1Parts[I] := StrToIntDef(Copy(S1, 1, DotPos - 1), 0);
+      Delete(S1, 1, DotPos);
+    end
+    else if S1 <> '' then
+    begin
+      V1Parts[I] := StrToIntDef(S1, 0);
+      S1 := '';
+    end;
+  end;
+
+  { Parse Version2 }
+  S2 := Version2;
+  for I := 0 to 3 do
+  begin
+    DotPos := Pos('.', S2);
+    if DotPos > 0 then
+    begin
+      V2Parts[I] := StrToIntDef(Copy(S2, 1, DotPos - 1), 0);
+      Delete(S2, 1, DotPos);
+    end
+    else if S2 <> '' then
+    begin
+      V2Parts[I] := StrToIntDef(S2, 0);
+      S2 := '';
+    end;
+  end;
+
+  { Compare each component }
+  Result := 0;
+  for I := 0 to 3 do
+  begin
+    if V1Parts[I] < V2Parts[I] then
+    begin
+      Result := -1;
+      Exit;
+    end
+    else if V1Parts[I] > V2Parts[I] then
+    begin
+      Result := 1;
+      Exit;
+    end;
+  end;
+end;
 
 procedure MergeConfigFiles(ExistingConfigPath: String; NewConfigPath: String);
 var
@@ -277,35 +352,49 @@ begin
     if RegQueryStringValue(HKLM, UninstallKey, 'DisplayVersion', InstalledVersion) or
        RegQueryStringValue(HKCU, UninstallKey, 'DisplayVersion', InstalledVersion) then
     begin
-      { Compare versions }
-      if InstalledVersion = '{#MyAppVersion}' then
-      begin
-        { Same version - Repair mode }
-        IsRepairMode := True;
-        if MsgBox(CustomMessage('RepairInstallationMessage'),
-                  mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
-        begin
-          Result := False;
-          Exit;
-        end;
-      end
-      else
-      begin
-        { Different version - Update mode }
-        IsUpdateMode := True;
-        if MsgBox(CustomMessage('UpdateInstallationMessage'),
-                  mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
-        begin
-          Result := False;
-          Exit;
-        end;
+      { Compare versions using FileVersion (includes build number) }
+      case CompareVersion(InstalledVersion, '{#MyFileVersion}') of
+        0:
+          begin
+            { Same version - Repair mode }
+            IsRepairMode := True;
+            if MsgBox(CustomMessage('RepairInstallationMessage'),
+                      mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+            begin
+              Result := False;
+              Exit;
+            end;
+          end;
+        -1:
+          begin
+            { Older version installed - Update mode }
+            IsUpdateMode := True;
+            if MsgBox(FmtMessage(CustomMessage('UpdateInstallationMessage'), [InstalledVersion]),
+                      mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+            begin
+              Result := False;
+              Exit;
+            end;
+          end;
+        1:
+          begin
+            { Newer version installed - Downgrade warning }
+            if MsgBox(FmtMessage(CustomMessage('DowngradeInstallationMessage'), [InstalledVersion]),
+                      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDNO then
+            begin
+              Result := False;
+              Exit;
+            end;
+            { Allow downgrade but as update mode }
+            IsUpdateMode := True;
+          end;
       end;
     end
     else
     begin
       { Version not found in registry, assume update mode }
       IsUpdateMode := True;
-      if MsgBox(CustomMessage('UpdateInstallationMessage'),
+      if MsgBox(FmtMessage(CustomMessage('UpdateInstallationMessage'), ['(unknown)']),
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
       begin
         Result := False;
