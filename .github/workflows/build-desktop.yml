@@ -69,7 +69,7 @@ jobs:
           cd web-ui
 
           Write-Host "Installing dependencies..." -ForegroundColor Cyan
-          pnpm install --frozen-lockfile
+          pnpm install
 
           Write-Host "Building Next.js application..." -ForegroundColor Cyan
           pnpm run build
