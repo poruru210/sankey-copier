@@ -25,8 +25,8 @@
     "windows": [
       {
         "title": "SANKEY Copier",
-        "width": 1200,
-        "height": 800,
+        "width": 1440,
+        "height": 1024,
         "resizable": true,
         "fullscreen": false
       }
