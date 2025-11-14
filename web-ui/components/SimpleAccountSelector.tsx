@@ -133,10 +133,11 @@ export function SimpleAccountSelector({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={label}>
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </Label>
+      {label && (
+        <Label htmlFor={label}>
+          {label}
+        </Label>
+      )}
       <select
         id={label}
         value={value}

@@ -152,7 +152,6 @@ export function EditCopySettingsDialog({
                 <div>
                   <Label htmlFor="lot_multiplier">
                     {content.lotMultiplier.value}
-                    <span className="text-red-500 ml-1">*</span>
                   </Label>
                   <Input
                     id="lot_multiplier"
