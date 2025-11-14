@@ -143,13 +143,12 @@ jobs:
         shell: pwsh
 
       - name: Build Desktop App with Tauri Action
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop-app/src-tauri
-          tauriScript: cargo tauri
-          args: --verbose
+          distPath: ../src-tauri/dist
 
       - name: List build output
         run: |
