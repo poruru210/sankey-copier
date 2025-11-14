@@ -1,0 +1,221 @@
+name: Build Unified Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'rust-server/**'
+      - 'web-ui/**'
+      - 'desktop-app/**'
+      - 'installer/**'
+      - '.github/workflows/build-unified-installer.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'rust-server/**'
+      - 'web-ui/**'
+      - 'desktop-app/**'
+      - 'installer/**'
+  workflow_dispatch:
+
+jobs:
+  build-installer:
+    name: Build Unified Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust-server/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust-server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Node.js dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            web-ui/node_modules
+            desktop-app/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('web-ui/pnpm-lock.yaml', 'desktop-app/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Cache Inno Setup
+        id: cache-inno
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files (x86)\Inno Setup 6
+          key: innosetup-6.3.3
+
+      - name: Install Inno Setup
+        if: steps.cache-inno.outputs.cache-hit != 'true'
+        run: choco install innosetup -y
+
+      - name: Add Inno Setup to PATH
+        run: |
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build rust-server
+        working-directory: rust-server
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Verify rust-server binary
+        run: |
+          $exePath = "rust-server/target/x86_64-pc-windows-msvc/release/rust-server.exe"
+          if (Test-Path $exePath) {
+            Write-Host "✓ rust-server.exe built successfully" -ForegroundColor Green
+            $size = (Get-Item $exePath).Length / 1MB
+            Write-Host "  Size: $([math]::Round($size, 2)) MB"
+          } else {
+            Write-Error "rust-server.exe not found"
+            exit 1
+          }
+
+      - name: Copy rust-server to expected location
+        run: |
+          New-Item -ItemType Directory -Force -Path "rust-server/target/release"
+          Copy-Item "rust-server/target/x86_64-pc-windows-msvc/release/rust-server.exe" -Destination "rust-server/target/release/rust-server.exe"
+          Write-Host "✓ Copied rust-server.exe to target/release"
+
+      - name: Build web-ui (static export)
+        working-directory: web-ui
+        env:
+          NEXT_BUILD_MODE: export
+        run: |
+          pnpm install
+          pnpm run build
+
+      - name: Verify web-ui output
+        run: |
+          if (Test-Path "web-ui/out") {
+            Write-Host "✓ web-ui static export successful" -ForegroundColor Green
+            $fileCount = (Get-ChildItem "web-ui/out" -Recurse -File).Count
+            Write-Host "  Files: $fileCount"
+          } else {
+            Write-Error "web-ui/out directory not found"
+            exit 1
+          }
+
+      - name: Build Desktop App
+        working-directory: desktop-app
+        run: |
+          npm install
+          npm run tauri build -- --bundles none
+
+      - name: Verify Desktop App binary
+        run: |
+          $exePath = "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe"
+          if (Test-Path $exePath) {
+            Write-Host "✓ Desktop App built successfully" -ForegroundColor Green
+            $size = (Get-Item $exePath).Length / 1MB
+            Write-Host "  Size: $([math]::Round($size, 2)) MB"
+          } else {
+            Write-Error "sankey-copier-desktop.exe not found"
+            exit 1
+          }
+
+      - name: Build installer with Inno Setup
+        working-directory: installer
+        run: |
+          Write-Host "Building installer..." -ForegroundColor Cyan
+
+          # Run Inno Setup compiler
+          & iscc setup.iss
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed"
+            exit 1
+          }
+
+          Write-Host "✓ Installer built successfully" -ForegroundColor Green
+
+      - name: Verify installer output
+        run: |
+          $installerPath = "installer/output/SankeyCopierSetup-1.0.0.exe"
+
+          if (Test-Path $installerPath) {
+            Write-Host "✓ Installer created successfully" -ForegroundColor Green
+            $size = (Get-Item $installerPath).Length / 1MB
+            Write-Host "  Path: $installerPath"
+            Write-Host "  Size: $([math]::Round($size, 2)) MB"
+          } else {
+            Write-Error "Installer not found at: $installerPath"
+            Write-Host "Directory contents:"
+            if (Test-Path "installer/output") {
+              Get-ChildItem "installer/output" | ForEach-Object {
+                Write-Host "  - $($_.Name)"
+              }
+            } else {
+              Write-Host "  installer/output directory does not exist"
+            }
+            exit 1
+          }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sankey-copier-unified-installer
+          path: installer/output/*.exe
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installer/output/*.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## SANKEY Copier Unified Installer
+
+            ### What's Included
+            - **rust-server** - Windows Service (24/7 background operation)
+            - **Desktop App** - Configuration UI (Tauri + Next.js)
+            - **MT4/MT5 Components** - Expert Advisors and DLLs (optional)
+
+            ### Installation
+            1. Download `SankeyCopierSetup-1.0.0.exe`
+            2. Run as Administrator
+            3. Follow the installation wizard
+
+            ### Requirements
+            - Windows 10/11 (64-bit)
+            - MetaTrader 4 or 5
+
+            ### After Installation
+            - rust-server will automatically start as a Windows Service
+            - Desktop App shortcut will be created on your desktop
+            - No additional dependencies required (Node.js not needed)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
