@@ -134,51 +134,20 @@ jobs:
             exit 1
           }
 
-          # Copy tray exe
-          New-Item -ItemType Directory -Force -Path "sankey-copier-tray/target/release"
-          if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
-            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "sankey-copier-tray/target/release/"
-            Write-Host "✓ Copied tray exe"
+          # Copy Desktop App exe (with embedded web-ui)
+          New-Item -ItemType Directory -Force -Path "desktop-app/src-tauri/target/release"
+          if (Test-Path "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe") {
+            Copy-Item "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe" -Destination "desktop-app/src-tauri/target/release/"
+            Write-Host "✓ Copied Desktop App exe"
           } else {
-            Write-Host "❌ Tray exe not found"
+            Write-Host "❌ Desktop App exe not found"
+            Write-Host "Listing build-artifacts/sankey-copier-desktop:"
+            if (Test-Path "build-artifacts/sankey-copier-desktop") {
+              Get-ChildItem "build-artifacts/sankey-copier-desktop" -Force | ForEach-Object { Write-Host "  $($_.Name)" }
+            } else {
+              Write-Host "  Directory does not exist"
+            }
             exit 1
-          }
-
-          # Copy Web UI
-          # Artifact structure: .next/standalone/, .next/static/, public/
-          New-Item -ItemType Directory -Force -Path "web-ui/.next"
-
-          # Copy .next/standalone
-          $standaloneSrc = "build-artifacts/sankey-copier-web-ui/.next/standalone"
-          $standaloneDest = "web-ui/.next/standalone"
-          if (Test-Path -LiteralPath $standaloneSrc) {
-            Copy-Item -Recurse -Force -LiteralPath $standaloneSrc -Destination $standaloneDest
-            Write-Host "✓ Copied Web UI standalone"
-          } else {
-            Write-Host "❌ Web UI standalone not found"
-            Write-Host "Expected path: $standaloneSrc"
-            Write-Host "Listing build-artifacts/sankey-copier-web-ui:"
-            Get-ChildItem "build-artifacts/sankey-copier-web-ui" -Force | ForEach-Object { Write-Host "  $($_.Name)" }
-            exit 1
-          }
-
-          # Copy .next/static
-          $staticSrc = "build-artifacts/sankey-copier-web-ui/.next/static"
-          $staticDest = "web-ui/.next/static"
-          if (Test-Path -LiteralPath $staticSrc) {
-            Copy-Item -Recurse -Force -LiteralPath $staticSrc -Destination $staticDest
-            Write-Host "✓ Copied Web UI static"
-          } else {
-            Write-Host "❌ Web UI static not found"
-            exit 1
-          }
-
-          # Copy public
-          $publicSrc = "build-artifacts/sankey-copier-web-ui/public"
-          $publicDest = "web-ui/public"
-          if (Test-Path -LiteralPath $publicSrc) {
-            Copy-Item -Recurse -Force -LiteralPath $publicSrc -Destination $publicDest
-            Write-Host "✓ Copied Web UI public"
           }
 
           # Copy MQL compiled files
@@ -217,8 +186,7 @@ jobs:
             "rust-server/target/release/sankey-copier-server.exe",
             "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
             "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
-            "sankey-copier-tray/target/release/sankey-copier-tray.exe",
-            "web-ui/.next/standalone",
+            "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe",
             "installer/resources/nssm.exe"
           )
 

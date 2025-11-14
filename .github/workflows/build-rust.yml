@@ -115,39 +115,3 @@ jobs:
           name: sankey-copier-server
           path: artifacts/server/
           retention-days: 1
-
-  build-tray-app:
-    name: Build Tray Application
-    runs-on: windows-latest
-    if: ${{ inputs.build_target == 'all' }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          workspace: sankey-copier-tray
-
-      - name: Build Tray Application
-        working-directory: sankey-copier-tray
-        env:
-          PACKAGE_VERSION: ${{ inputs.package_version }}
-          FILE_VERSION: ${{ inputs.file_version }}
-        run: |
-          echo "Building with PACKAGE_VERSION=${{ inputs.package_version }}"
-          echo "Building with FILE_VERSION=${{ inputs.file_version }}"
-          cargo build --release
-
-      - name: Prepare Tray Application artifacts
-        run: |
-          mkdir -p artifacts/tray
-          copy sankey-copier-tray\target\release\sankey-copier-tray.exe artifacts\tray\
-
-      - name: Upload Tray Application artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sankey-copier-tray
-          path: artifacts/tray/
-          retention-days: 1

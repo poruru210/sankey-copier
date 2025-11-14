@@ -92,21 +92,30 @@ jobs:
           pnpm install
         shell: pwsh
 
-      # Build Tauri application
+      # Build Tauri application (raw EXE without bundles for Inno Setup)
       - name: Build Tauri application
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop-app
+        run: |
+          cd desktop-app
+
+          Write-Host "Building Tauri application..." -ForegroundColor Cyan
+          pnpm run tauri build -- --bundles none
+
+          # Verify output
+          $exePath = "src-tauri/target/release/sankey-copier-desktop.exe"
+          if (!(Test-Path $exePath)) {
+            Write-Host "Build failed: $exePath not found" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "Build completed successfully" -ForegroundColor Green
+          Write-Host "EXE size: $((Get-Item $exePath).Length / 1MB) MB" -ForegroundColor Cyan
+        shell: pwsh
 
       # Upload artifacts
       - name: Upload Desktop App artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-desktop
-          path: |
-            desktop-app/src-tauri/target/release/bundle/**/*.exe
-            desktop-app/src-tauri/target/release/bundle/**/*.msi
+          path: desktop-app/src-tauri/target/release/sankey-copier-desktop.exe
           retention-days: 7
           if-no-files-found: error
