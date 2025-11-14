@@ -67,19 +67,6 @@ jobs:
             ${{ runner.os }}-cargo-desktop-
             ${{ runner.os }}-cargo-
 
-      - name: Install Tauri CLI
-        run: |
-          # Check if Tauri CLI is already installed
-          if (Get-Command cargo-tauri -ErrorAction SilentlyContinue) {
-            Write-Host "Tauri CLI already installed"
-            cargo tauri --version
-          } else {
-            Write-Host "Installing Tauri CLI..."
-            cargo install tauri-cli --version "^2.0.0" --locked
-            cargo tauri --version
-          }
-        shell: pwsh
-
       - name: Prepare Tauri dist (copy web build -> src-tauri/dist)
         working-directory: desktop-app/src-tauri
         run: |
@@ -155,54 +142,25 @@ jobs:
           Get-ChildItem -Path $dist -File | ForEach-Object { Write-Host "📄 $($_.Name)" }
         shell: pwsh
 
-      - name: Verify Cargo.toml location (debug)
-        run: |
-          Write-Host "Looking for Cargo.toml under desktop-app..."
-          Get-ChildItem -Path desktop-app -Filter Cargo.toml -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-        shell: pwsh
-
-      - name: Build Desktop App (cargo/tauri) in src-tauri
-        working-directory: desktop-app/src-tauri
-        run: |
-          Write-Host "Running from $(Get-Location)"
-          if (-not (Test-Path "Cargo.toml")) {
-            Write-Host "❌ Cargo.toml not found in current working directory: $(Get-Location)"
-            exit 1
-          }
-
-          # Verify dist directory contents
-          Write-Host "Contents of dist directory before build:"
-          if (Test-Path "dist") {
-            Get-ChildItem -Path dist | ForEach-Object { Write-Host $_.FullName }
-          } else {
-            Write-Host "dist directory not found!"
-          }
-
-          # Check for index.html or server.js in dist
-          if (-not ((Test-Path "dist/index.html") -or (Test-Path "dist/server.js"))) {
-            Write-Host "❌ Neither dist/index.html nor dist/server.js found - Web UI build missing!"
-            Write-Host "Contents of dist directory:"
-            Get-ChildItem -Path dist -Recurse | ForEach-Object { Write-Host $_.FullName }
-            exit 1
-          }
-
-          # Clean and build with verbose output
-          cargo clean
-          $env:RUST_BACKTRACE = "full"
-          cargo tauri build --verbose 2>&1 | Tee-Object -Variable buildOutput
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) {
-            Write-Host "❌ Tauri build failed with exit code: $exitCode"
-            Write-Host "Last 50 lines of build output:"
-            $buildOutput | Select-Object -Last 50
-            exit $exitCode
-          }
-        shell: pwsh
+      - name: Build Desktop App with Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop-app/src-tauri
+          tauriScript: cargo tauri
+          args: --verbose
 
       - name: List build output
         run: |
-          Write-Host "Listing desktop-app/src-tauri/target/release:" 
-          Get-ChildItem -Path desktop-app/src-tauri/target/release -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "Listing desktop-app/src-tauri/target/release:"
+          if (Test-Path "desktop-app/src-tauri/target/release") {
+            Get-ChildItem -Path desktop-app/src-tauri/target/release -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+          }
+          Write-Host "Listing desktop-app/src-tauri/target/release/bundle:"
+          if (Test-Path "desktop-app/src-tauri/target/release/bundle") {
+            Get-ChildItem -Path desktop-app/src-tauri/target/release/bundle -Recurse -Include *.exe, *.msi | ForEach-Object { Write-Host $_.FullName }
+          }
         shell: pwsh
 
       - name: Upload Desktop App artifact
@@ -211,4 +169,6 @@ jobs:
           name: sankey-copier-desktop
           path: |
             desktop-app/src-tauri/target/release/sankey-copier-desktop.exe
+            desktop-app/src-tauri/target/release/bundle/**/*.exe
+            desktop-app/src-tauri/target/release/bundle/**/*.msi
           retention-days: 7
