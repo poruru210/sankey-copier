@@ -124,7 +124,10 @@ export function SettingsDialog({
         ...formData,
       });
     } else {
-      onSave(formData);
+      onSave({
+        ...formData,
+        enabled: false,
+      });
     }
     onOpenChange(false);
   };
