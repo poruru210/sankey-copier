@@ -72,12 +72,12 @@ pub fn show_info(message: &str) {
 
 /// Show about dialog
 pub fn show_about() {
-    // Get version from EXE file properties at runtime
-    let version = get_exe_product_version().unwrap_or_else(|| "Unknown".to_string());
+    // Get file version from EXE file properties at runtime
+    let version = get_exe_file_version().unwrap_or_else(|| "Unknown".to_string());
 
     let message = format!(
         "SANKEY Copier Tray Application\n\n\
-         Version: {}\n\n\
+         File Version: {}\n\n\
          MT4/MT5 Trade Copy System\n\
          Low-latency local communication with remote control\n\n\
          Copyright © 2024 SANKEY Copier Project\n\
@@ -88,9 +88,9 @@ pub fn show_about() {
     show_info(&message);
 }
 
-/// Get ProductVersion from the current EXE file at runtime
+/// Get FileVersion from the current EXE file at runtime
 #[cfg(target_os = "windows")]
-fn get_exe_product_version() -> Option<String> {
+fn get_exe_file_version() -> Option<String> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::MAX_PATH;
@@ -156,9 +156,9 @@ fn get_exe_product_version() -> Option<String> {
             vec!["040904b0".to_string(), "000004b0".to_string(), "040904e4".to_string()]
         };
 
-        // Try each codepage to get ProductVersion
+        // Try each codepage to get FileVersion
         for codepage in &codepages {
-            let query_path = format!("\\StringFileInfo\\{}\\ProductVersion", codepage);
+            let query_path = format!("\\StringFileInfo\\{}\\FileVersion", codepage);
             let query_path_wide: Vec<u16> = OsStr::new(&query_path)
                 .encode_wide()
                 .chain(std::iter::once(0))
@@ -195,7 +195,7 @@ fn get_exe_product_version() -> Option<String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn get_exe_product_version() -> Option<String> {
+fn get_exe_file_version() -> Option<String> {
     None
 }
 
