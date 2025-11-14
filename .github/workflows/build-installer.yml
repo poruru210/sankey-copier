@@ -212,8 +212,13 @@ jobs:
       - name: Compile installer with Inno Setup
         run: |
           $version = "${{ inputs.package_version }}"
-          Write-Host "Compiling installer with version: $version" -ForegroundColor Cyan
-          Write-Host "Build Info: ${{ inputs.build_info }}" -ForegroundColor Yellow
+          $fileVersion = "${{ inputs.file_version }}"
+          $buildInfo = "${{ inputs.build_info }}"
+
+          Write-Host "Compiling installer with version information:" -ForegroundColor Cyan
+          Write-Host "  Package Version: $version" -ForegroundColor Cyan
+          Write-Host "  File Version:    $fileVersion" -ForegroundColor Cyan
+          Write-Host "  Build Info:      $buildInfo" -ForegroundColor Cyan
 
           # Check if setup.iss exists
           if (-not (Test-Path "installer/setup.iss")) {
@@ -226,7 +231,7 @@ jobs:
           Write-Host "Running Inno Setup compiler..." -ForegroundColor Cyan
 
           # Run compiler and capture both stdout and stderr
-          & iscc /DMyAppVersion=$version installer/setup.iss 2>&1 | Tee-Object -FilePath $logFile
+          & iscc /DMyAppVersion=$version /DMyFileVersion=$fileVersion /DMyBuildInfo=$buildInfo installer/setup.iss 2>&1 | Tee-Object -FilePath $logFile
           $exitCode = $LASTEXITCODE
 
           if ($exitCode -ne 0) {
