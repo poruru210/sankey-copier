@@ -152,12 +152,12 @@ export function SettingsDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{initialData ? content.editTitle.value : content.createTitle.value}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
+          <div className="space-y-6 overflow-y-auto pr-2">
             {/* Account Selection - Only show in create mode */}
             {!initialData && (
               <>
@@ -344,7 +344,7 @@ export function SettingsDialog({
             </div>
           </div>
 
-          <DialogFooter className="mt-6">
+          <DialogFooter className="mt-6 flex-shrink-0 pt-4 border-t">
             <div className="flex w-full justify-between items-center">
               <div>
                 {initialData && onDelete && (
