@@ -22,29 +22,63 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Web UI artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sankey-copier-web-ui
-          path: desktop-app/src-tauri/resources/web-ui
-
-      - name: Verify Web UI artifact structure
-        run: |
-          Write-Host "Verifying Web UI artifact structure..."
-          Get-ChildItem -Path desktop-app/src-tauri/resources/web-ui -Recurse | ForEach-Object { Write-Host $_.FullName }
-          if (Test-Path "desktop-app/src-tauri/resources/web-ui/.next/standalone/server.js") {
-            Write-Host "✓ Found server.js"
-          } elseif (Test-Path "desktop-app/src-tauri/resources/web-ui/out/index.html") {
-            Write-Host "✓ Found static export out/index.html"
-          } else {
-            Write-Host "⚠️ No recognized web build found yet - proceeding to copy attempt (will fail later if missing)."
-          }
-        shell: pwsh
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Build Web UI for Desktop
+        working-directory: web-ui
+        run: |
+          Write-Host "Installing dependencies..."
+          pnpm install --frozen-lockfile
+
+          Write-Host "Building Web UI..."
+          $env:NEXT_OUTPUT_MODE = "standalone"
+          pnpm run build
+
+          Write-Host "Verifying build output..."
+          if (Test-Path ".next/standalone/server.js") {
+            Write-Host "✓ Build successful - standalone server.js found"
+          } elseif (Test-Path "out/index.html") {
+            Write-Host "✓ Build successful - static export found"
+          } else {
+            Write-Host "⚠️ Standalone build not found, checking build output..."
+            Get-ChildItem -Path .next -Directory | ForEach-Object { Write-Host $_.Name }
+          }
+        shell: pwsh
+
+      - name: Copy Web UI to Tauri resources
+        run: |
+          $src = "web-ui"
+          $dest = "desktop-app/src-tauri/resources/web-ui"
+
+          Write-Host "Creating resources directory..."
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+
+          Write-Host "Copying build output..."
+          # Copy standalone build
+          Copy-Item -Path "$src\.next" -Destination $dest -Recurse -Force
+          # Copy public files if exists
+          if (Test-Path "$src\public") {
+            Copy-Item -Path "$src\public" -Destination $dest -Recurse -Force
+          }
+
+          Write-Host "Verification:"
+          if (Test-Path "$dest\.next\standalone\server.js") {
+            Write-Host "✓ server.js copied"
+          }
+          if (Test-Path "$dest\.next\standalone\node_modules") {
+            $count = (Get-ChildItem "$dest\.next\standalone\node_modules" -Directory).Count
+            Write-Host "✓ node_modules copied ($count packages)"
+          }
+        shell: pwsh
 
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -67,79 +101,59 @@ jobs:
             ${{ runner.os }}-cargo-desktop-
             ${{ runner.os }}-cargo-
 
-      - name: Prepare Tauri dist (copy web build -> src-tauri/dist)
+      - name: Prepare Tauri dist directory
         working-directory: desktop-app/src-tauri
         run: |
-          # We're already in desktop-app/src-tauri, so use relative paths
           $src = "resources\web-ui"
           $dist = "dist"
 
-          Write-Host "Creating $dist..."
+          Write-Host "Creating dist directory..."
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
 
-          # Next.js standalone (server + assets)
+          # Copy Next.js standalone build to dist
           if (Test-Path "$src\.next\standalone") {
-            Write-Host "Copying Next.js standalone to dist..."
+            Write-Host "Copying Next.js standalone build to dist..."
 
-            # Copy all contents from standalone directory (including node_modules)
-            Write-Host "Copying server.js, package.json, and node_modules..."
+            # Copy all standalone content (includes node_modules)
             Copy-Item -Path "$src\.next\standalone\*" -Destination $dist -Recurse -Force
 
-            # Ensure .next/static is also copied (needed for assets)
+            # Copy static files
             if (Test-Path "$src\.next\static") {
-              Write-Host "Copying .next/static to dist/.next/static"
+              Write-Host "Copying static files..."
               $staticDest = Join-Path $dist ".next\static"
               New-Item -ItemType Directory -Path $staticDest -Force | Out-Null
               Copy-Item -Path "$src\.next\static\*" -Destination $staticDest -Recurse -Force
             }
 
-            # Copy public directory if exists
+            # Copy public directory
             if (Test-Path "$src\public") {
               Write-Host "Copying public directory..."
               Copy-Item -Path "$src\public" -Destination $dist -Recurse -Force
             }
-
-            # Verify critical files exist
-            if (Test-Path "$dist\server.js") {
-              Write-Host "✓ server.js found"
-            } else {
-              Write-Host "❌ server.js NOT found"
-            }
-
-            if (Test-Path "$dist\node_modules") {
-              $moduleCount = (Get-ChildItem "$dist\node_modules" -Directory).Count
-              Write-Host "✓ node_modules found with $moduleCount packages"
-            } else {
-              Write-Host "❌ node_modules NOT found"
-            }
-
-            if (Test-Path "$dist\package.json") {
-              Write-Host "✓ package.json found"
-            } else {
-              Write-Host "❌ package.json NOT found"
-            }
-          }
-          # Static export (out/)
-          elseif (Test-Path "$src\out") {
-            Write-Host "Copying static export (out) to dist..."
-            Copy-Item -Path "$src\out\*" -Destination $dist -Recurse -Force
-
-            # Copy public directory if exists
-            if (Test-Path "$src\public") {
-              Write-Host "Copying public directory..."
-              Copy-Item -Path "$src\public\*" -Destination $dist -Recurse -Force
-            }
           }
           else {
-            Write-Host "ERROR: No recognized web build found under $src"
-            Get-ChildItem -Path $src -Recurse -Depth 2 | ForEach-Object { Write-Host $_.FullName }
+            Write-Host "ERROR: Standalone build not found at $src\.next\standalone"
             exit 1
           }
 
-          Write-Host "Summary of dist directory:"
-          Write-Host "===================="
-          Get-ChildItem -Path $dist -Directory | ForEach-Object { Write-Host "📁 $($_.Name)" }
-          Get-ChildItem -Path $dist -File | ForEach-Object { Write-Host "📄 $($_.Name)" }
+          Write-Host "`nVerifying dist directory:"
+          Write-Host "========================"
+          if (Test-Path "$dist\server.js") {
+            Write-Host "✓ server.js"
+          }
+          if (Test-Path "$dist\package.json") {
+            Write-Host "✓ package.json"
+          }
+          if (Test-Path "$dist\node_modules") {
+            $count = (Get-ChildItem "$dist\node_modules" -Directory).Count
+            Write-Host "✓ node_modules ($count packages)"
+          }
+          if (Test-Path "$dist\.next") {
+            Write-Host "✓ .next directory"
+          }
+          if (Test-Path "$dist\public") {
+            Write-Host "✓ public directory"
+          }
         shell: pwsh
 
       - name: Build Desktop App with Tauri Action
