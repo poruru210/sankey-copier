@@ -9,6 +9,9 @@ use anyhow::Result;
 use tray_icon::TrayIconBuilder;
 use winit::event_loop::EventLoop;
 use winit::application::ApplicationHandler;
+use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};
+use windows::Win32::System::Threading::CreateMutexW;
+use windows::core::PCWSTR;
 
 mod elevation;
 mod icon;
@@ -52,6 +55,33 @@ impl ApplicationHandler<menu::AppEvent> for App {
 }
 
 fn main() -> Result<()> {
+    // Check for single instance using Windows mutex
+    // If another instance is already running, exit silently (no warning needed)
+    let mutex_name: Vec<u16> = "Global\\SankeyCopierTrayApp"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        let mutex = CreateMutexW(
+            None,
+            true, // Initially owned by this thread
+            PCWSTR(mutex_name.as_ptr()),
+        );
+
+        // Check if mutex already exists (another instance is running)
+        if let Ok(handle) = mutex {
+            let last_error = GetLastError();
+            if last_error == ERROR_ALREADY_EXISTS {
+                // Another instance is already running, exit silently
+                let _ = CloseHandle(handle);
+                return Ok(());
+            }
+            // Mutex will be automatically released when the process exits
+            // No need to explicitly close the handle during normal operation
+        }
+    }
+
     // Create event loop for Windows message pump
     let event_loop: EventLoop<menu::AppEvent> = EventLoop::with_user_event()
         .build()
