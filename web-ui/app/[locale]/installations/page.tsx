@@ -165,31 +165,22 @@ export default function InstallationsPage() {
             maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
           }}
         >
-          <div className="w-[80%] mx-auto p-6">
+          <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
-            <p className="text-muted-foreground">
+          <div className="mb-4">
+            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
+            <p className="text-sm text-muted-foreground">
               {content.description}
             </p>
           </div>
 
           {/* Action Buttons */}
           <div className="mb-6 flex gap-3">
-            <Button
-              onClick={fetchInstallations}
-              disabled={loading}
-              variant="outline"
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              {content.refreshDetection}
-            </Button>
             {optimisticInstallations.length > 0 && (
               <Button
                 onClick={handleBatchInstall}
                 disabled={selectedIds.size === 0 || isPending || installing !== null}
-                className="gap-2"
+                className="gap-2 min-h-[44px] md:min-h-0"
               >
                 {isPending ? (
                   <>
@@ -199,11 +190,20 @@ export default function InstallationsPage() {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    {content.installToSelected} ({selectedIds.size})
+                    インストール ({selectedIds.size})
                   </>
                 )}
               </Button>
             )}
+            <Button
+              onClick={fetchInstallations}
+              disabled={loading}
+              variant="outline"
+              className="gap-2 min-h-[44px] md:min-h-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              更新
+            </Button>
           </div>
 
           {/* Error Display */}
@@ -245,22 +245,20 @@ export default function InstallationsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="rounded-lg border bg-card">
+            <div className="rounded-lg border bg-card overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">
+                  <TableRow className="h-12 md:h-9">
+                    <TableHead className="w-[40px] py-2 text-xs">
                       <Checkbox
                         checked={selectedIds.size === optimisticInstallations.length && optimisticInstallations.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead>{content.name}</TableHead>
-                    <TableHead>{content.type}</TableHead>
-                    <TableHead>{content.installationPath}</TableHead>
-                    <TableHead>{content.version}</TableHead>
-                    <TableHead>{content.components}</TableHead>
-                    <TableHead className="text-right">{content.actions}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.name}</TableHead>
+                    <TableHead className="py-2 text-xs hidden md:table-cell">{content.installationPath}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.version}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.components}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -273,78 +271,68 @@ export default function InstallationsPage() {
                     return (
                       <TableRow
                         key={installation.id}
-                        data-state={isSelected ? 'selected' : undefined}
                         onClick={() => toggleSelection(installation.id)}
-                        className="cursor-pointer"
+                        className="cursor-pointer h-14 md:h-10"
                       >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell onClick={(e) => e.stopPropagation()} className="py-2 md:py-1">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelection(installation.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{installation.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{installation.type}</Badge>
+                        <TableCell className="font-medium py-2 md:py-1">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={`text-xs px-1.5 py-0 ${
+                                installation.type === 'MT4'
+                                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                  : 'bg-purple-500 text-white hover:bg-purple-600'
+                              }`}
+                            >
+                              {installation.type}
+                            </Badge>
+                            <span className="text-xs">{installation.name}</span>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          <p className="text-sm font-mono truncate max-w-xs" title={installation.path}>
+                        <TableCell className="py-2 md:py-1 hidden md:table-cell">
+                          <p className="text-xs font-mono truncate max-w-xs" title={installation.path}>
                             {installation.path}
                           </p>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-2 md:py-1">
                           {installation.version ? (
-                            <span className="text-sm font-mono">v{installation.version}</span>
+                            <span className="text-xs font-mono">v{installation.version}</span>
                           ) : (
-                            <span className="text-sm text-muted-foreground">-</span>
+                            <span className="text-xs text-muted-foreground">-</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
+                        <TableCell className="py-2 md:py-1">
+                          <div className="flex gap-2">
+                            <div className="flex items-center gap-1" title={content.dll.value}>
                               {installation.components.dll ? (
                                 <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">{content.dll}</span>
+                              <span className="text-xs">DLL</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1" title={content.master.value}>
                               {installation.components.master_ea ? (
                                 <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">{content.master}</span>
+                              <span className="text-xs">M</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1" title={content.slave.value}>
                               {installation.components.slave_ea ? (
                                 <CheckCircle className="h-3 w-3 text-green-500" />
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">{content.slave}</span>
+                              <span className="text-xs">S</span>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            onClick={() => handleInstall(installation)}
-                            disabled={isInstalling || isPending}
-                            size="sm"
-                            variant={allComponentsInstalled ? 'outline' : 'default'}
-                          >
-                            {isInstalling ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                {content.installing}...
-                              </>
-                            ) : allComponentsInstalled ? (
-                              content.reinstall
-                            ) : (
-                              content.install
-                            )}
-                          </Button>
                         </TableCell>
                       </TableRow>
                     );

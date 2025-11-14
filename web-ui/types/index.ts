@@ -53,6 +53,7 @@ export interface CreateSettingsRequest {
   slave_account: string;
   lot_multiplier: number | null;
   reverse_trade: boolean;
+  enabled: boolean;
 }
 
 // ConnectionsView specific types

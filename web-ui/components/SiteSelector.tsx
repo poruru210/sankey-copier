@@ -1,6 +1,6 @@
 'use client';
 
-import { Server } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { useSiteContext } from '@/lib/contexts/site-context';
 
 // Site selector component for switching between server connections
@@ -14,7 +14,7 @@ export function SiteSelector() {
 
   return (
     <div className="flex items-center gap-2">
-      <Server className="h-4 w-4 text-muted-foreground" />
+      <Globe className="h-4 w-4 text-muted-foreground" />
       <select
         value={selectedSiteId}
         onChange={(e) => selectSite(e.target.value)}
@@ -22,7 +22,7 @@ export function SiteSelector() {
       >
         {sites.map((site) => (
           <option key={site.id} value={site.id}>
-            {site.name} ({site.siteUrl})
+            {site.name}
           </option>
         ))}
       </select>
