@@ -21,14 +21,14 @@ pub enum AppEvent {
     Exit,
 }
 
-/// Get status indicator symbol
-fn get_status_indicator(status: &str) -> &str {
+/// Format service status for menu display
+fn format_service_status(status: &str) -> String {
     match status {
-        "Running" => "🟢",      // Running (green circle)
-        "Stopped" => "🔴",      // Stopped (red circle)
-        "Starting..." => "🟡",  // Starting (yellow circle)
-        "Stopping..." => "🟡",  // Stopping (yellow circle)
-        _ => "⚪",              // Unknown (white circle)
+        "Running" => "Running".to_string(),
+        "Stopped" => "Stopped".to_string(),
+        "Starting..." => "Starting...".to_string(),
+        "Stopping..." => "Stopping...".to_string(),
+        _ => "Unknown".to_string(),
     }
 }
 
@@ -68,7 +68,7 @@ pub fn create_menu() -> Result<Menu> {
         "service_restart".to_string(),
     );
 
-    let service_title = format!("Service {}", get_status_indicator(&server_status));
+    let service_title = format!("Service ({})", format_service_status(&server_status));
     let service_submenu = Submenu::with_items(
         &service_title,
         true,
