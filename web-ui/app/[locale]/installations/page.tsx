@@ -271,7 +271,6 @@ export default function InstallationsPage() {
                     return (
                       <TableRow
                         key={installation.id}
-                        data-state={isSelected ? 'selected' : undefined}
                         onClick={() => toggleSelection(installation.id)}
                         className="cursor-pointer h-14 md:h-10"
                       >
