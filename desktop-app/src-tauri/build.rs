@@ -1,9 +1,8 @@
 // Build script for SANKEY Copier Desktop
 // Configures Tauri build process
 //
-// NOTE: Tauri 2.0 automatically handles Windows resource embedding including version information.
-// Version is taken from tauri.conf.json which is updated by GitHub Actions workflow.
-// We do NOT manually embed Windows resources to avoid duplicate resource errors (CVT1100).
+// NOTE: Tauri 2.0 automatically embeds Windows version information from Cargo.toml
+// The version field in Cargo.toml is updated by GitHub Actions workflow before building
 
 use std::process::Command;
 
@@ -20,9 +19,9 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    println!("cargo:warning=Using Tauri automatic version embedding from tauri.conf.json: {}", package_version);
+    println!("cargo:warning=Building with version info: {}", file_version);
 
-    // Run Tauri build (handles Windows resources automatically)
+    // Run Tauri build
     tauri_build::build();
 }
 
