@@ -114,25 +114,6 @@ jobs:
           Write-Host "Modified tauri.conf.json - Version: $version" -ForegroundColor Green
         shell: pwsh
 
-      # Update Cargo.toml version with file_version (4-component)
-      - name: Update Cargo.toml version
-        run: |
-          cd desktop-app/src-tauri
-          $cargoPath = "Cargo.toml"
-          $fileVersion = "${{ inputs.file_version }}"
-
-          # Read Cargo.toml
-          $content = Get-Content $cargoPath -Raw
-
-          # Replace version line
-          $content = $content -replace 'version = "[^"]*"', "version = `"$fileVersion`""
-
-          # Write back
-          Set-Content $cargoPath -Value $content -NoNewline
-
-          Write-Host "Updated Cargo.toml version to: $fileVersion" -ForegroundColor Cyan
-        shell: pwsh
-
       # Build Tauri application (raw EXE for Inno Setup)
       - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
