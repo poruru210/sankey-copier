@@ -96,7 +96,7 @@ C:\Program Files\SANKEY Copier\
 ├── relay-server.exe             # relay-server（Windowsサービス）
 ├── config.toml                 # relay-server設定ファイル
 ├── app.ico                     # アイコン
-└── mql/                        # MT4/MT5コンポーネント（オプション）
+└── mt-advisors/                # MT4/MT5コンポーネント（オプション）
     ├── mt4/
     │   ├── Experts/
     │   │   ├── SankeyCopierMaster.ex4

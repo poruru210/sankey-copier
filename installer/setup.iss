@@ -115,10 +115,10 @@ Source: "..\tray-app\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: 
 Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; MT4/MT5 Components (if built)
-Source: "..\mt-advisors\build\mt4\Experts\*.ex4"; DestDir: "{app}\mql\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\build\mt4\Libraries\*.dll"; DestDir: "{app}\mql\mt4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\build\mt5\Experts\*.ex5"; DestDir: "{app}\mql\mt5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\build\mt5\Libraries\*.dll"; DestDir: "{app}\mql\mt5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\build\mt4\Experts\*.ex4"; DestDir: "{app}\mt-advisors\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\build\mt4\Libraries\*.dll"; DestDir: "{app}\mt-advisors\mt4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\build\mt5\Experts\*.ex5"; DestDir: "{app}\mt-advisors\mt5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\build\mt5\Libraries\*.dll"; DestDir: "{app}\mt-advisors\mt5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Icon
 Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion
