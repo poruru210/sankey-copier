@@ -230,11 +230,11 @@ https://app.yourdomain.com
 https://sankey-copier-web.vercel.app
 ```
 
-### 7.2 rust-serverへの接続テスト
+### 7.2 relay-serverへの接続テスト
 
 1. Web-UIのサイドバーから**Sites**を開く
 2. **Add Site**をクリック
-3. Cloudflare Tunnelで公開したrust-serverを登録:
+3. Cloudflare Tunnelで公開したrelay-serverを登録:
    - **Site Name**: `Production Server`
    - **Site URL**: `https://api.yourdomain.com`
 
@@ -263,7 +263,7 @@ Next.jsのルーティング設定を確認:
 
 ### CORS エラー
 
-rust-serverの`config.toml`を確認:
+relay-serverの`config.toml`を確認:
 
 ```toml
 [cors]
@@ -344,8 +344,8 @@ Vercelデプロイの利点:
 - ✅ 無料プランで十分な性能
 
 次のステップ:
-1. [CLOUDFLARE_SETUP.md](./CLOUDFLARE_SETUP.md)を参照し、rust-serverをCloudflare Tunnelで公開
-2. Web-UIのSite機能でrust-serverを登録
+1. [CLOUDFLARE_SETUP.md](./CLOUDFLARE_SETUP.md)を参照し、relay-serverをCloudflare Tunnelで公開
+2. Web-UIのSite機能でrelay-serverを登録
 3. Cloudflare Accessで認証を設定
 
 ---

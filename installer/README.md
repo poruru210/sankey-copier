@@ -5,7 +5,7 @@
 ## 概要
 
 1つのインストーラーで以下をインストール：
-- **rust-server** - Windowsサービスとして24/7稼働
+- **relay-server** - Windowsサービスとして24/7稼働
 - **Desktop App** - 設定変更用（必要時のみ起動）
 - **MT4/MT5コンポーネント** - EA、DLL（オプション）
 
@@ -40,7 +40,7 @@ cd installer
 ```
 
 **実行内容:**
-1. rust-serverをビルド（Cargo）
+1. relay-serverをビルド（Cargo）
 2. web-uiを静的エクスポート（Next.js）
 3. Desktop Appをビルド（Tauri）
 4. MT4/MT5コンポーネントをビルド（オプション）
@@ -93,22 +93,22 @@ GitHub UIから手動でビルドを実行できます：
 ```
 C:\Program Files\SANKEY Copier\
 ├── sankey-copier-desktop.exe  # Desktop App（web-ui内蔵）
-├── rust-server.exe             # rust-server（Windowsサービス）
-├── config.toml                 # rust-server設定ファイル
+├── relay-server.exe             # relay-server（Windowsサービス）
+├── config.toml                 # relay-server設定ファイル
 ├── app.ico                     # アイコン
-└── mql/                        # MT4/MT5コンポーネント（オプション）
-    ├── mt4/
+└── mt-advisors/                # MT4/MT5コンポーネント（オプション）
+    ├── MT4/
     │   ├── Experts/
     │   │   ├── SankeyCopierMaster.ex4
     │   │   └── SankeyCopierSlave.ex4
     │   └── Libraries/
-    │       └── zmq.dll
-    └── mt5/
+    │       └── sankey_copier_zmq.dll
+    └── MT5/
         ├── Experts/
         │   ├── SankeyCopierMaster.ex5
         │   └── SankeyCopierSlave.ex5
         └── Libraries/
-            └── zmq.dll
+            └── sankey_copier_zmq.dll
 ```
 
 ### Windowsサービス
@@ -162,7 +162,7 @@ choco install innosetup -y
 
 または [公式サイト](https://jrsoftware.org/isdl.php)からダウンロード
 
-### エラー: "rust-server build failed"
+### エラー: "relay-server build failed"
 
 **原因:** Rustツールチェーンが正しくインストールされていない
 

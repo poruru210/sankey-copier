@@ -1,5 +1,5 @@
 ; SANKEY Copier Unified Installer
-; Installs rust-server (Windows Service) + Desktop App + Tray App + MT4/MT5 Components
+; Installs relay-server (Windows Service) + Desktop App + Tray App + MT4/MT5 Components
 
 #define MyAppName "SANKEY Copier"
 #ifndef MyAppVersion
@@ -33,7 +33,6 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
-InfoBeforeFile=..\installer\README.md
 OutputDir=output
 OutputBaseFilename=SankeyCopierSetup-{#MyFileVersion}
 SetupIconFile=..\app.ico
@@ -103,22 +102,22 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Desktop App (Tauri - includes web-ui embedded as static files)
 Source: "..\desktop-app\src-tauri\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; rust-server
-Source: "..\rust-server\target\release\{#MyServerExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; relay-server
+Source: "..\relay-server\target\release\sankey-copier-relay-server.exe"; DestDir: "{app}"; DestName: "{#MyServerExeName}"; Flags: ignoreversion
 ; Configuration file (will be merged with existing config in code)
-Source: "..\rust-server\config.toml"; DestDir: "{app}"; DestName: "config.toml.new"; Flags: ignoreversion
+Source: "..\relay-server\config.toml"; DestDir: "{app}"; DestName: "config.toml.new"; Flags: ignoreversion
 
 ; Tray App (System tray for service management)
-Source: "..\sankey-copier-tray\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\tray-app\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; NSSM (Windows Service Manager for Tray App)
 Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; MT4/MT5 Components (if built)
-Source: "..\mql\build\mt4\Experts\*.ex4"; DestDir: "{app}\mql\mt4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt4\Libraries\*.dll"; DestDir: "{app}\mql\mt4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt5\Experts\*.ex5"; DestDir: "{app}\mql\mt5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mql\build\mt5\Libraries\*.dll"; DestDir: "{app}\mql\mt5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\MT4\Experts\*.ex4"; DestDir: "{app}\mt-advisors\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\MT4\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\MT5\Experts\*.ex5"; DestDir: "{app}\mt-advisors\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\mt-advisors\MT5\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Icon
 Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion

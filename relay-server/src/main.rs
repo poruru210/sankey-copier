@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
 
     // Initialize logging with log buffer layer and optional file output
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "sankey_copier_server=debug,tower_http=debug".into());
+        .unwrap_or_else(|_| "sankey_copier_relay_server=debug,tower_http=debug".into());
 
     let subscriber = tracing_subscriber::registry()
         .with(env_filter)

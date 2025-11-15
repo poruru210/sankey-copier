@@ -1,5 +1,5 @@
 [package]
-name = "sankey-copier-server"
+name = "sankey-copier-relay-server"
 version = "1.0.0"
 edition = "2021"
 
@@ -22,7 +22,7 @@ config = { version = "0.14", default-features = false, features = ["toml"] }
 rmp-serde = "1.3"
 
 # Shared message types
-sankey_copier_zmq = { path = "../mql-zmq-dll" }
+sankey_copier_zmq = { path = "../mt-bridge", package = "sankey-copier-mt-bridge" }
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }

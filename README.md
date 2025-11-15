@@ -36,7 +36,7 @@
                         │
                         ↓ localhost:3000
               ┌──────────────────┐
-              │  Rust中継サーバー  │
+              │  Relay Server    │
               │  + SQLite DB     │
               └──────┬───────────┘
                      │
@@ -53,7 +53,7 @@
 
 ```
 ┌─────────────────┐      ZeroMQ        ┌──────────────────┐      ZeroMQ        ┌─────────────────┐
-│  MT4/MT5 Master │ ───────────────> │  Rust中継サーバー  │ ───────────────> │  MT4/MT5 Slave  │
+│  MT4/MT5 Master │ ───────────────> │  Relay Server    │ ───────────────> │  MT4/MT5 Slave  │
 │       EA        │   ポート: 5555    │  + SQLite DB     │   ポート: 5556    │       EA        │
 └─────────────────┘                  └──────────────────┘                  └─────────────────┘
                                             │ ▲
@@ -72,7 +72,7 @@ SANKEY Copierは2つのデプロイ方法をサポートしています：
 
 ### 1. クラウド版（推奨） - どこからでもアクセス可能
 
-イントラネット内のrust-serverをCloudflare Tunnelで公開し、Web-UIをVercelにデプロイします。
+イントラネット内のRelay ServerをCloudflare Tunnelで公開し、Web-UIをVercelにデプロイします。
 
 **メリット:**
 - スマホ・タブレットから**どこからでも**アクセス可能
@@ -87,32 +87,32 @@ SANKEY Copierは2つのデプロイ方法をサポートしています：
 
 **手順:**
 
-1. **Rust-Serverのセットアップ（イントラネット内のPC）**
+1. **Relay Serverのセットアップ（イントラネット内のPC）**
    ```bash
-   cd rust-server
+   cd relay-server
    cargo run --release
    ```
 
 2. **Cloudflare Tunnelのセットアップ**
    - 詳細は [docs/CLOUDFLARE_SETUP.md](docs/CLOUDFLARE_SETUP.md) を参照
-   - Cloudflare Tunnelでrust-serverを公開（例: `https://api.yourdomain.com`）
+   - Cloudflare TunnelでRelay Serverを公開（例: `https://api.yourdomain.com`）
    - Cloudflare Accessで認証を設定
 
 3. **VercelにWeb-UIをデプロイ**
    - 詳細は [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md) を参照
    - VercelにWeb-UIをデプロイ（例: `https://app.yourdomain.com`）
 
-4. **Web-UIでrust-serverを登録**
+4. **Web-UIでRelay Serverを登録**
    - Web-UIの「Sites」ページで`https://api.yourdomain.com`を登録
    - 認証後、どこからでもアクセス可能
 
 ### 2. Desktop App版 - ローカル設定用（Windowsインストーラー）
 
-ローカルネットワーク内で完結するデスクトップアプリ版です。**1つのインストーラー**でrust-server + Desktop Appをインストールできます。
+ローカルネットワーク内で完結するデスクトップアプリ版です。**1つのインストーラー**でRelay Server + Desktop Appをインストールできます。
 
 **メリット:**
 - **簡単インストール**: 1つのEXEで完了
-- **自動サービス登録**: rust-serverがWindowsサービスとして24/7稼働
+- **自動サービス登録**: Relay ServerがWindowsサービスとして24/7稼働
 - **依存関係なし**: Node.js不要、すべて同梱
 - ローカルで高速動作
 
@@ -130,13 +130,13 @@ SANKEY Copierは2つのデプロイ方法をサポートしています：
 
 2. **インストール**
    - セットアップウィザードに従う
-   - rust-serverがWindowsサービスとして自動登録
+   - Relay ServerがWindowsサービスとして自動登録
    - Desktop Appのショートカットがデスクトップに作成される
 
 3. **使用開始**
    - デスクトップの「SANKEY Copier」アイコンをダブルクリック
    - Desktop Appが起動し、設定変更が可能
-   - rust-serverはバックグラウンドで常時稼働
+   - Relay Serverはバックグラウンドで常時稼働
 
 4. **MT4/MT5 コンポーネントのインストール**
    - Desktop Appの「MT4/MT5 Installations」ページで自動検出
@@ -179,7 +179,7 @@ cd installer
 - MetaTrader 4 または 5
 
 **手順:**
-1. Rustサーバー: `cd rust-server && cargo run --release`
+1. Relay Server: `cd relay-server && cargo run --release`
 2. Web-UI開発サーバー: `cd web-ui && npm install && npm run dev`
 3. http://localhost:8080 でアクセス
 

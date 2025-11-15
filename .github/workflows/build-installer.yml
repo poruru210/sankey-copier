@@ -76,9 +76,9 @@ jobs:
 
           # Update Cargo.toml files
           $cargoFiles = @(
-            "rust-server/Cargo.toml",
-            "mql-zmq-dll/Cargo.toml",
-            "sankey-copier-tray/Cargo.toml"
+            "relay-server/Cargo.toml",
+            "mt-bridge/Cargo.toml",
+            "tray-app/Cargo.toml"
           )
 
           foreach ($file in $cargoFiles) {
@@ -105,11 +105,14 @@ jobs:
           }
 
           # Copy DLLs to installer structure
-          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/release"
-          New-Item -ItemType Directory -Force -Path "mql-zmq-dll/target/i686-pc-windows-msvc/release"
+          New-Item -ItemType Directory -Force -Path "mt-bridge/target/release"
+          New-Item -ItemType Directory -Force -Path "mt-bridge/target/i686-pc-windows-msvc/release"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT4/Libraries"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT5/Libraries"
 
           if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-bridge/target/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-advisors/MT5/Libraries/"
             Write-Host "✓ Copied MT5 DLL"
           } else {
             Write-Host "❌ MT5 DLL not found"
@@ -117,7 +120,8 @@ jobs:
           }
 
           if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mql-zmq-dll/target/i686-pc-windows-msvc/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-bridge/target/i686-pc-windows-msvc/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-advisors/MT4/Libraries/"
             Write-Host "✓ Copied MT4 DLL"
           } else {
             Write-Host "❌ MT4 DLL not found"
@@ -125,9 +129,9 @@ jobs:
           }
 
           # Copy server exe
-          New-Item -ItemType Directory -Force -Path "rust-server/target/release"
+          New-Item -ItemType Directory -Force -Path "relay-server/target/release"
           if (Test-Path "build-artifacts/sankey-copier-server/sankey-copier-server.exe") {
-            Copy-Item "build-artifacts/sankey-copier-server/sankey-copier-server.exe" -Destination "rust-server/target/release/"
+            Copy-Item "build-artifacts/sankey-copier-server/sankey-copier-server.exe" -Destination "relay-server/target/release/sankey-copier-relay-server.exe"
             Write-Host "✓ Copied server exe"
           } else {
             Write-Host "❌ Server exe not found"
@@ -151,9 +155,9 @@ jobs:
           }
 
           # Copy Tray App exe
-          New-Item -ItemType Directory -Force -Path "sankey-copier-tray/target/release"
+          New-Item -ItemType Directory -Force -Path "tray-app/target/release"
           if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
-            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "sankey-copier-tray/target/release/"
+            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "tray-app/target/release/"
             Write-Host "✓ Copied Tray App exe"
           } else {
             Write-Host "❌ Tray App exe not found"
@@ -161,13 +165,13 @@ jobs:
           }
 
           # Copy MQL compiled files
-          New-Item -ItemType Directory -Force -Path "mql/MT4/Experts"
-          New-Item -ItemType Directory -Force -Path "mql/MT5/Experts"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT4/Experts"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT5/Experts"
 
           if (Test-Path "build-artifacts/sankey-copier-mql-MT4") {
             $mt4Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT4/*.ex4" -ErrorAction SilentlyContinue
             if ($mt4Files) {
-              Copy-Item "build-artifacts/sankey-copier-mql-MT4/*.ex4" -Destination "mql/MT4/Experts/"
+              Copy-Item "build-artifacts/sankey-copier-mql-MT4/*.ex4" -Destination "mt-advisors/MT4/Experts/"
               Write-Host "✓ Copied MT4 MQL files: $($mt4Files.Count) files"
             } else {
               Write-Host "⚠️ No MT4 .ex4 files found"
@@ -179,7 +183,7 @@ jobs:
           if (Test-Path "build-artifacts/sankey-copier-mql-MT5") {
             $mt5Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT5/*.ex5" -ErrorAction SilentlyContinue
             if ($mt5Files) {
-              Copy-Item "build-artifacts/sankey-copier-mql-MT5/*.ex5" -Destination "mql/MT5/Experts/"
+              Copy-Item "build-artifacts/sankey-copier-mql-MT5/*.ex5" -Destination "mt-advisors/MT5/Experts/"
               Write-Host "✓ Copied MT5 MQL files: $($mt5Files.Count) files"
             } else {
               Write-Host "⚠️ No MT5 .ex5 files found"
@@ -193,11 +197,11 @@ jobs:
       - name: Verify build artifacts
         run: |
           $artifacts = @(
-            "rust-server/target/release/sankey-copier-server.exe",
-            "mql-zmq-dll/target/release/sankey_copier_zmq.dll",
-            "mql-zmq-dll/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
+            "relay-server/target/release/sankey-copier-relay-server.exe",
+            "mt-bridge/target/release/sankey_copier_zmq.dll",
+            "mt-bridge/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
             "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe",
-            "sankey-copier-tray/target/release/sankey-copier-tray.exe",
+            "tray-app/target/release/sankey-copier-tray.exe",
             "installer/resources/nssm.exe"
           )
 

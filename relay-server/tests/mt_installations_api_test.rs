@@ -5,12 +5,12 @@ use axum::{
 use serde_json::Value;
 use tower::util::ServiceExt;
 
-use sankey_copier_server::api::create_router;
-use sankey_copier_server::api::AppState;
-use sankey_copier_server::connection_manager::ConnectionManager;
-use sankey_copier_server::db::Database;
-use sankey_copier_server::log_buffer::create_log_buffer;
-use sankey_copier_server::zeromq::ZmqConfigPublisher;
+use sankey_copier_relay_server::api::create_router;
+use sankey_copier_relay_server::api::AppState;
+use sankey_copier_relay_server::connection_manager::ConnectionManager;
+use sankey_copier_relay_server::db::Database;
+use sankey_copier_relay_server::log_buffer::create_log_buffer;
+use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -35,7 +35,7 @@ async fn create_test_app() -> axum::Router {
         log_buffer,
         allowed_origins: vec!["http://localhost:8080".to_string()],
         cors_disabled: false, // Use strict CORS for tests
-        config: Arc::new(sankey_copier_server::config::Config::default()),
+        config: Arc::new(sankey_copier_relay_server::config::Config::default()),
     };
 
     create_router(app_state)

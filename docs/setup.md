@@ -64,7 +64,7 @@ npm --version
 **32-bit版のビルド（MT4用、一部のMT5）:**
 
 ```powershell
-cd mql-zmq-dll
+cd mt-bridge
 
 # 32-bitターゲットの追加
 rustup target add i686-pc-windows-msvc
@@ -79,7 +79,7 @@ dir target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll
 **64-bit版のビルド（64-bit MT5用）:**
 
 ```powershell
-cd mql-zmq-dll
+cd mt-bridge
 
 # ビルド
 cargo build --release
@@ -136,7 +136,7 @@ copy ..\mql\MT5\Libraries\sankey_copier_zmq.dll "C:\Program Files\[Broker] MetaT
 
 ```powershell
 # プロジェクトフォルダに移動
-cd rust-server
+cd relay-server
 
 # 初回ビルド（時間がかかります: 5-10分程度）
 cargo build --release
@@ -144,7 +144,7 @@ cargo build --release
 
 ### 設定ファイルの確認
 
-`rust-server/config.toml` を確認:
+`relay-server/config.toml` を確認:
 
 ```toml
 [database]
@@ -193,8 +193,8 @@ INFO sankey_copier_server: HTTP server listening on http://0.0.0.0:8080
 
 ```cmd
 # インストール（パスは環境に合わせて変更）
-nssm install SankeyCopier "D:\projects\test\forex-copier\rust-server\target\release\sankey-copier-server.exe"
-nssm set SankeyCopier AppDirectory "D:\projects\test\forex-copier\rust-server"
+nssm install SankeyCopier "D:\projects\test\forex-copier\relay-server\target\release\sankey-copier-server.exe"
+nssm set SankeyCopier AppDirectory "D:\projects\test\forex-copier\relay-server"
 
 # 起動
 nssm start SankeyCopier
@@ -327,7 +327,7 @@ copy mql\MT5\SankeyCopierSlave.mq5 "C:\Program Files\[Broker] MetaTrader 5\MQL5\
 ### 1. Rustサーバーの起動確認
 
 ```powershell
-cd rust-server
+cd relay-server
 cargo run --release
 ```
 

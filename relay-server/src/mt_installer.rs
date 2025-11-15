@@ -101,10 +101,10 @@ impl MtInstaller {
         // DLLソースパスを決定
         let dll_source = match architecture {
             Architecture::Bit32 => {
-                self.components_base_path.join("mql").join("MT4").join("Libraries").join("sankey_copier_zmq.dll")
+                self.components_base_path.join("mt-advisors").join("MT4").join("Libraries").join("sankey_copier_zmq.dll")
             }
             Architecture::Bit64 => {
-                self.components_base_path.join("mql").join("MT5").join("Libraries").join("sankey_copier_zmq.dll")
+                self.components_base_path.join("mt-advisors").join("MT5").join("Libraries").join("sankey_copier_zmq.dll")
             }
         };
 
@@ -173,7 +173,7 @@ impl MtInstaller {
         // Master EAをコピー
         let master_source = self
             .components_base_path
-            .join("mql")
+            .join("mt-advisors")
             .join(mt_folder)
             .join("Experts")
             .join(format!("SankeyCopierMaster.{}", extension));
@@ -208,7 +208,7 @@ impl MtInstaller {
         // Slave EAをコピー
         let slave_source = self
             .components_base_path
-            .join("mql")
+            .join("mt-advisors")
             .join(mt_folder)
             .join("Experts")
             .join(format!("SankeyCopierSlave.{}", extension));
@@ -284,7 +284,7 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source DLL directory structure (production structure)
-        let source_dll_path = temp_components.path().join("mql").join("MT4").join("Libraries");
+        let source_dll_path = temp_components.path().join("mt-advisors").join("MT4").join("Libraries");
         fs::create_dir_all(&source_dll_path).unwrap();
 
         // Create dummy DLL file
@@ -314,7 +314,7 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source DLL directory structure (production structure)
-        let source_dll_path = temp_components.path().join("mql").join("MT5").join("Libraries");
+        let source_dll_path = temp_components.path().join("mt-advisors").join("MT5").join("Libraries");
         fs::create_dir_all(&source_dll_path).unwrap();
 
         // Create dummy DLL file
@@ -361,7 +361,7 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source EA binary files for MT4 (production structure)
-        let source_path = temp_components.path().join("mql").join("MT4").join("Experts");
+        let source_path = temp_components.path().join("mt-advisors").join("MT4").join("Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
@@ -392,7 +392,7 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source EA binary files for MT5 (production structure)
-        let source_path = temp_components.path().join("mql").join("MT5").join("Experts");
+        let source_path = temp_components.path().join("mt-advisors").join("MT5").join("Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
@@ -472,13 +472,13 @@ mod tests {
         let (mt_folder, ext) = if is_mt4 { ("MT4", "ex4") } else { ("MT5", "ex5") };
 
         // DLL files (production structure)
-        let dll_path = base_path.join("mql").join(mt_folder).join("Libraries");
+        let dll_path = base_path.join("mt-advisors").join(mt_folder).join("Libraries");
         fs::create_dir_all(&dll_path).unwrap();
         let dll_content = if is_mt4 { b"32-bit dll" } else { b"64-bit dll" };
         fs::write(dll_path.join("sankey_copier_zmq.dll"), dll_content).unwrap();
 
-        // EA binary files (production structure: mql/MT5/Experts/)
-        let ea_path = base_path.join("mql").join(mt_folder).join("Experts");
+        // EA binary files (production structure: mt-advisors/MT5/Experts/)
+        let ea_path = base_path.join("mt-advisors").join(mt_folder).join("Experts");
         fs::create_dir_all(&ea_path).unwrap();
         fs::write(ea_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
         fs::write(ea_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();

@@ -61,7 +61,7 @@ The project uses **three different version formats** for different purposes:
 
 ### Build-time Generation (build.rs)
 
-All Rust projects (`rust-server`, `mql-zmq-dll`, `sankey-copier-tray`) generate these versions during build:
+All Rust projects (`relay-server`, `mt-bridge`, `sankey-copier-tray`) generate these versions during build:
 
 ```rust
 // Environment variables set by build.rs:

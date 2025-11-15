@@ -1,6 +1,6 @@
 # Cloudflare Setup Guide
 
-このガイドでは、Cloudflare TunnelとAccessを使用して、イントラネット内のrust-serverを安全にインターネットに公開する方法を説明します。
+このガイドでは、Cloudflare TunnelとAccessを使用して、イントラネット内のrelay-serverを安全にインターネットに公開する方法を説明します。
 
 ## アーキテクチャ概要
 
@@ -13,7 +13,7 @@ Cloudflare Access (認証)
 │                      │                      │
 ↓                      ↓                      ↓
 Vercel                 Cloudflare Tunnel      Cloudflare DNS
-(web-ui)              (rust-server)
+(web-ui)              (relay-server)
                        ↓
                   イントラ内サーバー
                   (localhost:3000)
@@ -23,7 +23,7 @@ Vercel                 Cloudflare Tunnel      Cloudflare DNS
 
 - Cloudflareアカウント（無料プランでOK）
 - ドメイン管理がCloudflareに移管済み
-- イントラネット内でrust-serverが起動している（localhost:3000）
+- イントラネット内でrelay-serverが起動している（localhost:3000）
 
 ---
 
@@ -85,7 +85,7 @@ tunnel: <TUNNEL-ID>
 credentials-file: /path/to/.cloudflared/<TUNNEL-ID>.json
 
 ingress:
-  # rust-serverへのルーティング
+  # relay-serverへのルーティング
   - hostname: api.yourdomain.com
     service: http://localhost:3000
 
@@ -95,7 +95,7 @@ ingress:
 
 **設定のポイント:**
 - `hostname`: あなたのドメインのサブドメイン（例: `api.example.com`）
-- `service`: ローカルのrust-serverのURL（`http://localhost:3000`）
+- `service`: ローカルのrelay-serverのURL（`http://localhost:3000`）
 
 ### 1.5 DNSルーティングの設定
 
@@ -132,7 +132,7 @@ sudo systemctl enable cloudflared
 
 ## 2. Cloudflare Accessのセットアップ（認証）
 
-Cloudflare Accessを使用して、rust-serverへのアクセスを認証で保護します。
+Cloudflare Accessを使用して、relay-serverへのアクセスを認証で保護します。
 
 ### 2.1 Zero Trustダッシュボードにアクセス
 
@@ -151,7 +151,7 @@ Cloudflare Accessを使用して、rust-serverへのアクセスを認証で保�
 
 **推奨**: GoogleまたはGitHub（設定が簡単で安全）
 
-### 2.3 Access Policyの作成（rust-server用）
+### 2.3 Access Policyの作成（relay-server用）
 
 1. **Access** → **Applications**に移動
 2. **Add an application**をクリック
@@ -173,7 +173,7 @@ Cloudflare Accessを使用して、rust-serverへのアクセスを認証で保�
 
 ### 2.4 WebSocket対応の有効化
 
-rust-serverはWebSocketを使用するため、以下を確認:
+relay-serverはWebSocketを使用するため、以下を確認:
 
 1. 作成したアプリケーション設定を開く
 2. **Advanced settings** → **Additional settings**
@@ -224,17 +224,17 @@ Proxy status: Proxied (オレンジ色のクラウド)
 2. **Add an application** → **Self-hosted**
 3. 設定:
    - **Application domain**: `app.yourdomain.com`
-   - **Policy**: rust-serverと同じポリシーを使用
+   - **Policy**: relay-serverと同じポリシーを使用
 
 **Option B: Vercel側で認証（推奨）**
 
-web-uiは公開し、rust-server（機密データ）のみAccessで保護する方が柔軟性が高い場合があります。
+web-uiは公開し、relay-server（機密データ）のみAccessで保護する方が柔軟性が高い場合があります。
 
 ---
 
-## 4. Web-UIのSite機能でrust-serverを登録
+## 4. Web-UIのSite機能でrelay-serverを登録
 
-Cloudflare Tunnelで公開したrust-serverをweb-uiに登録します。
+Cloudflare Tunnelで公開したrelay-serverをweb-uiに登録します。
 
 1. ブラウザで`https://app.yourdomain.com`にアクセス
 2. サイドバーから**Sites**ページに移動
@@ -257,12 +257,12 @@ Cloudflare Tunnelで公開したrust-serverをweb-uiに登録します。
 cloudflared tunnel info sankey-server
 ```
 
-### 5.2 rust-serverへのアクセステスト
+### 5.2 relay-serverへのアクセステスト
 
 ブラウザで`https://api.yourdomain.com/api/settings`にアクセス:
 
 1. Cloudflare Accessのログイン画面が表示される
-2. 認証後、rust-serverのレスポンスが表示される
+2. 認証後、relay-serverのレスポンスが表示される
 
 ### 5.3 WebSocket接続テスト
 
@@ -294,9 +294,9 @@ cloudflared tunnel run sankey-server
 ### WebSocket接続失敗
 
 1. Cloudflare Access設定で**WebSocket support**が有効か確認
-2. rust-serverのログを確認:
+2. relay-serverのログを確認:
    ```bash
-   # rust-serverのログディレクトリ
+   # relay-serverのログディレクトリ
    tail -f logs/sankey-copier-*.log
    ```
 
@@ -304,7 +304,7 @@ cloudflared tunnel run sankey-server
 
 Cloudflare Accessを使用する場合、CORSは自動的に処理されます。エラーが出る場合:
 
-1. `rust-server/config.toml`で`cors.disable = false`に設定
+1. `relay-server/config.toml`で`cors.disable = false`に設定
 2. `cors.additional_origins`に`https://app.yourdomain.com`を追加
 
 ---
@@ -358,10 +358,10 @@ Access Policy → **Include** → **IP ranges**
 ## まとめ
 
 この設定により:
-- ✅ イントラネット内のrust-serverがインターネットからアクセス可能
+- ✅ イントラネット内のrelay-serverがインターネットからアクセス可能
 - ✅ Cloudflare Accessによる強固な認証
 - ✅ WebSocket通信も自動的に保護
 - ✅ 固定IPアドレス不要
 - ✅ 無料（Cloudflare無料プラン + Vercel無料プラン）
 
-設定完了後、web-uiのSite機能で複数のrust-serverを登録・切り替え可能になります。
+設定完了後、web-uiのSite機能で複数のrelay-serverを登録・切り替え可能になります。

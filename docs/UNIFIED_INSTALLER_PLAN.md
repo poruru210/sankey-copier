@@ -2,19 +2,19 @@
 
 ## 目標
 
-rust-server + Desktop App + MT4/MT5コンポーネントを**1つのインストーラー**で配布し、利用者の利便性を向上させる。
+relay-server + Desktop App + MT4/MT5コンポーネントを**1つのインストーラー**で配布し、利用者の利便性を向上させる。
 
 ## 要件
 
 ### 機能要件
 
 1. **1つのインストーラーEXE**で以下をインストール:
-   - rust-server.exe
+   - relay-server.exe
    - Desktop App（sankey-copier-desktop.exe）
    - MT4/MT5用DLL/EA
 
 2. **Windowsサービス登録**:
-   - rust-serverをWindowsサービスとして登録
+   - relay-serverをWindowsサービスとして登録
    - システム起動時に自動起動
 
 3. **デスクトップショートカット**:
@@ -39,9 +39,9 @@ rust-server + Desktop App + MT4/MT5コンポーネントを**1つのインスト
 
 ```
 C:\Program Files\SANKEY Copier\
-├── rust-server.exe              # サーバー本体（24/7稼働）
+├── relay-server.exe              # サーバー本体（24/7稼働）
 ├── sankey-copier-desktop.exe    # Desktop App（必要時のみ起動）
-├── config.toml                  # rust-server設定ファイル
+├── config.toml                  # relay-server設定ファイル
 ├── mql/                         # MT4/MT5コンポーネント
 │   ├── mt4/
 │   │   ├── Experts/
@@ -63,7 +63,7 @@ C:\Program Files\SANKEY Copier\
 - **サービス名**: `SankeyCopierServer`
 - **表示名**: `SANKEY Copier Server`
 - **起動タイプ**: 自動
-- **実行ファイル**: `C:\Program Files\SANKEY Copier\rust-server.exe`
+- **実行ファイル**: `C:\Program Files\SANKEY Copier\relay-server.exe`
 
 ### デスクトップショートカット
 
@@ -97,7 +97,7 @@ C:\Program Files\SANKEY Copier\
 
 ```iss
 ; SANKEY Copier Unified Installer
-; Installs rust-server (Windows Service) + Desktop App
+; Installs relay-server (Windows Service) + Desktop App
 
 #define MyAppName "SANKEY Copier"
 #define MyAppVersion "1.0.0"
@@ -127,12 +127,12 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "デスクトップアイコンを作成"; GroupDescription: "追加アイコン:"
-Name: "startservice"; Description: "インストール後にrust-serverサービスを開始"; GroupDescription: "サービス:"
+Name: "startservice"; Description: "インストール後にrelay-serverサービスを開始"; GroupDescription: "サービス:"
 
 [Files]
-; rust-server
-Source: "..\rust-server\target\release\rust-server.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\rust-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+; relay-server
+Source: "..\relay-server\target\release\relay-server.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\relay-server\config.toml"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
 ; Desktop App
 Source: "..\desktop-app\src-tauri\target\release\sankey-copier-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -153,8 +153,8 @@ Name: "{group}\SANKEY Copier"; Filename: "{app}\sankey-copier-desktop.exe"; Icon
 Name: "{autodesktop}\SANKEY Copier"; Filename: "{app}\sankey-copier-desktop.exe"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
 [Run]
-; Install rust-server as Windows Service
-Filename: "sc.exe"; Parameters: "create SankeyCopierServer binPath= ""{app}\rust-server.exe"" DisplayName= ""SANKEY Copier Server"" start= auto"; Flags: runhidden
+; Install relay-server as Windows Service
+Filename: "sc.exe"; Parameters: "create SankeyCopierServer binPath= ""{app}\relay-server.exe"" DisplayName= ""SANKEY Copier Server"" start= auto"; Flags: runhidden
 Filename: "sc.exe"; Parameters: "description SankeyCopierServer ""Trade copier server for MT4/MT5"""; Flags: runhidden
 Filename: "sc.exe"; Parameters: "start SankeyCopierServer"; Flags: runhidden; Tasks: startservice
 
@@ -181,7 +181,7 @@ end;
 
 #### `[Files]`
 - インストールするファイル一覧
-- `rust-server.exe`, `sankey-copier-desktop.exe`, MT4/MT5コンポーネント
+- `relay-server.exe`, `sankey-copier-desktop.exe`, MT4/MT5コンポーネント
 
 #### `[Icons]`
 - スタートメニュー、デスクトップショートカット
@@ -215,11 +215,11 @@ Write-Host "=====================================" -ForegroundColor Cyan
 $PROJECT_ROOT = (Get-Item $PSScriptRoot).Parent.FullName
 
 if (-not $SkipBuild) {
-    # 1. Build rust-server
-    Write-Host "`n[1/4] Building rust-server..." -ForegroundColor Yellow
-    Push-Location "$PROJECT_ROOT\rust-server"
+    # 1. Build relay-server
+    Write-Host "`n[1/4] Building relay-server..." -ForegroundColor Yellow
+    Push-Location "$PROJECT_ROOT\relay-server"
     cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "rust-server build failed" }
+    if ($LASTEXITCODE -ne 0) { throw "relay-server build failed" }
     Pop-Location
 
     # 2. Build web-ui (static export for Desktop App)
@@ -308,8 +308,8 @@ jobs:
         run: |
           choco install innosetup -y
 
-      - name: Build rust-server
-        working-directory: rust-server
+      - name: Build relay-server
+        working-directory: relay-server
         run: cargo build --release
 
       - name: Build web-ui (static export)
@@ -363,12 +363,12 @@ https://github.com/yourorg/sankey-copier/releases/latest
    - インストール先選択（デフォルト: `C:\Program Files\SANKEY Copier`）
    - タスク選択:
      - ✅ デスクトップアイコンを作成
-     - ✅ インストール後にrust-serverサービスを開始
+     - ✅ インストール後にrelay-serverサービスを開始
 4. 「インストール」をクリック
 
 ### 3. インストール完了後
 
-- **rust-serverサービス**: 自動起動（バックグラウンド）
+- **relay-serverサービス**: 自動起動（バックグラウンド）
 - **Desktop App**: デスクトップアイコンから起動可能
 
 ### 4. MT4/MT5コンポーネントのインストール
@@ -397,7 +397,7 @@ Desktop Appを起動:
 
 ### アンインストール時の動作
 
-- rust-serverサービスを停止・削除
+- relay-serverサービスを停止・削除
 - インストールディレクトリを削除
 - デスクトップショートカット削除
 - スタートメニュー項目削除
@@ -441,8 +441,8 @@ C:\Program Files\SANKEY Copier\logs\sankey-copier-YYYY-MM-DD.log
 ### ユーザー視点
 
 1. **簡単インストール**: 1つのEXEで完了
-2. **自動起動**: rust-serverがシステム起動時に自動起動
-3. **独立動作**: Desktop Appとrust-serverは別プロセス
+2. **自動起動**: relay-serverがシステム起動時に自動起動
+3. **独立動作**: Desktop Appとrelay-serverは別プロセス
 4. **簡単アンインストール**: Windowsの標準機能で削除可能
 
 ### 開発者視点
