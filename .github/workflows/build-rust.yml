@@ -73,10 +73,10 @@ jobs:
           path: artifacts/dll/
           retention-days: 1
 
-  build-rust-server:
-    name: Build Rust Server
+  build-relay-server:
+    name: Build Relay Server
     runs-on: windows-latest
-    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'rust-server' }}
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'relay-server' }}
 
     steps:
       - name: Checkout code

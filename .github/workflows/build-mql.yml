@@ -357,8 +357,8 @@ jobs:
 
           # Update version in all MQL files
           $mqlFiles = @(
-            "mql/${{ matrix.platform }}/SankeyCopierMaster.mq${{ matrix.version }}",
-            "mql/${{ matrix.platform }}/SankeyCopierSlave.mq${{ matrix.version }}"
+            "mt-advisors/${{ matrix.platform }}/SankeyCopierMaster.mq${{ matrix.version }}",
+            "mt-advisors/${{ matrix.platform }}/SankeyCopierSlave.mq${{ matrix.version }}"
           )
 
           foreach ($file in $mqlFiles) {
@@ -441,7 +441,7 @@ jobs:
           }
 
           Write-Host "Copying include files..."
-          Copy-Item -Path "${{ github.workspace }}\mql\Include\*" -Destination $targetIncludeDir -Recurse -Force
+          Copy-Item -Path "${{ github.workspace }}\mt-advisors\Include\*" -Destination $targetIncludeDir -Recurse -Force
 
           # List copied files
           Write-Host "Include files copied:"
@@ -449,11 +449,11 @@ jobs:
             Write-Host "  - $($_.FullName)"
           }
 
-          # Icon files are already in the source directory (mql/${{ matrix.platform }}/app.ico)
+          # Icon files are already in the source directory (mt-advisors/${{ matrix.platform }}/app.ico)
           # and will be found by MetaEditor during compilation
 
           # Compile Master EA
-          $masterFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.mq${{ matrix.version }}"
+          $masterFile = "${{ github.workspace }}\mt-advisors\${{ matrix.platform }}\SankeyCopierMaster.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Master EA ==="
           Write-Host "Source file: $masterFile"
@@ -473,7 +473,7 @@ jobs:
           }
 
           # Compile Slave EA
-          $slaveFile = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.mq${{ matrix.version }}"
+          $slaveFile = "${{ github.workspace }}\mt-advisors\${{ matrix.platform }}\SankeyCopierSlave.mq${{ matrix.version }}"
           Write-Host ""
           Write-Host "=== Compiling Slave EA ==="
           Write-Host "Source file: $slaveFile"
@@ -551,8 +551,8 @@ jobs:
         run: |
           Write-Host "Verifying compiled files..."
 
-          $masterEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierMaster.ex${{ matrix.version }}"
-          $slaveEx = "${{ github.workspace }}\mql\${{ matrix.platform }}\SankeyCopierSlave.ex${{ matrix.version }}"
+          $masterEx = "${{ github.workspace }}\mt-advisors\${{ matrix.platform }}\SankeyCopierMaster.ex${{ matrix.version }}"
+          $slaveEx = "${{ github.workspace }}\mt-advisors\${{ matrix.platform }}\SankeyCopierSlave.ex${{ matrix.version }}"
 
           $errors = @()
 
@@ -578,12 +578,12 @@ jobs:
 
       - name: Prepare MQL artifacts
         run: |
-          mkdir -p artifacts/mql/${{ matrix.platform }}
-          copy "mql\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mql\${{ matrix.platform }}\" 2>nul || echo "No compiled files found"
+          mkdir -p artifacts/mt-advisors/${{ matrix.platform }}
+          copy "mt-advisors\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mt-advisors\${{ matrix.platform }}\" 2>nul || echo "No compiled files found"
 
       - name: Upload MQL artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
-          path: artifacts/mql/${{ matrix.platform }}/
+          path: artifacts/mt-advisors/${{ matrix.platform }}/
           retention-days: 1
