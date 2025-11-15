@@ -120,19 +120,18 @@ jobs:
           cd desktop-app/src-tauri
           $cargoPath = "Cargo.toml"
           $fileVersion = "${{ inputs.file_version }}"
+          $packageVersion = "${{ inputs.version }}"
 
           # Add [package.metadata.tauri-winres] section
-          $metadata = @"
-
-[package.metadata.tauri-winres]
-FileVersion = "$fileVersion"
-ProductVersion = "${{ inputs.version }}"
-ProductName = "SANKEY Copier Desktop"
-FileDescription = "Desktop application for SANKEY Copier MT4/MT5 trade copying system"
-CompanyName = "SANKEY Copier Project"
-LegalCopyright = "Copyright (C) 2025 SANKEY Copier Project"
-OriginalFilename = "sankey-copier-desktop.exe"
-"@
+          $metadata = ""
+          $metadata += "`n[package.metadata.tauri-winres]`n"
+          $metadata += "FileVersion = `"$fileVersion`"`n"
+          $metadata += "ProductVersion = `"$packageVersion`"`n"
+          $metadata += "ProductName = `"SANKEY Copier Desktop`"`n"
+          $metadata += "FileDescription = `"Desktop application for SANKEY Copier MT4/MT5 trade copying system`"`n"
+          $metadata += "CompanyName = `"SANKEY Copier Project`"`n"
+          $metadata += "LegalCopyright = `"Copyright (C) 2025 SANKEY Copier Project`"`n"
+          $metadata += "OriginalFilename = `"sankey-copier-desktop.exe`"`n"
 
           Add-Content -Path $cargoPath -Value $metadata
           Write-Host "Injected Windows version metadata: FileVersion=$fileVersion" -ForegroundColor Cyan
