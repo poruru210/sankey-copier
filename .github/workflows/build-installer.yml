@@ -107,9 +107,12 @@ jobs:
           # Copy DLLs to installer structure
           New-Item -ItemType Directory -Force -Path "mt-bridge/target/release"
           New-Item -ItemType Directory -Force -Path "mt-bridge/target/i686-pc-windows-msvc/release"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT4/Libraries"
+          New-Item -ItemType Directory -Force -Path "mt-advisors/MT5/Libraries"
 
           if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
             Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-bridge/target/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-advisors/MT5/Libraries/"
             Write-Host "✓ Copied MT5 DLL"
           } else {
             Write-Host "❌ MT5 DLL not found"
@@ -118,6 +121,7 @@ jobs:
 
           if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
             Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-bridge/target/i686-pc-windows-msvc/release/"
+            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-advisors/MT4/Libraries/"
             Write-Host "✓ Copied MT4 DLL"
           } else {
             Write-Host "❌ MT4 DLL not found"
