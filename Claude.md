@@ -31,6 +31,11 @@ Motto: "Small, clear, safe steps — always grounded in real docs."
 * **Configuration:** Centralize runtime tunables in configuration files; avoid magic numbers in code and tests. Use project-appropriate config mechanisms (e.g., Rust: config files, MQL: input parameters, TypeScript: environment variables).
 * **Simplicity:** Implement exactly what's requested—no extra features.
 
+## Platform Considerations
+
+* **Windows Reserved Names:** Avoid using Windows reserved device names (nul, con, prn, aux, com1-9, lpt1-9) as file or directory names in any commands or scripts.
+* When redirecting output to null device, use platform-appropriate syntax (e.g., `/dev/null` on Unix, `$null` in PowerShell, `>nul 2>&1` only in Windows batch scripts).
+
 ## Communication & Language
 
 * All team communication (discussions, issues, PRs, and commit messages) should be conducted in **Japanese**.
