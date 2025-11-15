@@ -19,17 +19,16 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Run Tauri build first (required)
-    tauri_build::build();
-
     // Embed custom version information in Windows executable resources
-    // This must be done AFTER tauri_build to avoid conflicts
-    // Note: This may still cause duplicate resource warnings, but should work
+    // This must be done BEFORE tauri_build::build() to avoid conflicts
     #[cfg(windows)]
     {
-        println!("cargo:warning=Attempting to embed custom Windows resources with PACKAGE_VERSION={}, FILE_VERSION={}", package_version, file_version);
+        println!("cargo:warning=Embedding Windows resources with PACKAGE_VERSION={}, FILE_VERSION={}", package_version, file_version);
         embed_windows_resources(&package_version, &file_version);
     }
+
+    // Run Tauri build
+    tauri_build::build();
 }
 
 #[cfg(windows)]
