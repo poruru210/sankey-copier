@@ -1,8 +1,5 @@
 // Build script for SANKEY Copier Desktop
-// Configures Tauri build process
-//
-// NOTE: Tauri 2.0 automatically embeds Windows version information from Cargo.toml
-// The version field in Cargo.toml is updated by GitHub Actions workflow before building
+// Configures Tauri build process and embeds Windows version information
 
 use std::process::Command;
 
@@ -11,7 +8,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PACKAGE_VERSION");
     println!("cargo:rerun-if-env-changed=FILE_VERSION");
 
-    // Generate version information for use in Rust code
+    // Generate version information
     let (package_version, file_version, build_info) = generate_version_info();
 
     // Set environment variables for use in code
@@ -19,71 +16,192 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    println!("cargo:warning=Building with version info: {}", file_version);
-
-    // Run Tauri build
+    // Run Tauri build (generates default Windows resources)
     tauri_build::build();
+
+    // Patch the generated VERSIONINFO with CI-provided values
+    #[cfg(windows)]
+    {
+        if let Err(err) = patch_windows_resource(&package_version, &file_version) {
+            panic!("Failed to patch Windows VERSIONINFO: {err}");
+        }
+    }
 }
 
 #[cfg(windows)]
-fn embed_windows_resources(package_version: &str, file_version: &str) {
-    // Parse file version into 4-component format (MAJOR.MINOR.PATCH.BUILD)
-    let file_parts: Vec<&str> = file_version.split('.').collect();
-    let file_ver_string = if file_parts.len() >= 4 {
-        file_version.to_string()
-    } else {
-        // Ensure we have 4 components
-        let mut parts = file_parts.to_vec();
-        while parts.len() < 4 {
-            parts.push("0");
-        }
-        parts.join(".")
-    };
+fn patch_windows_resource(package_version: &str, file_version: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::{env, fs, path::PathBuf};
 
-    let mut res = winres::WindowsResource::new();
+    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+    let rc_path = out_dir.join("resource.rc");
 
-    // Set string version information (StringFileInfo)
-    res.set("ProductVersion", package_version)
-        .set("ProductName", "SANKEY Copier Desktop")
-        .set("FileVersion", &file_ver_string)
-        .set("FileDescription", "Desktop application for SANKEY Copier MT4/MT5 trade copying system")
-        .set("CompanyName", "SANKEY Copier Project")
-        .set("LegalCopyright", "Copyright (C) 2025 SANKEY Copier Project")
-        .set("OriginalFilename", "sankey-copier-desktop.exe");
-
-    // Set numeric version information (FixedFileInfo)
-    if let Some(version_u64) = parse_version(&file_ver_string) {
-        res.set_version_info(winres::VersionInfo::FILEVERSION, version_u64);
-        res.set_version_info(winres::VersionInfo::PRODUCTVERSION, version_u64);
+    if !rc_path.exists() {
+        return Err(format!("resource.rc not found at {}", rc_path.display()).into());
     }
 
-    // Compile the resource file
-    if let Err(e) = res.compile() {
-        eprintln!("Failed to compile Windows resources: {}", e);
-        // Don't fail the build, just warn
-    } else {
-        println!("cargo:warning=Successfully embedded Windows resources");
+    let original = fs::read_to_string(&rc_path)?;
+    let newline = if original.contains("\r\n") { "\r\n" } else { "\n" };
+
+    let mut replaced_file_numeric = false;
+    let mut replaced_product_numeric = false;
+    let mut replaced_file_string = false;
+    let mut replaced_product_string = false;
+    let file_tuple = format_file_tuple(file_version);
+
+    let mut new_lines = Vec::new();
+    for line in original.lines() {
+        let trimmed = line.trim_start();
+        let indent_len = line.len() - trimmed.len();
+        let indent = &line[..indent_len];
+
+        let updated = if trimmed.starts_with("FILEVERSION") {
+            replaced_file_numeric = true;
+            format!("{}FILEVERSION {}", indent, file_tuple)
+        } else if trimmed.starts_with("PRODUCTVERSION") {
+            replaced_product_numeric = true;
+            format!("{}PRODUCTVERSION {}", indent, file_tuple)
+        } else if trimmed.starts_with("VALUE \"FileVersion\"") {
+            replaced_file_string = true;
+            format!("{}VALUE \"FileVersion\", \"{}\"", indent, file_version)
+        } else if trimmed.starts_with("VALUE \"ProductVersion\"") {
+            replaced_product_string = true;
+            format!("{}VALUE \"ProductVersion\", \"{}\"", indent, package_version)
+        } else {
+            line.to_string()
+        };
+
+        new_lines.push(updated);
     }
+
+    if !replaced_file_numeric
+        || !replaced_product_numeric
+        || !replaced_file_string
+        || !replaced_product_string
+    {
+        return Err("Failed to patch VERSIONINFO fields in resource.rc".into());
+    }
+
+    let mut new_contents = new_lines.join(newline);
+    if original.ends_with("\r\n") && !new_contents.ends_with("\r\n") {
+        new_contents.push_str("\r\n");
+    } else if original.ends_with('\n') && !original.ends_with("\r\n") && !new_contents.ends_with('\n') {
+        new_contents.push('\n');
+    }
+
+    fs::write(&rc_path, new_contents)?;
+    recompile_resource(&rc_path, &out_dir)?;
+
+    println!(
+        "cargo:warning=Patched Windows VERSIONINFO to package={} file={}",
+        package_version, file_version
+    );
+
+    Ok(())
 }
 
-/// Parse version string (e.g., "1.2.3.169") into u64 for Windows VERSIONINFO
-/// Format: [major.minor.patch.build] -> 0xMMMMmmmmPPPPbbbb
-fn parse_version(version_str: &str) -> Option<u64> {
-    let parts: Vec<u16> = version_str
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
+#[cfg(windows)]
+fn recompile_resource(rc_path: &std::path::Path, out_dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    use std::{env, process::Command};
 
-    if parts.len() >= 3 {
-        let major = parts.get(0).copied().unwrap_or(0) as u64;
-        let minor = parts.get(1).copied().unwrap_or(0) as u64;
-        let patch = parts.get(2).copied().unwrap_or(0) as u64;
-        let build = parts.get(3).copied().unwrap_or(0) as u64;
+    let rc_exe = find_rc_executable().ok_or("Unable to locate rc.exe. Set RC_EXE_PATH to override.")?;
+    let output = out_dir.join("resource.lib");
+    let mut command = Command::new(&rc_exe);
+    command.arg("/nologo");
 
-        // Pack into u64: high DWORD (major.minor), low DWORD (patch.build)
-        Some((major << 48) | (minor << 32) | (patch << 16) | build)
+    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        command.arg(format!("/I{}", manifest_dir));
+    }
+
+    let status = command
+        .arg(format!("/fo{}", output.display()))
+        .arg(rc_path)
+        .status()?;
+
+    if !status.success() {
+        return Err(format!("rc.exe failed with status {}", status).into());
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn format_file_tuple(file_version: &str) -> String {
+    let mut parts = [0u16; 4];
+    for (idx, part) in file_version.split('.').take(4).enumerate() {
+        parts[idx] = part.parse().unwrap_or(0);
+    }
+
+    format!("{}, {}, {}, {}", parts[0], parts[1], parts[2], parts[3])
+}
+
+#[cfg(windows)]
+fn find_rc_executable() -> Option<std::path::PathBuf> {
+    use std::{env, fs, path::PathBuf};
+
+    if let Ok(custom) = env::var("RC_EXE_PATH") {
+        let candidate = PathBuf::from(custom);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+
+    let mut candidates = Vec::new();
+    let mut roots = vec![
+        PathBuf::from(r"C:\\Program Files (x86)\\Windows Kits\\10\\bin"),
+        PathBuf::from(r"C:\\Program Files\\Windows Kits\\10\\bin"),
+    ];
+
+    if let Ok(sdk_dir) = env::var("WindowsSdkDir") {
+        roots.push(PathBuf::from(sdk_dir).join("bin"));
+    }
+
+    for root in roots {
+        if !root.exists() {
+            continue;
+        }
+
+        let direct = root.join("x64").join("rc.exe");
+        if direct.exists() {
+            candidates.push((version_key(&direct), direct.clone()));
+        }
+
+        if let Ok(entries) = fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let rc = path.join("x64").join("rc.exe");
+                    if rc.exists() {
+                        candidates.push((version_key(&rc), rc));
+                    }
+                }
+            }
+        }
+    }
+
+    candidates.sort_by(|a, b| a.0.cmp(&b.0));
+    candidates.pop().map(|(_, path)| path)
+}
+
+#[cfg(windows)]
+fn version_key(path: &std::path::Path) -> (u32, u32, u32, u32) {
+    if let Some(version_dir) = path
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.file_name())
+    {
+        let mut parts = [0u32; 4];
+        for (idx, part) in version_dir
+            .to_string_lossy()
+            .split('.')
+            .filter_map(|s| s.parse::<u32>().ok())
+            .take(4)
+            .enumerate()
+        {
+            parts[idx] = part;
+        }
+        (parts[0], parts[1], parts[2], parts[3])
     } else {
-        None
+        (0, 0, 0, 0)
     }
 }
 
