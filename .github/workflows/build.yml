@@ -4,9 +4,9 @@ name: Build SANKEY Copier
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
   push:
-    branches: [ master ]
+    branches: [ main ]
     tags:
       - 'v*'
   workflow_dispatch:  # Manual execution
