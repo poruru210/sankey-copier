@@ -19,20 +19,17 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Embed version information in Windows executable resources
+    // Run Tauri build first (required)
+    tauri_build::build();
+
+    // Embed custom version information in Windows executable resources
+    // This must be done AFTER tauri_build to avoid conflicts
+    // Note: This may still cause duplicate resource warnings, but should work
     #[cfg(windows)]
     {
-        let is_bin_build = std::env::var("CARGO_BIN_NAME").is_ok();
-
-        if is_bin_build {
-            embed_windows_resources(&package_version, &file_version);
-        } else {
-            println!("cargo:warning=Skipping Windows resource embedding (not a binary build)");
-        }
+        println!("cargo:warning=Attempting to embed custom Windows resources with PACKAGE_VERSION={}, FILE_VERSION={}", package_version, file_version);
+        embed_windows_resources(&package_version, &file_version);
     }
-
-    // Run Tauri build
-    tauri_build::build()
 }
 
 #[cfg(windows)]
