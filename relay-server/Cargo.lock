@@ -1585,7 +1585,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "sankey-copier-server"
+name = "sankey-copier-mt-bridge"
+version = "1.0.0"
+dependencies = [
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "winres",
+ "zmq",
+]
+
+[[package]]
+name = "sankey-copier-relay-server"
 version = "1.0.0"
 dependencies = [
  "anyhow",
@@ -1593,7 +1604,7 @@ dependencies = [
  "chrono",
  "config",
  "rmp-serde",
- "sankey_copier_zmq",
+ "sankey-copier-mt-bridge",
  "serde",
  "serde_json",
  "sqlx",
@@ -1608,17 +1619,6 @@ dependencies = [
  "uuid",
  "winapi",
  "winreg",
- "winres",
- "zmq",
-]
-
-[[package]]
-name = "sankey_copier_zmq"
-version = "1.0.0"
-dependencies = [
- "rmp-serde",
- "serde",
- "serde_json",
  "winres",
  "zmq",
 ]
