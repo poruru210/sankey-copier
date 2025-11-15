@@ -223,7 +223,7 @@ async fn create_settings(
 
     let settings = CopySettings {
         id: 0,
-        enabled: true,
+        enabled: false,
         master_account: req.master_account.clone(),
         slave_account: req.slave_account.clone(),
         lot_multiplier: req.lot_multiplier,
@@ -243,9 +243,10 @@ async fn create_settings(
                 settings_id = id,
                 master_account = %req.master_account,
                 slave_account = %req.slave_account,
+                enabled = false,
                 lot_multiplier = ?req.lot_multiplier,
                 reverse_trade = req.reverse_trade,
-                "Successfully created copy settings"
+                "Successfully created copy settings (disabled by default)"
             );
 
             refresh_settings_cache(&state).await;
