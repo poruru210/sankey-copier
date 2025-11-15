@@ -1,4 +1,4 @@
-use sankey_copier_server::models::{ConfigMessage, CopySettings, SymbolMapping, TradeFilters};
+use sankey_copier_relay_server::models::{ConfigMessage, CopySettings, SymbolMapping, TradeFilters};
 
 /// Performance benchmark test for Phase 1: ConfigMessage Extension
 ///
