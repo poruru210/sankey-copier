@@ -102,10 +102,10 @@ jobs:
           $configPath = "src-tauri/tauri.conf.json"
           $config = Get-Content $configPath -Raw | ConvertFrom-Json
 
-          # Inject version information
-          $version = "${{ inputs.version }}"
+          # Inject version information (using file_version for 4-component version)
+          $version = "${{ inputs.file_version }}"
           $config.version = $version
-          Write-Host "Injected version: $version" -ForegroundColor Cyan
+          Write-Host "Injected file version (4-component): $version" -ForegroundColor Cyan
 
           # Skip beforeBuildCommand (web-ui already built)
           $config.build.beforeBuildCommand = ""
