@@ -97,18 +97,18 @@ C:\Program Files\SANKEY Copier\
 ├── config.toml                 # relay-server設定ファイル
 ├── app.ico                     # アイコン
 └── mt-advisors/                # MT4/MT5コンポーネント（オプション）
-    ├── mt4/
+    ├── MT4/
     │   ├── Experts/
     │   │   ├── SankeyCopierMaster.ex4
     │   │   └── SankeyCopierSlave.ex4
     │   └── Libraries/
-    │       └── zmq.dll
-    └── mt5/
+    │       └── sankey_copier_zmq.dll
+    └── MT5/
         ├── Experts/
         │   ├── SankeyCopierMaster.ex5
         │   └── SankeyCopierSlave.ex5
         └── Libraries/
-            └── zmq.dll
+            └── sankey_copier_zmq.dll
 ```
 
 ### Windowsサービス
