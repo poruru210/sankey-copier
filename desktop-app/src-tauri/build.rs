@@ -1,17 +1,18 @@
 // Build script for SANKEY Copier Desktop
-// Configures Tauri build process and embeds Windows version information
+// Configures Tauri build process
+//
+// NOTE: Tauri 2.0 automatically handles Windows resource embedding including version information.
+// Version is taken from tauri.conf.json which is updated by GitHub Actions workflow.
+// We do NOT manually embed Windows resources to avoid duplicate resource errors (CVT1100).
 
 use std::process::Command;
-
-#[cfg(windows)]
-extern crate winres;
 
 fn main() {
     // Rerun if environment variables change
     println!("cargo:rerun-if-env-changed=PACKAGE_VERSION");
     println!("cargo:rerun-if-env-changed=FILE_VERSION");
 
-    // Generate version information
+    // Generate version information for use in Rust code
     let (package_version, file_version, build_info) = generate_version_info();
 
     // Set environment variables for use in code
@@ -19,15 +20,9 @@ fn main() {
     println!("cargo:rustc-env=FILE_VERSION={}", file_version);
     println!("cargo:rustc-env=BUILD_INFO={}", build_info);
 
-    // Embed custom version information in Windows executable resources
-    // This must be done BEFORE tauri_build::build() to avoid conflicts
-    #[cfg(windows)]
-    {
-        println!("cargo:warning=Embedding Windows resources with PACKAGE_VERSION={}, FILE_VERSION={}", package_version, file_version);
-        embed_windows_resources(&package_version, &file_version);
-    }
+    println!("cargo:warning=Using Tauri automatic version embedding from tauri.conf.json: {}", package_version);
 
-    // Run Tauri build
+    // Run Tauri build (handles Windows resources automatically)
     tauri_build::build();
 }
 
