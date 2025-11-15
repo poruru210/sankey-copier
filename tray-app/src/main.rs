@@ -1,7 +1,7 @@
 //! SANKEY Copier System Tray Application
 //!
 //! This application provides a system tray interface for controlling
-//! the rust-server Windows service and launching the Desktop App.
+//! the relay-server Windows service and launching the Desktop App.
 
 #![windows_subsystem = "windows"] // Hide console window
 

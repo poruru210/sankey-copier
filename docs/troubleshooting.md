@@ -41,7 +41,7 @@
 3. **正しいビット数のDLLをビルド:**
    ```bash
    # 32-bit版（MT4用、一部のMT5）
-   cd mql-zmq-dll
+   cd mt-bridge
    rustup target add i686-pc-windows-msvc
    cargo build --release --target i686-pc-windows-msvc
 
@@ -113,7 +113,7 @@ dir "C:\Program Files\[Broker] MetaTrader 5\MQL5\Include\SankeyCopier\"
 
 1. **Rustサーバーの起動を確認:**
    ```bash
-   cd rust-server
+   cd relay-server
    cargo run --release
    ```
 
@@ -177,7 +177,7 @@ dir "C:\Program Files\[Broker] MetaTrader 5\MQL5\Include\SankeyCopier\"
 
 2. **Rustサーバーの起動確認:**
    ```bash
-   cd rust-server
+   cd relay-server
    cargo run --release
    ```
 
@@ -224,7 +224,7 @@ netstat -an | findstr "5173 5555 5556 8080"
 
 1. **タイムアウト設定の確認・調整:**
 
-   `rust-server/config.toml` を編集:
+   `relay-server/config.toml` を編集:
    ```toml
    [zeromq]
    timeout_seconds = 30  # デフォルト30秒、必要に応じて60秒などに延長
@@ -249,7 +249,7 @@ netstat -an | findstr "5173 5555 5556 8080"
 
 4. **ハートビート送信間隔の確認:**
    - EA側: `HEARTBEAT_INTERVAL_SECONDS = 30` (mql/Include/SankeyCopier/SankeyCopierCommon.mqh)
-   - サーバー側: `timeout_seconds = 30` (rust-server/config.toml)
+   - サーバー側: `timeout_seconds = 30` (relay-server/config.toml)
    - サーバー側のタイムアウトはEA側の送信間隔より長く設定する
 
 ---
@@ -510,7 +510,7 @@ Slave EAパラメータ:
 
 2. **ログレベルの調整:**
 
-   `rust-server/config.toml`:
+   `relay-server/config.toml`:
    ```toml
    [logging]
    level = "info"  # "debug"から"info"に変更
@@ -562,7 +562,7 @@ Slave EAパラメータ:
 
 3. **依存関係の再取得:**
    ```bash
-   cd rust-server
+   cd relay-server
    cargo clean
    cargo build --release
    ```
@@ -684,14 +684,14 @@ AllowCloseOrders = false  // 決済はコピーしない
 
 1. **データベース:**
    ```
-   rust-server/copier.db
-   rust-server/copier.db-shm
-   rust-server/copier.db-wal
+   relay-server/copier.db
+   relay-server/copier.db-shm
+   relay-server/copier.db-wal
    ```
 
 2. **設定ファイル:**
    ```
-   rust-server/config.toml
+   relay-server/config.toml
    web-ui/.env.local
    ```
 

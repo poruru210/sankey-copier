@@ -4,7 +4,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};
 
-// Re-export message types for use in rust-server
+// Re-export message types for use in relay-server
 pub use msgpack::{
     UnregisterMessage,
     RequestConfigMessage,

@@ -85,7 +85,7 @@ cd sankey-copier
 #### 1-3. 依存関係のインストール
 
 ```bash
-cd rust-server
+cd relay-server
 cargo build --release
 ```
 
@@ -153,7 +153,7 @@ npm run build
 **32-bit版** (MT4, 一部MT5):
 
 ```bash
-cd mql-zmq-dll
+cd mt-bridge
 
 # 32-bitターゲット追加
 rustup target add i686-pc-windows-msvc
@@ -249,7 +249,7 @@ mql/MT5/SankeyCopierSlave.mq5
 #### 1-1. 設定ファイルの作成
 
 ```bash
-cd rust-server
+cd relay-server
 cp config.toml.example config.toml
 # または、以下の内容で新規作成
 ```
@@ -451,7 +451,7 @@ SankeyCopierSlave: Configuration updated
 
 ### config.toml (Rust Server)
 
-**場所**: `rust-server/config.toml`
+**場所**: `relay-server/config.toml`
 
 ```toml
 [server]
@@ -508,7 +508,7 @@ pnpm start
 #### 1. Rustサーバーのビルド
 
 ```bash
-cd rust-server
+cd relay-server
 cargo build --release
 ```
 
@@ -593,7 +593,7 @@ sudo systemctl status sankey-copier
 **開発環境**:
 
 ```bash
-cd rust-server
+cd relay-server
 cargo run --release
 ```
 
@@ -735,7 +735,7 @@ cp sankey_copier.db backups/sankey_copier_$DATE.db
 
 ```bash
 tar -czf backup_$DATE.tar.gz \
-    rust-server/config.toml \
+    relay-server/config.toml \
     sankey_copier.db
 ```
 

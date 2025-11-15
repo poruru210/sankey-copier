@@ -1,8 +1,8 @@
-# Desktop App + rust-server 統合実装計画
+# Desktop App + relay-server 統合実装計画
 
 ## 目標
 
-Desktop App（Tauri）とrust-serverを統合し、単一のインストーラーで配布できるようにする。
+Desktop App（Tauri）とrelay-serverを統合し、単一のインストーラーで配布できるようにする。
 
 ## アーキテクチャ
 
@@ -11,7 +11,7 @@ Desktop App（Tauri）とrust-serverを統合し、単一のインストーラ�
 ```
 【別々にインストール・起動が必要】
 
-1. rust-server (手動起動)
+1. relay-server (手動起動)
    └─ cargo run --release
 
 2. Desktop App (別途起動)
@@ -25,7 +25,7 @@ Desktop App（Tauri）とrust-serverを統合し、単一のインストーラ�
 
 Desktop App (Tauri)
   ├─ web-ui (静的HTML/CSS/JS)
-  └─ rust-server (Tauri sidecar)
+  └─ relay-server (Tauri sidecar)
        ├─ 自動起動（Desktop App起動時）
        ├─ 自動停止（Desktop App終了時）
        └─ localhost:3000でHTTP/WebSocket提供
@@ -35,9 +35,9 @@ Desktop App (Tauri)
 
 ## 実装ステップ
 
-### ステップ1: rust-serverのsidecarビルド設定
+### ステップ1: relay-serverのsidecarビルド設定
 
-#### 1.1 `rust-server/Cargo.toml`の修正
+#### 1.1 `relay-server/Cargo.toml`の修正
 
 ```toml
 # 既存の[package]セクションは変更なし
@@ -51,20 +51,20 @@ opt-level = "z"   # サイズ最適化
 
 **目的**: バイナリサイズを最小化（Desktop Appに同梱するため）
 
-#### 1.2 rust-serverのビルドスクリプト作成
+#### 1.2 relay-serverのビルドスクリプト作成
 
-`rust-server/build-sidecar.ps1`:
+`relay-server/build-sidecar.ps1`:
 
 ```powershell
-# Tauri sidecar用のrust-serverビルドスクリプト
+# Tauri sidecar用のrelay-serverビルドスクリプト
 
-Write-Host "Building rust-server for Tauri sidecar..."
+Write-Host "Building relay-server for Tauri sidecar..."
 
 # リリースビルド
 cargo build --release --target x86_64-pc-windows-msvc
 
 # 出力先
-$SOURCE = "target/x86_64-pc-windows-msvc/release/rust-server.exe"
+$SOURCE = "target/x86_64-pc-windows-msvc/release/relay-server.exe"
 $DEST = "../desktop-app/src-tauri/binaries"
 
 # ディレクトリ作成
@@ -72,7 +72,7 @@ New-Item -ItemType Directory -Force -Path $DEST | Out-Null
 
 # Tauri命名規則に従ってコピー
 # 形式: {binary-name}-{target-triple}.exe
-Copy-Item $SOURCE "$DEST/rust-server-x86_64-pc-windows-msvc.exe"
+Copy-Item $SOURCE "$DEST/relay-server-x86_64-pc-windows-msvc.exe"
 
 Write-Host "✅ Sidecar binary copied to: $DEST"
 ```
@@ -100,7 +100,7 @@ Write-Host "✅ Sidecar binary copied to: $DEST"
     "targets": "all",
     "icon": ["icons/icon.ico"],
     "externalBin": [
-      "binaries/rust-server"
+      "binaries/relay-server"
     ],
     "windows": {
       "certificateThumbprint": null,
@@ -130,19 +130,19 @@ Write-Host "✅ Sidecar binary copied to: $DEST"
 ```
 
 **変更点:**
-1. `bundle.externalBin`: rust-serverをsidecarとして登録
+1. `bundle.externalBin`: relay-serverをsidecarとして登録
 2. `beforeBuildCommand`: web-uiをexportモードでビルド
-3. `app.windows.url`: rust-serverのURL（localhost:3000）を指定
+3. `app.windows.url`: relay-serverのURL（localhost:3000）を指定
 
 ---
 
-### ステップ3: Desktop Appのrust-server起動ロジック
+### ステップ3: Desktop Appのrelay-server起動ロジック
 
 #### 3.1 `desktop-app/src-tauri/src/main.rs`の実装
 
 ```rust
 // SANKEY Copier Desktop Application
-// Tauri-based desktop app with integrated rust-server sidecar
+// Tauri-based desktop app with integrated relay-server sidecar
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -153,11 +153,11 @@ use std::net::TcpStream;
 
 /// サーバーが起動するまで待機（最大30秒）
 fn wait_for_server(port: u16, max_attempts: usize) -> bool {
-    println!("Waiting for rust-server on port {}...", port);
+    println!("Waiting for relay-server on port {}...", port);
 
     for i in 0..max_attempts {
         if TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
-            println!("✅ rust-server is ready!");
+            println!("✅ relay-server is ready!");
             return true;
         }
 
@@ -167,26 +167,26 @@ fn wait_for_server(port: u16, max_attempts: usize) -> bool {
         }
     }
 
-    eprintln!("❌ rust-server failed to start within {} seconds", max_attempts);
+    eprintln!("❌ relay-server failed to start within {} seconds", max_attempts);
     false
 }
 
-/// rust-serverのsidecarを起動
+/// relay-serverのsidecarを起動
 fn start_rust_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting rust-server sidecar...");
+    println!("Starting relay-server sidecar...");
 
     // Tauri sidecarコマンドを取得
     let sidecar_command = app.shell()
-        .sidecar("rust-server")?;
+        .sidecar("relay-server")?;
 
-    // rust-serverを起動（バックグラウンド）
+    // relay-serverを起動（バックグラウンド）
     let (_rx, _child) = sidecar_command.spawn()?;
 
-    println!("rust-server process spawned");
+    println!("relay-server process spawned");
 
     // サーバーが起動するまで待機
     if !wait_for_server(3000, 30) {
-        return Err("Failed to start rust-server".into());
+        return Err("Failed to start relay-server".into());
     }
 
     Ok(())
@@ -196,9 +196,9 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            // rust-serverを起動
+            // relay-serverを起動
             if let Err(e) = start_rust_server(&app.handle()) {
-                eprintln!("Failed to start rust-server: {}", e);
+                eprintln!("Failed to start relay-server: {}", e);
                 // エラーダイアログを表示してアプリを終了
                 std::process::exit(1);
             }
@@ -211,9 +211,9 @@ fn main() {
 ```
 
 **ポイント:**
-1. `start_rust_server()`: sidecarとしてrust-serverを起動
+1. `start_rust_server()`: sidecarとしてrelay-serverを起動
 2. `wait_for_server()`: サーバーが起動するまで待機（ポーリング）
-3. エラーハンドリング: rust-server起動失敗時はアプリ終了
+3. エラーハンドリング: relay-server起動失敗時はアプリ終了
 
 ---
 
@@ -222,7 +222,7 @@ fn main() {
 #### 4.1 `desktop-app/build-all.ps1`の作成
 
 ```powershell
-# Desktop App + rust-server 統合ビルドスクリプト
+# Desktop App + relay-server 統合ビルドスクリプト
 
 param(
     [switch]$Release
@@ -234,11 +234,11 @@ Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "Building SANKEY Copier Desktop App" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 
-# 1. rust-serverをsidecar用にビルド
-Write-Host "`n[1/3] Building rust-server sidecar..." -ForegroundColor Yellow
-Push-Location ../rust-server
+# 1. relay-serverをsidecar用にビルド
+Write-Host "`n[1/3] Building relay-server sidecar..." -ForegroundColor Yellow
+Push-Location ../relay-server
 & .\build-sidecar.ps1
-if ($LASTEXITCODE -ne 0) { throw "rust-server build failed" }
+if ($LASTEXITCODE -ne 0) { throw "relay-server build failed" }
 Pop-Location
 
 # 2. web-uiを静的エクスポートモードでビルド
@@ -280,7 +280,7 @@ on:
     branches: [main]
     paths:
       - 'desktop-app/**'
-      - 'rust-server/**'
+      - 'relay-server/**'
       - 'web-ui/**'
 
 jobs:
@@ -306,12 +306,12 @@ jobs:
         with:
           version: 8
 
-      - name: Build rust-server (sidecar)
-        working-directory: rust-server
+      - name: Build relay-server (sidecar)
+        working-directory: relay-server
         run: |
           cargo build --release --target x86_64-pc-windows-msvc
           mkdir -p ../desktop-app/src-tauri/binaries
-          cp target/x86_64-pc-windows-msvc/release/rust-server.exe ../desktop-app/src-tauri/binaries/rust-server-x86_64-pc-windows-msvc.exe
+          cp target/x86_64-pc-windows-msvc/release/relay-server.exe ../desktop-app/src-tauri/binaries/relay-server-x86_64-pc-windows-msvc.exe
 
       - name: Build web-ui (static export)
         working-directory: web-ui
@@ -341,10 +341,10 @@ jobs:
 ### ユーザー視点
 1. **簡単インストール**: 1つのEXEをダブルクリックするだけ
 2. **依存関係ゼロ**: Node.jsやRustのインストール不要
-3. **自動起動**: Desktop App起動時にrust-serverも自動起動
+3. **自動起動**: Desktop App起動時にrelay-serverも自動起動
 
 ### 開発者視点
-1. **メンテナンス容易**: 既存のrust-serverコードはほぼ変更なし
+1. **メンテナンス容易**: 既存のrelay-serverコードはほぼ変更なし
 2. **標準機能**: Tauriの公式sidecar機能を使用
 3. **クロスプラットフォーム**: Linux/macOSにも対応可能
 
@@ -352,7 +352,7 @@ jobs:
 
 ## 課題と対策
 
-### 課題1: rust-serverがすでに起動している場合
+### 課題1: relay-serverがすでに起動している場合
 
 **対策**: 起動前にポート3000をチェック
 
@@ -365,24 +365,24 @@ fn is_port_available(port: u16) -> bool {
 if is_port_available(3000) {
     start_rust_server(app)?;
 } else {
-    println!("⚠️ rust-server is already running on port 3000");
+    println!("⚠️ relay-server is already running on port 3000");
 }
 ```
 
-### 課題2: rust-server設定ファイルの場所
+### 課題2: relay-server設定ファイルの場所
 
 **対策**: sidecar起動時にカレントディレクトリを指定
 
 ```rust
 let sidecar_command = app.shell()
-    .sidecar("rust-server")?
+    .sidecar("relay-server")?
     .current_dir(get_config_dir()?);  // 設定ファイルディレクトリ
 ```
 
 ### 課題3: バイナリサイズの肥大化
 
 **対策**:
-- rust-serverのリリースビルド最適化（LTO、strip）
+- relay-serverのリリースビルド最適化（LTO、strip）
 - UPXなどの圧縮ツール（オプション）
 
 ---
@@ -391,17 +391,17 @@ let sidecar_command = app.shell()
 
 ### 単体テスト
 
-1. **rust-server sidecar起動テスト**
+1. **relay-server sidecar起動テスト**
    ```bash
    cd desktop-app
    pnpm tauri dev
-   # → rust-serverが自動起動するか確認
+   # → relay-serverが自動起動するか確認
    ```
 
 2. **ポート競合テスト**
    ```bash
-   # 先にrust-serverを手動起動
-   cd rust-server && cargo run
+   # 先にrelay-serverを手動起動
+   cd relay-server && cargo run
 
    # Desktop Appを起動
    cd desktop-app && pnpm tauri dev
@@ -411,7 +411,7 @@ let sidecar_command = app.shell()
 3. **終了時のクリーンアップテスト**
    ```bash
    # Desktop Appを起動→終了
-   # タスクマネージャーでrust-serverプロセスが残っていないか確認
+   # タスクマネージャーでrelay-serverプロセスが残っていないか確認
    ```
 
 ### 統合テスト

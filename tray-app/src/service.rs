@@ -1,7 +1,7 @@
 //! Windows service management for SANKEY Copier.
 //!
 //! This module provides functions to start, stop, restart, and query
-//! the status of the rust-server Windows service.
+//! the status of the relay-server Windows service.
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;

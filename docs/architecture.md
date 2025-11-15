@@ -183,7 +183,7 @@ graph LR
 **主要モジュール**:
 
 ```
-rust-server/
+relay-server/
 ├── src/
 │   ├── main.rs                 # エントリポイント
 │   ├── api/
@@ -311,7 +311,7 @@ graph LR
 
 **役割**: MQL4/MQL5からZeroMQ通信を可能にするブリッジ
 
-**実装**: Rust (`mql-zmq-dll/`)
+**実装**: Rust (`mt-bridge/`)
 
 **主要機能**:
 

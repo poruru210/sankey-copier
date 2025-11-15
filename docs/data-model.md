@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS trade_filters (
 ### モデル構成
 
 ```
-rust-server/src/models/
+relay-server/src/models/
 ├── mod.rs              # メインモデル定義
 └── connection.rs       # EA接続情報
 ```
@@ -510,7 +510,7 @@ struct ConfigInfo {
 
 ### MessagePack共通定義
 
-すべてのメッセージは `mql-zmq-dll/src/msgpack.rs` で定義されています。
+すべてのメッセージは `mt-bridge/src/msgpack.rs` で定義されています。
 
 #### 1. UnregisterMessage
 

@@ -73,7 +73,7 @@ The main workflow supports manual triggering with build target selection:
 
 - `all` - Build all components (default)
 - `rust-dll` - Build only Rust DLL
-- `rust-server` - Build only Rust Server
+- `relay-server` - Build only Rust Server
 - `web-ui` - Build only Web UI
 - `mql` - Build only MQL components
 

@@ -42,7 +42,7 @@ export function useSankeyCopier() {
       setConnections(connections);
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
-        console.error('Cannot connect to server - is rust-server running?');
+        console.error('Cannot connect to server - is relay-server running?');
       } else {
         console.error('Failed to fetch connections:', err);
       }

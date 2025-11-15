@@ -3,7 +3,7 @@
 # Each subproject has its own .gitignore
 # ============================================
 
-# Database (global - used by rust-server)
+# Database (global - used by relay-server)
 *.db
 *.db-shm
 *.db-wal
@@ -32,7 +32,7 @@ nul
 .env.local
 .env.*.local
 
-# Local configuration overrides (Rust server)
+# Local configuration overrides (Relay Server)
 config.local.toml
 config.*.local.toml
 

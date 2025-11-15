@@ -19,7 +19,7 @@ on:
         options:
           - all
           - rust-dll
-          - rust-server
+          - relay-server
           - web-ui
           - mql
 

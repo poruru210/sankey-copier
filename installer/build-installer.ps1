@@ -15,11 +15,11 @@ Write-Host "=====================================" -ForegroundColor Cyan
 $PROJECT_ROOT = (Get-Item $PSScriptRoot).Parent.FullName
 
 if (-not $SkipBuild) {
-    # 1. Build rust-server
-    Write-Host "`n[1/4] Building rust-server..." -ForegroundColor Yellow
-    Push-Location "$PROJECT_ROOT\rust-server"
+    # 1. Build relay-server
+    Write-Host "`n[1/4] Building relay-server..." -ForegroundColor Yellow
+    Push-Location "$PROJECT_ROOT\relay-server"
     cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "rust-server build failed" }
+    if ($LASTEXITCODE -ne 0) { throw "relay-server build failed" }
     Pop-Location
 
     # 2. Build web-ui (static export for Desktop App)
@@ -55,8 +55,8 @@ if (-not $SkipBuild) {
     # 4. Build MT4/MT5 components (optional)
     if (-not $SkipMQL) {
         Write-Host "`n[4/4] Building MT4/MT5 components..." -ForegroundColor Yellow
-        if (Test-Path "$PROJECT_ROOT\mql") {
-            Push-Location "$PROJECT_ROOT\mql"
+        if (Test-Path "$PROJECT_ROOT\mt-advisors") {
+            Push-Location "$PROJECT_ROOT\mt-advisors"
 
             # Check if build script exists
             if (Test-Path ".\build.ps1") {
