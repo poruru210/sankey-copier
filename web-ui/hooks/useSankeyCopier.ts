@@ -167,7 +167,7 @@ export function useSankeyCopier() {
     const tempSetting: CopySettings = {
       ...formData,
       id: Date.now(), // Temporary ID
-      enabled: true,
+      enabled: false, // Disabled by default for safety
       symbol_mappings: [],
       filters: {
         allowed_symbols: null,
