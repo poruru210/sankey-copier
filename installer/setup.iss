@@ -33,7 +33,6 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
-InfoBeforeFile=..\installer\README.md
 OutputDir=output
 OutputBaseFilename=SankeyCopierSetup-{#MyFileVersion}
 SetupIconFile=..\app.ico
