@@ -21,13 +21,11 @@ const SiteContext = createContext<SiteContextValue | undefined>(undefined);
 
 export function SiteProvider({ children }: { children: ReactNode }) {
   const siteManagement = useSites();
+  const { selectedSite } = siteManagement;
 
   // Memoize apiClient to prevent recreating on every render
   // This ensures stable reference for hooks that depend on it
-  const apiClient = useMemo(
-    () => new ApiClient(siteManagement.selectedSite),
-    [siteManagement.selectedSite.id, siteManagement.selectedSite.siteUrl]
-  );
+  const apiClient = useMemo(() => new ApiClient(selectedSite), [selectedSite]);
 
   return (
     <SiteContext.Provider value={{ ...siteManagement, apiClient }}>

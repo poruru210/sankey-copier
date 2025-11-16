@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { getBrokerIconUrl, getBrokerColor } from '@/lib/brokerIcons';
@@ -42,16 +43,27 @@ export function BrokerIcon({ brokerName, size = 'md', className = '' }: BrokerIc
     );
   }
 
+  // Track pixel dimensions for Next/Image sizing
+  const sizePixels = {
+    sm: 24,
+    md: 28,
+    lg: 32,
+  } as const;
+
   // Show broker favicon
   return (
     <div
       className={`${sizeClasses[size]} rounded flex items-center justify-center flex-shrink-0 ${className}`}
     >
-      <img
+      <Image
         src={iconUrl}
         alt={`${brokerName} icon`}
+        width={sizePixels[size]}
+        height={sizePixels[size]}
+        sizes={`${sizePixels[size]}px`}
         className="w-full h-full object-contain"
         onError={() => setImageError(true)}
+        unoptimized
       />
     </div>
   );

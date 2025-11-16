@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Locales } from 'intlayer';
 
 declare module 'intlayer' {
