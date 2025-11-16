@@ -1,6 +1,4 @@
-use crate::models::{
-    Architecture, InstalledComponents, MtInstallation, MtType,
-};
+use crate::models::{Architecture, InstalledComponents, MtInstallation, MtType};
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,7 +23,10 @@ impl MtDetector {
         let mut seen_paths = std::collections::HashSet::new();
 
         // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
-        if let Ok(hklm_installations) = self.scan_uninstall_registry(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") {
+        if let Ok(hklm_installations) = self.scan_uninstall_registry(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        ) {
             for installation in hklm_installations {
                 if seen_paths.insert(installation.path.clone()) {
                     installations.push(installation);
@@ -34,7 +35,10 @@ impl MtDetector {
         }
 
         // HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall (32-bit apps on 64-bit Windows)
-        if let Ok(wow64_installations) = self.scan_uninstall_registry(HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") {
+        if let Ok(wow64_installations) = self.scan_uninstall_registry(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        ) {
             for installation in wow64_installations {
                 if seen_paths.insert(installation.path.clone()) {
                     installations.push(installation);
@@ -42,7 +46,10 @@ impl MtDetector {
             }
         }
 
-        tracing::info!("Found {} MT4/MT5 installations in registry", installations.len());
+        tracing::info!(
+            "Found {} MT4/MT5 installations in registry",
+            installations.len()
+        );
         Ok(installations)
     }
 
@@ -106,15 +113,18 @@ impl MtDetector {
         // MetaTraderまたはMT4/MT5を含むもののみ処理
         if !display_name.to_lowercase().contains("metatrader")
             && !display_name.to_lowercase().contains("mt4")
-            && !display_name.to_lowercase().contains("mt5") {
+            && !display_name.to_lowercase().contains("mt5")
+        {
             return None;
         }
 
         tracing::debug!("Parsing MT registry entry: {}", display_name);
 
         // インストールパスを取得
-        let install_location: String = match key.get_value("InstallLocation")
-            .or_else(|_| key.get_value("InstallPath")) {
+        let install_location: String = match key
+            .get_value("InstallLocation")
+            .or_else(|_| key.get_value("InstallPath"))
+        {
             Ok(path) => path,
             Err(e) => {
                 tracing::warn!(
@@ -126,7 +136,11 @@ impl MtDetector {
             }
         };
 
-        tracing::debug!("Install location for '{}': {}", display_name, install_location);
+        tracing::debug!(
+            "Install location for '{}': {}",
+            display_name,
+            install_location
+        );
 
         let install_path = PathBuf::from(&install_location);
         if !install_path.exists() {
@@ -135,7 +149,8 @@ impl MtDetector {
         }
 
         // MT4/MT5のタイプとアーキテクチャを判定
-        let (mt_type, platform, executable) = match self.detect_mt_type_and_platform(&install_path) {
+        let (mt_type, platform, executable) = match self.detect_mt_type_and_platform(&install_path)
+        {
             Some(result) => result,
             None => {
                 tracing::warn!(
@@ -181,7 +196,8 @@ impl MtDetector {
         let name = display_name.clone();
 
         // インストールされたコンポーネントをチェック
-        let (components, version) = self.check_installed_components(&data_path, &mt_type)
+        let (components, version) = self
+            .check_installed_components(&data_path, &mt_type)
             .unwrap_or_else(|_| (InstalledComponents::default(), None));
 
         tracing::info!(
@@ -207,7 +223,11 @@ impl MtDetector {
     }
 
     /// MT4/MT5のタイプとプラットフォームを検出
-    fn detect_mt_type_and_platform(&self, install_path: &Path) -> Option<(MtType, Architecture, PathBuf)> {
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn detect_mt_type_and_platform(
+        &self,
+        install_path: &Path,
+    ) -> Option<(MtType, Architecture, PathBuf)> {
         // 64-bit MT5
         let terminal64_path = install_path.join("terminal64.exe");
         if terminal64_path.exists() {
@@ -231,6 +251,7 @@ impl MtDetector {
     }
 
     /// データディレクトリを検出
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn find_data_directory(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
         // ポータブルモード: インストールパスと同じ
         let mql_folder = match mt_type {
@@ -257,7 +278,12 @@ impl MtDetector {
 
     /// %APPDATA%\MetaQuotes\Terminal\ からデータディレクトリを検索
     /// Windows Service (SYSTEM account) で実行される場合、全ユーザーのプロファイルを検索
-    fn find_data_directory_from_appdata(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn find_data_directory_from_appdata(
+        &self,
+        install_path: &Path,
+        mt_type: &MtType,
+    ) -> Option<PathBuf> {
         let appdata = match std::env::var("APPDATA") {
             Ok(path) => {
                 tracing::debug!("APPDATA environment variable: {}", path);
@@ -273,7 +299,9 @@ impl MtDetector {
         let is_system_account = appdata.contains("system32\\config\\systemprofile");
 
         if is_system_account {
-            tracing::info!("Running as SYSTEM account, scanning all user profiles for MT data directories");
+            tracing::info!(
+                "Running as SYSTEM account, scanning all user profiles for MT data directories"
+            );
             return self.find_data_directory_all_users(install_path, mt_type);
         }
 
@@ -286,7 +314,10 @@ impl MtDetector {
         );
 
         if !terminal_base.exists() {
-            tracing::warn!("Terminal base directory does not exist: {:?}", terminal_base);
+            tracing::warn!(
+                "Terminal base directory does not exist: {:?}",
+                terminal_base
+            );
             return None;
         }
 
@@ -349,7 +380,12 @@ impl MtDetector {
     }
 
     /// すべてのユーザープロファイルからデータディレクトリを検索（SYSTEM account用）
-    fn find_data_directory_all_users(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn find_data_directory_all_users(
+        &self,
+        install_path: &Path,
+        mt_type: &MtType,
+    ) -> Option<PathBuf> {
         // C:\Users\ 配下の全ユーザーを検索
         let users_dir = PathBuf::from("C:\\Users");
         if !users_dir.exists() {
@@ -396,7 +432,9 @@ impl MtDetector {
             );
 
             // Search in this user's terminal directory
-            if let Some(data_path) = self.search_terminal_directory(&terminal_base, install_path, mql_folder) {
+            if let Some(data_path) =
+                self.search_terminal_directory(&terminal_base, install_path, mql_folder)
+            {
                 tracing::info!(
                     "Found data directory in user profile {:?}: {:?}",
                     user_path.file_name(),
@@ -414,6 +452,7 @@ impl MtDetector {
     }
 
     /// Terminal ディレクトリ内で origin.txt を使ってデータディレクトリを検索
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn search_terminal_directory(
         &self,
         terminal_base: &Path,
@@ -452,6 +491,7 @@ impl MtDetector {
     }
 
     /// origin.txtをデコード（UTF-16LE）
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn decode_origin_txt(&self, content: &[u8]) -> Option<String> {
         let content = if content.starts_with(&[0xFF, 0xFE]) {
             &content[2..]
@@ -471,7 +511,12 @@ impl MtDetector {
 
     /// インストールされたコンポーネントをチェック
     /// Returns: (components, client_version)
-    fn check_installed_components(&self, data_path: &Path, mt_type: &MtType) -> Result<(InstalledComponents, Option<String>)> {
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn check_installed_components(
+        &self,
+        data_path: &Path,
+        mt_type: &MtType,
+    ) -> Result<(InstalledComponents, Option<String>)> {
         let (mql_folder, ea_ext) = match mt_type {
             MtType::MT4 => ("MQL4", "ex4"),
             MtType::MT5 => ("MQL5", "ex5"),
@@ -489,11 +534,15 @@ impl MtDetector {
         };
 
         // Master EAチェック
-        let master_ea_path = mql_path.join("Experts").join(format!("SankeyCopierMaster.{}", ea_ext));
+        let master_ea_path = mql_path
+            .join("Experts")
+            .join(format!("SankeyCopierMaster.{}", ea_ext));
         let master_ea_installed = master_ea_path.exists();
 
         // Slave EAチェック
-        let slave_ea_path = mql_path.join("Experts").join(format!("SankeyCopierSlave.{}", ea_ext));
+        let slave_ea_path = mql_path
+            .join("Experts")
+            .join(format!("SankeyCopierSlave.{}", ea_ext));
         let slave_ea_installed = slave_ea_path.exists();
 
         let components = InstalledComponents {
@@ -512,8 +561,8 @@ impl MtDetector {
         use std::os::windows::ffi::OsStrExt;
         use std::ptr;
         use winapi::ctypes::c_void;
-        use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
         use winapi::um::winnt::LPCWSTR;
+        use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
 
         unsafe {
             // Convert path to wide string
@@ -532,12 +581,7 @@ impl MtDetector {
 
             // Allocate buffer and get version info
             let mut buffer = vec![0u8; size as usize];
-            if GetFileVersionInfoW(
-                wide_path.as_ptr(),
-                0,
-                size,
-                buffer.as_mut_ptr() as *mut _,
-            ) == 0
+            if GetFileVersionInfoW(wide_path.as_ptr(), 0, size, buffer.as_mut_ptr() as *mut _) == 0
             {
                 tracing::debug!("GetFileVersionInfoW failed for {:?}", file_path);
                 return None;
@@ -557,7 +601,9 @@ impl MtDetector {
                 translation_query.as_ptr() as LPCWSTR,
                 &mut trans_ptr,
                 &mut trans_len,
-            ) != 0 && !trans_ptr.is_null() && trans_len >= 4
+            ) != 0
+                && !trans_ptr.is_null()
+                && trans_len >= 4
             {
                 // Translation data is an array of DWORD values (language_id + codepage)
                 // Each entry is 4 bytes: 2 bytes for language, 2 bytes for codepage
@@ -572,8 +618,8 @@ impl MtDetector {
 
                 // Try each translation until we find ProductVersion
                 for i in 0..num_translations {
-                    let lang_id = *trans_data.offset((i * 2) as isize);
-                    let codepage = *trans_data.offset((i * 2 + 1) as isize);
+                    let lang_id = *trans_data.add(i * 2);
+                    let codepage = *trans_data.add(i * 2 + 1);
 
                     let sub_block_str = format!(
                         "\\StringFileInfo\\{:04x}{:04x}\\ProductVersion",
@@ -599,7 +645,8 @@ impl MtDetector {
                         sub_block.as_ptr() as LPCWSTR,
                         &mut value_ptr,
                         &mut value_len,
-                    ) != 0 && !value_ptr.is_null()
+                    ) != 0
+                        && !value_ptr.is_null()
                     {
                         // Convert wide string to Rust String
                         let value_ptr = value_ptr as *mut u16;
@@ -660,7 +707,8 @@ impl MtDetector {
                         sub_block.as_ptr() as LPCWSTR,
                         &mut value_ptr,
                         &mut value_len,
-                    ) != 0 && !value_ptr.is_null()
+                    ) != 0
+                        && !value_ptr.is_null()
                     {
                         let value_ptr = value_ptr as *mut u16;
                         let slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
@@ -711,8 +759,6 @@ mod tests {
     #[test]
     fn test_detector_creation() {
         let _detector = MtDetector::new();
-        // Just ensure it can be created
-        assert!(true);
     }
 
     #[test]
@@ -724,7 +770,9 @@ mod tests {
         let mql4_path = mt_path.join("MQL4");
         fs::create_dir_all(&mql4_path).unwrap();
 
-        let (components, version) = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+        let (components, version) = detector
+            .check_installed_components(mt_path, &MtType::MT4)
+            .unwrap();
 
         assert!(!components.dll);
         assert!(!components.master_ea);
@@ -749,7 +797,9 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex4"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex4"), b"slave").unwrap();
 
-        let (components, _version) = detector.check_installed_components(mt_path, &MtType::MT4).unwrap();
+        let (components, _version) = detector
+            .check_installed_components(mt_path, &MtType::MT4)
+            .unwrap();
 
         assert!(components.dll);
         assert!(components.master_ea);
@@ -773,7 +823,9 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex5"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex5"), b"slave").unwrap();
 
-        let (components, _version) = detector.check_installed_components(mt_path, &MtType::MT5).unwrap();
+        let (components, _version) = detector
+            .check_installed_components(mt_path, &MtType::MT5)
+            .unwrap();
 
         assert!(components.dll);
         assert!(components.master_ea);
@@ -787,7 +839,7 @@ mod tests {
         // UTF-16LE BOM + "C:\Test"
         let content = vec![
             0xFF, 0xFE, // BOM
-            0x43, 0x00, 0x3A, 0x00, 0x5C, 0x00, 0x54, 0x00, 0x65, 0x00, 0x73, 0x00, 0x74, 0x00
+            0x43, 0x00, 0x3A, 0x00, 0x5C, 0x00, 0x54, 0x00, 0x65, 0x00, 0x73, 0x00, 0x74, 0x00,
         ];
 
         let result = detector.decode_origin_txt(&content);

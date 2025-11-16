@@ -130,7 +130,9 @@ fn test_transform_signal_lot_multiplier() {
         suffix_add: None,
     };
 
-    let result = engine.transform_signal(signal.clone(), &settings, &converter).unwrap();
+    let result = engine
+        .transform_signal(signal.clone(), &settings, &converter)
+        .unwrap();
     assert_eq!(result.lots, 0.2);
     assert_eq!(result.symbol, "EURUSD");
 }
@@ -149,16 +151,36 @@ fn test_transform_signal_reverse_trade() {
         suffix_add: None,
     };
 
-    let result = engine.transform_signal(signal.clone(), &settings, &converter).unwrap();
+    let result = engine
+        .transform_signal(signal.clone(), &settings, &converter)
+        .unwrap();
     assert!(matches!(result.order_type, OrderType::Sell));
 }
 
 #[test]
 fn test_reverse_order_type() {
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::Buy), OrderType::Sell));
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::Sell), OrderType::Buy));
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::BuyLimit), OrderType::SellLimit));
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::SellLimit), OrderType::BuyLimit));
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::BuyStop), OrderType::SellStop));
-    assert!(matches!(CopyEngine::reverse_order_type(&OrderType::SellStop), OrderType::BuyStop));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::Buy),
+        OrderType::Sell
+    ));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::Sell),
+        OrderType::Buy
+    ));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::BuyLimit),
+        OrderType::SellLimit
+    ));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::SellLimit),
+        OrderType::BuyLimit
+    ));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::BuyStop),
+        OrderType::SellStop
+    ));
+    assert!(matches!(
+        CopyEngine::reverse_order_type(&OrderType::SellStop),
+        OrderType::BuyStop
+    ));
 }

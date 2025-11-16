@@ -4,12 +4,16 @@ This directory contains the build workflows for the SANKEY Copier project. The w
 
 ## Workflow Structure
 
-### Main Orchestrator
-- **`build.yml`** (107 lines)
-  - Main entry point that coordinates all build steps
-  - Generates version information
-  - Calls reusable workflows for each component
-  - Handles workflow dispatch with build target selection
+### Orchestrators
+- **`ci-pr.yml`**
+  - Pull Request focused pipeline (and manual dispatch helper)
+  - Runs `version-info`, change detection, Rust/MQL checks, Web lint/typecheck/E2E, and optional preview deploys
+  - Skips Windows-heavy jobs by default but allows manual overrides (`force_*` inputs)
+
+- **`ci-release.yml`**
+  - Runs on `push main`, tags `v*`, or manual dispatch
+  - Orchestrates production-grade builds (Rust DLL/server, MQL, Desktop, Installer) and Vercel production deploys
+  - Shares the same versioning job and change filters to avoid unnecessary work
 
 ### Reusable Workflows
 
@@ -32,6 +36,13 @@ This directory contains the build workflows for the SANKEY Copier project. The w
   - Packages all components into Windows installer
   - Uses Inno Setup for installer creation
   - Creates GitHub releases for tagged versions
+
+### Deployment Workflow
+
+- **`deploy-vercel.yml`**
+  - Reusable workflow invoked from `ci-pr`/`ci-release`
+  - Builds and deploys the Web UI via Vercel with environment metadata
+  - Skips forked PRs automatically (no secrets leakage)
 
 ### Composite Actions
 
@@ -69,13 +80,7 @@ Located in `.github/actions/`:
 
 ## Workflow Dispatch
 
-The main workflow supports manual triggering with build target selection:
-
-- `all` - Build all components (default)
-- `rust-dll` - Build only Rust DLL
-- `relay-server` - Build only Rust Server
-- `web-ui` - Build only Web UI
-- `mql` - Build only MQL components
+`ci-pr.yml` and `ci-release.yml` both expose `workflow_dispatch` inputs (`force_web`, `force_rust`, `force_mql`, `force_installer`, etc.) so maintainers can override the path filters and trigger heavy builds or deployments on demand.
 
 ## Total Lines of Code
 

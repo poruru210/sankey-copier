@@ -35,7 +35,7 @@ pub struct MtInstallation {
     pub platform: Architecture,
     pub path: String,
     pub executable: String,
-    pub version: Option<String>,  // DLLバージョン = クライアントバージョン
+    pub version: Option<String>, // DLLバージョン = クライアントバージョン
     pub components: InstalledComponents,
 }
 
@@ -55,11 +55,10 @@ pub struct MtInstallationsResponse {
 
 impl MtInstallation {
     /// インストールIDを生成
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn generate_id(mt_type: &MtType, path: &str) -> String {
         // パスから識別可能なIDを生成
-        let mut path_hash = path
-            .to_lowercase()
-            .replace(['\\', '/', ' ', ':'], "-");
+        let mut path_hash = path.to_lowercase().replace(['\\', '/', ' ', ':'], "-");
 
         // 連続したハイフンを単一のハイフンに置き換え
         while path_hash.contains("--") {

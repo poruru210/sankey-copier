@@ -1,4 +1,6 @@
-use sankey_copier_relay_server::models::{ConfigMessage, CopySettings, SymbolMapping, TradeFilters};
+use sankey_copier_relay_server::models::{
+    ConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+};
 
 /// Performance benchmark test for Phase 1: ConfigMessage Extension
 ///
@@ -161,9 +163,21 @@ async fn test_config_message_size_benchmark() {
 
     // Summary
     println!("=== Summary ===");
-    println!("Minimal:  {} bytes ({:.1}% of 2KB limit)", minimal_size, (minimal_size as f64 / 2048.0) * 100.0);
-    println!("Moderate: {} bytes ({:.1}% of 2KB limit)", moderate_size, (moderate_size as f64 / 2048.0) * 100.0);
-    println!("Maximum:  {} bytes ({:.1}% of 2KB limit)", max_size, (max_size as f64 / 2048.0) * 100.0);
+    println!(
+        "Minimal:  {} bytes ({:.1}% of 2KB limit)",
+        minimal_size,
+        (minimal_size as f64 / 2048.0) * 100.0
+    );
+    println!(
+        "Moderate: {} bytes ({:.1}% of 2KB limit)",
+        moderate_size,
+        (moderate_size as f64 / 2048.0) * 100.0
+    );
+    println!(
+        "Maximum:  {} bytes ({:.1}% of 2KB limit)",
+        max_size,
+        (max_size as f64 / 2048.0) * 100.0
+    );
     println!();
 
     // Assertions
@@ -216,9 +230,9 @@ async fn test_estimate_parsing_performance() {
 
     // Estimate parsing operations
     let string_parses = 5; // account_id, master_account, trade_group_id, timestamp, config_version
-    let bool_parses = 2;   // enabled, reverse_trade
+    let bool_parses = 2; // enabled, reverse_trade
     let number_parses = 2; // lot_multiplier, config_version
-    let array_parses = 6;  // symbol_mappings + 4 filter arrays + symbol_mappings items
+    let array_parses = 6; // symbol_mappings + 4 filter arrays + symbol_mappings items
     let object_parses = 2; // filters, each symbol_mapping
 
     let total_ops = string_parses + bool_parses + number_parses + array_parses + object_parses;
@@ -248,7 +262,7 @@ async fn test_estimate_memory_usage() {
     // Estimate memory for global variables
     let base_memory = std::mem::size_of::<bool>() * 3          // g_config_enabled, reverse_trade, + 1 spare
                     + std::mem::size_of::<f64>()               // g_config_lot_multiplier
-                    + std::mem::size_of::<i32>();              // g_config_version
+                    + std::mem::size_of::<i32>(); // g_config_version
 
     println!("Base Configuration Variables:");
     println!("  Booleans (3): {} bytes", std::mem::size_of::<bool>() * 3);
@@ -276,7 +290,11 @@ async fn test_estimate_memory_usage() {
     println!("  Symbol mappings: ~{} bytes", mappings_memory);
     println!("  Symbol filters: ~{} bytes", symbols_memory);
     println!("  Magic number filters: ~{} bytes", magic_memory);
-    println!("  Total estimated: ~{} bytes ({:.2} KB)", total_estimated, total_estimated as f64 / 1024.0);
+    println!(
+        "  Total estimated: ~{} bytes ({:.2} KB)",
+        total_estimated,
+        total_estimated as f64 / 1024.0
+    );
     println!();
 
     println!("Memory Overhead:");
@@ -285,6 +303,9 @@ async fn test_estimate_memory_usage() {
     println!("  Status: Well within acceptable range");
     println!();
 
-    assert!(total_estimated < 100 * 1024, "Memory usage exceeds 100KB limit");
+    assert!(
+        total_estimated < 100 * 1024,
+        "Memory usage exceeds 100KB limit"
+    );
     println!("✓ Memory usage well within 100KB limit");
 }

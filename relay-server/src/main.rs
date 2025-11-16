@@ -23,7 +23,7 @@ use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
-use zeromq::{ZmqMessage, ZmqSender, ZmqServer, ZmqConfigPublisher};
+use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -46,7 +46,8 @@ fn cleanup_old_logs(logging_config: &LoggingConfig) {
             .filter_map(|entry| entry.ok())
             .filter(|entry| {
                 // Only consider files that start with the configured prefix
-                entry.file_name()
+                entry
+                    .file_name()
                     .to_str()
                     .map(|name| name.starts_with(&logging_config.file_prefix))
                     .unwrap_or(false)
@@ -138,7 +139,10 @@ async fn main() -> Result<()> {
 
         // Create log directory if it doesn't exist
         if let Err(e) = fs::create_dir_all(&config.logging.directory) {
-            eprintln!("Failed to create log directory {}: {}", config.logging.directory, e);
+            eprintln!(
+                "Failed to create log directory {}: {}",
+                config.logging.directory, e
+            );
         }
 
         // Clean up old log files based on retention policy
@@ -154,9 +158,11 @@ async fn main() -> Result<()> {
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
         subscriber
-            .with(tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false)) // Disable ANSI colors in file output
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false),
+            ) // Disable ANSI colors in file output
             .init();
 
         // Store guard to prevent it from being dropped
@@ -190,7 +196,10 @@ async fn main() -> Result<()> {
 
     // Initialize ConnectionManager
     let connection_manager = Arc::new(ConnectionManager::new(config.zeromq.timeout_seconds));
-    tracing::info!("Connection manager initialized with {}s timeout", config.zeromq.timeout_seconds);
+    tracing::info!(
+        "Connection manager initialized with {}s timeout",
+        config.zeromq.timeout_seconds
+    );
 
     // Create channels
     let (zmq_tx, mut zmq_rx) = mpsc::unbounded_channel::<ZmqMessage>();
@@ -198,14 +207,21 @@ async fn main() -> Result<()> {
 
     // Initialize ZeroMQ server
     let zmq_server = ZmqServer::new(zmq_tx)?;
-    zmq_server.start_receiver(&config.zmq_receiver_address()).await?;
-    tracing::info!("ZeroMQ receiver started on {}", config.zmq_receiver_address());
+    zmq_server
+        .start_receiver(&config.zmq_receiver_address())
+        .await?;
+    tracing::info!(
+        "ZeroMQ receiver started on {}",
+        config.zmq_receiver_address()
+    );
 
     // Initialize ZeroMQ sender (PUB socket)
     let zmq_sender = Arc::new(ZmqSender::new(&config.zmq_sender_address())?);
 
     // Initialize ZeroMQ config sender (PUB socket with MessagePack)
-    let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(&config.zmq_config_sender_address())?);
+    let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(
+        &config.zmq_config_sender_address(),
+    )?);
 
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
@@ -274,7 +290,11 @@ async fn main() -> Result<()> {
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");
     } else {
-        tracing::info!("API state created with CORS origins (auto-generated from webui port {}): {:?}", config.webui.port, allowed_origins);
+        tracing::info!(
+            "API state created with CORS origins (auto-generated from webui port {}): {:?}",
+            config.webui.port,
+            allowed_origins
+        );
     }
 
     // Build API router
@@ -285,12 +305,17 @@ async fn main() -> Result<()> {
     // Start HTTP server
     tracing::info!("Getting bind address...");
     let bind_address = config.server_address();
-    tracing::info!("Bind address: {}, attempting to bind with 5 second timeout...", bind_address);
+    tracing::info!(
+        "Bind address: {}, attempting to bind with 5 second timeout...",
+        bind_address
+    );
 
     let listener = match tokio::time::timeout(
         Duration::from_secs(5),
-        tokio::net::TcpListener::bind(&bind_address)
-    ).await {
+        tokio::net::TcpListener::bind(&bind_address),
+    )
+    .await
+    {
         Ok(Ok(listener)) => {
             tracing::info!("Successfully bound to {}", bind_address);
             listener

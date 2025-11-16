@@ -1,10 +1,10 @@
 mod config_publisher;
 
-use anyhow::{Result, Context};
-use serde::{Serialize, Deserialize};
-use tokio::sync::mpsc;
+use crate::models::{HeartbeatMessage, RequestConfigMessage, TradeSignal, UnregisterMessage};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::models::{TradeSignal, UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
+use tokio::sync::mpsc;
 
 pub use config_publisher::ZmqConfigPublisher;
 
@@ -37,17 +37,17 @@ pub struct ZmqServer {
 impl ZmqServer {
     pub fn new(rx_sender: mpsc::UnboundedSender<ZmqMessage>) -> Result<Self> {
         let context = Arc::new(zmq::Context::new());
-        Ok(Self {
-            context,
-            rx_sender,
-        })
+        Ok(Self { context, rx_sender })
     }
 
     pub async fn start_receiver(&self, bind_address: &str) -> Result<()> {
-        let socket = self.context.socket(zmq::PULL)
+        let socket = self
+            .context
+            .socket(zmq::PULL)
             .context("Failed to create ZMQ PULL socket")?;
 
-        socket.bind(bind_address)
+        socket
+            .bind(bind_address)
             .context(format!("Failed to bind to {}", bind_address))?;
 
         tracing::info!("ZeroMQ receiver started on {}", bind_address);
@@ -66,11 +66,21 @@ impl ZmqServer {
                                 if let Some(msg_type) = discriminator.message_type {
                                     match msg_type.as_str() {
                                         "RequestConfig" => {
-                                            match rmp_serde::from_slice::<RequestConfigMessage>(&bytes) {
+                                            match rmp_serde::from_slice::<RequestConfigMessage>(
+                                                &bytes,
+                                            ) {
                                                 Ok(req) => {
-                                                    tracing::debug!("Received RequestConfig message: {:?}", req);
-                                                    if let Err(e) = tx.send(ZmqMessage::RequestConfig(req)) {
-                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    tracing::debug!(
+                                                        "Received RequestConfig message: {:?}",
+                                                        req
+                                                    );
+                                                    if let Err(e) =
+                                                        tx.send(ZmqMessage::RequestConfig(req))
+                                                    {
+                                                        tracing::error!(
+                                                            "Failed to send message to channel: {}",
+                                                            e
+                                                        );
                                                     }
                                                 }
                                                 Err(e) => {
@@ -79,11 +89,20 @@ impl ZmqServer {
                                             }
                                         }
                                         "Unregister" => {
-                                            match rmp_serde::from_slice::<UnregisterMessage>(&bytes) {
+                                            match rmp_serde::from_slice::<UnregisterMessage>(&bytes)
+                                            {
                                                 Ok(unreg) => {
-                                                    tracing::debug!("Received Unregister message: {:?}", unreg);
-                                                    if let Err(e) = tx.send(ZmqMessage::Unregister(unreg)) {
-                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    tracing::debug!(
+                                                        "Received Unregister message: {:?}",
+                                                        unreg
+                                                    );
+                                                    if let Err(e) =
+                                                        tx.send(ZmqMessage::Unregister(unreg))
+                                                    {
+                                                        tracing::error!(
+                                                            "Failed to send message to channel: {}",
+                                                            e
+                                                        );
                                                     }
                                                 }
                                                 Err(e) => {
@@ -92,17 +111,28 @@ impl ZmqServer {
                                             }
                                         }
                                         "Heartbeat" => {
-                                            match rmp_serde::from_slice::<HeartbeatMessage>(&bytes) {
+                                            match rmp_serde::from_slice::<HeartbeatMessage>(&bytes)
+                                            {
                                                 Ok(hb) => {
-                                                    if let Err(e) = tx.send(ZmqMessage::Heartbeat(hb)) {
-                                                        tracing::error!("Failed to send message to channel: {}", e);
+                                                    if let Err(e) =
+                                                        tx.send(ZmqMessage::Heartbeat(hb))
+                                                    {
+                                                        tracing::error!(
+                                                            "Failed to send message to channel: {}",
+                                                            e
+                                                        );
                                                     }
                                                 }
                                                 Err(e) => {
                                                     // Try to extract account_id from MessagePack for better error reporting
-                                                    match rmp_serde::from_slice::<FlexibleHeartbeat>(&bytes) {
+                                                    match rmp_serde::from_slice::<FlexibleHeartbeat>(
+                                                        &bytes,
+                                                    ) {
                                                         Ok(partial) => {
-                                                            let acc = partial.account_id.as_deref().unwrap_or("unknown");
+                                                            let acc = partial
+                                                                .account_id
+                                                                .as_deref()
+                                                                .unwrap_or("unknown");
                                                             tracing::error!(
                                                                 "Failed to deserialize Heartbeat message from EA [account_id: {}]: {}",
                                                                 acc, e
@@ -110,7 +140,8 @@ impl ZmqServer {
                                                         }
                                                         Err(parse_err) => {
                                                             // Cannot extract any info - log raw bytes
-                                                            let bytes_preview = if bytes.len() > 32 {
+                                                            let bytes_preview = if bytes.len() > 32
+                                                            {
                                                                 format!("{:02x?}...", &bytes[..32])
                                                             } else {
                                                                 format!("{:02x?}", bytes)
@@ -132,21 +163,36 @@ impl ZmqServer {
                                     // Message has 'action' field - it's a TradeSignal
                                     match rmp_serde::from_slice::<TradeSignal>(&bytes) {
                                         Ok(signal) => {
-                                            if let Err(e) = tx.send(ZmqMessage::TradeSignal(signal)) {
-                                                tracing::error!("Failed to send signal to channel: {}", e);
+                                            if let Err(e) = tx.send(ZmqMessage::TradeSignal(signal))
+                                            {
+                                                tracing::error!(
+                                                    "Failed to send signal to channel: {}",
+                                                    e
+                                                );
                                             }
                                         }
                                         Err(e) => {
-                                            tracing::error!("Failed to deserialize TradeSignal: {}", e);
+                                            tracing::error!(
+                                                "Failed to deserialize TradeSignal: {}",
+                                                e
+                                            );
                                         }
                                     }
                                 } else {
-                                    tracing::error!("Message has neither message_type nor action field");
+                                    tracing::error!(
+                                        "Message has neither message_type nor action field"
+                                    );
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to deserialize message discriminator: {}", e);
-                                tracing::debug!("Raw message bytes (first 100): {:?}", &bytes[..bytes.len().min(100)]);
+                                tracing::error!(
+                                    "Failed to deserialize message discriminator: {}",
+                                    e
+                                );
+                                tracing::debug!(
+                                    "Raw message bytes (first 100): {:?}",
+                                    &bytes[..bytes.len().min(100)]
+                                );
                             }
                         }
                     }
@@ -175,10 +221,12 @@ pub struct ZmqPublisher<T: Serialize + Clone + Send + 'static> {
 impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
     pub fn new(bind_address: &str) -> Result<Self> {
         let context = zmq::Context::new();
-        let socket = context.socket(zmq::PUB)
+        let socket = context
+            .socket(zmq::PUB)
             .context("Failed to create ZMQ PUB socket")?;
 
-        socket.bind(bind_address)
+        socket
+            .bind(bind_address)
             .context(format!("Failed to bind to {}", bind_address))?;
 
         tracing::info!("ZeroMQ publisher (PUB) bound to {}", bind_address);
@@ -225,7 +273,8 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
             payload: payload.clone(),
         };
 
-        self.tx.send(msg)
+        self.tx
+            .send(msg)
             .map_err(|e| anyhow::anyhow!("Failed to send message to ZMQ publisher task: {}", e))?;
 
         Ok(())

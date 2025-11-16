@@ -96,9 +96,9 @@ async fn test_install_to_mt_endpoint_not_found() {
     assert!(json["detail"].is_string());
     assert!(json["instance"].is_string());
 
-    // Error message should indicate MT4/MT5 not found
+    // Error message should indicate MT4/MT5 not found (English detail)
     let detail = json["detail"].as_str().unwrap();
-    assert!(detail.contains("見つかりません"));
+    assert!(detail.contains("was not found"));
 }
 
 #[tokio::test]
@@ -127,11 +127,7 @@ async fn test_mt_installations_response_structure() {
         assert!(installation["platform"].is_string());
         assert!(installation["path"].is_string());
         assert!(installation["executable"].is_string());
-        assert!(installation["is_running"].is_boolean());
-        assert!(installation["detection_method"].is_string());
-        assert!(installation["is_installed"].is_boolean());
-        assert!(installation["available_version"].is_string());
-
+        assert!(installation["version"].is_null() || installation["version"].is_string());
         // Check components structure
         let components = &installation["components"];
         assert!(components["dll"].is_boolean());
@@ -144,8 +140,5 @@ async fn test_mt_installations_response_structure() {
 
         let platform = installation["platform"].as_str().unwrap();
         assert!(platform == "32-bit" || platform == "64-bit");
-
-        let detection_method = installation["detection_method"].as_str().unwrap();
-        assert!(detection_method == "process" || detection_method == "registry");
     }
 }

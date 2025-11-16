@@ -108,8 +108,7 @@ impl ProblemDetails {
 
 impl IntoResponse for ProblemDetails {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.status)
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
         // RFC 9457で規定されているContent-Type
         let mut response = (status, Json(self)).into_response();
@@ -163,18 +162,19 @@ mod tests {
 
     #[test]
     fn test_with_instance() {
-        let problem = ProblemDetails::not_found("Settings")
-            .with_instance("/api/settings/123");
+        let problem = ProblemDetails::not_found("Settings").with_instance("/api/settings/123");
         assert_eq!(problem.instance, Some("/api/settings/123".to_string()));
     }
 
     #[test]
     fn test_serialization() {
-        let problem = ProblemDetails::not_found("Settings")
-            .with_instance("/api/settings/123");
+        let problem = ProblemDetails::not_found("Settings").with_instance("/api/settings/123");
         let json = serde_json::to_value(&problem).unwrap();
 
-        assert_eq!(json["type"], "https://sankey-copier.example.com/errors/not-found");
+        assert_eq!(
+            json["type"],
+            "https://sankey-copier.example.com/errors/not-found"
+        );
         assert_eq!(json["title"], "Not Found");
         assert_eq!(json["status"], 404);
         assert!(json["detail"].is_string());

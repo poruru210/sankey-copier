@@ -1,4 +1,4 @@
-use crate::models::{CopySettings, OrderType, TradeSignal, SymbolConverter};
+use crate::models::{CopySettings, OrderType, SymbolConverter, TradeSignal};
 use anyhow::Result;
 
 #[cfg(test)]
@@ -87,5 +87,11 @@ impl CopyEngine {
             OrderType::BuyStop => OrderType::SellStop,
             OrderType::SellStop => OrderType::BuyStop,
         }
+    }
+}
+
+impl Default for CopyEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }

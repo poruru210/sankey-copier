@@ -1,0 +1,265 @@
+# Release Validation & Packaging Pipeline
+name: CI Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      force_web:
+        description: 'Force Web build checks'
+        required: false
+        default: false
+        type: boolean
+      force_rust:
+        description: 'Force Rust builds'
+        required: false
+        default: false
+        type: boolean
+      force_mql:
+        description: 'Force MQL compile'
+        required: false
+        default: false
+        type: boolean
+      force_desktop:
+        description: 'Force Desktop build'
+        required: false
+        default: false
+        type: boolean
+      force_installer:
+        description: 'Force installer packaging'
+        required: false
+        default: false
+        type: boolean
+      force_vercel:
+        description: 'Force production deploy'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  deployments: write
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-info:
+    name: Generate Version Information
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.compute_version.outputs.package_version }}
+      file_version: ${{ steps.compute_version.outputs.file_version }}
+      build_info: ${{ steps.compute_version.outputs.build_info }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version information
+        id: compute_version
+        run: |
+          TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null || echo "v0.1.0")
+          VERSION=${TAG#v}
+          BUILD=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          PACKAGE_VERSION="$VERSION"
+          FILE_VERSION="$VERSION.$BUILD"
+          BUILD_INFO="$VERSION+build.$BUILD.$HASH"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "file_version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_info=$BUILD_INFO" >> "$GITHUB_OUTPUT"
+          cat <<EOF
+          ╔═══════════════════════════════════════════
+          ║ Version Information
+          ║ PACKAGE_VERSION: $PACKAGE_VERSION
+          ║ FILE_VERSION:    $FILE_VERSION
+          ║ BUILD_INFO:      $BUILD_INFO
+          ╚═══════════════════════════════════════════
+          EOF
+
+  paths-filter:
+    name: Detect Changed Components
+    runs-on: ubuntu-latest
+    needs: version-info
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      rust: ${{ steps.filter.outputs.rust }}
+      mql: ${{ steps.filter.outputs.mql }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      installer: ${{ steps.filter.outputs.installer }}
+      docs: ${{ steps.filter.outputs.docs }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute path filters
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'web-ui/**'
+              - '.github/workflows/deploy-vercel.yml'
+            rust:
+              - 'relay-server/**'
+              - 'mt-bridge/**'
+              - 'tray-app/**'
+              - '.github/workflows/build-rust.yml'
+            mql:
+              - 'mt-advisors/**'
+              - '.github/workflows/build-mql.yml'
+            desktop:
+              - 'desktop-app/**'
+            installer:
+              - 'installer/**'
+              - '.github/workflows/build-installer.yml'
+            docs:
+              - 'docs/**'
+            infra:
+              - '.github/actions/**'
+              - '.github/workflows/**'
+
+  manual-flags:
+    name: Resolve Manual Overrides
+    runs-on: ubuntu-latest
+    outputs:
+      force_web: ${{ steps.flags.outputs.force_web }}
+      force_rust: ${{ steps.flags.outputs.force_rust }}
+      force_mql: ${{ steps.flags.outputs.force_mql }}
+      force_desktop: ${{ steps.flags.outputs.force_desktop }}
+      force_installer: ${{ steps.flags.outputs.force_installer }}
+      force_vercel: ${{ steps.flags.outputs.force_vercel }}
+    steps:
+      - name: Compute override flags
+        id: flags
+        run: |
+          FORCE_WEB=false
+          FORCE_RUST=false
+          FORCE_MQL=false
+          FORCE_DESKTOP=false
+          FORCE_INSTALLER=false
+          FORCE_VERCEL=false
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            FORCE_WEB=$(jq -r '.inputs.force_web // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST=$(jq -r '.inputs.force_rust // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_MQL=$(jq -r '.inputs.force_mql // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_DESKTOP=$(jq -r '.inputs.force_desktop // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_INSTALLER=$(jq -r '.inputs.force_installer // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_VERCEL=$(jq -r '.inputs.force_vercel // "false"' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "force_web=$FORCE_WEB"
+            echo "force_rust=$FORCE_RUST"
+            echo "force_mql=$FORCE_MQL"
+            echo "force_desktop=$FORCE_DESKTOP"
+            echo "force_installer=$FORCE_INSTALLER"
+            echo "force_vercel=$FORCE_VERCEL"
+          } >> "$GITHUB_OUTPUT"
+
+  web-build:
+    name: Build Web UI
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
+    uses: ./.github/workflows/build-web.yml
+
+  build-rust:
+    name: Build Rust Artifacts
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/build-rust.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+
+  build-mql:
+    name: Compile MQL Advisors
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.mql == 'true' || needs.manual-flags.outputs.force_mql == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/build-mql.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      build_target: mql
+    secrets: inherit
+
+  build-desktop:
+    name: Build Desktop App
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.desktop == 'true' || needs.manual-flags.outputs.force_desktop == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+
+  build-installer:
+    name: Build Windows Installer
+    needs:
+      - version-info
+      - paths-filter
+      - manual-flags
+      - build-rust
+      - build-mql
+      - build-desktop
+    if: ${{ needs.paths-filter.outputs.installer == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/build-installer.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+      build_info: ${{ needs.version-info.outputs.build_info }}
+      create_release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    secrets: inherit
+
+  deploy-production:
+    name: Deploy Production to Vercel
+    needs:
+      - version-info
+      - paths-filter
+      - manual-flags
+      - web-build
+    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+    uses: ./.github/workflows/deploy-vercel.yml
+    with:
+      deployment_target: production
+      is_pr: false
+      pr_number: ''
+      pr_is_from_fork: false
+    secrets: inherit
+
+  release-summary:
+    name: Publish Release Summary
+    runs-on: ubuntu-latest
+    needs:
+      - version-info
+      - paths-filter
+      - manual-flags
+    if: always()
+    steps:
+      - name: Publish summary
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## CI Release Summary
+
+          **Version**: `${{ needs.version-info.outputs.package_version }}` (`${{ needs.version-info.outputs.build_info }}`)
+          **Ref**: `${{ github.ref }}`
+
+          | Component | Changed? | Forced? |
+          | --- | --- | --- |
+          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_web }}` |
+          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
+          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ needs.manual-flags.outputs.force_mql }}` |
+          | Desktop | `${{ needs.paths-filter.outputs.desktop }}` | `${{ needs.manual-flags.outputs.force_desktop }}` |
+          | Installer | `${{ needs.paths-filter.outputs.installer }}` | `${{ needs.manual-flags.outputs.force_installer }}` |
+          | Production Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_vercel }}` |
+
+          _Individual job statuses remain visible under **Actions → CI Release → Jobs**; this table highlights which components were targeted and whether overrides were requested._
+          EOF

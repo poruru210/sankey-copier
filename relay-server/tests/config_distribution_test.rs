@@ -1,5 +1,7 @@
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{CopySettings, SymbolMapping, TradeFilters, ConfigMessage};
+use sankey_copier_relay_server::models::{
+    ConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+};
 
 /// Integration test for CONFIG message distribution workflow
 ///
@@ -61,9 +63,17 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(retrieved_settings.master_account, "MASTER_TEST_001");
     assert_eq!(retrieved_settings.slave_account, "SLAVE_TEST_001");
     assert_eq!(retrieved_settings.lot_multiplier, Some(2.5));
-    assert_eq!(retrieved_settings.reverse_trade, true);
+    assert!(retrieved_settings.reverse_trade);
     assert_eq!(retrieved_settings.symbol_mappings.len(), 2);
-    assert_eq!(retrieved_settings.filters.allowed_symbols.as_ref().unwrap().len(), 2);
+    assert_eq!(
+        retrieved_settings
+            .filters
+            .allowed_symbols
+            .as_ref()
+            .unwrap()
+            .len(),
+        2
+    );
 
     // Step 4: Convert to ConfigMessage (simulating send_config_to_ea())
     let config_message: ConfigMessage = retrieved_settings.into();
@@ -72,9 +82,9 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(config_message.account_id, "SLAVE_TEST_001");
     assert_eq!(config_message.master_account, "MASTER_TEST_001");
     assert_eq!(config_message.trade_group_id, "MASTER_TEST_001");
-    assert_eq!(config_message.enabled, true);
+    assert!(config_message.enabled);
     assert_eq!(config_message.lot_multiplier, Some(2.5));
-    assert_eq!(config_message.reverse_trade, true);
+    assert!(config_message.reverse_trade);
     assert_eq!(config_message.symbol_mappings.len(), 2);
     assert_eq!(config_message.symbol_mappings[0].source_symbol, "EURUSD");
     assert_eq!(config_message.symbol_mappings[0].target_symbol, "EURUSDm");
@@ -90,19 +100,31 @@ async fn test_config_message_distribution_flow() {
         &vec!["USDJPY".to_string()]
     );
     assert_eq!(
-        config_message.filters.allowed_magic_numbers.as_ref().unwrap(),
+        config_message
+            .filters
+            .allowed_magic_numbers
+            .as_ref()
+            .unwrap(),
         &vec![123, 456, 789]
     );
     assert_eq!(
-        config_message.filters.blocked_magic_numbers.as_ref().unwrap(),
+        config_message
+            .filters
+            .blocked_magic_numbers
+            .as_ref()
+            .unwrap(),
         &vec![999]
     );
 
     // Step 6: Serialize to JSON (simulating ZMQ serialization)
-    let json_string = serde_json::to_string(&config_message)
-        .expect("Failed to serialize ConfigMessage to JSON");
+    let json_string =
+        serde_json::to_string(&config_message).expect("Failed to serialize ConfigMessage to JSON");
 
-    println!("Serialized ConfigMessage ({} bytes):\n{}", json_string.len(), json_string);
+    println!(
+        "Serialized ConfigMessage ({} bytes):\n{}",
+        json_string.len(),
+        json_string
+    );
 
     // Step 7: Verify JSON contains all expected fields
     assert!(json_string.contains("\"account_id\""));
@@ -196,7 +218,7 @@ async fn test_get_settings_for_slave_method() {
     let found_settings = result.unwrap();
     assert_eq!(found_settings.slave_account, "SLAVE_ACTIVE");
     assert_eq!(found_settings.master_account, "MASTER_001");
-    assert_eq!(found_settings.enabled, true);
+    assert!(found_settings.enabled);
 
     // Test 2: Query for disabled slave - should NOT find it (enabled=1 filter)
     let result = db

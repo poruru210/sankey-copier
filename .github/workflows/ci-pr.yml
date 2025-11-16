@@ -1,0 +1,325 @@
+# Pull Request Validation Pipeline
+name: CI Pull Request
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+  workflow_dispatch:
+    inputs:
+      force_web:
+        description: 'Force all Web UI checks'
+        required: false
+        default: false
+        type: boolean
+      force_rust:
+        description: 'Force relay-server Linux tests'
+        required: false
+        default: false
+        type: boolean
+      force_rust_dll:
+        description: 'Force mt-bridge DLL builds'
+        required: false
+        default: false
+        type: boolean
+      force_mql:
+        description: 'Force MQL compiles'
+        required: false
+        default: false
+        type: boolean
+      force_vercel:
+        description: 'Deploy preview even when Web UI unchanged'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: ci-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-info:
+    name: Generate Version Information
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.compute_version.outputs.package_version }}
+      file_version: ${{ steps.compute_version.outputs.file_version }}
+      build_info: ${{ steps.compute_version.outputs.build_info }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version information
+        id: compute_version
+        run: |
+          TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null || echo "v0.1.0")
+          VERSION=${TAG#v}
+          BUILD=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          PACKAGE_VERSION="$VERSION"
+          FILE_VERSION="$VERSION.$BUILD"
+          BUILD_INFO="$VERSION+build.$BUILD.$HASH"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "file_version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_info=$BUILD_INFO" >> "$GITHUB_OUTPUT"
+          cat <<EOF
+          ╔═══════════════════════════════════════════
+          ║ Version Information
+          ║ PACKAGE_VERSION: $PACKAGE_VERSION
+          ║ FILE_VERSION:    $FILE_VERSION
+          ║ BUILD_INFO:      $BUILD_INFO
+          ╚═══════════════════════════════════════════
+          EOF
+
+  paths-filter:
+    name: Detect Changed Components
+    runs-on: ubuntu-latest
+    needs: version-info
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      rust: ${{ steps.filter.outputs.rust }}
+      mql: ${{ steps.filter.outputs.mql }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      installer: ${{ steps.filter.outputs.installer }}
+      docs: ${{ steps.filter.outputs.docs }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute path filters
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'web-ui/**'
+              - '.github/workflows/deploy-vercel.yml'
+            rust:
+              - 'relay-server/**'
+              - 'mt-bridge/**'
+              - 'tray-app/**'
+              - '.github/workflows/build-rust.yml'
+            mql:
+              - 'mt-advisors/**'
+              - '.github/workflows/build-mql.yml'
+            desktop:
+              - 'desktop-app/**'
+            installer:
+              - 'installer/**'
+              - '.github/workflows/build-installer.yml'
+            docs:
+              - 'docs/**'
+            infra:
+              - '.github/actions/**'
+              - '.github/workflows/**'
+
+  manual-flags:
+    name: Resolve Manual Overrides
+    runs-on: ubuntu-latest
+    outputs:
+      force_web: ${{ steps.flags.outputs.force_web }}
+      force_rust: ${{ steps.flags.outputs.force_rust }}
+      force_rust_dll: ${{ steps.flags.outputs.force_rust_dll }}
+      force_mql: ${{ steps.flags.outputs.force_mql }}
+      force_vercel: ${{ steps.flags.outputs.force_vercel }}
+    steps:
+      - name: Compute override flags
+        id: flags
+        run: |
+          FORCE_WEB=false
+          FORCE_RUST=false
+          FORCE_RUST_DLL=false
+          FORCE_MQL=false
+          FORCE_VERCEL=false
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            FORCE_WEB=$(jq -r '.inputs.force_web // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST=$(jq -r '.inputs.force_rust // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST_DLL=$(jq -r '.inputs.force_rust_dll // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_MQL=$(jq -r '.inputs.force_mql // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_VERCEL=$(jq -r '.inputs.force_vercel // "false"' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "force_web=$FORCE_WEB"
+            echo "force_rust=$FORCE_RUST"
+            echo "force_rust_dll=$FORCE_RUST_DLL"
+            echo "force_mql=$FORCE_MQL"
+            echo "force_vercel=$FORCE_VERCEL"
+          } >> "$GITHUB_OUTPUT"
+
+  event-context:
+    name: Collect Event Context
+    runs-on: ubuntu-latest
+    outputs:
+      is_pr: ${{ steps.collect.outputs.is_pr }}
+      pr_number: ${{ steps.collect.outputs.pr_number }}
+      pr_is_draft: ${{ steps.collect.outputs.pr_is_draft }}
+      pr_is_from_fork: ${{ steps.collect.outputs.pr_is_from_fork }}
+    steps:
+      - name: Compute event metadata
+        id: collect
+        run: |
+          IS_PR=false
+          PR_NUMBER=""
+          PR_IS_DRAFT=false
+          PR_IS_FROM_FORK=false
+
+          if jq -e '.pull_request' "$GITHUB_EVENT_PATH" > /dev/null; then
+            IS_PR=true
+            PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+            PR_IS_DRAFT=$(jq -r '.pull_request.draft // false' "$GITHUB_EVENT_PATH")
+            PR_IS_FROM_FORK=$(jq -r '.pull_request.head.repo.fork // false' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "is_pr=$IS_PR"
+            echo "pr_number=$PR_NUMBER"
+            echo "pr_is_draft=$PR_IS_DRAFT"
+            echo "pr_is_from_fork=$PR_IS_FROM_FORK"
+          } >> "$GITHUB_OUTPUT"
+
+  rust-tests:
+    name: Relay Server Tests & Clippy
+    runs-on: ubuntu-latest
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            relay-server
+
+      - name: Run fmt/clippy/tests (relay-server)
+        working-directory: relay-server
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+          cargo test --workspace --all-features
+
+  rust-dll:
+    name: Build mt-bridge DLLs
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust_dll == 'true' }}
+    uses: ./.github/workflows/build-rust.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+      build_target: rust-dll
+
+  mql-build:
+    name: Compile MQL Advisors
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.mql == 'true' || needs.manual-flags.outputs.force_mql == 'true' }}
+    uses: ./.github/workflows/build-mql.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      build_target: mql
+    secrets: inherit
+
+  web-lint:
+    name: Web UI Lint
+    runs-on: ubuntu-latest
+    needs: [paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with pnpm
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: web-ui
+
+      - name: Install dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        working-directory: web-ui
+        run: pnpm lint
+
+  web-typecheck:
+    name: Web UI Type Check
+    runs-on: ubuntu-latest
+    needs: [paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with pnpm
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: web-ui
+
+      - name: Install dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check via tsc
+        working-directory: web-ui
+        run: pnpm exec tsc --noEmit
+
+  deploy-preview:
+    name: Deploy Vercel Preview
+    needs:
+      - paths-filter
+      - manual-flags
+      - event-context
+      - web-lint
+      - web-typecheck
+    if: ${{ fromJSON(needs.event-context.outputs.is_pr) && !fromJSON(needs.event-context.outputs.pr_is_draft) && !fromJSON(needs.event-context.outputs.pr_is_from_fork) && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
+    uses: ./.github/workflows/deploy-vercel.yml
+    with:
+      deployment_target: preview
+      is_pr: ${{ fromJSON(needs.event-context.outputs.is_pr) }}
+      pr_number: ${{ needs.event-context.outputs.pr_number }}
+      pr_is_from_fork: ${{ fromJSON(needs.event-context.outputs.pr_is_from_fork) }}
+    secrets: inherit
+
+  summarize:
+    name: Publish Workflow Summary
+    runs-on: ubuntu-latest
+    needs:
+      - version-info
+      - paths-filter
+      - manual-flags
+    if: always()
+    steps:
+      - name: Build summary
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## CI Pull Request Summary
+
+          **Version**: `${{ needs.version-info.outputs.package_version }}` (`${{ needs.version-info.outputs.build_info }}`)
+
+          | Component | Changed? | Forced? |
+          | --- | --- | --- |
+          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_web }}` |
+          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
+          | mt-bridge DLL | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust_dll }}` |
+          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ needs.manual-flags.outputs.force_mql }}` |
+          | Preview Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_vercel }}` |
+
+          _Note: Individual job statuses remain visible under the **Checks** tab. Use the table above to confirm which components were targeted in this run._
+          EOF
+

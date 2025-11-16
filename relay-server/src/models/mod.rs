@@ -5,13 +5,10 @@ pub use connection::*;
 pub use mt_installation::*;
 
 // Re-export shared types from DLL
-pub use sankey_copier_zmq::{
-    SymbolMapping,
-    TradeFilters,
-};
+pub use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OrderType {
@@ -77,13 +74,15 @@ impl SymbolConverter {
         let mut result = symbol.to_string();
 
         if let Some(prefix) = &self.prefix_remove {
-            result = result.strip_prefix(prefix.as_str())
+            result = result
+                .strip_prefix(prefix.as_str())
                 .unwrap_or(&result)
                 .to_string();
         }
 
         if let Some(suffix) = &self.suffix_remove {
-            result = result.strip_suffix(suffix.as_str())
+            result = result
+                .strip_suffix(suffix.as_str())
                 .unwrap_or(&result)
                 .to_string();
         }
@@ -113,12 +112,10 @@ mod tests {
             suffix_add: None,
         };
 
-        let mappings = vec![
-            SymbolMapping {
-                source_symbol: "EURUSD".to_string(),
-                target_symbol: "EURUSD.fx".to_string(),
-            }
-        ];
+        let mappings = vec![SymbolMapping {
+            source_symbol: "EURUSD".to_string(),
+            target_symbol: "EURUSD.fx".to_string(),
+        }];
 
         let result = converter.convert("EURUSD", &mappings);
         assert_eq!(result, "EURUSD.fx");
@@ -198,12 +195,10 @@ mod tests {
             suffix_add: None,
         };
 
-        let mappings = vec![
-            SymbolMapping {
-                source_symbol: "MT5_EURUSD".to_string(),
-                target_symbol: "CUSTOM_EURUSD".to_string(),
-            }
-        ];
+        let mappings = vec![SymbolMapping {
+            source_symbol: "MT5_EURUSD".to_string(),
+            target_symbol: "CUSTOM_EURUSD".to_string(),
+        }];
 
         // Exact mapping should take priority over prefix/suffix rules
         let result = converter.convert("MT5_EURUSD", &mappings);

@@ -172,5 +172,6 @@ export function useSVGConnections({
     getConnectedSources,
     sourceRefs,
     receiverRefs,
+    middleColumnRef,
   ]);
 }

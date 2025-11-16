@@ -48,7 +48,10 @@ fn embed_windows_resources(package_version: &str, file_version: &str) {
     res.set("ProductVersion", package_version)
         .set("ProductName", "SANKEY Copier ZMQ DLL")
         .set("FileVersion", &file_ver_string)
-        .set("FileDescription", "ZeroMQ communication library for SANKEY Copier MT4/MT5 Expert Advisors")
+        .set(
+            "FileDescription",
+            "ZeroMQ communication library for SANKEY Copier MT4/MT5 Expert Advisors",
+        )
         .set("CompanyName", "SANKEY Copier Project")
         .set("LegalCopyright", "Copyright (C) 2025 SANKEY Copier Project")
         .set("OriginalFilename", "sankey_copier_zmq.dll");
@@ -70,6 +73,7 @@ fn embed_windows_resources(package_version: &str, file_version: &str) {
 
 /// Parse version string (e.g., "1.2.3.169") into u64 for Windows VERSIONINFO
 /// Format: [major.minor.patch.build] -> 0xMMMMmmmmPPPPbbbb
+#[cfg(windows)]
 fn parse_version(version_str: &str) -> Option<u64> {
     let parts: Vec<u16> = version_str
         .split('.')
@@ -77,7 +81,7 @@ fn parse_version(version_str: &str) -> Option<u64> {
         .collect();
 
     if parts.len() >= 3 {
-        let major = parts.get(0).copied().unwrap_or(0) as u64;
+        let major = parts.first().copied().unwrap_or(0) as u64;
         let minor = parts.get(1).copied().unwrap_or(0) as u64;
         let patch = parts.get(2).copied().unwrap_or(0) as u64;
         let build = parts.get(3).copied().unwrap_or(0) as u64;
@@ -91,7 +95,10 @@ fn parse_version(version_str: &str) -> Option<u64> {
 
 fn generate_version_info() -> (String, String, String) {
     // Check if version information is provided via environment variables (from CI/CD)
-    if let (Ok(pkg_ver), Ok(file_ver)) = (std::env::var("PACKAGE_VERSION"), std::env::var("FILE_VERSION")) {
+    if let (Ok(pkg_ver), Ok(file_ver)) = (
+        std::env::var("PACKAGE_VERSION"),
+        std::env::var("FILE_VERSION"),
+    ) {
         // Use versions from environment variables
         let build_info = format!("{}+ci", file_ver);
         return (pkg_ver, file_ver, build_info);
@@ -113,14 +120,17 @@ fn generate_version_info() -> (String, String, String) {
     // Generate three version formats
     let package_version = base_version.clone();
     let file_version = format!("{}.{}", base_version, commit_count);
-    let build_info = format!("{}+build.{}.{}{}", base_version, commit_count, commit_hash, dirty_suffix);
+    let build_info = format!(
+        "{}+build.{}.{}{}",
+        base_version, commit_count, commit_hash, dirty_suffix
+    );
 
     (package_version, file_version, build_info)
 }
 
 fn get_tag_version() -> Option<String> {
     Command::new("git")
-        .args(&["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"])
+        .args(["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"])
         .output()
         .ok()
         .and_then(|output| {
@@ -135,7 +145,7 @@ fn get_tag_version() -> Option<String> {
 
 fn get_commit_count() -> Option<u32> {
     Command::new("git")
-        .args(&["rev-list", "--count", "HEAD"])
+        .args(["rev-list", "--count", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -150,7 +160,7 @@ fn get_commit_count() -> Option<u32> {
 
 fn get_commit_hash() -> Option<String> {
     Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -165,7 +175,7 @@ fn get_commit_hash() -> Option<String> {
 
 fn is_dirty() -> bool {
     Command::new("git")
-        .args(&["diff", "--quiet"])
+        .args(["diff", "--quiet"])
         .status()
         .map(|status| !status.success())
         .unwrap_or(false)

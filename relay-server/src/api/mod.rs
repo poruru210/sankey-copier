@@ -1,10 +1,10 @@
-mod mt_installations;
 mod error;
+mod mt_installations;
 
 pub use error::ProblemDetails;
 
 use axum::{
-    extract::{Path, State, ws::WebSocket, ws::WebSocketUpgrade},
+    extract::{ws::WebSocket, ws::WebSocketUpgrade, Path, State},
     http::StatusCode,
     response::Response,
     routing::{get, post},
@@ -14,7 +14,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
-use tower_http::trace::{TraceLayer, DefaultMakeSpan, DefaultOnResponse};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     log_buffer::LogBuffer,
-    models::{CopySettings, EaConnection, ConfigMessage},
+    models::{ConfigMessage, CopySettings, EaConnection},
     zeromq::ZmqConfigPublisher,
 };
 
@@ -43,16 +43,19 @@ pub fn create_router(state: AppState) -> Router {
     // Create CORS layer - either permissive (all origins) or restricted based on config
     let cors = if state.cors_disabled {
         // CORS disabled: allow all origins (development mode)
-        tracing::warn!("CORS is DISABLED - allowing all origins. This should only be used in development!");
+        tracing::warn!(
+            "CORS is DISABLED - allowing all origins. This should only be used in development!"
+        );
         CorsLayer::permissive()
     } else {
         // CORS enabled: restrict to configured origins
         CorsLayer::new()
             .allow_origin(
-                state.allowed_origins
+                state
+                    .allowed_origins
                     .iter()
                     .filter_map(|origin| origin.parse().ok())
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>(),
             )
             .allow_methods([
                 axum::http::Method::GET,
@@ -73,7 +76,7 @@ pub fn create_router(state: AppState) -> Router {
         .make_span_with(
             DefaultMakeSpan::new()
                 .level(tracing::Level::INFO)
-                .include_headers(true)
+                .include_headers(true),
         )
         .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
             tracing::info!(
@@ -87,20 +90,31 @@ pub fn create_router(state: AppState) -> Router {
             DefaultOnResponse::new()
                 .level(tracing::Level::INFO)
                 .latency_unit(LatencyUnit::Millis)
-                .include_headers(true)
+                .include_headers(true),
         );
 
     Router::new()
         .route("/api/settings", get(list_settings).post(create_settings))
-        .route("/api/settings/:id", get(get_settings).put(update_settings).delete(delete_settings))
+        .route(
+            "/api/settings/:id",
+            get(get_settings)
+                .put(update_settings)
+                .delete(delete_settings),
+        )
         .route("/api/settings/:id/toggle", post(toggle_settings))
         .route("/api/connections", get(list_connections))
         .route("/api/connections/:id", get(get_connection))
         .route("/api/logs", get(get_logs))
         .route("/ws", get(websocket_handler))
         // MT installations API
-        .route("/api/mt-installations", get(mt_installations::list_mt_installations))
-        .route("/api/mt-installations/:id/install", post(mt_installations::install_to_mt))
+        .route(
+            "/api/mt-installations",
+            get(mt_installations::list_mt_installations),
+        )
+        .route(
+            "/api/mt-installations/:id/install",
+            post(mt_installations::install_to_mt),
+        )
         .layer(trace_layer)
         .layer(cors)
         .with_state(state)
@@ -122,7 +136,11 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
     let config: ConfigMessage = settings.clone().into();
 
     if let Err(e) = state.config_sender.send_config(&config).await {
-        tracing::error!("Failed to send config message to {}: {}", settings.slave_account, e);
+        tracing::error!(
+            "Failed to send config message to {}: {}",
+            settings.slave_account,
+            e
+        );
     } else {
         tracing::info!(
             "Sent full config to EA: {} (master: {}, enabled: {}, lot_mult: {:?})",
@@ -133,7 +151,6 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
         );
     }
 }
-
 
 async fn list_settings(
     State(state): State<AppState>,
@@ -157,7 +174,10 @@ async fn list_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to list settings from database"
             );
-            Err(ProblemDetails::internal_error(format!("Failed to retrieve settings from database: {}", e)))
+            Err(ProblemDetails::internal_error(format!(
+                "Failed to retrieve settings from database: {}",
+                e
+            )))
         }
     }
 }
@@ -181,10 +201,7 @@ async fn get_settings(
             Ok(Json(settings))
         }
         Ok(None) => {
-            tracing::warn!(
-                settings_id = id,
-                "Settings not found"
-            );
+            tracing::warn!(settings_id = id, "Settings not found");
             Err(ProblemDetails::not_found("settings")
                 .with_instance(format!("/api/settings/{}", id)))
         }
@@ -196,8 +213,11 @@ async fn get_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to get settings from database"
             );
-            Err(ProblemDetails::internal_error(format!("Failed to retrieve settings from database: {}", e))
-                .with_instance(format!("/api/settings/{}", id)))
+            Err(ProblemDetails::internal_error(format!(
+                "Failed to retrieve settings from database: {}",
+                e
+            ))
+            .with_instance(format!("/api/settings/{}", id)))
         }
     }
 }
@@ -276,8 +296,11 @@ async fn create_settings(
                     "A connection setting with this combination already exists. Only one master-slave pair can be registered."
                 ).with_instance("/api/settings"))
             } else {
-                Err(ProblemDetails::internal_error(format!("Failed to create settings: {}", error_msg))
-                    .with_instance("/api/settings"))
+                Err(ProblemDetails::internal_error(format!(
+                    "Failed to create settings: {}",
+                    error_msg
+                ))
+                .with_instance("/api/settings"))
             }
         }
     }
@@ -340,8 +363,11 @@ async fn update_settings(
                     "A connection setting with this combination already exists. Only one master-slave pair can be registered."
                 ).with_instance(format!("/api/settings/{}", id)))
             } else {
-                Err(ProblemDetails::internal_error(format!("Failed to update settings: {}", error_msg))
-                    .with_instance(format!("/api/settings/{}", id)))
+                Err(ProblemDetails::internal_error(format!(
+                    "Failed to update settings: {}",
+                    error_msg
+                ))
+                .with_instance(format!("/api/settings/{}", id)))
             }
         }
     }
@@ -357,11 +383,7 @@ async fn toggle_settings(
     Path(id): Path<i32>,
     Json(req): Json<ToggleRequest>,
 ) -> Result<StatusCode, ProblemDetails> {
-    let span = tracing::info_span!(
-        "toggle_settings",
-        settings_id = id,
-        enabled = req.enabled
-    );
+    let span = tracing::info_span!("toggle_settings", settings_id = id, enabled = req.enabled);
     let _enter = span.enter();
 
     match state.db.update_enabled_status(id, req.enabled).await {
@@ -375,7 +397,9 @@ async fn toggle_settings(
             refresh_settings_cache(&state).await;
 
             // Notify via WebSocket
-            let _ = state.tx.send(format!("settings_toggled:{}:{}", id, req.enabled));
+            let _ = state
+                .tx
+                .send(format!("settings_toggled:{}:{}", id, req.enabled));
 
             Ok(StatusCode::NO_CONTENT)
         }
@@ -388,8 +412,10 @@ async fn toggle_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to toggle copy settings"
             );
-            Err(ProblemDetails::internal_error(format!("Failed to toggle settings: {}", e))
-                .with_instance(format!("/api/settings/{}/toggle", id)))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to toggle settings: {}", e))
+                    .with_instance(format!("/api/settings/{}/toggle", id)),
+            )
         }
     }
 }
@@ -403,10 +429,7 @@ async fn delete_settings(
 
     match state.db.delete_copy_settings(id).await {
         Ok(_) => {
-            tracing::info!(
-                settings_id = id,
-                "Successfully deleted copy settings"
-            );
+            tracing::info!(settings_id = id, "Successfully deleted copy settings");
 
             refresh_settings_cache(&state).await;
 
@@ -423,16 +446,15 @@ async fn delete_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to delete copy settings"
             );
-            Err(ProblemDetails::internal_error(format!("Failed to delete settings: {}", e))
-                .with_instance(format!("/api/settings/{}", id)))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to delete settings: {}", e))
+                    .with_instance(format!("/api/settings/{}", id)),
+            )
         }
     }
 }
 
-async fn websocket_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> Response {
+async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
@@ -440,7 +462,11 @@ async fn handle_websocket(mut socket: WebSocket, state: AppState) {
     let mut rx = state.tx.subscribe();
 
     while let Ok(msg) = rx.recv().await {
-        if socket.send(axum::extract::ws::Message::Text(msg)).await.is_err() {
+        if socket
+            .send(axum::extract::ws::Message::Text(msg))
+            .await
+            .is_err()
+        {
             break;
         }
     }
@@ -502,10 +528,7 @@ async fn get_logs(
     let buffer = state.log_buffer.read().await;
     let logs: Vec<_> = buffer.iter().cloned().collect();
 
-    tracing::debug!(
-        count = logs.len(),
-        "Successfully retrieved server logs"
-    );
+    tracing::debug!(count = logs.len(), "Successfully retrieved server logs");
 
     Ok(Json(logs))
 }

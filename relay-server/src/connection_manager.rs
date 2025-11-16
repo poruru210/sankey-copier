@@ -1,9 +1,9 @@
+use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{Duration, Utc};
 
-use crate::models::{EaConnection, ConnectionStatus, HeartbeatMessage, EaType, Platform};
+use crate::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
 
 /// EA接続を管理するマネージャー
 #[derive(Clone)]
@@ -67,8 +67,8 @@ impl ConnectionManager {
             let now = Utc::now();
             let connection = EaConnection {
                 account_id: msg.account_id.clone(),
-                ea_type: EaType::from_str(&msg.ea_type).unwrap_or(EaType::Master),
-                platform: Platform::from_str(&msg.platform).unwrap_or(Platform::MT5),
+                ea_type: msg.ea_type.parse().unwrap_or(EaType::Master),
+                platform: msg.platform.parse().unwrap_or(Platform::MT5),
                 account_number: msg.account_number,
                 broker: msg.broker,
                 account_name: msg.account_name,
@@ -126,7 +126,6 @@ impl ConnectionManager {
             tracing::info!("Timed out EAs: {:?}", timed_out_accounts);
         }
     }
-
 }
 
 #[cfg(test)]
@@ -233,8 +232,12 @@ mod tests {
         let manager = ConnectionManager::new(30);
 
         // Auto-register two EAs via heartbeat
-        manager.update_heartbeat(create_test_heartbeat_message("TEST_001")).await;
-        manager.update_heartbeat(create_test_heartbeat_message("TEST_002")).await;
+        manager
+            .update_heartbeat(create_test_heartbeat_message("TEST_001"))
+            .await;
+        manager
+            .update_heartbeat(create_test_heartbeat_message("TEST_002"))
+            .await;
 
         let eas = manager.get_all_eas().await;
         assert_eq!(eas.len(), 2);
@@ -275,23 +278,25 @@ mod tests {
 
         // Send heartbeat after 1 second
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        manager.update_heartbeat(HeartbeatMessage {
-            message_type: "Heartbeat".to_string(),
-            account_id: account_id.clone(),
-            balance: 10000.0,
-            equity: 10000.0,
-            open_positions: 0,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            version: "test".to_string(),
-            ea_type: "Master".to_string(),
-            platform: "MT4".to_string(),
-            account_number: 12345,
-            broker: "Test Broker".to_string(),
-            account_name: "Test Account".to_string(),
-            server: "Test-Server".to_string(),
-            currency: "USD".to_string(),
-            leverage: 100,
-        }).await;
+        manager
+            .update_heartbeat(HeartbeatMessage {
+                message_type: "Heartbeat".to_string(),
+                account_id: account_id.clone(),
+                balance: 10000.0,
+                equity: 10000.0,
+                open_positions: 0,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                version: "test".to_string(),
+                ea_type: "Master".to_string(),
+                platform: "MT4".to_string(),
+                account_number: 12345,
+                broker: "Test Broker".to_string(),
+                account_name: "Test Account".to_string(),
+                server: "Test-Server".to_string(),
+                currency: "USD".to_string(),
+                leverage: 100,
+            })
+            .await;
 
         // Wait another second (total 2 seconds, but heartbeat was sent at 1 second)
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

@@ -23,14 +23,10 @@ impl MtInstaller {
     /// なければ current_dir() を使用（プロダクション環境）
     pub fn from_config(config: &crate::config::Config) -> Self {
         let base_path = if let Some(path) = &config.installer.components_base_path {
-            tracing::info!(
-                "Using configured components_base_path: {}",
-                path
-            );
+            tracing::info!("Using configured components_base_path: {}", path);
             PathBuf::from(path)
         } else {
-            let current = std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."));
+            let current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             tracing::info!(
                 "Using current_dir as components_base_path: {}",
                 current.display()
@@ -91,44 +87,43 @@ impl MtInstaller {
         );
 
         let libraries_path = mql_path.join("Libraries");
-        tracing::debug!(
-            "Creating Libraries directory: {}",
-            libraries_path.display()
-        );
-        fs::create_dir_all(&libraries_path)
-            .context("Failed to create Libraries directory")?;
+        tracing::debug!("Creating Libraries directory: {}", libraries_path.display());
+        fs::create_dir_all(&libraries_path).context("Failed to create Libraries directory")?;
 
         // DLLソースパスを決定
         let dll_source = match architecture {
-            Architecture::Bit32 => {
-                self.components_base_path.join("mt-advisors").join("MT4").join("Libraries").join("sankey_copier_zmq.dll")
-            }
-            Architecture::Bit64 => {
-                self.components_base_path.join("mt-advisors").join("MT5").join("Libraries").join("sankey_copier_zmq.dll")
-            }
+            Architecture::Bit32 => self
+                .components_base_path
+                .join("mt-advisors")
+                .join("MT4")
+                .join("Libraries")
+                .join("sankey_copier_zmq.dll"),
+            Architecture::Bit64 => self
+                .components_base_path
+                .join("mt-advisors")
+                .join("MT5")
+                .join("Libraries")
+                .join("sankey_copier_zmq.dll"),
         };
 
-        tracing::info!(
-            "Looking for DLL source at: {}",
-            dll_source.display()
-        );
+        tracing::info!("Looking for DLL source at: {}", dll_source.display());
         tracing::debug!(
             "components_base_path: {}",
             self.components_base_path.display()
         );
 
         if !dll_source.exists() {
-            tracing::error!(
-                "DLL source not found at: {}",
-                dll_source.display()
-            );
+            tracing::error!("DLL source not found at: {}", dll_source.display());
             tracing::error!(
                 "components_base_path: {}",
                 self.components_base_path.display()
             );
             tracing::error!(
                 "Expected full path: {}",
-                dll_source.canonicalize().unwrap_or(dll_source.clone()).display()
+                dll_source
+                    .canonicalize()
+                    .unwrap_or(dll_source.clone())
+                    .display()
             );
             anyhow::bail!(
                 "DLL source not found: {}. Please check components_base_path configuration.",
@@ -152,18 +147,11 @@ impl MtInstaller {
 
     /// EAをインストール（コンパイル済みバイナリのみ）
     fn install_eas(&self, mql_path: &Path, mt_type: &MtType) -> Result<()> {
-        tracing::info!(
-            "Starting EA installation for {:?}",
-            mt_type
-        );
+        tracing::info!("Starting EA installation for {:?}", mt_type);
 
         let experts_path = mql_path.join("Experts");
-        tracing::debug!(
-            "Creating Experts directory: {}",
-            experts_path.display()
-        );
-        fs::create_dir_all(&experts_path)
-            .context("Failed to create Experts directory")?;
+        tracing::debug!("Creating Experts directory: {}", experts_path.display());
+        fs::create_dir_all(&experts_path).context("Failed to create Experts directory")?;
 
         let (mt_folder, extension) = match mt_type {
             MtType::MT4 => ("MT4", "ex4"),
@@ -178,20 +166,11 @@ impl MtInstaller {
             .join("Experts")
             .join(format!("SankeyCopierMaster.{}", extension));
 
-        tracing::info!(
-            "Looking for Master EA at: {}",
-            master_source.display()
-        );
+        tracing::info!("Looking for Master EA at: {}", master_source.display());
 
         if !master_source.exists() {
-            tracing::error!(
-                "Master EA binary not found at: {}",
-                master_source.display()
-            );
-            anyhow::bail!(
-                "Master EA binary not found: {}",
-                master_source.display()
-            );
+            tracing::error!("Master EA binary not found at: {}", master_source.display());
+            anyhow::bail!("Master EA binary not found: {}", master_source.display());
         }
 
         let master_dest = experts_path.join(format!("SankeyCopierMaster.{}", extension));
@@ -213,20 +192,11 @@ impl MtInstaller {
             .join("Experts")
             .join(format!("SankeyCopierSlave.{}", extension));
 
-        tracing::info!(
-            "Looking for Slave EA at: {}",
-            slave_source.display()
-        );
+        tracing::info!("Looking for Slave EA at: {}", slave_source.display());
 
         if !slave_source.exists() {
-            tracing::error!(
-                "Slave EA binary not found at: {}",
-                slave_source.display()
-            );
-            anyhow::bail!(
-                "Slave EA binary not found: {}",
-                slave_source.display()
-            );
+            tracing::error!("Slave EA binary not found at: {}", slave_source.display());
+            anyhow::bail!("Slave EA binary not found: {}", slave_source.display());
         }
 
         let slave_dest = experts_path.join(format!("SankeyCopierSlave.{}", extension));
@@ -242,7 +212,6 @@ impl MtInstaller {
 
         Ok(())
     }
-
 }
 
 #[cfg(test)]
@@ -257,7 +226,10 @@ mod tests {
         config.installer.components_base_path = Some("C:\\test\\path".to_string());
 
         let installer = MtInstaller::from_config(&config);
-        assert_eq!(installer.components_base_path.to_str().unwrap(), "C:\\test\\path");
+        assert_eq!(
+            installer.components_base_path.to_str().unwrap(),
+            "C:\\test\\path"
+        );
     }
 
     #[test]
@@ -284,7 +256,11 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source DLL directory structure (production structure)
-        let source_dll_path = temp_components.path().join("mt-advisors").join("MT4").join("Libraries");
+        let source_dll_path = temp_components
+            .path()
+            .join("mt-advisors")
+            .join("MT4")
+            .join("Libraries");
         fs::create_dir_all(&source_dll_path).unwrap();
 
         // Create dummy DLL file
@@ -314,7 +290,11 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source DLL directory structure (production structure)
-        let source_dll_path = temp_components.path().join("mt-advisors").join("MT5").join("Libraries");
+        let source_dll_path = temp_components
+            .path()
+            .join("mt-advisors")
+            .join("MT5")
+            .join("Libraries");
         fs::create_dir_all(&source_dll_path).unwrap();
 
         // Create dummy DLL file
@@ -352,7 +332,10 @@ mod tests {
         let result = installer.install_dll(&mql_path, &Architecture::Bit32);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("DLL source not found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("DLL source not found"));
     }
 
     #[test]
@@ -361,7 +344,11 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source EA binary files for MT4 (production structure)
-        let source_path = temp_components.path().join("mt-advisors").join("MT4").join("Experts");
+        let source_path = temp_components
+            .path()
+            .join("mt-advisors")
+            .join("MT4")
+            .join("Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex4"), b"master ea mt4").unwrap();
@@ -392,7 +379,11 @@ mod tests {
         let temp_mt = TempDir::new().unwrap();
 
         // Create source EA binary files for MT5 (production structure)
-        let source_path = temp_components.path().join("mt-advisors").join("MT5").join("Experts");
+        let source_path = temp_components
+            .path()
+            .join("mt-advisors")
+            .join("MT5")
+            .join("Experts");
         fs::create_dir_all(&source_path).unwrap();
 
         fs::write(source_path.join("SankeyCopierMaster.ex5"), b"master ea mt5").unwrap();
@@ -437,9 +428,18 @@ mod tests {
 
         // Verify all components (実行に必要なもののみ)
         let mql_path = mt_path.join("MQL4");
-        assert!(mql_path.join("Libraries").join("sankey_copier_zmq.dll").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierMaster.ex4").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierSlave.ex4").exists());
+        assert!(mql_path
+            .join("Libraries")
+            .join("sankey_copier_zmq.dll")
+            .exists());
+        assert!(mql_path
+            .join("Experts")
+            .join("SankeyCopierMaster.ex4")
+            .exists());
+        assert!(mql_path
+            .join("Experts")
+            .join("SankeyCopierSlave.ex4")
+            .exists());
     }
 
     #[test]
@@ -462,25 +462,48 @@ mod tests {
 
         // Verify all components (実行に必要なもののみ)
         let mql_path = mt_path.join("MQL5");
-        assert!(mql_path.join("Libraries").join("sankey_copier_zmq.dll").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierMaster.ex5").exists());
-        assert!(mql_path.join("Experts").join("SankeyCopierSlave.ex5").exists());
+        assert!(mql_path
+            .join("Libraries")
+            .join("sankey_copier_zmq.dll")
+            .exists());
+        assert!(mql_path
+            .join("Experts")
+            .join("SankeyCopierMaster.ex5")
+            .exists());
+        assert!(mql_path
+            .join("Experts")
+            .join("SankeyCopierSlave.ex5")
+            .exists());
     }
 
     /// Helper function to setup complete component directory structure (実行に必要なもののみ)
     fn setup_complete_components(base_path: &Path, is_mt4: bool) {
-        let (mt_folder, ext) = if is_mt4 { ("MT4", "ex4") } else { ("MT5", "ex5") };
+        let (mt_folder, ext) = if is_mt4 {
+            ("MT4", "ex4")
+        } else {
+            ("MT5", "ex5")
+        };
 
         // DLL files (production structure)
-        let dll_path = base_path.join("mt-advisors").join(mt_folder).join("Libraries");
+        let dll_path = base_path
+            .join("mt-advisors")
+            .join(mt_folder)
+            .join("Libraries");
         fs::create_dir_all(&dll_path).unwrap();
         let dll_content = if is_mt4 { b"32-bit dll" } else { b"64-bit dll" };
         fs::write(dll_path.join("sankey_copier_zmq.dll"), dll_content).unwrap();
 
         // EA binary files (production structure: mt-advisors/MT5/Experts/)
-        let ea_path = base_path.join("mt-advisors").join(mt_folder).join("Experts");
+        let ea_path = base_path
+            .join("mt-advisors")
+            .join(mt_folder)
+            .join("Experts");
         fs::create_dir_all(&ea_path).unwrap();
-        fs::write(ea_path.join(format!("SankeyCopierMaster.{}", ext)), b"master").unwrap();
+        fs::write(
+            ea_path.join(format!("SankeyCopierMaster.{}", ext)),
+            b"master",
+        )
+        .unwrap();
         fs::write(ea_path.join(format!("SankeyCopierSlave.{}", ext)), b"slave").unwrap();
     }
 }

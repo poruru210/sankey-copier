@@ -5,10 +5,14 @@ use std::sync::{LazyLock, Mutex};
 
 // Static buffers for returning UTF-16 strings to MQL5 (supports up to 4 concurrent strings)
 const MAX_STRING_LEN: usize = 512;
-static STRING_BUFFER_1: LazyLock<Mutex<Vec<u16>>> = LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
-static STRING_BUFFER_2: LazyLock<Mutex<Vec<u16>>> = LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
-static STRING_BUFFER_3: LazyLock<Mutex<Vec<u16>>> = LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
-static STRING_BUFFER_4: LazyLock<Mutex<Vec<u16>>> = LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
+static STRING_BUFFER_1: LazyLock<Mutex<Vec<u16>>> =
+    LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
+static STRING_BUFFER_2: LazyLock<Mutex<Vec<u16>>> =
+    LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
+static STRING_BUFFER_3: LazyLock<Mutex<Vec<u16>>> =
+    LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
+static STRING_BUFFER_4: LazyLock<Mutex<Vec<u16>>> =
+    LazyLock::new(|| Mutex::new(vec![0; MAX_STRING_LEN]));
 static BUFFER_INDEX: LazyLock<Mutex<usize>> = LazyLock::new(|| Mutex::new(0));
 
 /// Symbol mapping structure
@@ -37,7 +41,7 @@ pub struct ConfigMessage {
     pub account_id: String,
     pub master_account: String,
     pub trade_group_id: String,
-    pub timestamp: String,  // ISO 8601 format
+    pub timestamp: String, // ISO 8601 format
     pub enabled: bool,
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
@@ -50,7 +54,7 @@ pub struct ConfigMessage {
 /// Unregistration message structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnregisterMessage {
-    pub message_type: String,  // "Unregister"
+    pub message_type: String, // "Unregister"
     pub account_id: String,
     pub timestamp: String,
 }
@@ -58,7 +62,7 @@ pub struct UnregisterMessage {
 /// Request configuration message structure (for Slave EAs)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestConfigMessage {
-    pub message_type: String,  // "RequestConfig"
+    pub message_type: String, // "RequestConfig"
     pub account_id: String,
     pub timestamp: String,
 }
@@ -66,16 +70,16 @@ pub struct RequestConfigMessage {
 /// Heartbeat message structure (includes all EA information for auto-registration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartbeatMessage {
-    pub message_type: String,  // "Heartbeat"
+    pub message_type: String, // "Heartbeat"
     pub account_id: String,
     pub balance: f64,
     pub equity: f64,
     pub open_positions: i32,
     pub timestamp: String,
-    pub version: String,  // Build version information
+    pub version: String, // Build version information
     // EA identification fields (for auto-registration)
-    pub ea_type: String,       // "Master" or "Slave"
-    pub platform: String,      // "MT4" or "MT5"
+    pub ea_type: String,  // "Master" or "Slave"
+    pub platform: String, // "MT4" or "MT5"
     pub account_number: i64,
     pub broker: String,
     pub account_name: String,
@@ -87,7 +91,7 @@ pub struct HeartbeatMessage {
 /// Trade signal message structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeSignalMessage {
-    pub action: String,  // "Open", "Close", "Modify"
+    pub action: String, // "Open", "Close", "Modify"
     pub ticket: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
@@ -115,10 +119,7 @@ pub struct TradeSignalMessage {
 /// This function is unsafe because it dereferences raw pointers.
 /// The returned handle must be freed with `config_free()`.
 #[no_mangle]
-pub unsafe extern "C" fn parse_message(
-    data: *const u8,
-    data_len: i32,
-) -> *mut ConfigMessage {
+pub unsafe extern "C" fn parse_message(data: *const u8, data_len: i32) -> *mut ConfigMessage {
     if data.is_null() || data_len <= 0 {
         return std::ptr::null_mut();
     }
@@ -263,7 +264,11 @@ pub unsafe extern "C" fn config_get_bool(
         _ => false,
     };
 
-    if result { 1 } else { 0 }
+    if result {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get an integer field from ConfigMessage handle
@@ -315,7 +320,8 @@ pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
 //==============================================================================
 
 // Static buffer for serialized data
-static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> = LazyLock::new(|| Mutex::new(Vec::with_capacity(8192)));
+static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> =
+    LazyLock::new(|| Mutex::new(Vec::with_capacity(8192)));
 
 /// Serialize a RequestConfigMessage to MessagePack
 ///
@@ -434,9 +440,21 @@ pub unsafe extern "C" fn serialize_trade_signal(
         symbol: utf16_to_string_opt(symbol),
         order_type: utf16_to_string_opt(order_type),
         lots: if lots > 0.0 { Some(lots) } else { None },
-        open_price: if open_price > 0.0 { Some(open_price) } else { None },
-        stop_loss: if stop_loss > 0.0 { Some(stop_loss) } else { None },
-        take_profit: if take_profit > 0.0 { Some(take_profit) } else { None },
+        open_price: if open_price > 0.0 {
+            Some(open_price)
+        } else {
+            None
+        },
+        stop_loss: if stop_loss > 0.0 {
+            Some(stop_loss)
+        } else {
+            None
+        },
+        take_profit: if take_profit > 0.0 {
+            Some(take_profit)
+        } else {
+            None
+        },
         magic_number: Some(magic_number),
         comment: utf16_to_string_opt(comment),
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
@@ -484,7 +502,10 @@ pub unsafe extern "C" fn copy_serialized_buffer(dest: *mut u8, max_len: i32) -> 
     let len = buffer.len();
 
     if len > max_len as usize {
-        eprintln!("msgpack_copy_buffer: buffer size {} exceeds max_len {}", len, max_len);
+        eprintln!(
+            "msgpack_copy_buffer: buffer size {} exceeds max_len {}",
+            len, max_len
+        );
         return 0;
     }
 
@@ -669,8 +690,8 @@ mod tests {
         assert!(serialized.len() > 0, "Serialized data should not be empty");
 
         // Deserialize
-        let deserialized: RequestConfigMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: RequestConfigMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         // Verify fields
         assert_eq!(msg.message_type, deserialized.message_type);
@@ -687,8 +708,8 @@ mod tests {
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        let deserialized: UnregisterMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: UnregisterMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         assert_eq!(msg.message_type, deserialized.message_type);
         assert_eq!(msg.account_id, deserialized.account_id);
@@ -716,8 +737,8 @@ mod tests {
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        let deserialized: HeartbeatMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: HeartbeatMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         assert_eq!(msg.message_type, deserialized.message_type);
         assert_eq!(msg.account_id, deserialized.account_id);
@@ -753,8 +774,8 @@ mod tests {
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        let deserialized: TradeSignalMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: TradeSignalMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         assert_eq!(msg.action, deserialized.action);
         assert_eq!(msg.ticket, deserialized.ticket);
@@ -789,8 +810,8 @@ mod tests {
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        let deserialized: TradeSignalMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: TradeSignalMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         assert_eq!(msg.action, deserialized.action);
         assert_eq!(msg.ticket, deserialized.ticket);
@@ -809,12 +830,10 @@ mod tests {
             enabled: true,
             lot_multiplier: Some(1.5),
             reverse_trade: false,
-            symbol_mappings: vec![
-                SymbolMapping {
-                    source_symbol: "EURUSD".to_string(),
-                    target_symbol: "EURUSD.raw".to_string(),
-                },
-            ],
+            symbol_mappings: vec![SymbolMapping {
+                source_symbol: "EURUSD".to_string(),
+                target_symbol: "EURUSD.raw".to_string(),
+            }],
             filters: TradeFilters {
                 allowed_symbols: Some(vec!["EURUSD".to_string(), "GBPUSD".to_string()]),
                 blocked_symbols: None,
@@ -825,15 +844,18 @@ mod tests {
         };
 
         let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
-        let deserialized: ConfigMessage = rmp_serde::from_slice(&serialized)
-            .expect("Failed to deserialize");
+        let deserialized: ConfigMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
         assert_eq!(config.account_id, deserialized.account_id);
         assert_eq!(config.master_account, deserialized.master_account);
         assert_eq!(config.enabled, deserialized.enabled);
         assert_eq!(config.lot_multiplier, deserialized.lot_multiplier);
         assert_eq!(config.reverse_trade, deserialized.reverse_trade);
-        assert_eq!(config.symbol_mappings.len(), deserialized.symbol_mappings.len());
+        assert_eq!(
+            config.symbol_mappings.len(),
+            deserialized.symbol_mappings.len()
+        );
         assert_eq!(config.config_version, deserialized.config_version);
     }
 
@@ -874,9 +896,12 @@ mod tests {
         let serialized_minimal = rmp_serde::to_vec_named(&msg_minimal).unwrap();
 
         // Minimal message should be smaller
-        assert!(serialized_minimal.len() < serialized_full.len(),
-                "Minimal message ({} bytes) should be smaller than full message ({} bytes)",
-                serialized_minimal.len(), serialized_full.len());
+        assert!(
+            serialized_minimal.len() < serialized_full.len(),
+            "Minimal message ({} bytes) should be smaller than full message ({} bytes)",
+            serialized_minimal.len(),
+            serialized_full.len()
+        );
     }
 
     #[test]

@@ -40,22 +40,13 @@ impl Default for WebUIConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CorsConfig {
     /// Disable CORS restrictions (allows all origins) - use only in development!
     #[serde(default)]
     pub disable: bool,
     #[serde(default)]
     pub additional_origins: Vec<String>,
-}
-
-impl Default for CorsConfig {
-    fn default() -> Self {
-        Self {
-            disable: false,
-            additional_origins: vec![],
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,12 +71,24 @@ pub struct LoggingConfig {
     pub max_age_days: u32,
 }
 
-fn default_logging_enabled() -> bool { true }
-fn default_log_directory() -> String { "logs".to_string() }
-fn default_log_file_prefix() -> String { "sankey-copier-server".to_string() }
-fn default_log_rotation() -> String { "daily".to_string() }
-fn default_max_files() -> u32 { 30 }
-fn default_max_age_days() -> u32 { 90 }
+fn default_logging_enabled() -> bool {
+    true
+}
+fn default_log_directory() -> String {
+    "logs".to_string()
+}
+fn default_log_file_prefix() -> String {
+    "sankey-copier-server".to_string()
+}
+fn default_log_rotation() -> String {
+    "daily".to_string()
+}
+fn default_max_files() -> u32 {
+    30
+}
+fn default_max_age_days() -> u32 {
+    90
+}
 
 impl Default for LoggingConfig {
     fn default() -> Self {
@@ -100,20 +103,12 @@ impl Default for LoggingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstallerConfig {
     /// Base path for MQL components (DLL, EA files)
     /// If not set, uses current_dir() (production default)
     #[serde(default)]
     pub components_base_path: Option<String>,
-}
-
-impl Default for InstallerConfig {
-    fn default() -> Self {
-        Self {
-            components_base_path: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,8 +141,7 @@ impl Config {
     ///   - Common values: "dev", "prod", "staging"
     pub fn from_file<P: AsRef<Path>>(base_name: P) -> Result<Self> {
         let base_path = base_name.as_ref();
-        let base_str = base_path.to_str()
-            .context("Invalid base path")?;
+        let base_str = base_path.to_str().context("Invalid base path")?;
 
         // Build layered configuration
         let mut builder = config::Config::builder()
@@ -158,46 +152,19 @@ impl Config {
         // Only loads if CONFIG_ENV environment variable is explicitly set
         if let Ok(env) = std::env::var("CONFIG_ENV") {
             let env_config = format!("{}.{}", base_str, env);
-            builder = builder.add_source(
-                config::File::with_name(&env_config).required(false)
-            );
+            builder = builder.add_source(config::File::with_name(&env_config).required(false));
         }
 
         // 3. Load local config (optional, for personal overrides)
         let local_config = format!("{}.local", base_str);
-        builder = builder.add_source(
-            config::File::with_name(&local_config).required(false)
-        );
+        builder = builder.add_source(config::File::with_name(&local_config).required(false));
 
         // Build and deserialize
-        let config = builder.build()
-            .context("Failed to build configuration")?;
+        let config = builder.build().context("Failed to build configuration")?;
 
-        config.try_deserialize()
+        config
+            .try_deserialize()
             .context("Failed to deserialize configuration")
-    }
-
-    /// Create default config
-    pub fn default() -> Self {
-        Self {
-            server: ServerConfig {
-                host: "0.0.0.0".to_string(),
-                port: 8080,
-            },
-            webui: WebUIConfig::default(),
-            database: DatabaseConfig {
-                url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
-            },
-            zeromq: ZeroMqConfig {
-                receiver_port: 5555,
-                sender_port: 5556,
-                config_sender_port: 5557,
-                timeout_seconds: 30,
-            },
-            cors: CorsConfig::default(),
-            logging: LoggingConfig::default(),
-            installer: InstallerConfig::default(),
-        }
     }
 
     /// Get server bind address
@@ -232,6 +199,30 @@ impl Config {
         origins.extend(self.cors.additional_origins.clone());
 
         origins
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+            },
+            webui: WebUIConfig::default(),
+            database: DatabaseConfig {
+                url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
+            },
+            zeromq: ZeroMqConfig {
+                receiver_port: 5555,
+                sender_port: 5556,
+                config_sender_port: 5557,
+                timeout_seconds: 30,
+            },
+            cors: CorsConfig::default(),
+            logging: LoggingConfig::default(),
+            installer: InstallerConfig::default(),
+        }
     }
 }
 

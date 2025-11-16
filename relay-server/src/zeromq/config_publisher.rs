@@ -1,6 +1,6 @@
-use anyhow::{Result, Context};
-use tokio::sync::mpsc;
 use crate::models::ConfigMessage;
+use anyhow::{Context, Result};
+use tokio::sync::mpsc;
 
 pub struct ZmqConfigPublisher {
     tx: mpsc::UnboundedSender<ConfigMessage>,
@@ -9,13 +9,18 @@ pub struct ZmqConfigPublisher {
 impl ZmqConfigPublisher {
     pub fn new(bind_address: &str) -> Result<Self> {
         let context = zmq::Context::new();
-        let socket = context.socket(zmq::PUB)
+        let socket = context
+            .socket(zmq::PUB)
             .context("Failed to create PUB socket")?;
 
-        socket.bind(bind_address)
+        socket
+            .bind(bind_address)
             .context(format!("Failed to bind to {}", bind_address))?;
 
-        tracing::info!("ZeroMQ ConfigMessage publisher (MessagePack) bound to {}", bind_address);
+        tracing::info!(
+            "ZeroMQ ConfigMessage publisher (MessagePack) bound to {}",
+            bind_address
+        );
 
         let (tx, mut rx) = mpsc::unbounded_channel::<ConfigMessage>();
 
@@ -53,8 +58,9 @@ impl ZmqConfigPublisher {
     }
 
     pub async fn send_config(&self, config: &ConfigMessage) -> Result<()> {
-        self.tx.send(config.clone())
-            .map_err(|e| anyhow::anyhow!("Failed to send ConfigMessage to publisher task: {}", e))?;
+        self.tx.send(config.clone()).map_err(|e| {
+            anyhow::anyhow!("Failed to send ConfigMessage to publisher task: {}", e)
+        })?;
         Ok(())
     }
 }
