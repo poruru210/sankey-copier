@@ -51,7 +51,7 @@ Output: `src-tauri/target/release/sankey-copier-desktop.exe`
 
 The desktop app is built as part of the main build workflow:
 
-1. `build-web.yml` - Builds Next.js standalone
+1. `deploy-vercel.yml` - Builds & deploys the bundled Web UI for preview/production
 2. `build-desktop.yml` - Builds Tauri desktop app
 3. `build-installer.yml` - Packages desktop app with installer
 

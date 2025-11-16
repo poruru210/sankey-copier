@@ -8,7 +8,7 @@
 ## 2. 現状整理
 - **イベント**: `pull_request`, `push(main)`, `tags(v*)`, `workflow_dispatch`。
 - **メインジョブ**: `version-info` → `detect-web-changes` → (Rust / MQL / Desktop / Installer) → `deploy-vercel`。
-- **再利用ワークフロー**: `build-rust.yml`, `build-web.yml`, `build-mql.yml`, `build-desktop.yml`, `build-installer.yml`, `deploy-vercel.yml`。
+- **再利用ワークフロー**: `build-rust.yml`, `build-mql.yml`, `build-desktop.yml`, `build-installer.yml`, `deploy-vercel.yml`。
 - **アーティファクト受け渡し**: すべてGitHub Artifacts（保持期間 1〜90日）。
 - **コメント/通知**: Vercel コメントは権限制限のため削除済み。その他の自動通知は未整備。
 
@@ -70,7 +70,7 @@ flowchart LR
 - `workflow_dispatch` では「強制実行対象」を上書きできる入力を提供。
 
 ### 4.3 成果物の再利用とキャッシュ
-- **Web**: `build-web` ジョブで `.vercel/output` や `.next/standalone` を生成し、Vercel/デスクトップ/インストーラで `actions/download-artifact` し再利用。
+- **Web**: `deploy-vercel` ワークフロー内で `pnpm install` → `vercel build/deploy` を一気通貫で行い、別ジョブのアーティファクトには依存しない。
 - **Rust**: `cargo-chef` と `sccache` を導入し、コンパイルキャッシュを Linux/Windows 間で共有（Azure Cache も検討）。
 - **Installer**: デフォルトでは main/tag（もしくは release workflow）でのみ実行し、PR ではスキップ。ただし、インストーラ検証が必要な PR では `workflow_dispatch` 入力や `ci-pr.yml` の `force-installer` フラグで任意に有効化できるようにし、検証結果を PR 上で共有する。アーティファクト保持期間は PR=1日、main=14日、リリース=90日。
 

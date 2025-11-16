@@ -22,11 +22,6 @@ This directory contains the build workflows for the SANKEY Copier project. The w
   - Runs tests for each component
   - Uploads build artifacts
 
-- **`build-web.yml`** (63 lines)
-  - Builds the Next.js web UI
-  - Handles pnpm dependencies and caching
-  - Runs linter and builds for production
-
 - **`build-mql.yml`** (589 lines)
   - Compiles MQL4/MQL5 Expert Advisors
   - Manages MetaTrader installation and caching
