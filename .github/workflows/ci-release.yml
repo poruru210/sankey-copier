@@ -128,16 +128,55 @@ jobs:
               - '.github/actions/**'
               - '.github/workflows/**'
 
+  manual-flags:
+    name: Resolve Manual Overrides
+    runs-on: ubuntu-latest
+    outputs:
+      force_web: ${{ steps.flags.outputs.force_web }}
+      force_rust: ${{ steps.flags.outputs.force_rust }}
+      force_mql: ${{ steps.flags.outputs.force_mql }}
+      force_desktop: ${{ steps.flags.outputs.force_desktop }}
+      force_installer: ${{ steps.flags.outputs.force_installer }}
+      force_vercel: ${{ steps.flags.outputs.force_vercel }}
+    steps:
+      - name: Compute override flags
+        id: flags
+        run: |
+          FORCE_WEB=false
+          FORCE_RUST=false
+          FORCE_MQL=false
+          FORCE_DESKTOP=false
+          FORCE_INSTALLER=false
+          FORCE_VERCEL=false
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            FORCE_WEB=$(jq -r '.inputs.force_web // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST=$(jq -r '.inputs.force_rust // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_MQL=$(jq -r '.inputs.force_mql // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_DESKTOP=$(jq -r '.inputs.force_desktop // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_INSTALLER=$(jq -r '.inputs.force_installer // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_VERCEL=$(jq -r '.inputs.force_vercel // "false"' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "force_web=$FORCE_WEB"
+            echo "force_rust=$FORCE_RUST"
+            echo "force_mql=$FORCE_MQL"
+            echo "force_desktop=$FORCE_DESKTOP"
+            echo "force_installer=$FORCE_INSTALLER"
+            echo "force_vercel=$FORCE_VERCEL"
+          } >> "$GITHUB_OUTPUT"
+
   web-build:
     name: Build Web UI
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_web == 'true' || github.event.inputs.force_vercel == 'true' }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
     uses: ./.github/workflows/build-web.yml
 
   build-rust:
     name: Build Rust Artifacts
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.rust == 'true' || github.event.inputs.force_rust == 'true' || github.event.inputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
     uses: ./.github/workflows/build-rust.yml
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
@@ -145,8 +184,8 @@ jobs:
 
   build-mql:
     name: Compile MQL Advisors
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.mql == 'true' || github.event.inputs.force_mql == 'true' || github.event.inputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.mql == 'true' || needs.manual-flags.outputs.force_mql == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
     uses: ./.github/workflows/build-mql.yml
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
@@ -155,8 +194,8 @@ jobs:
 
   build-desktop:
     name: Build Desktop App
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.desktop == 'true' || github.event.inputs.force_desktop == 'true' || github.event.inputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.desktop == 'true' || needs.manual-flags.outputs.force_desktop == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
     uses: ./.github/workflows/build-desktop.yml
     with:
       version: ${{ needs.version-info.outputs.package_version }}
@@ -167,10 +206,11 @@ jobs:
     needs:
       - version-info
       - paths-filter
+      - manual-flags
       - build-rust
       - build-mql
       - build-desktop
-    if: ${{ needs.paths-filter.outputs.installer == 'true' || github.event.inputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ needs.paths-filter.outputs.installer == 'true' || needs.manual-flags.outputs.force_installer == 'true' || startsWith(github.ref, 'refs/tags/') }}
     uses: ./.github/workflows/build-installer.yml
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
@@ -184,8 +224,9 @@ jobs:
     needs:
       - version-info
       - paths-filter
+      - manual-flags
       - web-build
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
     uses: ./.github/workflows/deploy-vercel.yml
     with:
       deployment_target: production
@@ -200,6 +241,7 @@ jobs:
     needs:
       - version-info
       - paths-filter
+      - manual-flags
     if: always()
     steps:
       - name: Publish summary
@@ -212,12 +254,12 @@ jobs:
 
           | Component | Changed? | Forced? |
           | --- | --- | --- |
-          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ github.event.inputs.force_web == 'true' }}` |
-          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ github.event.inputs.force_rust == 'true' }}` |
-          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ github.event.inputs.force_mql == 'true' }}` |
-          | Desktop | `${{ needs.paths-filter.outputs.desktop }}` | `${{ github.event.inputs.force_desktop == 'true' }}` |
-          | Installer | `${{ needs.paths-filter.outputs.installer }}` | `${{ github.event.inputs.force_installer == 'true' }}` |
-          | Production Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ github.event.inputs.force_vercel == 'true' }}` |
+          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_web }}` |
+          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
+          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ needs.manual-flags.outputs.force_mql }}` |
+          | Desktop | `${{ needs.paths-filter.outputs.desktop }}` | `${{ needs.manual-flags.outputs.force_desktop }}` |
+          | Installer | `${{ needs.paths-filter.outputs.installer }}` | `${{ needs.manual-flags.outputs.force_installer }}` |
+          | Production Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_vercel }}` |
 
           _Individual job statuses remain visible under **Actions → CI Release → Jobs**; this table highlights which components were targeted and whether overrides were requested._
           EOF

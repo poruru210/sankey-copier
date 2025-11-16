@@ -123,11 +123,46 @@ jobs:
               - '.github/actions/**'
               - '.github/workflows/**'
 
+  manual-flags:
+    name: Resolve Manual Overrides
+    runs-on: ubuntu-latest
+    outputs:
+      force_web: ${{ steps.flags.outputs.force_web }}
+      force_rust: ${{ steps.flags.outputs.force_rust }}
+      force_rust_dll: ${{ steps.flags.outputs.force_rust_dll }}
+      force_mql: ${{ steps.flags.outputs.force_mql }}
+      force_vercel: ${{ steps.flags.outputs.force_vercel }}
+    steps:
+      - name: Compute override flags
+        id: flags
+        run: |
+          FORCE_WEB=false
+          FORCE_RUST=false
+          FORCE_RUST_DLL=false
+          FORCE_MQL=false
+          FORCE_VERCEL=false
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            FORCE_WEB=$(jq -r '.inputs.force_web // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST=$(jq -r '.inputs.force_rust // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_RUST_DLL=$(jq -r '.inputs.force_rust_dll // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_MQL=$(jq -r '.inputs.force_mql // "false"' "$GITHUB_EVENT_PATH")
+            FORCE_VERCEL=$(jq -r '.inputs.force_vercel // "false"' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "force_web=$FORCE_WEB"
+            echo "force_rust=$FORCE_RUST"
+            echo "force_rust_dll=$FORCE_RUST_DLL"
+            echo "force_mql=$FORCE_MQL"
+            echo "force_vercel=$FORCE_VERCEL"
+          } >> "$GITHUB_OUTPUT"
+
   rust-tests:
     name: Relay Server Tests & Clippy
     runs-on: ubuntu-latest
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.rust == 'true' || github.event.inputs.force_rust == 'true' }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -150,8 +185,8 @@ jobs:
 
   rust-dll:
     name: Build mt-bridge DLLs
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.rust == 'true' || github.event.inputs.force_rust_dll == 'true' }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust_dll == 'true' }}
     uses: ./.github/workflows/build-rust.yml
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
@@ -160,8 +195,8 @@ jobs:
 
   mql-build:
     name: Compile MQL Advisors
-    needs: [version-info, paths-filter]
-    if: ${{ needs.paths-filter.outputs.mql == 'true' || github.event.inputs.force_mql == 'true' }}
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.mql == 'true' || needs.manual-flags.outputs.force_mql == 'true' }}
     uses: ./.github/workflows/build-mql.yml
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
@@ -171,8 +206,8 @@ jobs:
   web-lint:
     name: Web UI Lint
     runs-on: ubuntu-latest
-    needs: paths-filter
-    if: ${{ needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_web == 'true' || github.event.inputs.force_vercel == 'true' }}
+    needs: [paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -193,8 +228,8 @@ jobs:
   web-typecheck:
     name: Web UI Type Check
     runs-on: ubuntu-latest
-    needs: paths-filter
-    if: ${{ needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_web == 'true' || github.event.inputs.force_vercel == 'true' }}
+    needs: [paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -215,8 +250,8 @@ jobs:
   web-e2e:
     name: Web UI Playwright E2E
     runs-on: ubuntu-latest
-    needs: [paths-filter, web-lint, web-typecheck]
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_web == 'true' || github.event.inputs.force_vercel == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
+    needs: [paths-filter, manual-flags, web-lint, web-typecheck]
+    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -279,6 +314,7 @@ jobs:
     needs:
       - version-info
       - paths-filter
+      - manual-flags
     if: always()
     steps:
       - name: Build summary
@@ -290,11 +326,11 @@ jobs:
 
           | Component | Changed? | Forced? |
           | --- | --- | --- |
-          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ github.event.inputs.force_web == 'true' }}` |
-          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ github.event.inputs.force_rust == 'true' }}` |
-          | mt-bridge DLL | `${{ needs.paths-filter.outputs.rust }}` | `${{ github.event.inputs.force_rust_dll == 'true' }}` |
-          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ github.event.inputs.force_mql == 'true' }}` |
-          | Preview Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ github.event.inputs.force_vercel == 'true' }}` |
+          | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_web }}` |
+          | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
+          | mt-bridge DLL | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust_dll }}` |
+          | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ needs.manual-flags.outputs.force_mql }}` |
+          | Preview Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_vercel }}` |
 
           _Note: Individual job statuses remain visible under the **Checks** tab. Use the table above to confirm which components were targeted in this run._
           EOF
@@ -305,9 +341,10 @@ jobs:
       - summarize
       - version-info
       - paths-filter
+      - manual-flags
       - web-lint
       - web-typecheck
-    if: ${{ github.event_name == 'pull_request' && (needs.paths-filter.outputs.web == 'true' || github.event.inputs.force_vercel == 'true') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
     uses: ./.github/workflows/deploy-vercel.yml
     with:
       deployment_target: preview
