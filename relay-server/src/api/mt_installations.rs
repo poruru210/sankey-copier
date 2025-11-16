@@ -49,9 +49,7 @@ pub async fn list_mt_installations(
     let response = MtInstallationsResponse {
         success: true,
         data: installations,
-        detection_summary: DetectionSummary {
-            total_found,
-        },
+        detection_summary: DetectionSummary { total_found },
     };
 
     Ok(Json(response))
@@ -85,7 +83,8 @@ pub async fn install_to_mt(
             return Err(ProblemDetails::internal_error(format!(
                 "Failed to detect MT4/MT5 installations: {}",
                 e
-            )).with_instance(format!("/api/mt-installations/{}/install", id)));
+            ))
+            .with_instance(format!("/api/mt-installations/{}/install", id)));
         }
     };
 
@@ -101,7 +100,10 @@ pub async fn install_to_mt(
                 "MT installation not found"
             );
             return Err(ProblemDetails::not_found("MT4/MT5 installation")
-                .with_detail(format!("The specified MT4/MT5 installation (ID: {}) was not found", id))
+                .with_detail(format!(
+                    "The specified MT4/MT5 installation (ID: {}) was not found",
+                    id
+                ))
                 .with_instance(format!("/api/mt-installations/{}/install", id)));
         }
     };
@@ -143,10 +145,10 @@ pub async fn install_to_mt(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Installation failed"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Installation failed: {}",
-                e
-            )).with_instance(format!("/api/mt-installations/{}/install", id)))
+            Err(
+                ProblemDetails::internal_error(format!("Installation failed: {}", e))
+                    .with_instance(format!("/api/mt-installations/{}/install", id)),
+            )
         }
     }
 }

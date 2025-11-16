@@ -1,6 +1,6 @@
-use sqlx::{sqlite::SqlitePool, Row};
-use anyhow::Result;
 use crate::models::{CopySettings, SymbolMapping, TradeFilters};
+use anyhow::Result;
+use sqlx::{sqlite::SqlitePool, Row};
 
 pub struct Database {
     pool: SqlitePool,
@@ -65,7 +65,7 @@ impl Database {
     pub async fn get_copy_settings(&self, id: i32) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
             "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE id = ?"
+             FROM copy_settings WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -76,7 +76,7 @@ impl Database {
 
             // Get symbol mappings
             let mappings = sqlx::query_as::<_, (String, String)>(
-                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?"
+                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?",
             )
             .bind(setting_id)
             .fetch_all(&self.pool)
@@ -99,13 +99,17 @@ impl Database {
 
             let filters = if let Some(f) = filter_row {
                 TradeFilters {
-                    allowed_symbols: f.get::<Option<String>, _>("allowed_symbols")
+                    allowed_symbols: f
+                        .get::<Option<String>, _>("allowed_symbols")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_symbols: f.get::<Option<String>, _>("blocked_symbols")
+                    blocked_symbols: f
+                        .get::<Option<String>, _>("blocked_symbols")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    allowed_magic_numbers: f.get::<Option<String>, _>("allowed_magic_numbers")
+                    allowed_magic_numbers: f
+                        .get::<Option<String>, _>("allowed_magic_numbers")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_magic_numbers: f.get::<Option<String>, _>("blocked_magic_numbers")
+                    blocked_magic_numbers: f
+                        .get::<Option<String>, _>("blocked_magic_numbers")
                         .and_then(|s| serde_json::from_str(&s).ok()),
                 }
             } else {
@@ -134,10 +138,13 @@ impl Database {
 
     /// Get enabled copy settings for a specific slave account
     /// Used in Phase 2 for registration-triggered CONFIG distribution
-    pub async fn get_settings_for_slave(&self, slave_account: &str) -> Result<Option<CopySettings>> {
+    pub async fn get_settings_for_slave(
+        &self,
+        slave_account: &str,
+    ) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
             "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE slave_account = ? AND enabled = 1 LIMIT 1"
+             FROM copy_settings WHERE slave_account = ? AND enabled = 1 LIMIT 1",
         )
         .bind(slave_account)
         .fetch_optional(&self.pool)
@@ -148,7 +155,7 @@ impl Database {
 
             // Get symbol mappings
             let mappings = sqlx::query_as::<_, (String, String)>(
-                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?"
+                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?",
             )
             .bind(setting_id)
             .fetch_all(&self.pool)
@@ -171,13 +178,17 @@ impl Database {
 
             let filters = if let Some(f) = filter_row {
                 TradeFilters {
-                    allowed_symbols: f.get::<Option<String>, _>("allowed_symbols")
+                    allowed_symbols: f
+                        .get::<Option<String>, _>("allowed_symbols")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_symbols: f.get::<Option<String>, _>("blocked_symbols")
+                    blocked_symbols: f
+                        .get::<Option<String>, _>("blocked_symbols")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    allowed_magic_numbers: f.get::<Option<String>, _>("allowed_magic_numbers")
+                    allowed_magic_numbers: f
+                        .get::<Option<String>, _>("allowed_magic_numbers")
                         .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_magic_numbers: f.get::<Option<String>, _>("blocked_magic_numbers")
+                    blocked_magic_numbers: f
+                        .get::<Option<String>, _>("blocked_magic_numbers")
                         .and_then(|s| serde_json::from_str(&s).ok()),
                 }
             } else {
@@ -208,7 +219,7 @@ impl Database {
         // Fetch all copy_settings
         let settings_rows = sqlx::query(
             "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings ORDER BY id"
+             FROM copy_settings ORDER BY id",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -221,7 +232,7 @@ impl Database {
         let mappings_rows = sqlx::query_as::<_, (i32, String, String)>(
             "SELECT setting_id, source_symbol, target_symbol
              FROM symbol_mappings
-             ORDER BY setting_id, id"
+             ORDER BY setting_id, id",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -235,7 +246,8 @@ impl Database {
         .await?;
 
         // Build lookup maps
-        let mut mappings_map: std::collections::HashMap<i32, Vec<SymbolMapping>> = std::collections::HashMap::new();
+        let mut mappings_map: std::collections::HashMap<i32, Vec<SymbolMapping>> =
+            std::collections::HashMap::new();
         for (setting_id, source, target) in mappings_rows {
             mappings_map
                 .entry(setting_id)
@@ -246,17 +258,22 @@ impl Database {
                 });
         }
 
-        let mut filters_map: std::collections::HashMap<i32, TradeFilters> = std::collections::HashMap::new();
+        let mut filters_map: std::collections::HashMap<i32, TradeFilters> =
+            std::collections::HashMap::new();
         for row in filters_rows {
             let setting_id: i32 = row.get("setting_id");
             let filters = TradeFilters {
-                allowed_symbols: row.get::<Option<String>, _>("allowed_symbols")
+                allowed_symbols: row
+                    .get::<Option<String>, _>("allowed_symbols")
                     .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_symbols: row.get::<Option<String>, _>("blocked_symbols")
+                blocked_symbols: row
+                    .get::<Option<String>, _>("blocked_symbols")
                     .and_then(|s| serde_json::from_str(&s).ok()),
-                allowed_magic_numbers: row.get::<Option<String>, _>("allowed_magic_numbers")
+                allowed_magic_numbers: row
+                    .get::<Option<String>, _>("allowed_magic_numbers")
                     .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_magic_numbers: row.get::<Option<String>, _>("blocked_magic_numbers")
+                blocked_magic_numbers: row
+                    .get::<Option<String>, _>("blocked_magic_numbers")
                     .and_then(|s| serde_json::from_str(&s).ok()),
             };
             filters_map.insert(setting_id, filters);
@@ -315,7 +332,7 @@ impl Database {
                     lot_multiplier = ?,
                     reverse_trade = ?,
                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?"
+                 WHERE id = ?",
             )
             .bind(settings.enabled)
             .bind(&settings.master_account)
@@ -366,11 +383,13 @@ impl Database {
     }
 
     pub async fn update_enabled_status(&self, id: i32, enabled: bool) -> Result<()> {
-        sqlx::query("UPDATE copy_settings SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(enabled)
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE copy_settings SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(enabled)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

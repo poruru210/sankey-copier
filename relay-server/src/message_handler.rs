@@ -6,8 +6,8 @@ use crate::{
     db::Database,
     engine::CopyEngine,
     models::{
-        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage,
-        SymbolConverter, TradeSignal, UnregisterMessage,
+        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage, SymbolConverter,
+        TradeSignal, UnregisterMessage,
     },
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
 };
@@ -75,16 +75,9 @@ impl MessageHandler {
 
                 // Send CONFIG via MessagePack
                 if let Err(e) = self.config_sender.send_config(&config).await {
-                    tracing::error!(
-                        "Failed to send config to {}: {}",
-                        account_id,
-                        e
-                    );
+                    tracing::error!("Failed to send config to {}: {}", account_id, e);
                 } else {
-                    tracing::info!(
-                        "Successfully sent CONFIG to: {}",
-                        account_id
-                    );
+                    tracing::info!("Successfully sent CONFIG to: {}", account_id);
                 }
             }
             Ok(None) => {
@@ -94,11 +87,7 @@ impl MessageHandler {
                 );
             }
             Err(e) => {
-                tracing::error!(
-                    "Failed to query settings for {}: {}",
-                    account_id,
-                    e
-                );
+                tracing::error!("Failed to query settings for {}: {}", account_id, e);
             }
         }
     }
@@ -109,7 +98,9 @@ impl MessageHandler {
         self.connection_manager.unregister_ea(account_id).await;
 
         // Notify WebSocket clients
-        let _ = self.broadcast_tx.send(format!("ea_disconnected:{}", account_id));
+        let _ = self
+            .broadcast_tx
+            .send(format!("ea_disconnected:{}", account_id));
     }
 
     /// Handle heartbeat messages (auto-registration + health monitoring only)
@@ -170,7 +161,10 @@ impl MessageHandler {
             suffix_add: None,
         };
 
-        match self.copy_engine.transform_signal(signal.clone(), setting, &converter) {
+        match self
+            .copy_engine
+            .transform_signal(signal.clone(), setting, &converter)
+        {
             Ok(transformed) => {
                 tracing::info!(
                     "Copying trade to {}: {} {} lots",
@@ -181,7 +175,11 @@ impl MessageHandler {
 
                 // Send to trade group using PUB/SUB with master_account as topic
                 // This allows multiple slaves to subscribe to the same master's trades
-                if let Err(e) = self.zmq_sender.send_signal(&setting.master_account, &transformed).await {
+                if let Err(e) = self
+                    .zmq_sender
+                    .send_signal(&setting.master_account, &transformed)
+                    .await
+                {
                     tracing::error!("Failed to send signal to trade group: {}", e);
                 } else {
                     tracing::debug!(
@@ -193,10 +191,7 @@ impl MessageHandler {
                     // Notify WebSocket clients
                     let _ = self.broadcast_tx.send(format!(
                         "trade_copied:{}:{}:{}:{}",
-                        setting.slave_account,
-                        transformed.symbol,
-                        transformed.lots,
-                        setting.id
+                        setting.slave_account, transformed.symbol, transformed.lots, setting.id
                     ));
                 }
             }
@@ -211,8 +206,7 @@ impl MessageHandler {
 mod tests {
     use super::*;
     use crate::models::{
-        CopySettings, HeartbeatMessage, OrderType,
-        TradeAction, TradeFilters, UnregisterMessage,
+        CopySettings, HeartbeatMessage, OrderType, TradeAction, TradeFilters, UnregisterMessage,
     };
     use chrono::Utc;
 
@@ -235,9 +229,8 @@ mod tests {
 
         // Create ZmqConfigPublisher for tests
         let config_port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let config_sender = Arc::new(
-            ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", config_port)).unwrap()
-        );
+        let config_sender =
+            Arc::new(ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", config_port)).unwrap());
 
         MessageHandler::new(
             connection_manager,
@@ -322,10 +315,7 @@ mod tests {
         // Verify EA status is Offline
         let ea = handler.connection_manager.get_ea(&account_id).await;
         assert!(ea.is_some());
-        assert_eq!(
-            ea.unwrap().status,
-            crate::models::ConnectionStatus::Offline
-        );
+        assert_eq!(ea.unwrap().status, crate::models::ConnectionStatus::Offline);
     }
 
     #[tokio::test]

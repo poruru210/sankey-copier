@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export shared message types from DLL
-pub use sankey_copier_zmq::{UnregisterMessage, HeartbeatMessage, RequestConfigMessage};
+pub use sankey_copier_zmq::{HeartbeatMessage, RequestConfigMessage, UnregisterMessage};
 
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,7 +66,6 @@ pub enum ConnectionStatus {
     Offline,
     Timeout,
 }
-
 
 // Re-export ConfigMessage from DLL
 pub use sankey_copier_zmq::ConfigMessage;
@@ -133,12 +132,10 @@ mod tests {
             slave_account: "SLAVE_002".to_string(),
             lot_multiplier: None,
             reverse_trade: true,
-            symbol_mappings: vec![
-                SymbolMapping {
-                    source_symbol: "EURUSD".to_string(),
-                    target_symbol: "EURUSDm".to_string(),
-                },
-            ],
+            symbol_mappings: vec![SymbolMapping {
+                source_symbol: "EURUSD".to_string(),
+                target_symbol: "EURUSDm".to_string(),
+            }],
             filters: TradeFilters {
                 allowed_symbols: Some(vec!["EURUSD".to_string(), "GBPUSD".to_string()]),
                 blocked_symbols: None,
@@ -155,7 +152,10 @@ mod tests {
         assert_eq!(config.symbol_mappings.len(), 1);
         assert_eq!(config.symbol_mappings[0].source_symbol, "EURUSD");
         assert_eq!(config.filters.allowed_symbols.as_ref().unwrap().len(), 2);
-        assert_eq!(config.filters.allowed_magic_numbers.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            config.filters.allowed_magic_numbers.as_ref().unwrap().len(),
+            2
+        );
     }
 
     #[test]

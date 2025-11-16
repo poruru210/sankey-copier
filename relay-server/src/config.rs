@@ -80,12 +80,24 @@ pub struct LoggingConfig {
     pub max_age_days: u32,
 }
 
-fn default_logging_enabled() -> bool { true }
-fn default_log_directory() -> String { "logs".to_string() }
-fn default_log_file_prefix() -> String { "sankey-copier-server".to_string() }
-fn default_log_rotation() -> String { "daily".to_string() }
-fn default_max_files() -> u32 { 30 }
-fn default_max_age_days() -> u32 { 90 }
+fn default_logging_enabled() -> bool {
+    true
+}
+fn default_log_directory() -> String {
+    "logs".to_string()
+}
+fn default_log_file_prefix() -> String {
+    "sankey-copier-server".to_string()
+}
+fn default_log_rotation() -> String {
+    "daily".to_string()
+}
+fn default_max_files() -> u32 {
+    30
+}
+fn default_max_age_days() -> u32 {
+    90
+}
 
 impl Default for LoggingConfig {
     fn default() -> Self {
@@ -146,8 +158,7 @@ impl Config {
     ///   - Common values: "dev", "prod", "staging"
     pub fn from_file<P: AsRef<Path>>(base_name: P) -> Result<Self> {
         let base_path = base_name.as_ref();
-        let base_str = base_path.to_str()
-            .context("Invalid base path")?;
+        let base_str = base_path.to_str().context("Invalid base path")?;
 
         // Build layered configuration
         let mut builder = config::Config::builder()
@@ -158,22 +169,18 @@ impl Config {
         // Only loads if CONFIG_ENV environment variable is explicitly set
         if let Ok(env) = std::env::var("CONFIG_ENV") {
             let env_config = format!("{}.{}", base_str, env);
-            builder = builder.add_source(
-                config::File::with_name(&env_config).required(false)
-            );
+            builder = builder.add_source(config::File::with_name(&env_config).required(false));
         }
 
         // 3. Load local config (optional, for personal overrides)
         let local_config = format!("{}.local", base_str);
-        builder = builder.add_source(
-            config::File::with_name(&local_config).required(false)
-        );
+        builder = builder.add_source(config::File::with_name(&local_config).required(false));
 
         // Build and deserialize
-        let config = builder.build()
-            .context("Failed to build configuration")?;
+        let config = builder.build().context("Failed to build configuration")?;
 
-        config.try_deserialize()
+        config
+            .try_deserialize()
             .context("Failed to deserialize configuration")
     }
 

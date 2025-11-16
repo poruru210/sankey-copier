@@ -52,11 +52,7 @@ impl<S> Layer<S> for LogBufferLayer
 where
     S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) {
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
         let metadata = event.metadata();
         let level = format!("{}", metadata.level());
 
@@ -65,9 +61,7 @@ where
         event.record(&mut visitor);
 
         // Get span information
-        let span_name = ctx
-            .event_span(event)
-            .map(|span| span.name().to_string());
+        let span_name = ctx.event_span(event).map(|span| span.name().to_string());
 
         let entry = LogEntry {
             timestamp: Utc::now(),
@@ -139,33 +133,25 @@ impl tracing::field::Visit for FieldVisitor {
     }
 
     fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.fields.insert(
-            field.name().to_string(),
-            JsonValue::Number(value.into()),
-        );
+        self.fields
+            .insert(field.name().to_string(), JsonValue::Number(value.into()));
     }
 
     fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.fields.insert(
-            field.name().to_string(),
-            JsonValue::Number(value.into()),
-        );
+        self.fields
+            .insert(field.name().to_string(), JsonValue::Number(value.into()));
     }
 
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
         if let Some(num) = serde_json::Number::from_f64(value) {
-            self.fields.insert(
-                field.name().to_string(),
-                JsonValue::Number(num),
-            );
+            self.fields
+                .insert(field.name().to_string(), JsonValue::Number(num));
         }
     }
 
     fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.fields.insert(
-            field.name().to_string(),
-            JsonValue::Bool(value),
-        );
+        self.fields
+            .insert(field.name().to_string(), JsonValue::Bool(value));
     }
 
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
