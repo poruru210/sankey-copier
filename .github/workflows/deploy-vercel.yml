@@ -69,29 +69,6 @@ jobs:
           URL=$(vercel deploy --prebuilt ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      - name: Check PR comment permissions
-        if: ${{ inputs.is_pr && inputs.pr_number != '' }}
-        id: can-comment
-        run: |
-          if [ "${{ inputs.pr_is_from_fork }}" = "true" ]; then
-            echo "allowed=false" >> $GITHUB_OUTPUT
-            echo "PR from fork detected; skipping PR comment."
-          else
-            echo "allowed=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comment PR with deployment URL
-        if: ${{ inputs.is_pr && inputs.pr_number != '' && steps.can-comment.outputs.allowed == 'true' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: Number('${{ inputs.pr_number }}'),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Preview deployment ready!\n\n🔗 **URL**: ${{ steps.deploy.outputs.url }}'
-            })
-
       - name: Print deployment URL
         run: |
           echo "🚀 Deployment successful!"
