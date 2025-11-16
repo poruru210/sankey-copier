@@ -102,7 +102,7 @@ jobs:
           $configPath = "src-tauri/tauri.conf.json"
           $config = Get-Content $configPath -Raw | ConvertFrom-Json
 
-          # Inject version information
+          # Inject version information (semver 3-component only)
           $version = "${{ inputs.version }}"
           $config.version = $version
           Write-Host "Injected version: $version" -ForegroundColor Cyan
