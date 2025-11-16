@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // Re-export shared message types from DLL
 pub use sankey_copier_zmq::{HeartbeatMessage, RequestConfigMessage, UnregisterMessage};
@@ -31,12 +32,14 @@ pub enum EaType {
     Slave,
 }
 
-impl EaType {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for EaType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Master" => Some(EaType::Master),
-            "Slave" => Some(EaType::Slave),
-            _ => None,
+            "Master" => Ok(EaType::Master),
+            "Slave" => Ok(EaType::Slave),
+            _ => Err(()),
         }
     }
 }
@@ -48,12 +51,14 @@ pub enum Platform {
     MT5,
 }
 
-impl Platform {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for Platform {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "MT4" => Some(Platform::MT4),
-            "MT5" => Some(Platform::MT5),
-            _ => None,
+            "MT4" => Ok(Platform::MT4),
+            "MT5" => Ok(Platform::MT5),
+            _ => Err(()),
         }
     }
 }
@@ -116,9 +121,9 @@ mod tests {
         assert_eq!(config.account_id, "SLAVE_001");
         assert_eq!(config.master_account, "MASTER_001");
         assert_eq!(config.trade_group_id, "MASTER_001");
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.lot_multiplier, Some(1.5));
-        assert_eq!(config.reverse_trade, false);
+        assert!(!config.reverse_trade);
         assert_eq!(config.config_version, 1);
         assert_eq!(config.symbol_mappings.len(), 0);
     }
@@ -146,9 +151,9 @@ mod tests {
 
         let config: ConfigMessage = settings.into();
 
-        assert_eq!(config.enabled, false);
+        assert!(!config.enabled);
         assert_eq!(config.lot_multiplier, None);
-        assert_eq!(config.reverse_trade, true);
+        assert!(config.reverse_trade);
         assert_eq!(config.symbol_mappings.len(), 1);
         assert_eq!(config.symbol_mappings[0].source_symbol, "EURUSD");
         assert_eq!(config.filters.allowed_symbols.as_ref().unwrap().len(), 2);
@@ -183,7 +188,7 @@ mod tests {
         // Verify deserialization works
         let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.account_id, "TEST_001");
-        assert_eq!(deserialized.enabled, true);
+        assert!(deserialized.enabled);
         assert_eq!(deserialized.config_version, 1);
     }
 

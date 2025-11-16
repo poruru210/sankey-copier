@@ -89,3 +89,9 @@ impl CopyEngine {
         }
     }
 }
+
+impl Default for CopyEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}

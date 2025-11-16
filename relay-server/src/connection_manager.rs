@@ -67,8 +67,8 @@ impl ConnectionManager {
             let now = Utc::now();
             let connection = EaConnection {
                 account_id: msg.account_id.clone(),
-                ea_type: EaType::from_str(&msg.ea_type).unwrap_or(EaType::Master),
-                platform: Platform::from_str(&msg.platform).unwrap_or(Platform::MT5),
+                ea_type: msg.ea_type.parse().unwrap_or(EaType::Master),
+                platform: msg.platform.parse().unwrap_or(Platform::MT5),
                 account_number: msg.account_number,
                 broker: msg.broker,
                 account_name: msg.account_name,

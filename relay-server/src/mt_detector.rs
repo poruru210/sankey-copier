@@ -223,6 +223,7 @@ impl MtDetector {
     }
 
     /// MT4/MT5のタイプとプラットフォームを検出
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn detect_mt_type_and_platform(
         &self,
         install_path: &Path,
@@ -250,6 +251,7 @@ impl MtDetector {
     }
 
     /// データディレクトリを検出
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn find_data_directory(&self, install_path: &Path, mt_type: &MtType) -> Option<PathBuf> {
         // ポータブルモード: インストールパスと同じ
         let mql_folder = match mt_type {
@@ -276,6 +278,7 @@ impl MtDetector {
 
     /// %APPDATA%\MetaQuotes\Terminal\ からデータディレクトリを検索
     /// Windows Service (SYSTEM account) で実行される場合、全ユーザーのプロファイルを検索
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn find_data_directory_from_appdata(
         &self,
         install_path: &Path,
@@ -377,6 +380,7 @@ impl MtDetector {
     }
 
     /// すべてのユーザープロファイルからデータディレクトリを検索（SYSTEM account用）
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn find_data_directory_all_users(
         &self,
         install_path: &Path,
@@ -448,6 +452,7 @@ impl MtDetector {
     }
 
     /// Terminal ディレクトリ内で origin.txt を使ってデータディレクトリを検索
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn search_terminal_directory(
         &self,
         terminal_base: &Path,
@@ -486,6 +491,7 @@ impl MtDetector {
     }
 
     /// origin.txtをデコード（UTF-16LE）
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn decode_origin_txt(&self, content: &[u8]) -> Option<String> {
         let content = if content.starts_with(&[0xFF, 0xFE]) {
             &content[2..]
@@ -505,6 +511,7 @@ impl MtDetector {
 
     /// インストールされたコンポーネントをチェック
     /// Returns: (components, client_version)
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn check_installed_components(
         &self,
         data_path: &Path,
@@ -611,8 +618,8 @@ impl MtDetector {
 
                 // Try each translation until we find ProductVersion
                 for i in 0..num_translations {
-                    let lang_id = *trans_data.offset((i * 2) as isize);
-                    let codepage = *trans_data.offset((i * 2 + 1) as isize);
+                    let lang_id = *trans_data.add(i * 2);
+                    let codepage = *trans_data.add(i * 2 + 1);
 
                     let sub_block_str = format!(
                         "\\StringFileInfo\\{:04x}{:04x}\\ProductVersion",
@@ -752,8 +759,6 @@ mod tests {
     #[test]
     fn test_detector_creation() {
         let _detector = MtDetector::new();
-        // Just ensure it can be created
-        assert!(true);
     }
 
     #[test]

@@ -251,7 +251,7 @@ impl Database {
         for (setting_id, source, target) in mappings_rows {
             mappings_map
                 .entry(setting_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(SymbolMapping {
                     source_symbol: source,
                     target_symbol: target,
@@ -284,7 +284,7 @@ impl Database {
         for row in settings_rows {
             let id: i32 = row.get("id");
             let symbol_mappings = mappings_map.remove(&id).unwrap_or_default();
-            let filters = filters_map.remove(&id).unwrap_or_else(|| TradeFilters {
+            let filters = filters_map.remove(&id).unwrap_or(TradeFilters {
                 allowed_symbols: None,
                 blocked_symbols: None,
                 allowed_magic_numbers: None,

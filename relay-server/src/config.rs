@@ -40,22 +40,13 @@ impl Default for WebUIConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CorsConfig {
     /// Disable CORS restrictions (allows all origins) - use only in development!
     #[serde(default)]
     pub disable: bool,
     #[serde(default)]
     pub additional_origins: Vec<String>,
-}
-
-impl Default for CorsConfig {
-    fn default() -> Self {
-        Self {
-            disable: false,
-            additional_origins: vec![],
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,20 +103,12 @@ impl Default for LoggingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstallerConfig {
     /// Base path for MQL components (DLL, EA files)
     /// If not set, uses current_dir() (production default)
     #[serde(default)]
     pub components_base_path: Option<String>,
-}
-
-impl Default for InstallerConfig {
-    fn default() -> Self {
-        Self {
-            components_base_path: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,29 +167,6 @@ impl Config {
             .context("Failed to deserialize configuration")
     }
 
-    /// Create default config
-    pub fn default() -> Self {
-        Self {
-            server: ServerConfig {
-                host: "0.0.0.0".to_string(),
-                port: 8080,
-            },
-            webui: WebUIConfig::default(),
-            database: DatabaseConfig {
-                url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
-            },
-            zeromq: ZeroMqConfig {
-                receiver_port: 5555,
-                sender_port: 5556,
-                config_sender_port: 5557,
-                timeout_seconds: 30,
-            },
-            cors: CorsConfig::default(),
-            logging: LoggingConfig::default(),
-            installer: InstallerConfig::default(),
-        }
-    }
-
     /// Get server bind address
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.server.host, self.server.port)
@@ -239,6 +199,30 @@ impl Config {
         origins.extend(self.cors.additional_origins.clone());
 
         origins
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+            },
+            webui: WebUIConfig::default(),
+            database: DatabaseConfig {
+                url: "sqlite://sankey_copier.db?mode=rwc".to_string(),
+            },
+            zeromq: ZeroMqConfig {
+                receiver_port: 5555,
+                sender_port: 5556,
+                config_sender_port: 5557,
+                timeout_seconds: 30,
+            },
+            cors: CorsConfig::default(),
+            logging: LoggingConfig::default(),
+            installer: InstallerConfig::default(),
+        }
     }
 }
 

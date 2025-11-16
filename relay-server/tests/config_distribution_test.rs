@@ -63,7 +63,7 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(retrieved_settings.master_account, "MASTER_TEST_001");
     assert_eq!(retrieved_settings.slave_account, "SLAVE_TEST_001");
     assert_eq!(retrieved_settings.lot_multiplier, Some(2.5));
-    assert_eq!(retrieved_settings.reverse_trade, true);
+    assert!(retrieved_settings.reverse_trade);
     assert_eq!(retrieved_settings.symbol_mappings.len(), 2);
     assert_eq!(
         retrieved_settings
@@ -82,9 +82,9 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(config_message.account_id, "SLAVE_TEST_001");
     assert_eq!(config_message.master_account, "MASTER_TEST_001");
     assert_eq!(config_message.trade_group_id, "MASTER_TEST_001");
-    assert_eq!(config_message.enabled, true);
+    assert!(config_message.enabled);
     assert_eq!(config_message.lot_multiplier, Some(2.5));
-    assert_eq!(config_message.reverse_trade, true);
+    assert!(config_message.reverse_trade);
     assert_eq!(config_message.symbol_mappings.len(), 2);
     assert_eq!(config_message.symbol_mappings[0].source_symbol, "EURUSD");
     assert_eq!(config_message.symbol_mappings[0].target_symbol, "EURUSDm");
@@ -218,7 +218,7 @@ async fn test_get_settings_for_slave_method() {
     let found_settings = result.unwrap();
     assert_eq!(found_settings.slave_account, "SLAVE_ACTIVE");
     assert_eq!(found_settings.master_account, "MASTER_001");
-    assert_eq!(found_settings.enabled, true);
+    assert!(found_settings.enabled);
 
     // Test 2: Query for disabled slave - should NOT find it (enabled=1 filter)
     let result = db
