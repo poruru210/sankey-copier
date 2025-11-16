@@ -3,68 +3,67 @@
 name: Deploy to Vercel
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'web-ui/**'
-      - '.github/workflows/deploy-vercel.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'web-ui/**'
-      - '.github/workflows/deploy-vercel.yml'
+  workflow_call:
+    inputs:
+      deployment_target:
+        description: 'Vercel deploy environment (production or preview)'
+        required: true
+        type: string
+      is_pr:
+        description: 'Whether the caller event is a pull request'
+        required: true
+        type: boolean
+      pr_number:
+        description: 'Pull request number (empty when not a PR)'
+        required: false
+        type: string
+      pr_is_from_fork:
+        description: 'True when the source branch belongs to a forked repository'
+        required: false
+        default: false
+        type: boolean
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
+  build-web:
+    name: Build Web UI
+    uses: ./.github/workflows/build-web.yml
+
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
+    needs: build-web
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js with pnpm
+        uses: ./.github/actions/setup-node
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web-ui/package-lock.json
+          working-directory: web-ui
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Pull Vercel Environment Information
+      - name: Install dependencies
         working-directory: web-ui
-        run: vercel pull --yes --environment=${{ github.event_name == 'push' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=${{ inputs.deployment_target }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
-        working-directory: web-ui
-        run: vercel build ${{ github.event_name == 'push' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
         id: deploy
-        working-directory: web-ui
         run: |
-          URL=$(vercel deploy --prebuilt ${{ github.event_name == 'push' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> $GITHUB_OUTPUT
-
-      - name: Comment PR with deployment URL
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Preview deployment ready!\n\n🔗 **URL**: ${{ steps.deploy.outputs.url }}'
-            })
 
       - name: Print deployment URL
         run: |

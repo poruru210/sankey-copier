@@ -69,6 +69,48 @@ jobs:
           echo "║ BUILD_INFO:      $BUILD_INFO"
           echo "╚════════════════════════════════════════════════════════════════"
 
+  detect-web-changes:
+    name: Detect Web UI Changes
+    needs: version-info
+    runs-on: ubuntu-latest
+    outputs:
+      web_changed: ${{ steps.diff.outputs.changed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Web UI changes
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA=$(git rev-parse HEAD^ || echo "")
+          else
+            git fetch --depth=1 origin "$BASE_SHA" || true
+          fi
+
+          if [ -z "$BASE_SHA" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --name-only "$BASE_SHA" "$GITHUB_SHA" | grep -Eq '^web-ui/|^\.github/workflows/deploy-vercel\.yml$'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-rust:
     name: Build Rust Components
     needs: version-info
@@ -76,13 +118,6 @@ jobs:
     with:
       package_version: ${{ needs.version-info.outputs.package_version }}
       file_version: ${{ needs.version-info.outputs.file_version }}
-      build_target: ${{ github.event.inputs.build_target || 'all' }}
-
-  build-web:
-    name: Build Web UI
-    needs: version-info
-    uses: ./.github/workflows/build-web.yml
-    with:
       build_target: ${{ github.event.inputs.build_target || 'all' }}
 
   build-mql:
@@ -112,4 +147,16 @@ jobs:
       file_version: ${{ needs.version-info.outputs.file_version }}
       build_info: ${{ needs.version-info.outputs.build_info }}
       create_release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    secrets: inherit
+
+  deploy-vercel:
+    name: Deploy Web UI to Vercel
+    needs: [version-info, detect-web-changes]
+    if: ${{ needs.detect-web-changes.outputs.web_changed == 'true' }}
+    uses: ./.github/workflows/deploy-vercel.yml
+    with:
+      deployment_target: ${{ github.event_name == 'push' && 'production' || 'preview' }}
+      is_pr: ${{ github.event_name == 'pull_request' }}
+      pr_number: ${{ github.event.pull_request.number || '' }}
+      pr_is_from_fork: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
     secrets: inherit
