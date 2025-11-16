@@ -158,6 +158,37 @@ jobs:
             echo "force_vercel=$FORCE_VERCEL"
           } >> "$GITHUB_OUTPUT"
 
+  event-context:
+    name: Collect Event Context
+    runs-on: ubuntu-latest
+    outputs:
+      is_pr: ${{ steps.collect.outputs.is_pr }}
+      pr_number: ${{ steps.collect.outputs.pr_number }}
+      pr_is_draft: ${{ steps.collect.outputs.pr_is_draft }}
+      pr_is_from_fork: ${{ steps.collect.outputs.pr_is_from_fork }}
+    steps:
+      - name: Compute event metadata
+        id: collect
+        run: |
+          IS_PR=false
+          PR_NUMBER=""
+          PR_IS_DRAFT=false
+          PR_IS_FROM_FORK=false
+
+          if jq -e '.pull_request' "$GITHUB_EVENT_PATH" > /dev/null; then
+            IS_PR=true
+            PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+            PR_IS_DRAFT=$(jq -r '.pull_request.draft // false' "$GITHUB_EVENT_PATH")
+            PR_IS_FROM_FORK=$(jq -r '.pull_request.head.repo.fork // false' "$GITHUB_EVENT_PATH")
+          fi
+
+          {
+            echo "is_pr=$IS_PR"
+            echo "pr_number=$PR_NUMBER"
+            echo "pr_is_draft=$PR_IS_DRAFT"
+            echo "pr_is_from_fork=$PR_IS_FROM_FORK"
+          } >> "$GITHUB_OUTPUT"
+
   rust-tests:
     name: Relay Server Tests & Clippy
     runs-on: ubuntu-latest
@@ -250,8 +281,8 @@ jobs:
   web-e2e:
     name: Web UI Playwright E2E
     runs-on: ubuntu-latest
-    needs: [paths-filter, manual-flags, web-lint, web-typecheck]
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
+    needs: [paths-filter, manual-flags, event-context, web-lint, web-typecheck]
+    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (needs.event-context.outputs.is_pr != 'true' || needs.event-context.outputs.pr_is_draft != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -342,13 +373,14 @@ jobs:
       - version-info
       - paths-filter
       - manual-flags
+      - event-context
       - web-lint
       - web-typecheck
-    if: ${{ github.event_name == 'pull_request' && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
+    if: ${{ needs.event-context.outputs.is_pr == 'true' && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
     uses: ./.github/workflows/deploy-vercel.yml
     with:
       deployment_target: preview
       is_pr: true
-      pr_number: ${{ github.event.pull_request.number }}
-      pr_is_from_fork: ${{ github.event.pull_request.head.repo.fork }}
+      pr_number: ${{ needs.event-context.outputs.pr_number }}
+      pr_is_from_fork: ${{ needs.event-context.outputs.pr_is_from_fork }}
     secrets: inherit

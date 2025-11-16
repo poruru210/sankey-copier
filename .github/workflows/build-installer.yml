@@ -293,7 +293,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ inputs.create_release }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: installer/Output/*.exe
           draft: false
