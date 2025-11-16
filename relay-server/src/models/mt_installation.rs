@@ -55,6 +55,7 @@ pub struct MtInstallationsResponse {
 
 impl MtInstallation {
     /// インストールIDを生成
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn generate_id(mt_type: &MtType, path: &str) -> String {
         // パスから識別可能なIDを生成
         let mut path_hash = path.to_lowercase().replace(['\\', '/', ' ', ':'], "-");
