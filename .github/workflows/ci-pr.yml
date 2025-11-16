@@ -306,21 +306,3 @@ jobs:
           _Note: Individual job statuses remain visible under the **Checks** tab. Use the table above to confirm which components were targeted in this run._
           EOF
 
-  deploy-preview:
-    name: Deploy Preview to Vercel
-    needs:
-      - summarize
-      - version-info
-      - paths-filter
-      - manual-flags
-      - event-context
-      - web-lint
-      - web-typecheck
-    if: ${{ needs.event-context.outputs.is_pr == 'true' && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
-    uses: ./.github/workflows/deploy-vercel.yml
-    with:
-      deployment_target: preview
-      is_pr: true
-      pr_number: ${{ needs.event-context.outputs.pr_number }}
-      pr_is_from_fork: ${{ needs.event-context.outputs.pr_is_from_fork }}
-    secrets: inherit
