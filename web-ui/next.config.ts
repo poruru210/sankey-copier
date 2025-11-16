@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
     unoptimized: buildMode === 'export',
   },
 
+  // Explicitly scope ESLint to existing source directories
+  eslint: {
+    dirs: ['app', 'components', 'hooks', 'lib', 'scripts', 'types', 'utils', '__tests__'],
+  },
+
   // For Tauri dev mode - use localhost:8080, for production use relative paths
   assetPrefix: isProd ? undefined : `http://${internalHost}:8080`,
 
