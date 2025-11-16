@@ -1,5 +1,7 @@
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{CopySettings, SymbolMapping, TradeFilters, ConfigMessage};
+use sankey_copier_relay_server::models::{
+    ConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+};
 
 /// Integration test for CONFIG message distribution workflow
 ///
@@ -63,7 +65,15 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(retrieved_settings.lot_multiplier, Some(2.5));
     assert_eq!(retrieved_settings.reverse_trade, true);
     assert_eq!(retrieved_settings.symbol_mappings.len(), 2);
-    assert_eq!(retrieved_settings.filters.allowed_symbols.as_ref().unwrap().len(), 2);
+    assert_eq!(
+        retrieved_settings
+            .filters
+            .allowed_symbols
+            .as_ref()
+            .unwrap()
+            .len(),
+        2
+    );
 
     // Step 4: Convert to ConfigMessage (simulating send_config_to_ea())
     let config_message: ConfigMessage = retrieved_settings.into();
@@ -90,19 +100,31 @@ async fn test_config_message_distribution_flow() {
         &vec!["USDJPY".to_string()]
     );
     assert_eq!(
-        config_message.filters.allowed_magic_numbers.as_ref().unwrap(),
+        config_message
+            .filters
+            .allowed_magic_numbers
+            .as_ref()
+            .unwrap(),
         &vec![123, 456, 789]
     );
     assert_eq!(
-        config_message.filters.blocked_magic_numbers.as_ref().unwrap(),
+        config_message
+            .filters
+            .blocked_magic_numbers
+            .as_ref()
+            .unwrap(),
         &vec![999]
     );
 
     // Step 6: Serialize to JSON (simulating ZMQ serialization)
-    let json_string = serde_json::to_string(&config_message)
-        .expect("Failed to serialize ConfigMessage to JSON");
+    let json_string =
+        serde_json::to_string(&config_message).expect("Failed to serialize ConfigMessage to JSON");
 
-    println!("Serialized ConfigMessage ({} bytes):\n{}", json_string.len(), json_string);
+    println!(
+        "Serialized ConfigMessage ({} bytes):\n{}",
+        json_string.len(),
+        json_string
+    );
 
     // Step 7: Verify JSON contains all expected fields
     assert!(json_string.contains("\"account_id\""));
