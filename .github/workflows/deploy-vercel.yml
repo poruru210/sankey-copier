@@ -17,6 +17,11 @@ on:
         description: 'Pull request number (empty when not a PR)'
         required: false
         type: string
+      pr_is_from_fork:
+        description: 'True when the source branch belongs to a forked repository'
+        required: false
+        default: false
+        type: boolean
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -64,7 +69,7 @@ jobs:
         if: ${{ inputs.is_pr && inputs.pr_number != '' }}
         id: can-comment
         run: |
-          if [ "${{ github.event.pull_request.head.repo.fork || 'false' }}" = "true" ]; then
+          if [ "${{ inputs.pr_is_from_fork }}" = "true" ]; then
             echo "allowed=false" >> $GITHUB_OUTPUT
             echo "PR from fork detected; skipping PR comment."
           else

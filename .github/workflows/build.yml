@@ -158,4 +158,5 @@ jobs:
       deployment_target: ${{ github.event_name == 'push' && 'production' || 'preview' }}
       is_pr: ${{ github.event_name == 'pull_request' }}
       pr_number: ${{ github.event.pull_request.number || '' }}
+      pr_is_from_fork: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
     secrets: inherit
