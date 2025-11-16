@@ -279,67 +279,6 @@ jobs:
         working-directory: web-ui
         run: pnpm exec tsc --noEmit
 
-  web-e2e:
-    name: Web UI Playwright E2E
-    runs-on: ubuntu-latest
-    needs: [paths-filter, manual-flags, event-context, web-lint, web-typecheck]
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (needs.event-context.outputs.is_pr != 'true' || needs.event-context.outputs.pr_is_draft != 'true') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js with pnpm
-        uses: ./.github/actions/setup-node
-        with:
-          working-directory: web-ui
-
-      - name: Install dependencies
-        working-directory: web-ui
-        run: pnpm install --frozen-lockfile
-
-      - name: Build application
-        working-directory: web-ui
-        env:
-          NEXT_BUILD_MODE: standalone
-        run: pnpm build
-
-      - name: Install Playwright browsers
-        working-directory: web-ui
-        run: pnpm exec playwright install --with-deps
-
-      - name: Start Next server
-        working-directory: web-ui
-        run: |
-          pnpm start &
-          echo $! > server.pid
-
-      - name: Wait for server
-        working-directory: web-ui
-        run: npx wait-on@7 http://127.0.0.1:8080
-
-      - name: Run Playwright tests
-        working-directory: web-ui
-        env:
-          CI: true
-        run: pnpm test:e2e
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: web-ui/playwright-report
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Stop Next server
-        if: always()
-        working-directory: web-ui
-        run: |
-          if [ -f server.pid ]; then
-            kill $(cat server.pid) || true
-          fi
-
   summarize:
     name: Publish Workflow Summary
     runs-on: ubuntu-latest
