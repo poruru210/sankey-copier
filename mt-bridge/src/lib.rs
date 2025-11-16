@@ -6,13 +6,8 @@ use std::sync::{LazyLock, Mutex};
 
 // Re-export message types for use in relay-server
 pub use msgpack::{
-    UnregisterMessage,
-    RequestConfigMessage,
-    HeartbeatMessage,
-    TradeSignalMessage,
-    ConfigMessage,
-    SymbolMapping,
-    TradeFilters,
+    ConfigMessage, HeartbeatMessage, RequestConfigMessage, SymbolMapping, TradeFilters,
+    TradeSignalMessage, UnregisterMessage,
 };
 
 // ZeroMQ socket types
@@ -22,8 +17,10 @@ pub const ZMQ_PUB: i32 = 1;
 pub const ZMQ_SUB: i32 = 2;
 
 // Global storage for contexts and sockets using handles
-static CONTEXTS: LazyLock<Mutex<Vec<Option<Box<zmq::Context>>>>> = LazyLock::new(|| Mutex::new(Vec::new()));
-static SOCKETS: LazyLock<Mutex<Vec<Option<Box<zmq::Socket>>>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static CONTEXTS: LazyLock<Mutex<Vec<Option<Box<zmq::Context>>>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+static SOCKETS: LazyLock<Mutex<Vec<Option<Box<zmq::Socket>>>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Create a new ZeroMQ context
 /// Returns an integer handle to the context, or -1 on error
@@ -88,7 +85,10 @@ pub extern "C" fn zmq_context_destroy(handle: i32) {
 #[no_mangle]
 pub extern "C" fn zmq_socket_create(context_handle: i32, socket_type: i32) -> i32 {
     if context_handle < 0 {
-        eprintln!("zmq_socket_create: invalid context handle {}", context_handle);
+        eprintln!(
+            "zmq_socket_create: invalid context handle {}",
+            context_handle
+        );
         return -1;
     }
 
@@ -394,7 +394,11 @@ pub unsafe extern "C" fn zmq_socket_send(socket_handle: i32, message: *const u16
 /// # Safety
 /// Data pointer must be valid and have at least len bytes
 #[no_mangle]
-pub unsafe extern "C" fn zmq_socket_send_binary(socket_handle: i32, data: *const u8, len: i32) -> i32 {
+pub unsafe extern "C" fn zmq_socket_send_binary(
+    socket_handle: i32,
+    data: *const u8,
+    len: i32,
+) -> i32 {
     if socket_handle < 0 {
         eprintln!("zmq_socket_send_binary: invalid socket handle");
         return 0;
