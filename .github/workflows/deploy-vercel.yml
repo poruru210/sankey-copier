@@ -49,15 +49,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --cwd web-ui --yes --environment=${{ inputs.deployment_target }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=${{ inputs.deployment_target }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
-        run: vercel build --cwd web-ui ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
         id: deploy
         run: |
-          URL=$(vercel deploy --cwd web-ui --prebuilt ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt ${{ inputs.deployment_target == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Comment PR with deployment URL
