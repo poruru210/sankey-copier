@@ -12,7 +12,7 @@ interface ApiClient {
 }
 
 // Hook for fetching and managing server logs
-export function useServerLogs(apiClient: ApiClient) {
+export function useServerLogs(apiClient: ApiClient, isExpanded?: boolean) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +37,13 @@ export function useServerLogs(apiClient: ApiClient) {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  // Fetch logs when expanded
+  useEffect(() => {
+    if (isExpanded) {
+      fetchLogs();
+    }
+  }, [isExpanded, fetchLogs]);
 
   // Auto-refresh logs
   useEffect(() => {
