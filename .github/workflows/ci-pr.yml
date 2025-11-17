@@ -292,22 +292,22 @@ jobs:
         working-directory: web-ui
         run: pnpm exec tsc --noEmit
 
-  deploy-preview:
-    name: Deploy Vercel Preview
-    needs:
-      - paths-filter
-      - manual-flags
-      - event-context
-      - web-lint
-      - web-typecheck
-    if: ${{ fromJSON(needs.event-context.outputs.is_pr) && !fromJSON(needs.event-context.outputs.pr_is_draft) && !fromJSON(needs.event-context.outputs.pr_is_from_fork) && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
-    uses: ./.github/workflows/deploy-vercel.yml
-    with:
-      deployment_target: preview
-      is_pr: ${{ fromJSON(needs.event-context.outputs.is_pr) }}
-      pr_number: ${{ needs.event-context.outputs.pr_number }}
-      pr_is_from_fork: ${{ fromJSON(needs.event-context.outputs.pr_is_from_fork) }}
-    secrets: inherit
+#  deploy-preview:
+#    name: Deploy Vercel Preview
+#    needs:
+#      - paths-filter
+#      - manual-flags
+#      - event-context
+#      - web-lint
+#      - web-typecheck
+#    if: ${{ fromJSON(needs.event-context.outputs.is_pr) && !fromJSON(needs.event-context.outputs.pr_is_draft) && !fromJSON(needs.event-context.outputs.pr_is_from_fork) && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
+#    uses: ./.github/workflows/deploy-vercel.yml
+#    with:
+#      deployment_target: preview
+#      is_pr: ${{ fromJSON(needs.event-context.outputs.is_pr) }}
+#      pr_number: ${{ needs.event-context.outputs.pr_number }}
+#      pr_is_from_fork: ${{ fromJSON(needs.event-context.outputs.pr_is_from_fork) }}
+#    secrets: inherit
 
   summarize:
     name: Publish Workflow Summary

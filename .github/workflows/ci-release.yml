@@ -213,20 +213,20 @@ jobs:
       create_release: ${{ startsWith(github.ref, 'refs/tags/v') }}
     secrets: inherit
 
-  deploy-production:
-    name: Deploy Production to Vercel
-    needs:
-      - version-info
-      - paths-filter
-      - manual-flags
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && needs.manual-flags.outputs.force_vercel == 'true')) }}
-    uses: ./.github/workflows/deploy-vercel.yml
-    with:
-      deployment_target: production
-      is_pr: false
-      pr_number: ''
-      pr_is_from_fork: false
-    secrets: inherit
+#  deploy-production:
+#    name: Deploy Production to Vercel
+#    needs:
+#      - version-info
+#      - paths-filter
+#      - manual-flags
+#    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && needs.manual-flags.outputs.force_vercel == 'true')) }}
+#    uses: ./.github/workflows/deploy-vercel.yml
+#    with:
+#      deployment_target: production
+#      is_pr: false
+#      pr_number: ''
+#      pr_is_from_fork: false
+#    secrets: inherit
 
   release-summary:
     name: Publish Release Summary
