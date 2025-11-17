@@ -228,6 +228,7 @@ struct CreateSettingsRequest {
     slave_account: String,
     lot_multiplier: Option<f64>,
     reverse_trade: bool,
+    enabled: Option<bool>, // Allow frontend to control initial enabled state
 }
 
 async fn create_settings(
@@ -243,7 +244,7 @@ async fn create_settings(
 
     let settings = CopySettings {
         id: 0,
-        enabled: true,
+        enabled: req.enabled.unwrap_or(false), // Respect frontend's enabled value, default to false
         master_account: req.master_account.clone(),
         slave_account: req.slave_account.clone(),
         lot_multiplier: req.lot_multiplier,
@@ -395,6 +396,11 @@ async fn toggle_settings(
             );
 
             refresh_settings_cache(&state).await;
+
+            // Send updated config to Slave EA for real-time reflection
+            if let Ok(Some(settings)) = state.db.get_copy_settings(id).await {
+                send_config_to_ea(&state, &settings).await;
+            }
 
             // Notify via WebSocket
             let _ = state
