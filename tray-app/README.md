@@ -87,6 +87,10 @@ cargo build --release
 - NSSM (Non-Sucking Service Manager)
 - Windows API libraries
 
+### CI Coverage
+
+Pull Request builds now include a Windows `Build Tray Application` job whenever files under `tray-app/` change, ensuring binaries stay green before merging.
+
 ## Usage
 
 The tray application provides:
