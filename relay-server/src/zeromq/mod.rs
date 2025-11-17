@@ -290,3 +290,6 @@ impl ZmqSender {
         self.publish(trade_group_id, signal).await
     }
 }
+
+#[cfg(test)]
+mod tests;
