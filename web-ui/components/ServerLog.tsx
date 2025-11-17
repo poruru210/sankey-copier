@@ -24,7 +24,7 @@ export function ServerLog() {
   const { title, noLogs, refreshButton, loading, error: errorText, toggleLabel } = useIntlayer('server-log');
 
   // Custom hooks
-  const { logs, isLoading, error, autoRefresh, setAutoRefresh, fetchLogs } = useServerLogs(apiClient);
+  const { logs, isLoading, error, autoRefresh, setAutoRefresh, fetchLogs } = useServerLogs(apiClient, isExpanded);
   const { height, isMaximized, handleResizeStart, toggleMaximize } = useLogViewerResize();
 
   // Layout adjustments

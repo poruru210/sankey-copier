@@ -177,11 +177,13 @@ cd installer
 - Rust 1.70以上
 - Node.js 20以上
 - MetaTrader 4 または 5
+- mise ([公式サイト](https://mise.jdx.dev/)) ※pnpm 10.20.0を固定管理します
 
 **手順:**
-1. Relay Server: `cd relay-server && cargo run --release`
-2. Web-UI開発サーバー: `cd web-ui && npm install && npm run dev`
-3. http://localhost:8080 でアクセス
+1. ルートディレクトリで `mise install` を実行して pnpm 10.20.0 を取得
+2. Relay Server: `cd relay-server && cargo run --release`
+3. Web-UI開発サーバー: `cd web-ui && pnpm install && pnpm dev`
+4. http://localhost:8080 でアクセス
 
 ## ドキュメント
 

@@ -25,6 +25,7 @@
 - **Windows 10/11** (MT4/MT5用)
 - **Rust 1.70以上**: https://www.rust-lang.org/tools/install
 - **Node.js 18以上**: https://nodejs.org/ (LTS版推奨)
+- **mise**: https://mise.jdx.dev/ （`.mise.toml`でpnpm 10.20.0を固定管理）
 - **MetaTrader 4 または 5**: ブローカーからダウンロード
 
 ### 確認コマンド
@@ -212,21 +213,17 @@ nssm status SankeyCopier
 ### 依存関係のインストール
 
 ```powershell
+# ルートでmiseを実行（pnpm 10.20.0を取得）
+mise install
+
 # WebUIフォルダに移動
 cd web-ui
-
-# pnpmのインストール（推奨）
-npm install -g pnpm
 
 # 依存関係のインストール
 pnpm install
 ```
 
-npm を使用する場合:
-
-```powershell
-npm install
-```
+※`npm install`でも動作しますが、本番と同じ依存ツリーを再現するためpnpm 10.20.0の使用を推奨しています。
 
 ### 開発サーバーの起動
 

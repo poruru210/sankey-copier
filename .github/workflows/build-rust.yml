@@ -119,7 +119,7 @@ jobs:
   build-tray-app:
     name: Build Tray Application
     runs-on: windows-latest
-    if: ${{ inputs.build_target == 'all' }}
+    if: ${{ inputs.build_target == 'all' || inputs.build_target == 'tray-app' }}
 
     steps:
       - name: Checkout code
