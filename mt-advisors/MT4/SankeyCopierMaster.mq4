@@ -11,6 +11,7 @@
 
 //--- Include common headers
 #include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierZmq.mqh>
 #include <SankeyCopier/SankeyCopierMessages.mqh>
 #include <SankeyCopier/SankeyCopierTrade.mqh>
 
@@ -49,30 +50,18 @@ int OnInit()
    Print("Server Address: ", ServerAddress);
    Print("Magic Filter: ", MagicFilter);
 
-   g_zmq_context = zmq_context_create();
+   // Initialize ZMQ context
+   g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
-   {
-      Print("ERROR: Failed to create ZMQ context");
       return INIT_FAILED;
-   }
 
-   g_zmq_socket = zmq_socket_create(g_zmq_context, ZMQ_PUSH);
+   // Create and connect PUSH socket
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, ServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
-      Print("ERROR: Failed to create ZMQ socket");
-      zmq_context_destroy(g_zmq_context);
+      CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
-
-   if(zmq_socket_connect(g_zmq_socket, ServerAddress) == 0)
-   {
-      Print("ERROR: Failed to connect to server");
-      zmq_socket_destroy(g_zmq_socket);
-      zmq_context_destroy(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   Print("Connected to server successfully");
 
    // Scan existing orders
    ScanExistingOrders();
@@ -99,8 +88,8 @@ void OnDeinit(const int reason)
    // Kill timer
    EventKillTimer();
 
-   if(g_zmq_socket >= 0) zmq_socket_destroy(g_zmq_socket);
-   if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
+   // Cleanup ZMQ resources
+   CleanupZmqResources(g_zmq_socket, g_zmq_context, "Master PUSH");
 
    Print("=== SankeyCopier Master EA (MT4) Stopped ===");
 }
