@@ -2,6 +2,7 @@
   "name": "sankey-copier-desktop",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@10.20.0",
   "description": "SANKEY Copier Desktop Application - Tauri v2",
   "scripts": {
     "tauri": "tauri"

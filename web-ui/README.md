@@ -24,9 +24,12 @@ Next.js 16 + Intlayer による多言語対応Web UI
 
 ## セットアップ
 
+このプロジェクトでは [mise](https://mise.jdx.dev/) で `pnpm 10.20.0` を固定管理しています。ルートディレクトリで `mise install` を実行してから、以下のコマンドを利用してください。
+
 ### 依存関係のインストール
 
 ```bash
+mise install
 pnpm install
 ```
 

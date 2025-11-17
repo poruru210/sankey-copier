@@ -72,7 +72,7 @@ $pnpmPath = Get-Command pnpm -ErrorAction SilentlyContinue
 if (-not $pnpmPath) {
     Write-Host "  -> ERROR: pnpm not found. Please install pnpm." -ForegroundColor Red
     Write-Host "  -> Visit: https://pnpm.io/installation" -ForegroundColor Red
-    Write-Host "  -> Quick install: npm install -g pnpm" -ForegroundColor Yellow
+    Write-Host "  -> Recommended: run 'mise install' at the repo root (pins pnpm 10.20.0)" -ForegroundColor Yellow
     exit 1
 }
 Write-Host "  -> pnpm found: $($pnpmPath.Source)" -ForegroundColor Green

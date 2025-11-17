@@ -32,7 +32,7 @@
 | 項目 | 要件 |
 |------|------|
 | **Node.js** | 18.0以上 |
-| **npm / pnpm / yarn** | 最新版推奨 |
+| **pnpm** | 10.20.0（mise管理） |
 | **ブラウザ** | Chrome/Firefox/Safari/Edge (最新版) |
 
 ### MT4/MT5 EA
@@ -126,10 +126,8 @@ brew install node
 #### 2-2. 依存関係のインストール
 
 ```bash
+mise install   # ルートでpnpm 10.20.0を取得
 cd web-ui
-
-# pnpm推奨（高速）
-npm install -g pnpm
 pnpm install
 
 # または npm

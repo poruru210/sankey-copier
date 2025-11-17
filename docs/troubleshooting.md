@@ -603,8 +603,8 @@ Slave EAパラメータ:
 
 3. **pnpmの使用（推奨）:**
    ```bash
-   # pnpmのインストール
-   npm install -g pnpm
+   # ルートでmise installを実行してpnpm 10.20.0を取得
+   mise install
 
    # pnpmで依存関係をインストール
    pnpm install
