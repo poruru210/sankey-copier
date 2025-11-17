@@ -22,19 +22,8 @@
 #endif
 #endif
 
-// Import ZeroMQ DLL functions
-#import "sankey_copier_zmq.dll"
-   HANDLE_TYPE zmq_context_create();
-   HANDLE_TYPE zmq_socket_create(HANDLE_TYPE context, int socket_type);
-   int         zmq_socket_connect(HANDLE_TYPE socket, string address);
-   int         zmq_socket_subscribe(HANDLE_TYPE socket, string topic);
-   int         zmq_socket_destroy(HANDLE_TYPE socket);
-   int         zmq_context_destroy(HANDLE_TYPE context);
-#import
-
-// ZeroMQ socket types
-#define ZMQ_PUSH 8
-#define ZMQ_SUB  2
+// Note: ZMQ DLL functions are imported in SankeyCopierCommon.mqh
+// Note: ZMQ socket type constants are defined in SankeyCopierCommon.mqh
 
 //+------------------------------------------------------------------+
 //| Initialize ZeroMQ context                                         |
