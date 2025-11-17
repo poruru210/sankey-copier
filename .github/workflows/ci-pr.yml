@@ -225,6 +225,16 @@ jobs:
       file_version: ${{ needs.version-info.outputs.file_version }}
       build_target: rust-dll
 
+  rust-server:
+    name: Build Relay Server
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
+    uses: ./.github/workflows/build-rust.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+      build_target: relay-server
+
   mql-build:
     name: Compile MQL Advisors
     needs: [version-info, paths-filter, manual-flags]
