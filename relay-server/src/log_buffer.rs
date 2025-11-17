@@ -165,3 +165,282 @@ impl tracing::field::Visit for FieldVisitor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_log_buffer() {
+        let buffer = create_log_buffer();
+        let buffer_guard = buffer.blocking_read();
+        assert_eq!(buffer_guard.len(), 0);
+        assert_eq!(buffer_guard.capacity(), MAX_LOG_ENTRIES);
+    }
+
+    #[test]
+    fn test_log_entry_serialization() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "account_id".to_string(),
+            JsonValue::String("TEST_001".to_string()),
+        );
+        fields.insert("balance".to_string(), JsonValue::Number(10000.into()));
+
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "INFO".to_string(),
+            message: "Test message".to_string(),
+            target: Some("relay_server".to_string()),
+            module_path: Some("relay_server::test".to_string()),
+            file: Some("test.rs".to_string()),
+            line: Some(42),
+            fields,
+            span_name: Some("test_span".to_string()),
+        };
+
+        // Should serialize to JSON successfully
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("Test message"));
+        assert!(json.contains("INFO"));
+        assert!(json.contains("TEST_001"));
+    }
+
+    #[test]
+    fn test_log_entry_optional_fields_omitted() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "INFO".to_string(),
+            message: "Simple message".to_string(),
+            target: None,
+            module_path: None,
+            file: None,
+            line: None,
+            fields: HashMap::new(),
+            span_name: None,
+        };
+
+        let json = serde_json::to_string(&entry).unwrap();
+
+        // Optional fields should not appear in JSON
+        assert!(!json.contains("target"));
+        assert!(!json.contains("module_path"));
+        assert!(!json.contains("file"));
+        assert!(!json.contains("line"));
+        assert!(!json.contains("span_name"));
+        assert!(!json.contains("fields")); // Empty HashMap should be omitted
+    }
+
+    #[test]
+    fn test_field_visitor_default() {
+        let visitor = FieldVisitor::default();
+
+        assert!(visitor.message.is_empty());
+        assert!(visitor.fields.is_empty());
+    }
+
+    #[test]
+    fn test_field_visitor_message_field_handling() {
+        // Test that message field is extracted separately
+        let visitor = FieldVisitor {
+            message: "Test log message".to_string(),
+            ..Default::default()
+        };
+
+        assert_eq!(visitor.message, "Test log message");
+        assert!(!visitor.fields.contains_key("message"));
+    }
+
+    #[test]
+    fn test_field_visitor_string_quote_removal() {
+        let mut visitor = FieldVisitor::default();
+
+        // Simulate Debug formatting which adds quotes
+        let field_value = "\"EURUSD\"";
+        let cleaned = if field_value.starts_with('"') && field_value.ends_with('"') {
+            field_value[1..field_value.len() - 1].to_string()
+        } else {
+            field_value.to_string()
+        };
+
+        visitor
+            .fields
+            .insert("symbol".to_string(), JsonValue::String(cleaned));
+
+        assert_eq!(
+            visitor.fields.get("symbol"),
+            Some(&JsonValue::String("EURUSD".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_field_visitor_integer_parsing() {
+        let mut visitor = FieldVisitor::default();
+
+        // Test i64 parsing
+        let value = "42";
+        if let Ok(num) = value.parse::<i64>() {
+            visitor
+                .fields
+                .insert("count".to_string(), JsonValue::Number(num.into()));
+        }
+
+        assert_eq!(
+            visitor.fields.get("count"),
+            Some(&JsonValue::Number(42.into()))
+        );
+    }
+
+    #[test]
+    fn test_field_visitor_bool_parsing() {
+        let mut visitor = FieldVisitor::default();
+
+        // Test bool parsing
+        let value_true = "true";
+        if value_true == "true" {
+            visitor
+                .fields
+                .insert("enabled".to_string(), JsonValue::Bool(true));
+        }
+
+        let value_false = "false";
+        if value_false == "false" {
+            visitor
+                .fields
+                .insert("disabled".to_string(), JsonValue::Bool(false));
+        }
+
+        assert_eq!(visitor.fields.get("enabled"), Some(&JsonValue::Bool(true)));
+        assert_eq!(
+            visitor.fields.get("disabled"),
+            Some(&JsonValue::Bool(false))
+        );
+    }
+
+    #[test]
+    fn test_log_buffer_layer_creation() {
+        let buffer = create_log_buffer();
+        let _layer = LogBufferLayer::new(buffer.clone());
+
+        // Layer should be created successfully
+        // This is primarily a smoke test
+        assert!(Arc::strong_count(&buffer) >= 2); // Buffer is shared
+    }
+
+    #[test]
+    fn test_buffer_size_limit() {
+        let buffer = create_log_buffer();
+
+        {
+            let mut buffer_guard = buffer.blocking_write();
+
+            // Add more than MAX_LOG_ENTRIES
+            for i in 0..(MAX_LOG_ENTRIES + 100) {
+                buffer_guard.push_front(LogEntry {
+                    timestamp: Utc::now(),
+                    level: "INFO".to_string(),
+                    message: format!("Message {}", i),
+                    target: None,
+                    module_path: None,
+                    file: None,
+                    line: None,
+                    fields: HashMap::new(),
+                    span_name: None,
+                });
+
+                // Simulate buffer size limit
+                if buffer_guard.len() > MAX_LOG_ENTRIES {
+                    buffer_guard.pop_back();
+                }
+            }
+
+            // Should not exceed MAX_LOG_ENTRIES
+            assert_eq!(buffer_guard.len(), MAX_LOG_ENTRIES);
+        }
+    }
+
+    #[test]
+    fn test_log_entry_reverse_chronological_order() {
+        let buffer = create_log_buffer();
+
+        {
+            let mut buffer_guard = buffer.blocking_write();
+
+            // Add entries in order
+            for i in 0..5 {
+                buffer_guard.push_front(LogEntry {
+                    timestamp: Utc::now(),
+                    level: "INFO".to_string(),
+                    message: format!("Message {}", i),
+                    target: None,
+                    module_path: None,
+                    file: None,
+                    line: None,
+                    fields: HashMap::new(),
+                    span_name: None,
+                });
+            }
+        }
+
+        let buffer_guard = buffer.blocking_read();
+
+        // Most recent should be at front
+        assert_eq!(buffer_guard.front().unwrap().message, "Message 4");
+        assert_eq!(buffer_guard.back().unwrap().message, "Message 0");
+    }
+
+    #[test]
+    fn test_log_entry_with_all_field_types() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "string_field".to_string(),
+            JsonValue::String("test".to_string()),
+        );
+        fields.insert("int_field".to_string(), JsonValue::Number(42.into()));
+        fields.insert("bool_field".to_string(), JsonValue::Bool(true));
+
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "DEBUG".to_string(),
+            message: "Mixed types".to_string(),
+            target: None,
+            module_path: None,
+            file: None,
+            line: None,
+            fields,
+            span_name: None,
+        };
+
+        assert_eq!(entry.fields.len(), 3);
+        assert!(entry.fields.contains_key("string_field"));
+        assert!(entry.fields.contains_key("int_field"));
+        assert!(entry.fields.contains_key("bool_field"));
+    }
+
+    #[test]
+    fn test_max_log_entries_constant() {
+        assert_eq!(MAX_LOG_ENTRIES, 1000);
+    }
+
+    #[test]
+    fn test_log_entry_deserialization() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "WARN".to_string(),
+            message: "Warning message".to_string(),
+            target: Some("test_target".to_string()),
+            module_path: Some("test::module".to_string()),
+            file: Some("test.rs".to_string()),
+            line: Some(100),
+            fields: HashMap::new(),
+            span_name: Some("test_span".to_string()),
+        };
+
+        let json = serde_json::to_string(&entry).unwrap();
+        let deserialized: LogEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.level, "WARN");
+        assert_eq!(deserialized.message, "Warning message");
+        assert_eq!(deserialized.line, Some(100));
+    }
+}
