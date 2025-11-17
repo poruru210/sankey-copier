@@ -87,6 +87,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       rust: ${{ steps.filter.outputs.rust }}
       mql: ${{ steps.filter.outputs.mql }}
+      tray: ${{ steps.filter.outputs.tray }}
       desktop: ${{ steps.filter.outputs.desktop }}
       installer: ${{ steps.filter.outputs.installer }}
       docs: ${{ steps.filter.outputs.docs }}
@@ -110,6 +111,8 @@ jobs:
               - 'mt-bridge/**'
               - 'tray-app/**'
               - '.github/workflows/build-rust.yml'
+            tray:
+              - 'tray-app/**'
             mql:
               - 'mt-advisors/**'
               - '.github/workflows/build-mql.yml'
@@ -225,6 +228,16 @@ jobs:
       file_version: ${{ needs.version-info.outputs.file_version }}
       build_target: rust-dll
 
+  tray-build:
+    name: Build Tray Application
+    needs: [version-info, paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.tray == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
+    uses: ./.github/workflows/build-rust.yml
+    with:
+      package_version: ${{ needs.version-info.outputs.package_version }}
+      file_version: ${{ needs.version-info.outputs.file_version }}
+      build_target: tray-app
+
   mql-build:
     name: Compile MQL Advisors
     needs: [version-info, paths-filter, manual-flags]
@@ -316,6 +329,7 @@ jobs:
           | --- | --- | --- |
           | Web | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_web }}` |
           | Rust | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
+          | Tray | `${{ needs.paths-filter.outputs.tray }}` | `${{ needs.manual-flags.outputs.force_rust }}` |
           | mt-bridge DLL | `${{ needs.paths-filter.outputs.rust }}` | `${{ needs.manual-flags.outputs.force_rust_dll }}` |
           | MQL | `${{ needs.paths-filter.outputs.mql }}` | `${{ needs.manual-flags.outputs.force_mql }}` |
           | Preview Deploy | `${{ needs.paths-filter.outputs.web }}` | `${{ needs.manual-flags.outputs.force_vercel }}` |
