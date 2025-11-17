@@ -1,12 +1,6 @@
 import type { NextConfig } from 'next';
 import { withIntlayer } from 'next-intlayer/server';
 
-type ExtendedNextConfig = NextConfig & {
-  eslint?: {
-    dirs?: string[];
-  };
-};
-
 // Build mode selection via environment variable
 // - 'export': For Tauri desktop app - static HTML/CSS/JS only
 // - undefined (default): For Vercel deployment - standard Next.js SSR/SSG
@@ -14,7 +8,7 @@ const buildMode = process.env.NEXT_BUILD_MODE;
 const isProd = process.env.NODE_ENV === 'production';
 const internalHost = process.env.TAURI_DEV_HOST || 'localhost';
 
-const nextConfig: ExtendedNextConfig = {
+const nextConfig: NextConfig = {
   // Output mode: export for Tauri desktop app, default for Vercel
   output: buildMode === 'export' ? 'export' : undefined,
 
@@ -27,11 +21,6 @@ const nextConfig: ExtendedNextConfig = {
         hostname: 'www.google.com',
       },
     ],
-  },
-
-  // Explicitly scope ESLint to existing source directories
-  eslint: {
-    dirs: ['app', 'components', 'hooks', 'lib', 'scripts', 'types', 'utils', '__tests__'],
   },
 
   // For Tauri dev mode - use localhost:8080, for production use relative paths
