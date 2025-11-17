@@ -31,7 +31,9 @@ disable = true  # Set to true to disable CORS restrictions (allows all origins)
 #   - http://localhost:{webui_port}
 #   - http://127.0.0.1:{webui_port}
 # Additional custom origins can be specified below (e.g., for Vercel deployment, development ports)
-additional_origins = []
+additional_origins = [
+	"https://copier.sankey.trade",
+]
 
 [logging]
 # Log file configuration
