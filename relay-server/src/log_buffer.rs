@@ -181,7 +181,10 @@ mod tests {
     #[test]
     fn test_log_entry_serialization() {
         let mut fields = HashMap::new();
-        fields.insert("account_id".to_string(), JsonValue::String("TEST_001".to_string()));
+        fields.insert(
+            "account_id".to_string(),
+            JsonValue::String("TEST_001".to_string()),
+        );
         fields.insert("balance".to_string(), JsonValue::Number(10000.into()));
 
         let entry = LogEntry {
@@ -238,10 +241,11 @@ mod tests {
 
     #[test]
     fn test_field_visitor_message_field_handling() {
-        let mut visitor = FieldVisitor::default();
-
         // Test that message field is extracted separately
-        visitor.message = "Test log message".to_string();
+        let visitor = FieldVisitor {
+            message: "Test log message".to_string(),
+            ..Default::default()
+        };
 
         assert_eq!(visitor.message, "Test log message");
         assert!(!visitor.fields.contains_key("message"));
@@ -259,7 +263,9 @@ mod tests {
             field_value.to_string()
         };
 
-        visitor.fields.insert("symbol".to_string(), JsonValue::String(cleaned));
+        visitor
+            .fields
+            .insert("symbol".to_string(), JsonValue::String(cleaned));
 
         assert_eq!(
             visitor.fields.get("symbol"),
@@ -274,7 +280,9 @@ mod tests {
         // Test i64 parsing
         let value = "42";
         if let Ok(num) = value.parse::<i64>() {
-            visitor.fields.insert("count".to_string(), JsonValue::Number(num.into()));
+            visitor
+                .fields
+                .insert("count".to_string(), JsonValue::Number(num.into()));
         }
 
         assert_eq!(
@@ -290,22 +298,29 @@ mod tests {
         // Test bool parsing
         let value_true = "true";
         if value_true == "true" {
-            visitor.fields.insert("enabled".to_string(), JsonValue::Bool(true));
+            visitor
+                .fields
+                .insert("enabled".to_string(), JsonValue::Bool(true));
         }
 
         let value_false = "false";
         if value_false == "false" {
-            visitor.fields.insert("disabled".to_string(), JsonValue::Bool(false));
+            visitor
+                .fields
+                .insert("disabled".to_string(), JsonValue::Bool(false));
         }
 
         assert_eq!(visitor.fields.get("enabled"), Some(&JsonValue::Bool(true)));
-        assert_eq!(visitor.fields.get("disabled"), Some(&JsonValue::Bool(false)));
+        assert_eq!(
+            visitor.fields.get("disabled"),
+            Some(&JsonValue::Bool(false))
+        );
     }
 
     #[test]
     fn test_log_buffer_layer_creation() {
         let buffer = create_log_buffer();
-        let layer = LogBufferLayer::new(buffer.clone());
+        let _layer = LogBufferLayer::new(buffer.clone());
 
         // Layer should be created successfully
         // This is primarily a smoke test
@@ -377,7 +392,10 @@ mod tests {
     #[test]
     fn test_log_entry_with_all_field_types() {
         let mut fields = HashMap::new();
-        fields.insert("string_field".to_string(), JsonValue::String("test".to_string()));
+        fields.insert(
+            "string_field".to_string(),
+            JsonValue::String("test".to_string()),
+        );
         fields.insert("int_field".to_string(), JsonValue::Number(42.into()));
         fields.insert("bool_field".to_string(), JsonValue::Bool(true));
 
@@ -426,4 +444,3 @@ mod tests {
         assert_eq!(deserialized.line, Some(100));
     }
 }
-

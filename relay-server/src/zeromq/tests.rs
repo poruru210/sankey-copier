@@ -1,5 +1,7 @@
 use super::*;
-use crate::models::{HeartbeatMessage, OrderType, RequestConfigMessage, TradeAction, TradeSignal, UnregisterMessage};
+use crate::models::{
+    HeartbeatMessage, OrderType, RequestConfigMessage, TradeAction, TradeSignal, UnregisterMessage,
+};
 use chrono::Utc;
 
 /// Test that TradeSignal messages can be distinguished by the presence of 'action' field
@@ -80,7 +82,10 @@ fn test_message_discriminator_request_config() {
 
     // Should successfully deserialize as MessageTypeDiscriminator
     let discriminator: MessageTypeDiscriminator = rmp_serde::from_slice(&bytes).unwrap();
-    assert_eq!(discriminator.message_type, Some("RequestConfig".to_string()));
+    assert_eq!(
+        discriminator.message_type,
+        Some("RequestConfig".to_string())
+    );
     assert!(discriminator.action.is_none());
 
     // Should successfully deserialize as RequestConfigMessage
@@ -191,11 +196,7 @@ fn test_publish_message_topic_format() {
 /// Test that different trade actions serialize/deserialize correctly
 #[test]
 fn test_trade_action_variants() {
-    let actions = vec![
-        TradeAction::Open,
-        TradeAction::Close,
-        TradeAction::Modify,
-    ];
+    let actions = vec![TradeAction::Open, TradeAction::Close, TradeAction::Modify];
 
     for action in actions {
         let signal = TradeSignal {

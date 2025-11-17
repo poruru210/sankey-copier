@@ -535,7 +535,10 @@ mod tests {
             retrieved.filters.blocked_symbols,
             Some(vec!["USDJPY".to_string()])
         );
-        assert_eq!(retrieved.filters.allowed_magic_numbers, Some(vec![100, 200]));
+        assert_eq!(
+            retrieved.filters.allowed_magic_numbers,
+            Some(vec![100, 200])
+        );
         assert_eq!(retrieved.filters.blocked_magic_numbers, Some(vec![999]));
     }
 
@@ -558,7 +561,7 @@ mod tests {
         let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
 
         assert_eq!(retrieved.lot_multiplier, Some(2.0));
-        assert_eq!(retrieved.reverse_trade, true);
+        assert!(retrieved.reverse_trade);
     }
 
     #[tokio::test]
@@ -572,13 +575,13 @@ mod tests {
         db.update_enabled_status(id, false).await.unwrap();
 
         let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
-        assert_eq!(retrieved.enabled, false);
+        assert!(!retrieved.enabled);
 
         // Enable again
         db.update_enabled_status(id, true).await.unwrap();
 
         let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
-        assert_eq!(retrieved.enabled, true);
+        assert!(retrieved.enabled);
     }
 
     #[tokio::test]
@@ -618,23 +621,21 @@ mod tests {
         db.delete_copy_settings(id).await.unwrap();
 
         // Related records should also be deleted (CASCADE)
-        let mappings_count: i32 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM symbol_mappings WHERE setting_id = ?"
-        )
-        .bind(id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let mappings_count: i32 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM symbol_mappings WHERE setting_id = ?")
+                .bind(id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
 
         assert_eq!(mappings_count, 0);
 
-        let filters_count: i32 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM trade_filters WHERE setting_id = ?"
-        )
-        .bind(id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let filters_count: i32 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM trade_filters WHERE setting_id = ?")
+                .bind(id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
 
         assert_eq!(filters_count, 0);
     }
@@ -749,4 +750,3 @@ mod tests {
         assert!(result.is_ok());
     }
 }
-
