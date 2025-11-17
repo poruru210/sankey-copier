@@ -167,12 +167,6 @@ jobs:
             echo "force_vercel=$FORCE_VERCEL"
           } >> "$GITHUB_OUTPUT"
 
-  web-build:
-    name: Build Web UI
-    needs: [version-info, paths-filter, manual-flags]
-    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
-    uses: ./.github/workflows/build-web.yml
-
   build-rust:
     name: Build Rust Artifacts
     needs: [version-info, paths-filter, manual-flags]
@@ -225,8 +219,7 @@ jobs:
       - version-info
       - paths-filter
       - manual-flags
-      - web-build
-    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+    if: ${{ (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && needs.manual-flags.outputs.force_vercel == 'true')) }}
     uses: ./.github/workflows/deploy-vercel.yml
     with:
       deployment_target: production
