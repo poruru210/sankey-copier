@@ -134,23 +134,25 @@ void InitializePanel(int x_offset = 10, int y_offset = 20)
    CreatePanelBackground(PANEL_PREFIX + "BG", x, y, panel_width, panel_height, PANEL_COLOR_BG);
 
    // Create title (centered)
+   // Background: right edge at x(10), left edge at x+width(210)
    CreatePanelLabel(PANEL_PREFIX + "Title", x + 100, y + 3, "Sankey Copier - Slave", PANEL_COLOR_TITLE, 9);
 
-   // Create labels (left column) - ANCHOR_RIGHT_UPPER means larger x = more left
-   CreatePanelLabel(PANEL_PREFIX + "StatusLabel", x + 190, y + 20, "Status:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "MasterLabel", x + 190, y + 35, "Master:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "LotLabel", x + 190, y + 50, "Lot Mult:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "ReverseLabel", x + 190, y + 65, "Reverse:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "VersionLabel", x + 190, y + 80, "Config Ver:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "SymbolsLabel", x + 190, y + 95, "Symbols:", PANEL_COLOR_LABEL);
+   // Create labels (left column) - positioned 5px from left edge of panel
+   // Left edge of panel = x + width = 10 + 200 = 210, so labels at x + 125 (right-aligned within panel)
+   CreatePanelLabel(PANEL_PREFIX + "StatusLabel", x + 125, y + 20, "Status:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "MasterLabel", x + 125, y + 35, "Master:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "LotLabel", x + 125, y + 50, "Lot Mult:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "ReverseLabel", x + 125, y + 65, "Reverse:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "VersionLabel", x + 125, y + 80, "Config Ver:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "SymbolsLabel", x + 125, y + 95, "Symbols:", PANEL_COLOR_LABEL);
 
-   // Create value labels (right column) - will be updated dynamically
-   CreatePanelLabel(PANEL_PREFIX + "Status", x + 15, y + 20, "DISABLED", PANEL_COLOR_DISABLED);
-   CreatePanelLabel(PANEL_PREFIX + "Master", x + 15, y + 35, "N/A", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Lot", x + 15, y + 50, "1.00x", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Reverse", x + 15, y + 65, "OFF", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Version", x + 15, y + 80, "0", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Symbols", x + 15, y + 95, "0", PANEL_COLOR_VALUE);
+   // Create value labels (right column) - positioned at middle of panel
+   CreatePanelLabel(PANEL_PREFIX + "Status", x + 85, y + 20, "DISABLED", PANEL_COLOR_DISABLED);
+   CreatePanelLabel(PANEL_PREFIX + "Master", x + 85, y + 35, "N/A", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Lot", x + 85, y + 50, "1.00x", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Reverse", x + 85, y + 65, "OFF", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Version", x + 85, y + 80, "0", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Symbols", x + 85, y + 95, "0", PANEL_COLOR_VALUE);
 
    Print("Configuration panel initialized");
 }
