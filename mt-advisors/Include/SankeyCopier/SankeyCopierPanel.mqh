@@ -24,7 +24,8 @@
 #define PANEL_PREFIX "SankeyCopierPanel_"
 #define PANEL_FONT "Arial"
 #define PANEL_FONT_SIZE 8
-#define PANEL_COLOR_BG clrDarkSlateGray
+#define PANEL_COLOR_BG C'40,40,50'        // Dark semi-transparent background
+#define PANEL_COLOR_BORDER clrDimGray      // Border color for better visibility
 #define PANEL_COLOR_TITLE clrWhite
 #define PANEL_COLOR_LABEL clrLightGray
 #define PANEL_COLOR_VALUE clrWhite
@@ -93,7 +94,9 @@ void CreatePanelBackground(string name, int x, int y, int width, int height, col
       ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_color);
       ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-      ObjectSetInteger(0, name, OBJPROP_BACK, true);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, PANEL_COLOR_BORDER);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);  // Draw in foreground for better visibility
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
    #else
@@ -105,7 +108,9 @@ void CreatePanelBackground(string name, int x, int y, int width, int height, col
       ObjectSet(name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSet(name, OBJPROP_BGCOLOR, bg_color);
       ObjectSet(name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-      ObjectSet(name, OBJPROP_BACK, true);
+      ObjectSet(name, OBJPROP_COLOR, PANEL_COLOR_BORDER);
+      ObjectSet(name, OBJPROP_WIDTH, 1);
+      ObjectSet(name, OBJPROP_BACK, false);  // Draw in foreground for better visibility
       ObjectSet(name, OBJPROP_SELECTABLE, false);
       ObjectSet(name, OBJPROP_HIDDEN, true);
    #endif
@@ -128,24 +133,24 @@ void InitializePanel(int x_offset = 10, int y_offset = 20)
    // Create background
    CreatePanelBackground(PANEL_PREFIX + "BG", x, y, panel_width, panel_height, PANEL_COLOR_BG);
 
-   // Create title
-   CreatePanelLabel(PANEL_PREFIX + "Title", x + 5, y + 3, "Sankey Copier - Slave", PANEL_COLOR_TITLE, 9);
+   // Create title (centered)
+   CreatePanelLabel(PANEL_PREFIX + "Title", x + 100, y + 3, "Sankey Copier - Slave", PANEL_COLOR_TITLE, 9);
 
-   // Create labels (left column)
-   CreatePanelLabel(PANEL_PREFIX + "StatusLabel", x + 5, y + 20, "Status:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "MasterLabel", x + 5, y + 35, "Master:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "LotLabel", x + 5, y + 50, "Lot Mult:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "ReverseLabel", x + 5, y + 65, "Reverse:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "VersionLabel", x + 5, y + 80, "Config Ver:", PANEL_COLOR_LABEL);
-   CreatePanelLabel(PANEL_PREFIX + "SymbolsLabel", x + 5, y + 95, "Symbols:", PANEL_COLOR_LABEL);
+   // Create labels (left column) - ANCHOR_RIGHT_UPPER means larger x = more left
+   CreatePanelLabel(PANEL_PREFIX + "StatusLabel", x + 190, y + 20, "Status:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "MasterLabel", x + 190, y + 35, "Master:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "LotLabel", x + 190, y + 50, "Lot Mult:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "ReverseLabel", x + 190, y + 65, "Reverse:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "VersionLabel", x + 190, y + 80, "Config Ver:", PANEL_COLOR_LABEL);
+   CreatePanelLabel(PANEL_PREFIX + "SymbolsLabel", x + 190, y + 95, "Symbols:", PANEL_COLOR_LABEL);
 
    // Create value labels (right column) - will be updated dynamically
-   CreatePanelLabel(PANEL_PREFIX + "Status", x + 70, y + 20, "DISABLED", PANEL_COLOR_DISABLED);
-   CreatePanelLabel(PANEL_PREFIX + "Master", x + 70, y + 35, "N/A", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Lot", x + 70, y + 50, "1.00x", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Reverse", x + 70, y + 65, "OFF", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Version", x + 70, y + 80, "0", PANEL_COLOR_VALUE);
-   CreatePanelLabel(PANEL_PREFIX + "Symbols", x + 70, y + 95, "0", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Status", x + 15, y + 20, "DISABLED", PANEL_COLOR_DISABLED);
+   CreatePanelLabel(PANEL_PREFIX + "Master", x + 15, y + 35, "N/A", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Lot", x + 15, y + 50, "1.00x", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Reverse", x + 15, y + 65, "OFF", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Version", x + 15, y + 80, "0", PANEL_COLOR_VALUE);
+   CreatePanelLabel(PANEL_PREFIX + "Symbols", x + 15, y + 95, "0", PANEL_COLOR_VALUE);
 
    Print("Configuration panel initialized");
 }
