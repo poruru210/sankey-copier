@@ -152,6 +152,9 @@ private:
    color    m_title_color;
 
    // Internal coordinate calculation methods
+   int      CalculateBackgroundX();
+   int      CalculateColumnX(int column_index);
+   int      CalculateTitleX();
    int      CalculateRowY(int row_index);
    int      CalculatePanelHeight();
    void     UpdateBackgroundSize();
@@ -247,17 +250,17 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
 
    // Default 2-column layout
    ArrayResize(m_column_widths, 2);
-   m_column_widths[0] = m_x_offset + m_panel_width - m_padding_left;   // Left column (labels)
-   m_column_widths[1] = m_x_offset + m_padding_right;                  // Right column (values)
+   m_column_widths[0] = CalculateColumnX(0);   // Left column (labels)
+   m_column_widths[1] = CalculateColumnX(1);   // Right column (values)
 
    // Create background with initial size (title only)
    // For CORNER_RIGHT_UPPER: XDISTANCE is the left edge position from right
    // To fit panel in screen: left_edge = x_offset + panel_width
    int initial_height = m_padding_top + m_title_height + m_padding_bottom;
    CreatePanelBackground(GenerateObjectName("BG"),
-                        m_x_offset + m_panel_width,  // Left edge at 210px from right
+                        CalculateBackgroundX(),  // Calculate left edge position
                         m_y_offset,
-                        m_panel_width,               // Width 200px (right edge at 10px)
+                        m_panel_width,
                         initial_height,
                         m_bg_color);
 
@@ -507,7 +510,7 @@ void CGridPanel::SetTitle(string title, color clr = -1)
       clr = m_title_color;
 
    string title_obj = GenerateObjectName("Title");
-   int title_x = m_x_offset + m_panel_width / 2 + 50;  // Approximate center
+   int title_x = CalculateTitleX();  // Use encapsulated calculation
    int title_y = m_y_offset + m_padding_top;
 
    CreatePanelLabel(title_obj, title_x, title_y, title, clr, 9);
@@ -576,6 +579,48 @@ void CGridPanel::Delete()
    ClearRows();
 
    Print("Grid panel deleted: ", m_prefix);
+}
+
+//+------------------------------------------------------------------+
+//| Calculate background panel X position (left edge from right)    |
+//| For CORNER_RIGHT_UPPER: XDISTANCE specifies left edge position  |
+//| Returns: X coordinate for background panel                      |
+//+------------------------------------------------------------------+
+int CGridPanel::CalculateBackgroundX()
+{
+   // Left edge = x_offset + panel_width (so right edge = x_offset)
+   return m_x_offset + m_panel_width;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate column X position                                      |
+//| Parameters:                                                       |
+//|   column_index - Column number (0 = left, 1 = right, etc.)     |
+//| Returns: X coordinate for column text                           |
+//+------------------------------------------------------------------+
+int CGridPanel::CalculateColumnX(int column_index)
+{
+   if(column_index == 0)
+   {
+      // Left column: labels aligned to left side of panel
+      return m_x_offset + m_panel_width - m_padding_left;
+   }
+   else
+   {
+      // Right column(s): values aligned to right side of panel
+      return m_x_offset + m_padding_right;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate title X position (centered)                            |
+//| Returns: X coordinate for centered title text                   |
+//+------------------------------------------------------------------+
+int CGridPanel::CalculateTitleX()
+{
+   // Center of panel for ANCHOR_RIGHT_UPPER
+   // Center point = x_offset + (panel_width / 2)
+   return m_x_offset + m_panel_width / 2;
 }
 
 //+------------------------------------------------------------------+
