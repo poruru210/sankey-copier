@@ -37,7 +37,7 @@
 #define TITLE_HEIGHT_EXTRA_PADDING 5       // Extra padding for title row height
 #define DEFAULT_X_OFFSET 10                // Default distance from right edge
 #define DEFAULT_Y_OFFSET 20                // Default distance from top edge
-#define DEFAULT_PANEL_WIDTH 200            // Default panel width in pixels
+#define DEFAULT_PANEL_WIDTH 280            // Default panel width in pixels
 #define DEFAULT_ROW_HEIGHT 15              // Default row height in pixels
 #define DEFAULT_TITLE_HEIGHT 20            // Default title row height in pixels
 #define DEFAULT_PADDING_TOP 3              // Default top padding
@@ -135,6 +135,36 @@ void CreatePanelBackground(string name, int x, int y, int width, int height, col
 }
 
 //+------------------------------------------------------------------+
+//| Truncate text to fit maximum character count                    |
+//| Parameters:                                                       |
+//|   text        - Original text string                            |
+//|   max_chars   - Maximum number of characters                    |
+//| Returns: Truncated text with "..." if needed                    |
+//+------------------------------------------------------------------+
+string TruncateText(string text, int max_chars)
+{
+   int text_len = StringLen(text);
+
+   // If text fits, return as-is
+   if(text_len <= max_chars)
+      return text;
+
+   // If max_chars is too small for ellipsis, just return truncated
+   if(max_chars < 4)
+      return StringSubstr(text, 0, max_chars);
+
+   // Show beginning and end with "..." in middle
+   // Example: "Exness_Technologies_Ltd_277195421" -> "Exness_Tech...95421"
+   int prefix_len = (max_chars - 3) / 2;
+   int suffix_len = max_chars - 3 - prefix_len;
+
+   string prefix = StringSubstr(text, 0, prefix_len);
+   string suffix = StringSubstr(text, text_len - suffix_len, suffix_len);
+
+   return prefix + "..." + suffix;
+}
+
+//+------------------------------------------------------------------+
 //| Dynamic Grid Layout Panel Class                                  |
 //| Manages rows and columns with automatic positioning              |
 //+------------------------------------------------------------------+
@@ -200,7 +230,7 @@ public:
    void     SetTitle(string title, color clr = -1);
 
    // Slave EA panel helpers (high-level update methods)
-   bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_");
+   bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
    void     UpdateStatusRow(bool enabled);
    void     UpdateMasterRow(string master_name);
    void     UpdateLotMultiplierRow(double multiplier);
@@ -543,13 +573,14 @@ void CGridPanel::SetTitle(string title, color clr = -1)
 //+------------------------------------------------------------------+
 //| Initialize Slave EA panel with standard layout                  |
 //| Parameters:                                                       |
-//|   prefix - Object name prefix for panel objects                |
+//|   prefix      - Object name prefix for panel objects            |
+//|   panel_width - Panel width in pixels (default: 280)           |
 //| Returns: true on success                                         |
 //+------------------------------------------------------------------+
-bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_")
+bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH)
 {
-   // Initialize panel with standard dimensions
-   if(!Initialize(prefix, DEFAULT_X_OFFSET, DEFAULT_Y_OFFSET, DEFAULT_PANEL_WIDTH, DEFAULT_ROW_HEIGHT))
+   // Initialize panel with specified or default dimensions
+   if(!Initialize(prefix, DEFAULT_X_OFFSET, DEFAULT_Y_OFFSET, panel_width, DEFAULT_ROW_HEIGHT))
       return false;
 
    // Set title
@@ -599,12 +630,17 @@ void CGridPanel::UpdateStatusRow(bool enabled)
 
 //+------------------------------------------------------------------+
 //| Update master row                                                |
+//| Note: Long master names are truncated to fit panel width        |
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateMasterRow(string master_name)
 {
+   // Truncate master name if too long (280px panel ~ 25 chars safe)
+   int max_chars = (m_panel_width == 280) ? 25 : (m_panel_width / 11);
+   string truncated_name = TruncateText(master_name, max_chars);
+
    string vals[2];
    vals[0] = "Master:";
-   vals[1] = master_name;
+   vals[1] = truncated_name;
    color cols[2];
    cols[0] = PANEL_COLOR_LABEL;
    cols[1] = PANEL_COLOR_VALUE;

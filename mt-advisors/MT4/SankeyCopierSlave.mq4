@@ -27,6 +27,7 @@ input bool     AllowCloseOrders = true;                      // Allow closing or
 input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
 input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
+input int      PanelWidth = 280;                             // Configuration panel width (pixels)
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
@@ -112,7 +113,7 @@ int OnInit()
    // Initialize configuration panel (Grid Panel)
    if(ShowConfigPanel)
    {
-      g_config_panel.InitializeSlavePanel("SankeyCopierPanel_");
+      g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
    }
 
    Print("=== SankeyCopier Slave EA Initialized ===");
