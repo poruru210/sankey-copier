@@ -107,7 +107,7 @@ export function useAccountData({
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
         // Check for MT auto-trading disabled warning
-        const hasWarning = isOnline && setting.status !== 0 && !isTradeAllowed;
+        const hasWarning = isOnline && !isTradeAllowed;
 
         receiverMap.set(setting.slave_account, {
           id: setting.slave_account,
