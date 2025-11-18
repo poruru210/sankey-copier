@@ -333,6 +333,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         handler.handle_heartbeat(hb_msg).await;
 
@@ -373,6 +374,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         handler.handle_heartbeat(hb_msg).await;
 

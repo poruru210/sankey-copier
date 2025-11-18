@@ -35,6 +35,7 @@ HANDLE_TYPE g_zmq_socket = -1;
 OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
+bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -102,12 +103,26 @@ void OnTimer()
    if(!g_initialized)
       return;
 
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
+   // Check for auto-trading state change (IsTradeAllowed)
+   bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
+
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
    // Use TimeLocal() instead of TimeCurrent() to ensure heartbeat works even when market is closed
-   if(TimeLocal() - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
+   datetime now = TimeLocal();
+   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
+
+   if(should_send_heartbeat)
    {
       SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4");
       g_last_heartbeat = TimeLocal();
+
+      // If trade state changed, log it and update tracking variable
+      if(trade_state_changed)
+      {
+         Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
+         g_last_trade_allowed = current_trade_allowed;
+      }
    }
 }
 

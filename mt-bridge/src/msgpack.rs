@@ -86,6 +86,8 @@ pub struct HeartbeatMessage {
     pub server: String,
     pub currency: String,
     pub leverage: i64,
+    // Auto-trading state (IsTradeAllowed)
+    pub is_trade_allowed: bool,
 }
 
 /// Trade signal message structure
@@ -388,6 +390,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
     server: *const u16,
     currency: *const u16,
     leverage: i64,
+    is_trade_allowed: i32,
 ) -> i32 {
     let msg = HeartbeatMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
@@ -405,6 +408,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
         server: utf16_to_string(server).unwrap_or_default(),
         currency: utf16_to_string(currency).unwrap_or_default(),
         leverage,
+        is_trade_allowed: is_trade_allowed != 0,
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -733,6 +737,7 @@ mod tests {
             server: "TestServer-Live".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -753,6 +758,7 @@ mod tests {
         assert_eq!(msg.server, deserialized.server);
         assert_eq!(msg.currency, deserialized.currency);
         assert_eq!(msg.leverage, deserialized.leverage);
+        assert_eq!(msg.is_trade_allowed, deserialized.is_trade_allowed);
     }
 
     #[test]
@@ -927,6 +933,7 @@ mod tests {
                         server: "TestServer".to_string(),
                         currency: "USD".to_string(),
                         leverage: 100,
+                        is_trade_allowed: true,
                     };
 
                     // This should not panic

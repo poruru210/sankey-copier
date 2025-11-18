@@ -44,14 +44,16 @@ impl ConnectionManager {
             conn.balance = msg.balance;
             conn.equity = msg.equity;
             conn.status = ConnectionStatus::Online;
+            conn.is_trade_allowed = msg.is_trade_allowed;
 
             tracing::debug!(
-                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {})",
+                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {}, TradeAllowed: {})",
                 account_id,
                 conn.balance,
                 conn.currency,
                 conn.equity,
-                msg.version
+                msg.version,
+                msg.is_trade_allowed
             );
         } else {
             // 未登録のEA: Heartbeatの情報から自動登録
@@ -80,6 +82,7 @@ impl ConnectionManager {
                 last_heartbeat: now,
                 status: ConnectionStatus::Online,
                 connected_at: now,
+                is_trade_allowed: msg.is_trade_allowed,
             };
 
             connections.insert(account_id.clone(), connection);
@@ -159,6 +162,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         }
     }
 
@@ -206,6 +210,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         manager.update_heartbeat(hb_msg).await;
 
@@ -226,6 +231,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         manager.update_heartbeat(hb_msg2).await;
 
@@ -310,6 +316,7 @@ mod tests {
                 server: "Test-Server".to_string(),
                 currency: "USD".to_string(),
                 leverage: 100,
+                is_trade_allowed: true,
             })
             .await;
 
@@ -348,6 +355,7 @@ mod tests {
             server: "NewServer-Live".to_string(),
             currency: "EUR".to_string(),
             leverage: 200,
+            is_trade_allowed: true,
         };
 
         manager.update_heartbeat(hb_msg).await;

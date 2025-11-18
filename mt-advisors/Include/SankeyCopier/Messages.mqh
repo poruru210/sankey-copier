@@ -137,13 +137,17 @@ bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string
       return false;
    }
 
+   // Get current auto-trading state (TERMINAL_TRADE_ALLOWED)
+   int is_trade_allowed = (int)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+
    // Serialize heartbeat message using MessagePack (includes EA info for auto-registration)
    int len = serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
                                  GetAccountEquity(), GetOpenPositionsCount(),
                                  FormatTimestampISO8601(TimeCurrent()),
                                  ea_type, platform,
                                  GetAccountNumber(), GetBrokerName(), GetAccountName(),
-                                 GetServerName(), GetAccountCurrency(), GetAccountLeverage());
+                                 GetServerName(), GetAccountCurrency(), GetAccountLeverage(),
+                                 is_trade_allowed);
 
    if(len <= 0)
    {

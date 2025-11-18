@@ -41,6 +41,7 @@ datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
 bool        g_config_requested = false; // Track if config has been requested
+bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
 // Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
 TicketMapping g_order_map[];
@@ -161,10 +162,15 @@ void OnTimer()
    if(!g_initialized)
       return;
 
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
-   datetime now = TimeLocal();
+   // Check for auto-trading state change (IsTradeAllowed)
+   bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
 
-   if(now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
+   datetime now = TimeLocal();
+   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
+
+   if(should_send_heartbeat)
    {
       bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT5");
 
@@ -172,18 +178,42 @@ void OnTimer()
       {
          g_last_heartbeat = TimeLocal();
 
-         // On first successful heartbeat, request configuration from server
-         if(!g_config_requested)
+         // If trade state changed, log it
+         if(trade_state_changed)
          {
-            Print("[INFO] First heartbeat successful, requesting configuration...");
-            if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
+            g_last_trade_allowed = current_trade_allowed;
+
+            // If auto-trading was just enabled, request configuration
+            if(current_trade_allowed && !g_config_requested)
             {
-               g_config_requested = true;
-               Print("[INFO] Configuration request sent successfully");
+               Print("[INFO] Auto-trading enabled, requesting configuration...");
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               {
+                  g_config_requested = true;
+                  Print("[INFO] Configuration request sent successfully");
+               }
+               else
+               {
+                  Print("[ERROR] Failed to send configuration request, will retry on next state change");
+               }
             }
-            else
+         }
+         else
+         {
+            // On first successful heartbeat (normal interval), request configuration if not yet requested
+            if(!g_config_requested)
             {
-               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+               Print("[INFO] First heartbeat successful, requesting configuration...");
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               {
+                  g_config_requested = true;
+                  Print("[INFO] Configuration request sent successfully");
+               }
+               else
+               {
+                  Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+               }
             }
          }
       }

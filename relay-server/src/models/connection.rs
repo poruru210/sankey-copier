@@ -22,6 +22,7 @@ pub struct EaConnection {
     pub last_heartbeat: DateTime<Utc>,
     pub status: ConnectionStatus,
     pub connected_at: DateTime<Utc>,
+    pub is_trade_allowed: bool, // MT auto-trading enabled state
 }
 
 /// EAの種類
