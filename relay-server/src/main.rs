@@ -273,7 +273,10 @@ async fn main() -> Result<()> {
                 // Update database statuses for timed-out Master EAs
                 for (account_id, ea_type) in timed_out {
                     if ea_type == EaType::Master {
-                        match db_clone.update_master_statuses_disconnected(&account_id).await {
+                        match db_clone
+                            .update_master_statuses_disconnected(&account_id)
+                            .await
+                        {
                             Ok(count) if count > 0 => {
                                 tracing::info!(
                                     "Master {} disconnected: updated {} settings to ENABLED",

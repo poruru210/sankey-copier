@@ -136,11 +136,7 @@ impl MessageHandler {
                     // No settings updated (no enabled settings for this master)
                 }
                 Err(e) => {
-                    tracing::error!(
-                        "Failed to update master statuses for {}: {}",
-                        account_id,
-                        e
-                    );
+                    tracing::error!("Failed to update master statuses for {}: {}", account_id, e);
                 }
             }
         }

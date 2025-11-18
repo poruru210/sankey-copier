@@ -407,10 +407,7 @@ impl Database {
     }
 
     /// Update all connected settings for a master to ENABLED (1) when master goes offline
-    pub async fn update_master_statuses_disconnected(
-        &self,
-        master_account: &str,
-    ) -> Result<usize> {
+    pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
         let result = sqlx::query(
             "UPDATE copy_settings
              SET status = 1, updated_at = CURRENT_TIMESTAMP
