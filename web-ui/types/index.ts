@@ -37,6 +37,7 @@ export interface EaConnection {
   status: 'Online' | 'Offline' | 'Timeout';
   connected_at: string;
   open_positions?: number; // Number of currently open positions
+  is_trade_allowed: boolean; // MT terminal's Algorithm Trading button state
   // Legacy fields for backwards compatibility
   role?: 'master' | 'slave';
   is_online?: boolean;

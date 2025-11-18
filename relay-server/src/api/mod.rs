@@ -387,11 +387,38 @@ async fn toggle_settings(
     let span = tracing::info_span!("toggle_settings", settings_id = id, status = req.status);
     let _enter = span.enter();
 
-    match state.db.update_status(id, req.status).await {
+    // Determine the actual status to set based on Master connection state
+    let actual_status = if req.status == 1 {
+        // User wants to enable (status=1)
+        // Check if Master is connected to determine if we should use CONNECTED (2) instead
+        if let Ok(Some(settings)) = state.db.get_copy_settings(id).await {
+            if let Some(master_conn) = state.connection_manager.get_ea(&settings.master_account).await {
+                if master_conn.status == crate::models::ConnectionStatus::Online {
+                    // Master is online, set to CONNECTED
+                    2
+                } else {
+                    // Master is offline/timeout, set to ENABLED
+                    1
+                }
+            } else {
+                // Master not found, set to ENABLED
+                1
+            }
+        } else {
+            // Settings not found, use requested status
+            req.status
+        }
+    } else {
+        // User wants to disable (status=0), use as-is
+        req.status
+    };
+
+    match state.db.update_status(id, actual_status).await {
         Ok(_) => {
             tracing::info!(
                 settings_id = id,
-                status = req.status,
+                requested_status = req.status,
+                actual_status = actual_status,
                 "Successfully toggled copy settings"
             );
 
@@ -405,7 +432,7 @@ async fn toggle_settings(
             // Notify via WebSocket
             let _ = state
                 .tx
-                .send(format!("settings_toggled:{}:{}", id, req.status));
+                .send(format!("settings_toggled:{}:{}", id, actual_status));
 
             Ok(StatusCode::NO_CONTENT)
         }

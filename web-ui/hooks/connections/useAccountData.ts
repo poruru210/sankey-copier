@@ -7,6 +7,7 @@ interface UseAccountDataProps {
   content: {
     allSourcesInactive: string;
     someSourcesInactive: string;
+    autoTradingDisabled: string;
   };
 }
 
@@ -73,16 +74,27 @@ export function useAccountData({
       if (!sourceMap.has(setting.master_account)) {
         const existingSource = prevSourceMap.get(setting.master_account);
         const isOnline = getConnectionStatus(setting.master_account);
-        // For demo: show error on first account if offline
+        const connection = getAccountConnection(setting.master_account);
+        const isTradeAllowed = connection?.is_trade_allowed ?? true;
+
+        // Check for errors/warnings
         const hasError = index === 0 && !isOnline;
+        const hasWarning = isOnline && !isTradeAllowed;
+        let errorMsg = '';
+        if (hasError) {
+          errorMsg = 'エラー! チャート上のEAの問題';
+        } else if (hasWarning) {
+          errorMsg = content.autoTradingDisabled;
+        }
+
         sourceMap.set(setting.master_account, {
           id: setting.master_account,
           name: setting.master_account,
           isOnline,
           isEnabled: existingSource?.isEnabled ?? true,
           hasError,
-          errorMsg: hasError ? 'エラー! チャート上のEAの問題' : '',
-          hasWarning: false,
+          hasWarning,
+          errorMsg,
           isExpanded: existingSource?.isExpanded ?? false,
         });
       }
@@ -91,6 +103,11 @@ export function useAccountData({
       if (!receiverMap.has(setting.slave_account)) {
         const existingReceiver = prevReceiverMap.get(setting.slave_account);
         const isOnline = getConnectionStatus(setting.slave_account);
+        const connection = getAccountConnection(setting.slave_account);
+        const isTradeAllowed = connection?.is_trade_allowed ?? true;
+
+        // Check for MT auto-trading disabled warning
+        const hasWarning = isOnline && setting.status !== 0 && !isTradeAllowed;
 
         receiverMap.set(setting.slave_account, {
           id: setting.slave_account,
@@ -98,8 +115,8 @@ export function useAccountData({
           isOnline,
           isEnabled: existingReceiver?.isEnabled ?? (setting.status !== 0),
           hasError: false,
-          hasWarning: false,
-          errorMsg: '',
+          hasWarning,
+          errorMsg: hasWarning ? content.autoTradingDisabled : '',
           isExpanded: existingReceiver?.isExpanded ?? false,
         });
       }
@@ -153,7 +170,7 @@ export function useAccountData({
     setSourceAccounts(newSourceAccounts);
     setReceiverAccounts(newReceiverAccounts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, connections, content.allSourcesInactive, content.someSourcesInactive]);
+  }, [settings, connections, content.allSourcesInactive, content.someSourcesInactive, content.autoTradingDisabled]);
 
   // Toggle expand state for source accounts
   const toggleSourceExpand = (accountId: string) => {

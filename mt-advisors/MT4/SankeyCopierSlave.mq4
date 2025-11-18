@@ -342,6 +342,14 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 
    Print("Processing ", action, " for master ticket #", master_ticket);
 
+   // Check if connected to Master before processing any trades
+   if(g_config_status != STATUS_CONNECTED)
+   {
+      Print("Trade signal rejected: Not connected to Master (status=", g_config_status, "). Master ticket #", master_ticket);
+      trade_signal_free(handle);
+      return;
+   }
+
    if(action == "Open")
    {
       if(AllowNewOrders)

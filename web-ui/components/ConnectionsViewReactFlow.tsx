@@ -78,6 +78,7 @@ function ConnectionsViewReactFlowInner({
     content: {
       allSourcesInactive: content.allSourcesInactive,
       someSourcesInactive: content.someSourcesInactive,
+      autoTradingDisabled: content.autoTradingDisabled,
     },
   });
 

@@ -65,6 +65,7 @@ export function ConnectionsView({
     content: {
       allSourcesInactive: content.allSourcesInactive,
       someSourcesInactive: content.someSourcesInactive,
+      autoTradingDisabled: content.autoTradingDisabled,
     },
   });
 
