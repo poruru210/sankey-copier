@@ -826,7 +826,7 @@ mod tests {
             master_account: "master_account_456".to_string(),
             trade_group_id: "group_789".to_string(),
             timestamp: "2025-01-01T00:00:00Z".to_string(),
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(1.5),
             reverse_trade: false,
             symbol_mappings: vec![SymbolMapping {
@@ -848,7 +848,7 @@ mod tests {
 
         assert_eq!(config.account_id, deserialized.account_id);
         assert_eq!(config.master_account, deserialized.master_account);
-        assert_eq!(config.enabled, deserialized.enabled);
+        assert_eq!(config.status, deserialized.status);
         assert_eq!(config.lot_multiplier, deserialized.lot_multiplier);
         assert_eq!(config.reverse_trade, deserialized.reverse_trade);
         assert_eq!(
