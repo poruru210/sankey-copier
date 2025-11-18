@@ -44,6 +44,15 @@ impl FromStr for EaType {
     }
 }
 
+impl std::fmt::Display for EaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EaType::Master => write!(f, "Master"),
+            EaType::Slave => write!(f, "Slave"),
+        }
+    }
+}
+
 /// プラットフォームの種類
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Platform {

@@ -108,9 +108,42 @@ impl MessageHandler {
         let account_id = msg.account_id.clone();
         let balance = msg.balance;
         let equity = msg.equity;
+        let ea_type = msg.ea_type.clone();
 
         // Update heartbeat (performs auto-registration if needed)
         self.connection_manager.update_heartbeat(msg).await;
+
+        // If this is a Master EA, update all enabled settings to CONNECTED (status=2)
+        if ea_type == "Master" {
+            match self.db.update_master_statuses_connected(&account_id).await {
+                Ok(count) if count > 0 => {
+                    tracing::info!(
+                        "Master {} connected: updated {} settings to CONNECTED",
+                        account_id,
+                        count
+                    );
+                    // Refresh settings cache to reflect the status change
+                    if let Ok(settings) = self.db.list_copy_settings().await {
+                        let mut cache = self.settings_cache.write().await;
+                        *cache = settings;
+                    }
+                    // Notify WebSocket clients
+                    let _ = self
+                        .broadcast_tx
+                        .send(format!("master_connected:{}", account_id));
+                }
+                Ok(_) => {
+                    // No settings updated (no enabled settings for this master)
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to update master statuses for {}: {}",
+                        account_id,
+                        e
+                    );
+                }
+            }
+        }
 
         // Notify WebSocket clients of heartbeat
         let _ = self.broadcast_tx.send(format!(

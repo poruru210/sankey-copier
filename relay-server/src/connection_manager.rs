@@ -99,7 +99,8 @@ impl ConnectionManager {
     }
 
     /// タイムアウトをチェックして、応答のないEAをタイムアウト状態にする
-    pub async fn check_timeouts(&self) {
+    /// Returns a list of (account_id, ea_type) for timed-out EAs
+    pub async fn check_timeouts(&self) -> Vec<(String, EaType)> {
         let now = Utc::now();
         let timeout_duration = Duration::seconds(self.timeout_seconds);
 
@@ -112,19 +113,28 @@ impl ConnectionManager {
 
                 if elapsed > timeout_duration {
                     tracing::warn!(
-                        "EA timed out: {} (last heartbeat: {:?} ago)",
+                        "EA timed out: {} (ea_type: {}, last heartbeat: {:?} ago)",
                         account_id,
+                        conn.ea_type,
                         elapsed
                     );
                     conn.status = ConnectionStatus::Timeout;
-                    timed_out_accounts.push(account_id.clone());
+                    timed_out_accounts.push((account_id.clone(), conn.ea_type));
                 }
             }
         }
 
         if !timed_out_accounts.is_empty() {
-            tracing::info!("Timed out EAs: {:?}", timed_out_accounts);
+            tracing::info!(
+                "Timed out EAs: {:?}",
+                timed_out_accounts
+                    .iter()
+                    .map(|(id, _)| id)
+                    .collect::<Vec<_>>()
+            );
         }
+
+        timed_out_accounts
     }
 }
 
@@ -260,9 +270,14 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Run timeout check
-        manager.check_timeouts().await;
+        let timed_out = manager.check_timeouts().await;
 
-        // Verify timed out
+        // Verify one EA timed out
+        assert_eq!(timed_out.len(), 1);
+        assert_eq!(timed_out[0].0, account_id);
+        assert_eq!(timed_out[0].1, EaType::Master);
+
+        // Verify timed out status
         let ea = manager.get_ea(&account_id).await;
         assert_eq!(ea.unwrap().status, ConnectionStatus::Timeout);
     }
@@ -302,9 +317,12 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         // Run timeout check
-        manager.check_timeouts().await;
+        let timed_out = manager.check_timeouts().await;
 
-        // Should still be online because heartbeat was sent within timeout
+        // Should not have timed out because heartbeat was sent within timeout
+        assert_eq!(timed_out.len(), 0);
+
+        // Should still be online
         let ea = manager.get_ea(&account_id).await;
         assert_eq!(ea.unwrap().status, ConnectionStatus::Online);
     }
