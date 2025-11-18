@@ -20,7 +20,7 @@ async fn test_config_message_distribution_flow() {
 
     // Step 1: Create a comprehensive CopySettings record
     let test_settings = CopySettings {
-        id: 0, // Will be assigned by DB
+        id: 0,     // Will be assigned by DB
         status: 2, // STATUS_CONNECTED
         master_account: "MASTER_TEST_001".to_string(),
         slave_account: "SLAVE_TEST_001".to_string(),

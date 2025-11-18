@@ -46,7 +46,7 @@ pub struct TradeSignal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CopySettings {
     pub id: i32,
-    pub status: i32,           // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
+    pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     pub master_account: String,
     pub slave_account: String,
     pub lot_multiplier: Option<f64>,
