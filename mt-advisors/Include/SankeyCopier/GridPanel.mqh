@@ -45,6 +45,7 @@
 #define DEFAULT_PADDING_LEFT 5             // Default left padding inside panel
 #define DEFAULT_PADDING_RIGHT 10           // Default right padding inside panel
 #define DEFAULT_COLUMN_COUNT 2             // Default number of columns
+#define LABEL_COLUMN_WIDTH 100             // Fixed width for label column in pixels
 
 //+------------------------------------------------------------------+
 //| Helper Functions for Panel Creation                              |
@@ -317,16 +318,17 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    ArrayResize(m_row_keys, 0);
    m_row_count = 0;
 
-   // Default 2-column layout with appropriate anchors
+   // Default 2-column layout with unified anchors (both LEFT_UPPER)
    ArrayResize(m_column_widths, 2);
    ArrayResize(m_column_anchors, 2);
 
-   // Left column uses ANCHOR_LEFT_UPPER (text extends rightward)
+   // Label column: ANCHOR_LEFT_UPPER, fixed width (LABEL_COLUMN_WIDTH)
    m_column_anchors[0] = ANCHOR_LEFT_UPPER;
    m_column_widths[0] = CalculateColumnX(0);
 
-   // Right column uses ANCHOR_RIGHT_UPPER (text extends leftward)
-   m_column_anchors[1] = ANCHOR_RIGHT_UPPER;
+   // Value column: ANCHOR_LEFT_UPPER (unified coordinate system)
+   // Takes remaining space after label column
+   m_column_anchors[1] = ANCHOR_LEFT_UPPER;
    m_column_widths[1] = CalculateColumnX(1);
 
    // Create background with initial size (title only)
@@ -346,11 +348,11 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    Print("Panel width: ", m_panel_width, "px");
    Print("X offset: ", m_x_offset, "px (from right edge)");
    Print("Background X (left edge): ", bg_x, "px");
-   Print("Column 0 (labels): X=", m_column_widths[0], "px, Anchor=",
-         (m_column_anchors[0] == ANCHOR_LEFT_UPPER ? "LEFT_UPPER" : "RIGHT_UPPER"));
-   Print("Column 1 (values): X=", m_column_widths[1], "px, Anchor=",
-         (m_column_anchors[1] == ANCHOR_LEFT_UPPER ? "LEFT_UPPER" : "RIGHT_UPPER"));
+   Print("Column 0 (label): X=", m_column_widths[0], "px, Width=", LABEL_COLUMN_WIDTH, "px, Anchor=LEFT_UPPER");
+   Print("Column 1 (value): X=", m_column_widths[1], "px, Width=",
+         (m_column_widths[0] - m_column_widths[1] - m_padding_right), "px, Anchor=LEFT_UPPER");
    Print("Padding: L=", m_padding_left, " R=", m_padding_right);
+   Print("Column spacing: ", (m_column_widths[0] - m_column_widths[1]), "px (label width)");
    Print("===============================");
    return true;
 }
@@ -816,28 +818,34 @@ int CGridPanel::CalculateBackgroundX()
 //+------------------------------------------------------------------+
 //| Calculate column X position                                      |
 //| Parameters:                                                       |
-//|   column_index - Column number (0 = left, 1 = right, etc.)     |
+//|   column_index - Column number (0 = label, 1 = value, etc.)    |
 //| Returns: X coordinate for column text                           |
-//| Note: Column 0 uses ANCHOR_LEFT_UPPER (left edge, extends right)|
-//|       Column 1 uses ANCHOR_RIGHT_UPPER (right edge, extends left)|
+//| Note: Both columns use ANCHOR_LEFT_UPPER for unified coordinate |
+//|       system. Columns are accumulated left-to-right.            |
+//|       Column 0 (label): Fixed width (LABEL_COLUMN_WIDTH)        |
+//|       Column 1 (value): Remaining space                         |
 //+------------------------------------------------------------------+
 int CGridPanel::CalculateColumnX(int column_index)
 {
+   // Panel left edge (distance from right edge of screen)
+   // For CORNER_RIGHT_UPPER: larger X = more to the left
+   int panel_left = m_x_offset + m_panel_width;
+
    if(column_index == 0)
    {
-      // Left column with ANCHOR_LEFT_UPPER:
-      // X specifies LEFT edge of text, text extends rightward (toward smaller X)
-      // Position near left edge of panel: left_edge - padding
-      // Example: offset=10, width=280, padding=5 -> 10+280-5=285px
-      return m_x_offset + m_panel_width - m_padding_left;
+      // Label column: ANCHOR_LEFT_UPPER
+      // Position at panel left edge minus left padding
+      // Example: offset=10, width=280, padding_left=5 -> 10+280-5=285px
+      return panel_left - m_padding_left;
    }
    else
    {
-      // Right column with ANCHOR_RIGHT_UPPER:
-      // X specifies RIGHT edge of text, text extends leftward (toward larger X)
-      // Position near right edge of panel: right_edge + padding
-      // Example: offset=10, padding=10 -> 10+10=20px
-      return m_x_offset + m_padding_right;
+      // Value column: ANCHOR_LEFT_UPPER (unified coordinate system)
+      // Position at label column left edge minus label column width
+      // This gives the value column all remaining space
+      // Example: label_x=285, label_width=100 -> 285-100=185px
+      int label_col_x = panel_left - m_padding_left;
+      return label_col_x - LABEL_COLUMN_WIDTH;
    }
 }
 

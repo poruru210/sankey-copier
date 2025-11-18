@@ -11,12 +11,12 @@
 #include <Trade/Trade.mqh>
 
 //--- Include common headers
-#include <SankeyCopier/SankeyCopierCommon.mqh>
-#include <SankeyCopier/SankeyCopierZmq.mqh>
-#include <SankeyCopier/SankeyCopierMapping.mqh>
-#include <SankeyCopier/SankeyCopierGridPanel.mqh>
-#include <SankeyCopier/SankeyCopierMessages.mqh>
-#include <SankeyCopier/SankeyCopierTrade.mqh>
+#include <SankeyCopier/Common.mqh>
+#include <SankeyCopier/Zmq.mqh>
+#include <SankeyCopier/Mapping.mqh>
+#include <SankeyCopier/GridPanel.mqh>
+#include <SankeyCopier/Messages.mqh>
+#include <SankeyCopier/Trade.mqh>
 
 //--- Input parameters
 input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel

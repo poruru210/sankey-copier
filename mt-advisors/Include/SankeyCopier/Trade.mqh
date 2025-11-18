@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
-#include "SankeyCopierCommon.mqh"
+#include "Common.mqh"
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |

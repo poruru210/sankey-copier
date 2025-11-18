@@ -9,10 +9,10 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include <SankeyCopier/SankeyCopierCommon.mqh>
-#include <SankeyCopier/SankeyCopierZmq.mqh>
-#include <SankeyCopier/SankeyCopierMessages.mqh>
-#include <SankeyCopier/SankeyCopierTrade.mqh>
+#include <SankeyCopier/Common.mqh>
+#include <SankeyCopier/Zmq.mqh>
+#include <SankeyCopier/Messages.mqh>
+#include <SankeyCopier/Trade.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
