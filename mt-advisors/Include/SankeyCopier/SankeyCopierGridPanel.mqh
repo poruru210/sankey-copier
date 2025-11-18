@@ -803,22 +803,17 @@ int CGridPanel::CalculateBackgroundX()
 //+------------------------------------------------------------------+
 int CGridPanel::CalculateColumnX(int column_index)
 {
-   // IMPORTANT: With CORNER_RIGHT_UPPER + ANCHOR_RIGHT_UPPER:
-   // - XDISTANCE specifies where text LEFT edge is positioned (from right edge of screen)
-   // - Text extends RIGHTWARD from that position
-   // Therefore: smaller X = further right on screen
-
    if(column_index == 0)
    {
-      // Left column (labels): near right edge of panel
-      // Text starts here and extends right (into panel)
-      return m_x_offset + m_padding_right;
+      // Left column: labels positioned at 40% of panel width from right edge
+      // This ensures labels stay inside panel even with ANCHOR_RIGHT_UPPER
+      // Example: panel_width=280, offset=10 -> label at 10+(280*0.4)=122px from right
+      return m_x_offset + (int)(m_panel_width * 0.4);
    }
    else
    {
-      // Right column (values): near left edge of panel
-      // Text starts here and extends right (into panel)
-      return m_x_offset + m_panel_width - m_padding_left;
+      // Right column(s): values aligned to right side of panel with padding
+      return m_x_offset + m_padding_right;
    }
 }
 
