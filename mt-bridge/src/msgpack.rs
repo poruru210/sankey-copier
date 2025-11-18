@@ -42,7 +42,7 @@ pub struct ConfigMessage {
     pub master_account: String,
     pub trade_group_id: String,
     pub timestamp: String, // ISO 8601 format
-    pub status: i32,       // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
+    pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,

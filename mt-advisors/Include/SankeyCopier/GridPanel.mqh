@@ -241,7 +241,7 @@ public:
 
    // Slave EA panel helpers (high-level update methods)
    bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
-   void     UpdateStatusRow(bool enabled);
+   void     UpdateStatusRow(int status);
    void     UpdateMasterRow(string master_name);
    void     UpdateLotMultiplierRow(double multiplier);
    void     UpdateReverseRow(bool reverse);
