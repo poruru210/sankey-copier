@@ -23,6 +23,8 @@
 // Panel styling constants
 #define PANEL_FONT "Arial"
 #define PANEL_FONT_SIZE 8
+#define PANEL_DATA_FONT_SIZE 8             // Font size for data rows
+#define PANEL_TITLE_FONT_SIZE 9            // Font size for title
 #define PANEL_COLOR_BG C'40,40,50'        // Dark background
 #define PANEL_COLOR_BORDER clrDimGray      // Border color
 #define PANEL_COLOR_TITLE clrWhite
@@ -30,6 +32,19 @@
 #define PANEL_COLOR_VALUE clrWhite
 #define PANEL_COLOR_ENABLED clrLime
 #define PANEL_COLOR_DISABLED clrRed
+
+// Panel layout constants
+#define TITLE_HEIGHT_EXTRA_PADDING 5       // Extra padding for title row height
+#define DEFAULT_X_OFFSET 10                // Default distance from right edge
+#define DEFAULT_Y_OFFSET 20                // Default distance from top edge
+#define DEFAULT_PANEL_WIDTH 200            // Default panel width in pixels
+#define DEFAULT_ROW_HEIGHT 15              // Default row height in pixels
+#define DEFAULT_TITLE_HEIGHT 20            // Default title row height in pixels
+#define DEFAULT_PADDING_TOP 3              // Default top padding
+#define DEFAULT_PADDING_BOTTOM 5           // Default bottom padding
+#define DEFAULT_PADDING_LEFT 5             // Default left padding inside panel
+#define DEFAULT_PADDING_RIGHT 10           // Default right padding inside panel
+#define DEFAULT_COLUMN_COUNT 2             // Default number of columns
 
 //+------------------------------------------------------------------+
 //| Helper Functions for Panel Creation                              |
@@ -184,6 +199,15 @@ public:
    // Title management
    void     SetTitle(string title, color clr = -1);
 
+   // Slave EA panel helpers (high-level update methods)
+   bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_");
+   void     UpdateStatusRow(bool enabled);
+   void     UpdateMasterRow(string master_name);
+   void     UpdateLotMultiplierRow(double multiplier);
+   void     UpdateReverseRow(bool reverse);
+   void     UpdateVersionRow(int version);
+   void     UpdateSymbolCountRow(int count);
+
    // Appearance
    void     SetColors(color bg, color border, color title);
    void     SetPadding(int top, int bottom, int left, int right);
@@ -200,20 +224,20 @@ public:
 CGridPanel::CGridPanel()
 {
    m_row_count = 0;
-   m_column_count = 2;  // Default: 2 columns (label, value)
+   m_column_count = DEFAULT_COLUMN_COUNT;
    m_prefix = "GridPanel_";
-   m_x_offset = 10;
-   m_y_offset = 20;
-   m_panel_width = 200;
-   m_row_height = 15;
-   m_title_height = 20;
-   m_padding_top = 3;
-   m_padding_bottom = 5;
-   m_padding_left = 5;
-   m_padding_right = 10;
-   m_bg_color = C'40,40,50';
-   m_border_color = clrDimGray;
-   m_title_color = clrWhite;
+   m_x_offset = DEFAULT_X_OFFSET;
+   m_y_offset = DEFAULT_Y_OFFSET;
+   m_panel_width = DEFAULT_PANEL_WIDTH;
+   m_row_height = DEFAULT_ROW_HEIGHT;
+   m_title_height = DEFAULT_TITLE_HEIGHT;
+   m_padding_top = DEFAULT_PADDING_TOP;
+   m_padding_bottom = DEFAULT_PADDING_BOTTOM;
+   m_padding_left = DEFAULT_PADDING_LEFT;
+   m_padding_right = DEFAULT_PADDING_RIGHT;
+   m_bg_color = PANEL_COLOR_BG;
+   m_border_color = PANEL_COLOR_BORDER;
+   m_title_color = PANEL_COLOR_TITLE;
 }
 
 //+------------------------------------------------------------------+
@@ -242,7 +266,7 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    m_y_offset = y_offset;
    m_panel_width = panel_width;
    m_row_height = row_height;
-   m_title_height = row_height + 5;
+   m_title_height = row_height + TITLE_HEIGHT_EXTRA_PADDING;
 
    // Initialize row management arrays
    ArrayResize(m_row_keys, 0);
@@ -342,7 +366,7 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
                       row_y,
                       values[col],
                       colors[col],
-                      8);
+                      PANEL_DATA_FONT_SIZE);
    }
 
    m_row_count++;
@@ -513,7 +537,134 @@ void CGridPanel::SetTitle(string title, color clr = -1)
    int title_x = CalculateTitleX();  // Use encapsulated calculation
    int title_y = m_y_offset + m_padding_top;
 
-   CreatePanelLabel(title_obj, title_x, title_y, title, clr, 9);
+   CreatePanelLabel(title_obj, title_x, title_y, title, clr, PANEL_TITLE_FONT_SIZE);
+}
+
+//+------------------------------------------------------------------+
+//| Initialize Slave EA panel with standard layout                  |
+//| Parameters:                                                       |
+//|   prefix - Object name prefix for panel objects                |
+//| Returns: true on success                                         |
+//+------------------------------------------------------------------+
+bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_")
+{
+   // Initialize panel with standard dimensions
+   if(!Initialize(prefix, DEFAULT_X_OFFSET, DEFAULT_Y_OFFSET, DEFAULT_PANEL_WIDTH, DEFAULT_ROW_HEIGHT))
+      return false;
+
+   // Set title
+   SetTitle("Sankey Copier - Slave", PANEL_COLOR_TITLE);
+
+   // Add standard rows with initial values
+   string status_vals[] = {"Status:", "DISABLED"};
+   color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
+   AddRow("status", status_vals, status_cols);
+
+   string master_vals[] = {"Master:", "N/A"};
+   color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("master", master_vals, master_cols);
+
+   string lot_vals[] = {"Lot x:", "N/A"};
+   color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("lot", lot_vals, lot_cols);
+
+   string reverse_vals[] = {"Reverse:", "N/A"};
+   color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("reverse", reverse_vals, reverse_cols);
+
+   string version_vals[] = {"Version:", "N/A"};
+   color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("version", version_vals, version_cols);
+
+   string symbols_vals[] = {"Symbols:", "N/A"};
+   color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("symbols", symbols_vals, symbols_cols);
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Update status row                                                |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateStatusRow(bool enabled)
+{
+   string vals[2];
+   vals[0] = "Status:";
+   vals[1] = enabled ? "ENABLED" : "DISABLED";
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = enabled ? PANEL_COLOR_ENABLED : PANEL_COLOR_DISABLED;
+   UpdateRow("status", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update master row                                                |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateMasterRow(string master_name)
+{
+   string vals[2];
+   vals[0] = "Master:";
+   vals[1] = master_name;
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("master", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update lot multiplier row                                        |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateLotMultiplierRow(double multiplier)
+{
+   string vals[2];
+   vals[0] = "Lot x:";
+   vals[1] = StringFormat("%.2f", multiplier);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("lot", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update reverse row                                               |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateReverseRow(bool reverse)
+{
+   string vals[2];
+   vals[0] = "Reverse:";
+   vals[1] = reverse ? "YES" : "NO";
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("reverse", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update version row                                               |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateVersionRow(int version)
+{
+   string vals[2];
+   vals[0] = "Version:";
+   vals[1] = IntegerToString(version);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("version", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update symbol count row                                          |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateSymbolCountRow(int count)
+{
+   string vals[2];
+   vals[0] = "Symbols:";
+   vals[1] = IntegerToString(count);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("symbols", vals, cols);
 }
 
 //+------------------------------------------------------------------+
