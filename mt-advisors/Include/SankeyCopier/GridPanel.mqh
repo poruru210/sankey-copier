@@ -30,8 +30,9 @@
 #define PANEL_COLOR_TITLE clrWhite
 #define PANEL_COLOR_LABEL clrLightGray
 #define PANEL_COLOR_VALUE clrWhite
-#define PANEL_COLOR_ENABLED clrLime
-#define PANEL_COLOR_DISABLED clrRed
+#define PANEL_COLOR_DISABLED clrRed       // Status: DISABLED (0)
+#define PANEL_COLOR_WAITING clrYellow     // Status: ENABLED but Master disconnected (1)
+#define PANEL_COLOR_CONNECTED clrLime     // Status: CONNECTED (2)
 
 // Panel layout constants
 #define TITLE_HEIGHT_EXTRA_PADDING 5       // Extra padding for title row height
@@ -651,16 +652,53 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
 }
 
 //+------------------------------------------------------------------+
-//| Update status row                                                |
+//| Update status row (3 states)                                     |
+//| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED |
 //+------------------------------------------------------------------+
-void CGridPanel::UpdateStatusRow(bool enabled)
+void CGridPanel::UpdateStatusRow(int status)
 {
    string vals[2];
    vals[0] = "Status:";
-   vals[1] = enabled ? "ENABLED" : "DISABLED";
+
+   // Determine status text and color based on status value
+   if(status == STATUS_DISABLED)
+   {
+      vals[1] = "DISABLED";
+   }
+   else if(status == STATUS_ENABLED)
+   {
+      vals[1] = "ENABLED";
+   }
+   else if(status == STATUS_CONNECTED)
+   {
+      vals[1] = "CONNECTED";
+   }
+   else
+   {
+      vals[1] = "UNKNOWN";
+   }
+
    color cols[2];
    cols[0] = PANEL_COLOR_LABEL;
-   cols[1] = enabled ? PANEL_COLOR_ENABLED : PANEL_COLOR_DISABLED;
+
+   // Assign color based on status
+   if(status == STATUS_DISABLED)
+   {
+      cols[1] = PANEL_COLOR_DISABLED;      // Red
+   }
+   else if(status == STATUS_ENABLED)
+   {
+      cols[1] = PANEL_COLOR_WAITING;       // Yellow (waiting for Master)
+   }
+   else if(status == STATUS_CONNECTED)
+   {
+      cols[1] = PANEL_COLOR_CONNECTED;     // Green (connected to Master)
+   }
+   else
+   {
+      cols[1] = PANEL_COLOR_DISABLED;      // Red for unknown state
+   }
+
    UpdateRow("status", vals, cols);
 }
 

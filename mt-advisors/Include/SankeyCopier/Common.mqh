@@ -26,6 +26,11 @@
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
 
+//--- Connection status constants (3 states)
+#define STATUS_DISABLED 0      // Slave is disabled
+#define STATUS_ENABLED 1       // Slave is enabled, Master disconnected
+#define STATUS_CONNECTED 2     // Slave is enabled, Master connected
+
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
    HANDLE_TYPE zmq_context_create();

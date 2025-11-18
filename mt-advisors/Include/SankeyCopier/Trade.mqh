@@ -10,13 +10,14 @@
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
 //+------------------------------------------------------------------+
-bool ShouldProcessTrade(string symbol, int magic_number, bool enabled,
+bool ShouldProcessTrade(string symbol, int magic_number, int status,
                         TradeFilters &filters)
 {
-   // Check if copying is enabled
-   if(!enabled)
+   // Check if copying is enabled and connected
+   // STATUS_CONNECTED (2) means both Slave is enabled AND Master is connected
+   if(status != STATUS_CONNECTED)
    {
-      Print("Trade filtering: Copying is disabled");
+      Print("Trade filtering: Status is ", status, " (need STATUS_CONNECTED=2)");
       return false;
    }
 
@@ -199,7 +200,7 @@ int GetOrderTypeEnum(string type_str)
 //+------------------------------------------------------------------+
 void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
                          string &current_master, string &trade_group_id,
-                         bool &enabled, double &lot_multiplier,
+                         int &status, double &lot_multiplier,
                          bool &reverse_trade, int &config_version,
                          SymbolMapping &symbol_mappings[],
                          TradeFilters &filters,
@@ -227,7 +228,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    }
 
    // Extract extended configuration fields
-   bool new_enabled = (config_get_bool(config_handle, "enabled") == 1);
+   int new_status = config_get_int(config_handle, "status");
    double new_lot_mult = config_get_double(config_handle, "lot_multiplier");
    bool new_reverse = (config_get_bool(config_handle, "reverse_trade") == 1);
    int new_version = config_get_int(config_handle, "config_version");
@@ -235,7 +236,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    // Log configuration values
    Print("Master Account: ", new_master);
    Print("Trade Group ID: ", new_group);
-   Print("Enabled: ", new_enabled);
+   Print("Status: ", new_status, " (0=DISABLED, 1=ENABLED, 2=CONNECTED)");
    Print("Lot Multiplier: ", new_lot_mult);
    Print("Reverse Trade: ", new_reverse);
    Print("Config Version: ", new_version);
@@ -249,7 +250,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    ArrayResize(filters.blocked_magic_numbers, 0);
 
    // Update global configuration
-   enabled = new_enabled;
+   status = new_status;
    lot_multiplier = new_lot_mult;
    reverse_trade = new_reverse;
    config_version = new_version;

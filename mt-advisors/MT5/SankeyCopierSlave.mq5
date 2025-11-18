@@ -47,7 +47,7 @@ TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
-bool           g_config_enabled = true;          // Whether copying is enabled
+int            g_config_status = STATUS_DISABLED;   // Connection status (0=DISABLED, 1=ENABLED, 2=CONNECTED)
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
 bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
 SymbolMapping  g_symbol_mappings[];              // Symbol mappings
@@ -123,7 +123,7 @@ int OnInit()
 
       // Update panel immediately with current values to avoid showing "N/A"
       // (OnTimer will also update these every second, but this provides instant feedback)
-      g_config_panel.UpdateStatusRow(g_config_enabled);
+      g_config_panel.UpdateStatusRow(g_config_status);
       g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
       g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
       g_config_panel.UpdateReverseRow(g_config_reverse_trade);
@@ -221,13 +221,13 @@ void OnTimer()
 
          Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
          ProcessConfigMessage(msgpack_payload, payload_len, g_current_master, g_trade_group_id,
-                             g_config_enabled, g_config_lot_multiplier, g_config_reverse_trade,
+                             g_config_status, g_config_lot_multiplier, g_config_reverse_trade,
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
 
          // Update configuration panel
          if(ShowConfigPanel)
          {
-            g_config_panel.UpdateStatusRow(g_config_enabled);
+            g_config_panel.UpdateStatusRow(g_config_status);
             g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
             g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
             g_config_panel.UpdateReverseRow(g_config_reverse_trade);
@@ -312,7 +312,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    if(action == "Open" && AllowNewOrders)
    {
       // Apply filtering
-      if(!ShouldProcessTrade(symbol, magic_number, g_config_enabled, g_filters))
+      if(!ShouldProcessTrade(symbol, magic_number, g_config_status, g_filters))
       {
          Print("Trade filtered out: ", symbol, " magic=", magic_number);
          trade_signal_free(handle);
