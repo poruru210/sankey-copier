@@ -586,4 +586,4 @@ jobs:
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
           path: artifacts/mt-advisors/${{ matrix.platform }}/
-          retention-days: 1
+          retention-days: 30

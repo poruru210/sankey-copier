@@ -12,6 +12,9 @@
 
 //--- Include common headers
 #include <SankeyCopier/SankeyCopierCommon.mqh>
+#include <SankeyCopier/SankeyCopierZmq.mqh>
+#include <SankeyCopier/SankeyCopierMapping.mqh>
+#include <SankeyCopier/SankeyCopierGridPanel.mqh>
 #include <SankeyCopier/SankeyCopierMessages.mqh>
 #include <SankeyCopier/SankeyCopierTrade.mqh>
 
@@ -24,6 +27,8 @@ input bool     AllowNewOrders = true;
 input bool     AllowCloseOrders = true;
 input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
 input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
+input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
+input int      PanelWidth = 280;                             // Configuration panel width (pixels)
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
@@ -37,23 +42,18 @@ string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
 bool        g_config_requested = false; // Track if config has been requested
 
-struct OrderMapping {
-    ulong master_ticket;
-    ulong slave_ticket;
-};
-OrderMapping g_order_map[];
-
-struct PendingOrderMapping {
-    ulong master_ticket;
-    ulong pending_ticket;
-};
-PendingOrderMapping g_pending_order_map[];
+// Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
+TicketMapping g_order_map[];
+PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
 bool           g_config_enabled = true;          // Whether copying is enabled
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
 bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
 SymbolMapping  g_symbol_mappings[];              // Symbol mappings
+
+//--- Configuration panel
+CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
 TradeFilters   g_filters;                        // Trade filters
 int            g_config_version = 0;             // Configuration version
 
@@ -68,62 +68,34 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   g_zmq_context = zmq_context_create();
+   // Initialize ZMQ context
+   g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
-   {
-      Print("ERROR: Failed to create ZMQ context");
       return INIT_FAILED;
-   }
 
-   // Create trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = zmq_socket_create(g_zmq_context, ZMQ_SUB);
+   // Create and connect trade signal socket (SUB to port 5556)
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
-      Print("ERROR: Failed to create ZMQ trade socket");
-      zmq_context_destroy(g_zmq_context);
+      CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
 
-   if(zmq_socket_connect(g_zmq_trade_socket, TradeServerAddress) == 0)
-   {
-      Print("ERROR: Failed to connect to ", TradeServerAddress);
-      zmq_socket_destroy(g_zmq_trade_socket);
-      zmq_context_destroy(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   Print("Connected to trade channel: ", TradeServerAddress);
-
-   // Create config socket (SUB to port 5557)
-   g_zmq_config_socket = zmq_socket_create(g_zmq_context, ZMQ_SUB);
+   // Create and connect config socket (SUB to port 5557)
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigServerAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
-      Print("ERROR: Failed to create ZMQ config socket");
-      zmq_socket_destroy(g_zmq_trade_socket);
-      zmq_context_destroy(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   if(zmq_socket_connect(g_zmq_config_socket, ConfigServerAddress) == 0)
-   {
-      Print("ERROR: Failed to connect to ", ConfigServerAddress);
-      zmq_socket_destroy(g_zmq_config_socket);
-      zmq_socket_destroy(g_zmq_trade_socket);
-      zmq_context_destroy(g_zmq_context);
+      CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
+      CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
 
    // Subscribe to config messages for this account ID
-   if(zmq_socket_subscribe(g_zmq_config_socket, AccountID) == 0)
+   if(!SubscribeToTopic(g_zmq_config_socket, AccountID))
    {
-      Print("ERROR: Failed to subscribe to config topic: ", AccountID);
-      zmq_socket_destroy(g_zmq_config_socket);
-      zmq_socket_destroy(g_zmq_trade_socket);
-      zmq_context_destroy(g_zmq_context);
+      CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
       return INIT_FAILED;
    }
-
-   Print("Connected to config channel: ", ConfigServerAddress, " and subscribed to: ", AccountID);
 
    g_trade.SetExpertMagicNumber(0);
    g_trade.SetDeviationInPoints(Slippage);
@@ -144,6 +116,21 @@ int OnInit()
    // Set up timer for heartbeat and config messages (1 second interval)
    EventSetTimer(1);
 
+   // Initialize configuration panel (Grid Panel)
+   if(ShowConfigPanel)
+   {
+      g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
+
+      // Update panel immediately with current values to avoid showing "N/A"
+      // (OnTimer will also update these every second, but this provides instant feedback)
+      g_config_panel.UpdateStatusRow(g_config_enabled);
+      g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
+      g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
+      g_config_panel.UpdateReverseRow(g_config_reverse_trade);
+      g_config_panel.UpdateVersionRow(g_config_version);
+      g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
+   }
+
    return INIT_SUCCEEDED;
 }
 
@@ -158,9 +145,12 @@ void OnDeinit(const int reason)
    // Kill timer
    EventKillTimer();
 
-   if(g_zmq_config_socket >= 0) zmq_socket_destroy(g_zmq_config_socket);
-   if(g_zmq_trade_socket >= 0) zmq_socket_destroy(g_zmq_trade_socket);
-   if(g_zmq_context >= 0) zmq_context_destroy(g_zmq_context);
+   // Delete configuration panel
+   if(ShowConfigPanel)
+      g_config_panel.Delete();
+
+   // Cleanup ZMQ resources
+   CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
 }
 
 //+------------------------------------------------------------------+
@@ -233,6 +223,17 @@ void OnTimer()
          ProcessConfigMessage(msgpack_payload, payload_len, g_current_master, g_trade_group_id,
                              g_config_enabled, g_config_lot_multiplier, g_config_reverse_trade,
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
+
+         // Update configuration panel
+         if(ShowConfigPanel)
+         {
+            g_config_panel.UpdateStatusRow(g_config_enabled);
+            g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
+            g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
+            g_config_panel.UpdateReverseRow(g_config_reverse_trade);
+            g_config_panel.UpdateVersionRow(g_config_version);
+            g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
+         }
       }
    }
 }
@@ -346,7 +347,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 void OpenPosition(ulong master_ticket, string symbol, string type_str,
                   double lots, double price, double sl, double tp, string timestamp, string source_account)
 {
-   if(GetSlaveTicket(master_ticket) > 0)
+   if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
    {
       Print("Already copied master #", master_ticket);
       return;
@@ -394,7 +395,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
       {
          ulong ticket = g_trade.ResultOrder();
          Print("Position opened: #", ticket, " from master #", master_ticket, " (delay: ", delay_ms, "ms)");
-         AddOrderMapping(master_ticket, ticket);
+         AddTicketMapping(g_order_map, master_ticket, ticket);
          break;
       }
       else
@@ -410,7 +411,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
 //+------------------------------------------------------------------+
 void ClosePosition(ulong master_ticket)
 {
-   ulong slave_ticket = GetSlaveTicket(master_ticket);
+   ulong slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
    if(slave_ticket == 0)
    {
       Print("No slave position for master #", master_ticket);
@@ -420,14 +421,14 @@ void ClosePosition(ulong master_ticket)
    if(!PositionSelectByTicket(slave_ticket))
    {
       Print("Position #", slave_ticket, " not found");
-      RemoveOrderMapping(master_ticket);
+      RemoveTicketMapping(g_order_map, master_ticket);
       return;
    }
 
    if(g_trade.PositionClose(slave_ticket))
    {
       Print("Position closed: #", slave_ticket);
-      RemoveOrderMapping(master_ticket);
+      RemoveTicketMapping(g_order_map, master_ticket);
    }
    else
    {
@@ -440,7 +441,7 @@ void ClosePosition(ulong master_ticket)
 //+------------------------------------------------------------------+
 void ModifyPosition(ulong master_ticket, double sl, double tp)
 {
-   ulong slave_ticket = GetSlaveTicket(master_ticket);
+   ulong slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
    if(slave_ticket == 0) return;
 
    if(!PositionSelectByTicket(slave_ticket)) return;
@@ -458,7 +459,7 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
                        double lots, double price, double sl, double tp, string source_account, int delay_ms)
 {
    // Check if pending order already exists
-   if(GetPendingTicket(master_ticket) > 0)
+   if(GetPendingTicketFromMapping(g_pending_order_map, master_ticket) > 0)
    {
       Print("Pending order already exists for master #", master_ticket);
       return;
@@ -496,7 +497,7 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
    {
       ulong ticket = g_trade.ResultOrder();
       Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
-      AddPendingOrderMapping(master_ticket, ticket);
+      AddPendingTicketMapping(g_pending_order_map, master_ticket, ticket);
    }
    else
    {
@@ -509,14 +510,14 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
 //+------------------------------------------------------------------+
 void CancelPendingOrder(ulong master_ticket)
 {
-   ulong pending_ticket = GetPendingTicket(master_ticket);
+   ulong pending_ticket = GetPendingTicketFromMapping(g_pending_order_map, master_ticket);
    if(pending_ticket == 0)
       return;
 
    if(g_trade.OrderDelete(pending_ticket))
    {
       Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
-      RemovePendingOrderMapping(master_ticket);
+      RemovePendingTicketMapping(g_pending_order_map, master_ticket);
    }
    else
    {
@@ -524,69 +525,5 @@ void CancelPendingOrder(ulong master_ticket)
    }
 }
 
-//+------------------------------------------------------------------+
-//| Order mapping helpers                                             |
-//+------------------------------------------------------------------+
-void AddOrderMapping(ulong master, ulong slave)
-{
-   int size = ArraySize(g_order_map);
-   ArrayResize(g_order_map, size + 1);
-   g_order_map[size].master_ticket = master;
-   g_order_map[size].slave_ticket = slave;
-}
-
-ulong GetSlaveTicket(ulong master)
-{
-   for(int i = 0; i < ArraySize(g_order_map); i++)
-      if(g_order_map[i].master_ticket == master)
-         return g_order_map[i].slave_ticket;
-   return 0;
-}
-
-void RemoveOrderMapping(ulong master)
-{
-   for(int i = 0; i < ArraySize(g_order_map); i++)
-   {
-      if(g_order_map[i].master_ticket == master)
-      {
-         for(int j = i; j < ArraySize(g_order_map) - 1; j++)
-            g_order_map[j] = g_order_map[j + 1];
-         ArrayResize(g_order_map, ArraySize(g_order_map) - 1);
-         break;
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Pending order mapping helpers                                     |
-//+------------------------------------------------------------------+
-void AddPendingOrderMapping(ulong master, ulong pending)
-{
-   int size = ArraySize(g_pending_order_map);
-   ArrayResize(g_pending_order_map, size + 1);
-   g_pending_order_map[size].master_ticket = master;
-   g_pending_order_map[size].pending_ticket = pending;
-}
-
-ulong GetPendingTicket(ulong master)
-{
-   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
-      if(g_pending_order_map[i].master_ticket == master)
-         return g_pending_order_map[i].pending_ticket;
-   return 0;
-}
-
-void RemovePendingOrderMapping(ulong master)
-{
-   for(int i = 0; i < ArraySize(g_pending_order_map); i++)
-   {
-      if(g_pending_order_map[i].master_ticket == master)
-      {
-         for(int j = i; j < ArraySize(g_pending_order_map) - 1; j++)
-            g_pending_order_map[j] = g_pending_order_map[j + 1];
-         ArrayResize(g_pending_order_map, ArraySize(g_pending_order_map) - 1);
-         break;
-      }
-   }
-}
+// Ticket mapping functions are now provided by SankeyCopierMapping.mqh
 

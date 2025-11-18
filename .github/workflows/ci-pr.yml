@@ -254,7 +254,7 @@ jobs:
     if: ${{ needs.paths-filter.outputs.mql == 'true' || needs.manual-flags.outputs.force_mql == 'true' }}
     uses: ./.github/workflows/build-mql.yml
     with:
-      package_version: ${{ needs.version-info.outputs.package_version }}
+      package_version: ${{ needs.version-info.outputs.file_version }}
       build_target: mql
     secrets: inherit
 
