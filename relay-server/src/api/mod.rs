@@ -392,7 +392,11 @@ async fn toggle_settings(
         // User wants to enable (status=1)
         // Check if Master is connected to determine if we should use CONNECTED (2) instead
         if let Ok(Some(settings)) = state.db.get_copy_settings(id).await {
-            if let Some(master_conn) = state.connection_manager.get_ea(&settings.master_account).await {
+            if let Some(master_conn) = state
+                .connection_manager
+                .get_ea(&settings.master_account)
+                .await
+            {
                 if master_conn.status == crate::models::ConnectionStatus::Online {
                     // Master is online, set to CONNECTED
                     2

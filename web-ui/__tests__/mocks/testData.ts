@@ -22,6 +22,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 3,
+    is_trade_allowed: true,
   },
   {
     account_id: 'OANDA_67890002',
@@ -39,6 +40,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Offline',
     connected_at: new Date().toISOString(),
     open_positions: 0,
+    is_trade_allowed: true,
   },
   {
     account_id: 'XM_11111003',
@@ -56,6 +58,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 5,
+    is_trade_allowed: true,
   },
   // Slave accounts
   {
@@ -74,6 +77,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 2,
+    is_trade_allowed: true,
   },
   {
     account_id: 'OANDA_33333005',
@@ -91,6 +95,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 1,
+    is_trade_allowed: true,
   },
   {
     account_id: 'XM_44444006',
@@ -108,6 +113,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 3,
+    is_trade_allowed: true,
   },
   {
     account_id: 'FxPro_55555007',
@@ -125,6 +131,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 1,
+    is_trade_allowed: true,
   },
 ];
 
