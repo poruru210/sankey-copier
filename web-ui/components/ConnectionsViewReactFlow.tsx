@@ -36,7 +36,7 @@ import { Plus, RefreshCw } from 'lucide-react';
 interface ConnectionsViewReactFlowProps {
   connections: EaConnection[];
   settings: CopySettings[];
-  onToggle: (id: number, currentStatus: boolean) => void;
+  onToggle: (id: number, currentStatus: number) => void;
   onCreate: (data: CreateSettingsRequest) => void;
   onUpdate: (id: number, data: CopySettings) => void;
   onDelete: (id: number) => void;

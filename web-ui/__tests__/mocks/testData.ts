@@ -131,7 +131,7 @@ export const mockConnections: EaConnection[] = [
 export const mockSettings: CopySettings[] = [
   {
     id: 1,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'FxPro_12345001',
     slave_account: 'FxPro_22222004',
     lot_multiplier: 1.5,
@@ -146,7 +146,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 2,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'FxPro_12345001',
     slave_account: 'OANDA_33333005',
     lot_multiplier: 0.5,
@@ -163,7 +163,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 3,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'OANDA_67890002',
     slave_account: 'XM_44444006',
     lot_multiplier: 2.0,
@@ -178,7 +178,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 4,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'XM_11111003',
     slave_account: 'FxPro_55555007',
     lot_multiplier: 1.0,

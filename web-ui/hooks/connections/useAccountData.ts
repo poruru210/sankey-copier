@@ -96,7 +96,7 @@ export function useAccountData({
           id: setting.slave_account,
           name: setting.slave_account,
           isOnline,
-          isEnabled: existingReceiver?.isEnabled ?? setting.enabled,
+          isEnabled: existingReceiver?.isEnabled ?? (setting.status !== 0),
           hasError: false,
           hasWarning: false,
           errorMsg: '',

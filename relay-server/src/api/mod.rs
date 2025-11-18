@@ -143,10 +143,10 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
         );
     } else {
         tracing::info!(
-            "Sent full config to EA: {} (master: {}, enabled: {}, lot_mult: {:?})",
+            "Sent full config to EA: {} (master: {}, status: {}, lot_mult: {:?})",
             settings.slave_account,
             settings.master_account,
-            settings.enabled,
+            settings.status,
             settings.lot_multiplier
         );
     }
@@ -195,7 +195,7 @@ async fn get_settings(
                 settings_id = id,
                 master_account = %settings.master_account,
                 slave_account = %settings.slave_account,
-                enabled = settings.enabled,
+                status = settings.status,
                 "Successfully retrieved copy settings"
             );
             Ok(Json(settings))
@@ -228,7 +228,7 @@ struct CreateSettingsRequest {
     slave_account: String,
     lot_multiplier: Option<f64>,
     reverse_trade: bool,
-    enabled: Option<bool>, // Allow frontend to control initial enabled state
+    status: Option<i32>, // Allow frontend to control initial status (0=DISABLED, 1=ENABLED, 2=CONNECTED)
 }
 
 async fn create_settings(
@@ -244,7 +244,7 @@ async fn create_settings(
 
     let settings = CopySettings {
         id: 0,
-        enabled: req.enabled.unwrap_or(false), // Respect frontend's enabled value, default to false
+        status: req.status.unwrap_or(0), // Respect frontend's status value, default to DISABLED (0)
         master_account: req.master_account.clone(),
         slave_account: req.slave_account.clone(),
         lot_multiplier: req.lot_multiplier,
@@ -329,7 +329,7 @@ async fn update_settings(
                 settings_id = id,
                 master_account = %updated.master_account,
                 slave_account = %updated.slave_account,
-                enabled = updated.enabled,
+                status = updated.status,
                 lot_multiplier = ?updated.lot_multiplier,
                 reverse_trade = updated.reverse_trade,
                 "Successfully updated copy settings"
@@ -376,7 +376,7 @@ async fn update_settings(
 
 #[derive(Debug, Deserialize)]
 struct ToggleRequest {
-    enabled: bool,
+    status: i32, // 0=DISABLED, 1=ENABLED, 2=CONNECTED
 }
 
 async fn toggle_settings(
@@ -384,14 +384,14 @@ async fn toggle_settings(
     Path(id): Path<i32>,
     Json(req): Json<ToggleRequest>,
 ) -> Result<StatusCode, ProblemDetails> {
-    let span = tracing::info_span!("toggle_settings", settings_id = id, enabled = req.enabled);
+    let span = tracing::info_span!("toggle_settings", settings_id = id, status = req.status);
     let _enter = span.enter();
 
-    match state.db.update_enabled_status(id, req.enabled).await {
+    match state.db.update_status(id, req.status).await {
         Ok(_) => {
             tracing::info!(
                 settings_id = id,
-                enabled = req.enabled,
+                status = req.status,
                 "Successfully toggled copy settings"
             );
 
@@ -405,14 +405,14 @@ async fn toggle_settings(
             // Notify via WebSocket
             let _ = state
                 .tx
-                .send(format!("settings_toggled:{}:{}", id, req.enabled));
+                .send(format!("settings_toggled:{}:{}", id, req.status));
 
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             tracing::error!(
                 settings_id = id,
-                enabled = req.enabled,
+                status = req.status,
                 error = %e,
                 error_type = std::any::type_name_of_val(&e),
                 backtrace = ?std::backtrace::Backtrace::capture(),

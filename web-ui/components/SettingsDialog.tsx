@@ -126,7 +126,7 @@ export function SettingsDialog({
     } else {
       onSave({
         ...formData,
-        enabled: false,
+        status: 0, // STATUS_DISABLED
       });
     }
     onOpenChange(false);

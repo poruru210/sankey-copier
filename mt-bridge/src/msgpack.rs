@@ -42,7 +42,7 @@ pub struct ConfigMessage {
     pub master_account: String,
     pub trade_group_id: String,
     pub timestamp: String, // ISO 8601 format
-    pub enabled: bool,
+    pub status: i32,       // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
@@ -259,7 +259,6 @@ pub unsafe extern "C" fn config_get_bool(
     };
 
     let result = match field.as_str() {
-        "enabled" => config.enabled,
         "reverse_trade" => config.reverse_trade,
         _ => false,
     };
@@ -294,10 +293,10 @@ pub unsafe extern "C" fn config_get_int(
         Err(_) => return 0,
     };
 
-    if field == "config_version" {
-        config.config_version as i32
-    } else {
-        0
+    match field.as_str() {
+        "config_version" => config.config_version as i32,
+        "status" => config.status,
+        _ => 0,
     }
 }
 

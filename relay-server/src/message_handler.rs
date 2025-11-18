@@ -63,10 +63,10 @@ impl MessageHandler {
         match self.db.get_settings_for_slave(&account_id).await {
             Ok(Some(settings)) => {
                 tracing::info!(
-                    "Found settings for {}: master={}, enabled={}, lot_mult={:?}",
+                    "Found settings for {}: master={}, status={}, lot_mult={:?}",
                     account_id,
                     settings.master_account,
-                    settings.enabled,
+                    settings.status,
                     settings.lot_multiplier
                 );
 
@@ -263,7 +263,7 @@ mod tests {
     fn create_test_copy_settings() -> CopySettings {
         CopySettings {
             id: 1,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: "MASTER_001".to_string(),
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.0),
@@ -390,7 +390,7 @@ mod tests {
         let handler = create_test_handler().await;
         let signal = create_test_trade_signal();
         let mut settings = create_test_copy_settings();
-        settings.enabled = false;
+        settings.status = 0; // STATUS_DISABLED
 
         // Add settings to cache
         {

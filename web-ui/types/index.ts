@@ -1,6 +1,6 @@
 export interface CopySettings {
   id: number;
-  enabled: boolean;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
   master_account: string;
   slave_account: string;
   lot_multiplier: number | null;
@@ -53,7 +53,7 @@ export interface CreateSettingsRequest {
   slave_account: string;
   lot_multiplier: number | null;
   reverse_trade: boolean;
-  enabled: boolean;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
 }
 
 // ConnectionsView specific types

@@ -13,8 +13,8 @@ impl CopyEngine {
 
     /// Apply filters to determine if a trade should be copied
     pub fn should_copy_trade(&self, signal: &TradeSignal, settings: &CopySettings) -> bool {
-        // Check if copying is enabled
-        if !settings.enabled {
+        // Check if copying is enabled and master is connected (STATUS_CONNECTED = 2)
+        if settings.status != 2 {
             return false;
         }
 
