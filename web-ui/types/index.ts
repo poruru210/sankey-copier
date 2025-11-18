@@ -1,6 +1,6 @@
 export interface CopySettings {
   id: number;
-  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
+  status: number; // 0=OFF (user disabled), 1=ON (user enabled)
   master_account: string;
   slave_account: string;
   lot_multiplier: number | null;
@@ -54,7 +54,7 @@ export interface CreateSettingsRequest {
   slave_account: string;
   lot_multiplier: number | null;
   reverse_trade: boolean;
-  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
+  status: number; // 0=OFF (user disabled), 1=ON (user enabled)
 }
 
 // ConnectionsView specific types
@@ -62,7 +62,8 @@ export interface AccountInfo {
   id: string;
   name: string;
   isOnline: boolean;
-  isEnabled: boolean;
+  isEnabled: boolean; // User's switch state (status > 0)
+  isActive: boolean; // Calculated active state (ready for trading)
   hasError: boolean;
   hasWarning: boolean;
   errorMsg: string;

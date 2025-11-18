@@ -103,18 +103,71 @@ impl MessageHandler {
             .send(format!("ea_disconnected:{}", account_id));
     }
 
-    /// Handle heartbeat messages (auto-registration + health monitoring only)
+    /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
     async fn handle_heartbeat(&self, msg: HeartbeatMessage) {
         let account_id = msg.account_id.clone();
         let balance = msg.balance;
         let equity = msg.equity;
         let ea_type = msg.ea_type.clone();
+        let new_is_trade_allowed = msg.is_trade_allowed;
+
+        // Get old is_trade_allowed before updating
+        let old_is_trade_allowed = self
+            .connection_manager
+            .get_ea(&account_id)
+            .await
+            .map(|conn| conn.is_trade_allowed);
 
         // Update heartbeat (performs auto-registration if needed)
         self.connection_manager.update_heartbeat(msg).await;
 
-        // If this is a Master EA, update all enabled settings to CONNECTED (status=2)
+        // If this is a Master EA, check for is_trade_allowed changes
         if ea_type == "Master" {
+            // Detect is_trade_allowed change
+            let trade_allowed_changed = old_is_trade_allowed != Some(new_is_trade_allowed);
+
+            if trade_allowed_changed {
+                tracing::info!(
+                    "Master {} is_trade_allowed changed: {:?} -> {}",
+                    account_id,
+                    old_is_trade_allowed,
+                    new_is_trade_allowed
+                );
+
+                // Resend Config to all Slave accounts connected to this Master
+                match self.db.get_settings_for_master(&account_id).await {
+                    Ok(settings_list) => {
+                        for settings in settings_list {
+                            // Only send to enabled Slaves (status > 0)
+                            if settings.status > 0 {
+                                let config: ConfigMessage = settings.clone().into();
+                                if let Err(e) = self.config_sender.send_config(&config).await {
+                                    tracing::error!(
+                                        "Failed to send config to {} due to Master is_trade_allowed change: {}",
+                                        settings.slave_account,
+                                        e
+                                    );
+                                } else {
+                                    tracing::info!(
+                                        "Sent config to {} due to Master {} is_trade_allowed change",
+                                        settings.slave_account,
+                                        account_id
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to get settings for Master {}: {}",
+                            account_id,
+                            e
+                        );
+                    }
+                }
+            }
+
+            // Update all enabled settings to CONNECTED (status=2)
             match self.db.update_master_statuses_connected(&account_id).await {
                 Ok(count) if count > 0 => {
                     tracing::info!(
