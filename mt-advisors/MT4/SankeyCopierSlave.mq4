@@ -13,7 +13,7 @@
 #include <SankeyCopier/SankeyCopierCommon.mqh>
 #include <SankeyCopier/SankeyCopierZmq.mqh>
 #include <SankeyCopier/SankeyCopierMapping.mqh>
-#include <SankeyCopier/SankeyCopierPanel.mqh>
+#include <SankeyCopier/SankeyCopierGridPanel.mqh>
 #include <SankeyCopier/SankeyCopierMessages.mqh>
 #include <SankeyCopier/SankeyCopierTrade.mqh>
 
@@ -48,6 +48,9 @@ bool           g_config_enabled = true;          // Whether copying is enabled
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
 bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
 SymbolMapping  g_symbol_mappings[];              // Symbol mappings
+
+//--- Configuration panel
+CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
 TradeFilters   g_filters;                        // Trade filters
 int            g_config_version = 0;             // Configuration version
 
@@ -106,9 +109,37 @@ int OnInit()
    // Set up timer for heartbeat and config messages (1 second interval)
    EventSetTimer(1);
 
-   // Initialize configuration panel
+   // Initialize configuration panel (Grid Panel)
    if(ShowConfigPanel)
-      InitializePanel();
+   {
+      g_config_panel.Initialize("SankeyCopierPanel_", 10, 20, 200, 15);
+      g_config_panel.SetTitle("Sankey Copier - Slave", PANEL_COLOR_TITLE);
+
+      // Add initial rows
+      string status_vals[] = {"Status:", "DISABLED"};
+      color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
+      g_config_panel.AddRow("status", status_vals, status_cols);
+
+      string master_vals[] = {"Master:", "N/A"};
+      color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+      g_config_panel.AddRow("master", master_vals, master_cols);
+
+      string lot_vals[] = {"Lot Mult:", "1.00x"};
+      color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+      g_config_panel.AddRow("lot", lot_vals, lot_cols);
+
+      string reverse_vals[] = {"Reverse:", "OFF"};
+      color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+      g_config_panel.AddRow("reverse", reverse_vals, reverse_cols);
+
+      string version_vals[] = {"Config Ver:", "0"};
+      color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+      g_config_panel.AddRow("version", version_vals, version_cols);
+
+      string symbols_vals[] = {"Symbols:", "0"};
+      color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+      g_config_panel.AddRow("symbols", symbols_vals, symbols_cols);
+   }
 
    Print("=== SankeyCopier Slave EA Initialized ===");
 
@@ -130,7 +161,7 @@ void OnDeinit(const int reason)
 
    // Delete configuration panel
    if(ShowConfigPanel)
-      DeletePanel();
+      g_config_panel.Delete();
 
    // Cleanup ZMQ resources
    CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
@@ -211,8 +242,37 @@ void OnTimer()
 
          // Update configuration panel
          if(ShowConfigPanel)
-            UpdatePanel(g_config_enabled, g_current_master, g_config_lot_multiplier,
-                       g_config_reverse_trade, g_config_version, ArraySize(g_symbol_mappings));
+         {
+            // Update status row
+            string status_vals[] = {"Status:", g_config_enabled ? "ENABLED" : "DISABLED"};
+            color status_cols[] = {PANEL_COLOR_LABEL, g_config_enabled ? PANEL_COLOR_ENABLED : PANEL_COLOR_DISABLED};
+            g_config_panel.UpdateRow("status", status_vals, status_cols);
+
+            // Update master row
+            string master_vals[] = {"Master:", g_current_master == "" ? "N/A" : g_current_master};
+            color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            g_config_panel.UpdateRow("master", master_vals, master_cols);
+
+            // Update lot multiplier row
+            string lot_vals[] = {"Lot Mult:", StringFormat("%.2fx", g_config_lot_multiplier)};
+            color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            g_config_panel.UpdateRow("lot", lot_vals, lot_cols);
+
+            // Update reverse trade row
+            string reverse_vals[] = {"Reverse:", g_config_reverse_trade ? "ON" : "OFF"};
+            color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            g_config_panel.UpdateRow("reverse", reverse_vals, reverse_cols);
+
+            // Update config version row
+            string version_vals[] = {"Config Ver:", IntegerToString(g_config_version)};
+            color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            g_config_panel.UpdateRow("version", version_vals, version_cols);
+
+            // Update symbols row
+            string symbols_vals[] = {"Symbols:", IntegerToString(ArraySize(g_symbol_mappings))};
+            color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            g_config_panel.UpdateRow("symbols", symbols_vals, symbols_cols);
+         }
       }
    }
 }
