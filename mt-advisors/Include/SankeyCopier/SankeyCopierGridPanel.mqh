@@ -318,14 +318,23 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    // For CORNER_RIGHT_UPPER: XDISTANCE is the left edge position from right
    // To fit panel in screen: left_edge = x_offset + panel_width
    int initial_height = m_padding_top + m_title_height + m_padding_bottom;
+   int bg_x = CalculateBackgroundX();
    CreatePanelBackground(GenerateObjectName("BG"),
-                        CalculateBackgroundX(),  // Calculate left edge position
+                        bg_x,
                         m_y_offset,
                         m_panel_width,
                         initial_height,
                         m_bg_color);
 
-   Print("Grid panel initialized: ", m_prefix);
+   Print("==== Grid Panel Debug Info ====");
+   Print("Panel initialized: ", m_prefix);
+   Print("Panel width: ", m_panel_width, "px");
+   Print("X offset: ", m_x_offset, "px (from right edge)");
+   Print("Background X (left edge): ", bg_x, "px");
+   Print("Column 0 X (labels): ", m_column_widths[0], "px");
+   Print("Column 1 X (values): ", m_column_widths[1], "px");
+   Print("Padding: L=", m_padding_left, " R=", m_padding_right);
+   Print("===============================");
    return true;
 }
 
@@ -796,12 +805,14 @@ int CGridPanel::CalculateColumnX(int column_index)
 {
    if(column_index == 0)
    {
-      // Left column: labels aligned to left side of panel
-      return m_x_offset + m_panel_width - m_padding_left;
+      // Left column: labels positioned at 40% of panel width from right edge
+      // This ensures labels stay inside panel even with ANCHOR_RIGHT_UPPER
+      // Example: panel_width=280, offset=10 -> label at 10+(280*0.4)=122px from right
+      return m_x_offset + (int)(m_panel_width * 0.4);
    }
    else
    {
-      // Right column(s): values aligned to right side of panel
+      // Right column(s): values aligned to right side of panel with padding
       return m_x_offset + m_padding_right;
    }
 }
