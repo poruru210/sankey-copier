@@ -30,9 +30,9 @@
 #define PANEL_COLOR_TITLE clrWhite
 #define PANEL_COLOR_LABEL clrLightGray
 #define PANEL_COLOR_VALUE clrWhite
-#define PANEL_COLOR_DISABLED clrRed       // Status: DISABLED (0)
-#define PANEL_COLOR_WAITING clrYellow     // Status: ENABLED but Master disconnected (1)
-#define PANEL_COLOR_CONNECTED clrLime     // Status: CONNECTED (2)
+#define PANEL_COLOR_DISABLED clrGray      // Status: DISABLED (0) - matches Web UI gray
+#define PANEL_COLOR_WAITING clrYellow     // Status: ENABLED but Master disconnected (1) - matches Web UI yellow warning
+#define PANEL_COLOR_CONNECTED clrLime     // Status: CONNECTED (2) - matches Web UI green active
 
 // Panel layout constants
 #define TITLE_HEIGHT_EXTRA_PADDING 5       // Extra padding for title row height

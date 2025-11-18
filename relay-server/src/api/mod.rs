@@ -131,9 +131,51 @@ async fn refresh_settings_cache(state: &AppState) {
 ///
 /// CopySettingsから完全な設定情報を含むConfigMessageを生成し、
 /// ZeroMQ経由でSlaveEAに送信します。
+/// Build ConfigMessage with calculated effective status based on Master connection state
+async fn build_config_message(state: &AppState, settings: &CopySettings) -> ConfigMessage {
+    // Calculate effective status (0/1/2) based on Master's is_trade_allowed
+    let effective_status = if settings.status == 0 {
+        // User disabled -> DISABLED
+        0
+    } else {
+        // User enabled (status == 1)
+        // Check if Master is connected and has trading allowed
+        let master_conn = state
+            .connection_manager
+            .get_ea(&settings.master_account)
+            .await;
+
+        if let Some(conn) = master_conn {
+            if conn.is_trade_allowed {
+                // Master online && trading allowed -> CONNECTED
+                2
+            } else {
+                // Master online but trading NOT allowed -> ENABLED (but not connected)
+                1
+            }
+        } else {
+            // Master offline -> ENABLED (but not connected)
+            1
+        }
+    };
+
+    ConfigMessage {
+        account_id: settings.slave_account.clone(),
+        master_account: settings.master_account.clone(),
+        trade_group_id: settings.master_account.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        status: effective_status,
+        lot_multiplier: settings.lot_multiplier,
+        reverse_trade: settings.reverse_trade,
+        symbol_mappings: settings.symbol_mappings.clone(),
+        filters: settings.filters.clone(),
+        config_version: 1,
+    }
+}
+
 async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
-    // From<CopySettings>トレイトを使用して変換
-    let config: ConfigMessage = settings.clone().into();
+    // Build ConfigMessage with calculated effective status
+    let config = build_config_message(state, settings).await;
 
     if let Err(e) = state.config_sender.send_config(&config).await {
         tracing::error!(
@@ -143,10 +185,11 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
         );
     } else {
         tracing::info!(
-            "Sent full config to EA: {} (master: {}, status: {}, lot_mult: {:?})",
+            "Sent full config to EA: {} (master: {}, db_status: {}, effective_status: {}, lot_mult: {:?})",
             settings.slave_account,
             settings.master_account,
             settings.status,
+            config.status,
             settings.lot_multiplier
         );
     }

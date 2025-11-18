@@ -63,21 +63,63 @@ impl MessageHandler {
         match self.db.get_settings_for_slave(&account_id).await {
             Ok(Some(settings)) => {
                 tracing::info!(
-                    "Found settings for {}: master={}, status={}, lot_mult={:?}",
+                    "Found settings for {}: master={}, db_status={}, lot_mult={:?}",
                     account_id,
                     settings.master_account,
                     settings.status,
                     settings.lot_multiplier
                 );
 
-                // Convert CopySettings to ConfigMessage
-                let config: ConfigMessage = settings.into();
+                // Calculate effective status based on Master's is_trade_allowed
+                let effective_status = if settings.status == 0 {
+                    // User disabled -> DISABLED
+                    0
+                } else {
+                    // User enabled (status == 1)
+                    // Check if Master is connected and has trading allowed
+                    let master_conn = self
+                        .connection_manager
+                        .get_ea(&settings.master_account)
+                        .await;
+
+                    if let Some(conn) = master_conn {
+                        if conn.is_trade_allowed {
+                            // Master online && trading allowed -> CONNECTED
+                            2
+                        } else {
+                            // Master online but trading NOT allowed -> ENABLED
+                            1
+                        }
+                    } else {
+                        // Master offline -> ENABLED
+                        1
+                    }
+                };
+
+                // Build ConfigMessage with calculated effective status
+                let config = ConfigMessage {
+                    account_id: settings.slave_account.clone(),
+                    master_account: settings.master_account.clone(),
+                    trade_group_id: settings.master_account.clone(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    status: effective_status,
+                    lot_multiplier: settings.lot_multiplier,
+                    reverse_trade: settings.reverse_trade,
+                    symbol_mappings: settings.symbol_mappings,
+                    filters: settings.filters,
+                    config_version: 1,
+                };
 
                 // Send CONFIG via MessagePack
                 if let Err(e) = self.config_sender.send_config(&config).await {
                     tracing::error!("Failed to send config to {}: {}", account_id, e);
                 } else {
-                    tracing::info!("Successfully sent CONFIG to: {}", account_id);
+                    tracing::info!(
+                        "Successfully sent CONFIG to: {} (db_status: {}, effective_status: {})",
+                        account_id,
+                        settings.status,
+                        effective_status
+                    );
                 }
             }
             Ok(None) => {
@@ -140,7 +182,22 @@ impl MessageHandler {
                         for settings in settings_list {
                             // Only send to enabled Slaves (status > 0)
                             if settings.status > 0 {
-                                let config: ConfigMessage = settings.clone().into();
+                                // Build Config with calculated effective status
+                                let effective_status = if new_is_trade_allowed { 2 } else { 1 };
+
+                                let config = ConfigMessage {
+                                    account_id: settings.slave_account.clone(),
+                                    master_account: settings.master_account.clone(),
+                                    trade_group_id: settings.master_account.clone(),
+                                    timestamp: chrono::Utc::now().to_rfc3339(),
+                                    status: effective_status,
+                                    lot_multiplier: settings.lot_multiplier,
+                                    reverse_trade: settings.reverse_trade,
+                                    symbol_mappings: settings.symbol_mappings.clone(),
+                                    filters: settings.filters.clone(),
+                                    config_version: 1,
+                                };
+
                                 if let Err(e) = self.config_sender.send_config(&config).await {
                                     tracing::error!(
                                         "Failed to send config to {} due to Master is_trade_allowed change: {}",
@@ -149,9 +206,11 @@ impl MessageHandler {
                                     );
                                 } else {
                                     tracing::info!(
-                                        "Sent config to {} due to Master {} is_trade_allowed change",
+                                        "Sent config to {} (effective_status: {}) due to Master {} is_trade_allowed change: {}",
                                         settings.slave_account,
-                                        account_id
+                                        effective_status,
+                                        account_id,
+                                        new_is_trade_allowed
                                     );
                                 }
                             }
