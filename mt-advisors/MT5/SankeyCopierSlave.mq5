@@ -244,33 +244,57 @@ void OnTimer()
          if(ShowConfigPanel)
          {
             // Update status row
-            string status_vals[] = {"Status:", g_config_enabled ? "ENABLED" : "DISABLED"};
-            color status_cols[] = {PANEL_COLOR_LABEL, g_config_enabled ? PANEL_COLOR_ENABLED : PANEL_COLOR_DISABLED};
+            string status_vals[2];
+            status_vals[0] = "Status:";
+            status_vals[1] = g_config_enabled ? "ENABLED" : "DISABLED";
+            color status_cols[2];
+            status_cols[0] = PANEL_COLOR_LABEL;
+            status_cols[1] = g_config_enabled ? PANEL_COLOR_ENABLED : PANEL_COLOR_DISABLED;
             g_config_panel.UpdateRow("status", status_vals, status_cols);
 
             // Update master row
-            string master_vals[] = {"Master:", g_current_master == "" ? "N/A" : g_current_master};
-            color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            string master_vals[2];
+            master_vals[0] = "Master:";
+            master_vals[1] = (g_current_master == "" ? "N/A" : g_current_master);
+            color master_cols[2];
+            master_cols[0] = PANEL_COLOR_LABEL;
+            master_cols[1] = PANEL_COLOR_VALUE;
             g_config_panel.UpdateRow("master", master_vals, master_cols);
 
             // Update lot multiplier row
-            string lot_vals[] = {"Lot Mult:", StringFormat("%.2fx", g_config_lot_multiplier)};
-            color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            string lot_vals[2];
+            lot_vals[0] = "Lot Mult:";
+            lot_vals[1] = StringFormat("%.2fx", g_config_lot_multiplier);
+            color lot_cols[2];
+            lot_cols[0] = PANEL_COLOR_LABEL;
+            lot_cols[1] = PANEL_COLOR_VALUE;
             g_config_panel.UpdateRow("lot", lot_vals, lot_cols);
 
             // Update reverse trade row
-            string reverse_vals[] = {"Reverse:", g_config_reverse_trade ? "ON" : "OFF"};
-            color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            string reverse_vals[2];
+            reverse_vals[0] = "Reverse:";
+            reverse_vals[1] = g_config_reverse_trade ? "ON" : "OFF";
+            color reverse_cols[2];
+            reverse_cols[0] = PANEL_COLOR_LABEL;
+            reverse_cols[1] = PANEL_COLOR_VALUE;
             g_config_panel.UpdateRow("reverse", reverse_vals, reverse_cols);
 
             // Update config version row
-            string version_vals[] = {"Config Ver:", IntegerToString(g_config_version)};
-            color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            string version_vals[2];
+            version_vals[0] = "Config Ver:";
+            version_vals[1] = IntegerToString(g_config_version);
+            color version_cols[2];
+            version_cols[0] = PANEL_COLOR_LABEL;
+            version_cols[1] = PANEL_COLOR_VALUE;
             g_config_panel.UpdateRow("version", version_vals, version_cols);
 
             // Update symbols row
-            string symbols_vals[] = {"Symbols:", IntegerToString(ArraySize(g_symbol_mappings))};
-            color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+            string symbols_vals[2];
+            symbols_vals[0] = "Symbols:";
+            symbols_vals[1] = IntegerToString(ArraySize(g_symbol_mappings));
+            color symbols_cols[2];
+            symbols_cols[0] = PANEL_COLOR_LABEL;
+            symbols_cols[1] = PANEL_COLOR_VALUE;
             g_config_panel.UpdateRow("symbols", symbols_vals, symbols_cols);
          }
       }
