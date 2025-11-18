@@ -52,15 +52,22 @@
 
 //+------------------------------------------------------------------+
 //| Create text label object (MT4/MT5 compatible)                    |
+//| Parameters:                                                       |
+//|   name - Object name                                             |
+//|   x, y - Coordinates                                             |
+//|   text - Label text                                              |
+//|   clr - Text color                                               |
+//|   font_size - Font size                                          |
+//|   anchor - Anchor point (ANCHOR_LEFT_UPPER or ANCHOR_RIGHT_UPPER)|
 //+------------------------------------------------------------------+
-void CreatePanelLabel(string name, int x, int y, string text, color clr, int font_size = PANEL_FONT_SIZE)
+void CreatePanelLabel(string name, int x, int y, string text, color clr, int font_size = PANEL_FONT_SIZE, ENUM_ANCHOR_POINT anchor = ANCHOR_RIGHT_UPPER)
 {
    #ifdef IS_MT5
       ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
       ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
       ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
       ObjectSetString(0, name, OBJPROP_TEXT, text);
       ObjectSetString(0, name, OBJPROP_FONT, PANEL_FONT);
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
@@ -73,7 +80,7 @@ void CreatePanelLabel(string name, int x, int y, string text, color clr, int fon
       ObjectSet(name, OBJPROP_XDISTANCE, x);
       ObjectSet(name, OBJPROP_YDISTANCE, y);
       ObjectSet(name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+      ObjectSet(name, OBJPROP_ANCHOR, anchor);
       ObjectSetText(name, text, font_size, PANEL_FONT, clr);
       ObjectSet(name, OBJPROP_BACK, false);
       ObjectSet(name, OBJPROP_SELECTABLE, false);
@@ -186,6 +193,7 @@ private:
    // Grid configuration
    int      m_column_count;        // Number of columns
    int      m_column_widths[];     // X position for each column (from right edge)
+   ENUM_ANCHOR_POINT m_column_anchors[];  // Anchor point for each column
 
    // Row management
    int      m_row_count;           // Current number of data rows (excluding title)
@@ -309,10 +317,17 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    ArrayResize(m_row_keys, 0);
    m_row_count = 0;
 
-   // Default 2-column layout
+   // Default 2-column layout with appropriate anchors
    ArrayResize(m_column_widths, 2);
-   m_column_widths[0] = CalculateColumnX(0);   // Left column (labels)
-   m_column_widths[1] = CalculateColumnX(1);   // Right column (values)
+   ArrayResize(m_column_anchors, 2);
+
+   // Left column uses ANCHOR_LEFT_UPPER (text extends rightward)
+   m_column_anchors[0] = ANCHOR_LEFT_UPPER;
+   m_column_widths[0] = CalculateColumnX(0);
+
+   // Right column uses ANCHOR_RIGHT_UPPER (text extends leftward)
+   m_column_anchors[1] = ANCHOR_RIGHT_UPPER;
+   m_column_widths[1] = CalculateColumnX(1);
 
    // Create background with initial size (title only)
    // For CORNER_RIGHT_UPPER: XDISTANCE is the left edge position from right
@@ -331,8 +346,10 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    Print("Panel width: ", m_panel_width, "px");
    Print("X offset: ", m_x_offset, "px (from right edge)");
    Print("Background X (left edge): ", bg_x, "px");
-   Print("Column 0 X (labels): ", m_column_widths[0], "px");
-   Print("Column 1 X (values): ", m_column_widths[1], "px");
+   Print("Column 0 (labels): X=", m_column_widths[0], "px, Anchor=",
+         (m_column_anchors[0] == ANCHOR_LEFT_UPPER ? "LEFT_UPPER" : "RIGHT_UPPER"));
+   Print("Column 1 (values): X=", m_column_widths[1], "px, Anchor=",
+         (m_column_anchors[1] == ANCHOR_LEFT_UPPER ? "LEFT_UPPER" : "RIGHT_UPPER"));
    Print("Padding: L=", m_padding_left, " R=", m_padding_right);
    Print("===============================");
    return true;
@@ -403,7 +420,7 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
    // Calculate Y position for this row
    int row_y = CalculateRowY(m_row_count);
 
-   // Create label objects for each column
+   // Create label objects for each column with appropriate anchor
    for(int col = 0; col < m_column_count; col++)
    {
       string obj_name = GenerateObjectName(row_key + "_col" + IntegerToString(col));
@@ -412,7 +429,8 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
                       row_y,
                       values[col],
                       colors[col],
-                      PANEL_DATA_FONT_SIZE);
+                      PANEL_DATA_FONT_SIZE,
+                      m_column_anchors[col]);  // Use anchor specific to this column
    }
 
    m_row_count++;
@@ -800,19 +818,25 @@ int CGridPanel::CalculateBackgroundX()
 //| Parameters:                                                       |
 //|   column_index - Column number (0 = left, 1 = right, etc.)     |
 //| Returns: X coordinate for column text                           |
+//| Note: Column 0 uses ANCHOR_LEFT_UPPER (left edge, extends right)|
+//|       Column 1 uses ANCHOR_RIGHT_UPPER (right edge, extends left)|
 //+------------------------------------------------------------------+
 int CGridPanel::CalculateColumnX(int column_index)
 {
    if(column_index == 0)
    {
-      // Left column: labels positioned at 40% of panel width from right edge
-      // This ensures labels stay inside panel even with ANCHOR_RIGHT_UPPER
-      // Example: panel_width=280, offset=10 -> label at 10+(280*0.4)=122px from right
-      return m_x_offset + (int)(m_panel_width * 0.4);
+      // Left column with ANCHOR_LEFT_UPPER:
+      // X specifies LEFT edge of text, text extends rightward (toward smaller X)
+      // Position near left edge of panel: left_edge - padding
+      // Example: offset=10, width=280, padding=5 -> 10+280-5=285px
+      return m_x_offset + m_panel_width - m_padding_left;
    }
    else
    {
-      // Right column(s): values aligned to right side of panel with padding
+      // Right column with ANCHOR_RIGHT_UPPER:
+      // X specifies RIGHT edge of text, text extends leftward (toward larger X)
+      // Position near right edge of panel: right_edge + padding
+      // Example: offset=10, padding=10 -> 10+10=20px
       return m_x_offset + m_padding_right;
    }
 }
