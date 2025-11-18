@@ -291,6 +291,13 @@ CGridPanel::~CGridPanel()
 bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
                            int panel_width = 200, int row_height = 15)
 {
+   // If re-initializing with the same prefix, delete existing objects first
+   // This prevents object name conflicts and stale objects when EA parameters change
+   if(m_prefix == prefix && m_prefix != "")
+   {
+      Delete();
+   }
+
    m_prefix = prefix;
    m_x_offset = x_offset;
    m_y_offset = y_offset;
