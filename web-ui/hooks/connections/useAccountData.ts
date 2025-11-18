@@ -148,19 +148,28 @@ export function useAccountData({
         }
       });
 
+      // Check if receiver already has auto-trading warning (preserve it)
+      const connection = getAccountConnection(receiver.id);
+      const hasAutoTradingWarning = receiver.isOnline && !(connection?.is_trade_allowed ?? true);
+
       // Determine receiver state based on source states
       if (inactiveCount > 0 && activeCount === 0) {
-        // All sources are inactive - ERROR
+        // All sources are inactive - ERROR (takes priority over auto-trading warning)
         receiver.hasError = true;
         receiver.hasWarning = false;
         receiver.errorMsg = content.allSourcesInactive;
       } else if (inactiveCount > 0 && activeCount > 0) {
-        // Some sources are inactive - WARNING
+        // Some sources are inactive - WARNING (takes priority over auto-trading warning)
         receiver.hasError = false;
         receiver.hasWarning = true;
         receiver.errorMsg = content.someSourcesInactive;
+      } else if (hasAutoTradingWarning) {
+        // All sources are active, but auto-trading is disabled - WARNING
+        receiver.hasError = false;
+        receiver.hasWarning = true;
+        receiver.errorMsg = content.autoTradingDisabled;
       } else {
-        // All sources are active - NORMAL
+        // All sources are active and auto-trading is enabled - NORMAL
         receiver.hasError = false;
         receiver.hasWarning = false;
         receiver.errorMsg = '';
