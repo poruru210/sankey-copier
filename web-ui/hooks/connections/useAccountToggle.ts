@@ -7,7 +7,7 @@ interface UseAccountToggleProps {
   receiverAccounts: AccountInfo[];
   setSourceAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
   setReceiverAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
-  onToggle: (id: number, currentStatus: number) => void;
+  onToggle: (id: number, currentStatus: number) => Promise<void>;
 }
 
 interface UseAccountToggleReturn {
