@@ -251,11 +251,13 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    m_column_widths[1] = m_x_offset + m_padding_right;                  // Right column (values)
 
    // Create background with initial size (title only)
+   // For CORNER_RIGHT_UPPER: XDISTANCE is the left edge position from right
+   // To fit panel in screen: left_edge = x_offset + panel_width
    int initial_height = m_padding_top + m_title_height + m_padding_bottom;
    CreatePanelBackground(GenerateObjectName("BG"),
-                        m_x_offset,
+                        m_x_offset + m_panel_width,  // Left edge at 210px from right
                         m_y_offset,
-                        m_panel_width,
+                        m_panel_width,               // Width 200px (right edge at 10px)
                         initial_height,
                         m_bg_color);
 
