@@ -1,6 +1,6 @@
 export interface CopySettings {
   id: number;
-  enabled: boolean;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
   master_account: string;
   slave_account: string;
   lot_multiplier: number | null;
@@ -37,6 +37,7 @@ export interface EaConnection {
   status: 'Online' | 'Offline' | 'Timeout';
   connected_at: string;
   open_positions?: number; // Number of currently open positions
+  is_trade_allowed: boolean; // MT terminal's Algorithm Trading button state
   // Legacy fields for backwards compatibility
   role?: 'master' | 'slave';
   is_online?: boolean;
@@ -53,7 +54,7 @@ export interface CreateSettingsRequest {
   slave_account: string;
   lot_multiplier: number | null;
   reverse_trade: boolean;
-  enabled: boolean;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
 }
 
 // ConnectionsView specific types

@@ -63,10 +63,10 @@ impl MessageHandler {
         match self.db.get_settings_for_slave(&account_id).await {
             Ok(Some(settings)) => {
                 tracing::info!(
-                    "Found settings for {}: master={}, enabled={}, lot_mult={:?}",
+                    "Found settings for {}: master={}, status={}, lot_mult={:?}",
                     account_id,
                     settings.master_account,
-                    settings.enabled,
+                    settings.status,
                     settings.lot_multiplier
                 );
 
@@ -108,9 +108,38 @@ impl MessageHandler {
         let account_id = msg.account_id.clone();
         let balance = msg.balance;
         let equity = msg.equity;
+        let ea_type = msg.ea_type.clone();
 
         // Update heartbeat (performs auto-registration if needed)
         self.connection_manager.update_heartbeat(msg).await;
+
+        // If this is a Master EA, update all enabled settings to CONNECTED (status=2)
+        if ea_type == "Master" {
+            match self.db.update_master_statuses_connected(&account_id).await {
+                Ok(count) if count > 0 => {
+                    tracing::info!(
+                        "Master {} connected: updated {} settings to CONNECTED",
+                        account_id,
+                        count
+                    );
+                    // Refresh settings cache to reflect the status change
+                    if let Ok(settings) = self.db.list_copy_settings().await {
+                        let mut cache = self.settings_cache.write().await;
+                        *cache = settings;
+                    }
+                    // Notify WebSocket clients
+                    let _ = self
+                        .broadcast_tx
+                        .send(format!("master_connected:{}", account_id));
+                }
+                Ok(_) => {
+                    // No settings updated (no enabled settings for this master)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to update master statuses for {}: {}", account_id, e);
+                }
+            }
+        }
 
         // Notify WebSocket clients of heartbeat
         let _ = self.broadcast_tx.send(format!(
@@ -263,7 +292,7 @@ mod tests {
     fn create_test_copy_settings() -> CopySettings {
         CopySettings {
             id: 1,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: "MASTER_001".to_string(),
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.0),
@@ -300,6 +329,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         handler.handle_heartbeat(hb_msg).await;
 
@@ -340,6 +370,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         handler.handle_heartbeat(hb_msg).await;
 
@@ -390,7 +421,7 @@ mod tests {
         let handler = create_test_handler().await;
         let signal = create_test_trade_signal();
         let mut settings = create_test_copy_settings();
-        settings.enabled = false;
+        settings.status = 0; // STATUS_DISABLED
 
         // Add settings to cache
         {

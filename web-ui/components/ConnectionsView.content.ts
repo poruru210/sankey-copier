@@ -239,6 +239,18 @@ const connectionsViewContent = {
       en: 'An unknown error occurred',
       ja: '不明なエラーが発生しました',
     }),
+    autoTradingDisabled: t({
+      en: 'MT Auto-Trading is disabled. Enable it in MT terminal.',
+      ja: 'MTの自動売買がOFFです。MTターミナルで有効にしてください。',
+    }),
+    deleteFailed: t({
+      en: 'Failed to delete',
+      ja: '削除に失敗しました',
+    }),
+    createFailed: t({
+      en: 'Failed to create',
+      ja: '作成に失敗しました',
+    }),
   },
 } satisfies DeclarationContent;
 

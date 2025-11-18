@@ -42,7 +42,7 @@ pub struct ConfigMessage {
     pub master_account: String,
     pub trade_group_id: String,
     pub timestamp: String, // ISO 8601 format
-    pub enabled: bool,
+    pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
@@ -86,6 +86,8 @@ pub struct HeartbeatMessage {
     pub server: String,
     pub currency: String,
     pub leverage: i64,
+    // Auto-trading state (IsTradeAllowed)
+    pub is_trade_allowed: bool,
 }
 
 /// Trade signal message structure
@@ -259,7 +261,6 @@ pub unsafe extern "C" fn config_get_bool(
     };
 
     let result = match field.as_str() {
-        "enabled" => config.enabled,
         "reverse_trade" => config.reverse_trade,
         _ => false,
     };
@@ -294,10 +295,10 @@ pub unsafe extern "C" fn config_get_int(
         Err(_) => return 0,
     };
 
-    if field == "config_version" {
-        config.config_version as i32
-    } else {
-        0
+    match field.as_str() {
+        "config_version" => config.config_version as i32,
+        "status" => config.status,
+        _ => 0,
     }
 }
 
@@ -389,6 +390,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
     server: *const u16,
     currency: *const u16,
     leverage: i64,
+    is_trade_allowed: i32,
 ) -> i32 {
     let msg = HeartbeatMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
@@ -406,6 +408,7 @@ pub unsafe extern "C" fn serialize_heartbeat(
         server: utf16_to_string(server).unwrap_or_default(),
         currency: utf16_to_string(currency).unwrap_or_default(),
         leverage,
+        is_trade_allowed: is_trade_allowed != 0,
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -734,6 +737,7 @@ mod tests {
             server: "TestServer-Live".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -754,6 +758,7 @@ mod tests {
         assert_eq!(msg.server, deserialized.server);
         assert_eq!(msg.currency, deserialized.currency);
         assert_eq!(msg.leverage, deserialized.leverage);
+        assert_eq!(msg.is_trade_allowed, deserialized.is_trade_allowed);
     }
 
     #[test]
@@ -827,7 +832,7 @@ mod tests {
             master_account: "master_account_456".to_string(),
             trade_group_id: "group_789".to_string(),
             timestamp: "2025-01-01T00:00:00Z".to_string(),
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(1.5),
             reverse_trade: false,
             symbol_mappings: vec![SymbolMapping {
@@ -849,7 +854,7 @@ mod tests {
 
         assert_eq!(config.account_id, deserialized.account_id);
         assert_eq!(config.master_account, deserialized.master_account);
-        assert_eq!(config.enabled, deserialized.enabled);
+        assert_eq!(config.status, deserialized.status);
         assert_eq!(config.lot_multiplier, deserialized.lot_multiplier);
         assert_eq!(config.reverse_trade, deserialized.reverse_trade);
         assert_eq!(
@@ -928,6 +933,7 @@ mod tests {
                         server: "TestServer".to_string(),
                         currency: "USD".to_string(),
                         leverage: 100,
+                        is_trade_allowed: true,
                     };
 
                     // This should not panic

@@ -20,8 +20,8 @@ async fn test_config_message_distribution_flow() {
 
     // Step 1: Create a comprehensive CopySettings record
     let test_settings = CopySettings {
-        id: 0, // Will be assigned by DB
-        enabled: true,
+        id: 0,     // Will be assigned by DB
+        status: 2, // STATUS_CONNECTED
         master_account: "MASTER_TEST_001".to_string(),
         slave_account: "SLAVE_TEST_001".to_string(),
         lot_multiplier: Some(2.5),
@@ -82,7 +82,7 @@ async fn test_config_message_distribution_flow() {
     assert_eq!(config_message.account_id, "SLAVE_TEST_001");
     assert_eq!(config_message.master_account, "MASTER_TEST_001");
     assert_eq!(config_message.trade_group_id, "MASTER_TEST_001");
-    assert!(config_message.enabled);
+    assert_eq!(config_message.status, 2); // STATUS_CONNECTED
     assert_eq!(config_message.lot_multiplier, Some(2.5));
     assert!(config_message.reverse_trade);
     assert_eq!(config_message.symbol_mappings.len(), 2);
@@ -130,7 +130,7 @@ async fn test_config_message_distribution_flow() {
     assert!(json_string.contains("\"account_id\""));
     assert!(json_string.contains("\"master_account\""));
     assert!(json_string.contains("\"trade_group_id\""));
-    assert!(json_string.contains("\"enabled\""));
+    assert!(json_string.contains("\"status\""));
     assert!(json_string.contains("\"lot_multiplier\""));
     assert!(json_string.contains("\"reverse_trade\""));
     assert!(json_string.contains("\"symbol_mappings\""));
@@ -151,7 +151,7 @@ async fn test_config_message_distribution_flow() {
 
     assert_eq!(deserialized.account_id, config_message.account_id);
     assert_eq!(deserialized.master_account, config_message.master_account);
-    assert_eq!(deserialized.enabled, config_message.enabled);
+    assert_eq!(deserialized.status, config_message.status);
     assert_eq!(deserialized.lot_multiplier, config_message.lot_multiplier);
     assert_eq!(deserialized.reverse_trade, config_message.reverse_trade);
     assert_eq!(deserialized.config_version, config_message.config_version);
@@ -170,7 +170,7 @@ async fn test_get_settings_for_slave_method() {
     // Create multiple settings with different slave accounts
     let settings1 = CopySettings {
         id: 0,
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         master_account: "MASTER_001".to_string(),
         slave_account: "SLAVE_ACTIVE".to_string(),
         lot_multiplier: Some(1.5),
@@ -186,7 +186,7 @@ async fn test_get_settings_for_slave_method() {
 
     let settings2 = CopySettings {
         id: 0,
-        enabled: false, // Disabled
+        status: 0, // STATUS_DISABLED
         master_account: "MASTER_002".to_string(),
         slave_account: "SLAVE_DISABLED".to_string(),
         lot_multiplier: Some(2.0),
@@ -214,13 +214,13 @@ async fn test_get_settings_for_slave_method() {
         .await
         .expect("Query failed");
 
-    assert!(result.is_some(), "Should find enabled slave settings");
+    assert!(result.is_some(), "Should find active slave settings");
     let found_settings = result.unwrap();
     assert_eq!(found_settings.slave_account, "SLAVE_ACTIVE");
     assert_eq!(found_settings.master_account, "MASTER_001");
-    assert!(found_settings.enabled);
+    assert_eq!(found_settings.status, 2); // STATUS_CONNECTED
 
-    // Test 2: Query for disabled slave - should NOT find it (enabled=1 filter)
+    // Test 2: Query for disabled slave - should NOT find it (status filter)
     let result = db
         .get_settings_for_slave("SLAVE_DISABLED")
         .await
@@ -249,7 +249,7 @@ async fn test_config_message_with_null_values() {
     // Create settings with minimal configuration (no lot multiplier, no mappings, no filters)
     let minimal_settings = CopySettings {
         id: 0,
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         master_account: "MASTER_MIN".to_string(),
         slave_account: "SLAVE_MIN".to_string(),
         lot_multiplier: None, // null

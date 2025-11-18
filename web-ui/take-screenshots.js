@@ -116,7 +116,7 @@ async function takeScreenshots() {
         const mockSettings = [
           {
             id: 1,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: 'FxPro_12345001',
             slave_account: 'FxPro_22222004',
             lot_multiplier: 1.5,
@@ -130,7 +130,7 @@ async function takeScreenshots() {
           },
           {
             id: 2,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: 'FxPro_12345001',
             slave_account: 'FxPro_33333005',
             lot_multiplier: 0.5,
@@ -255,7 +255,7 @@ async function takeScreenshots() {
         const mockSettings = [
           {
             id: 1,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: 'FxPro_12345001',
             slave_account: 'FxPro_22222004',
             lot_multiplier: 1.5,

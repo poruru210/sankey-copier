@@ -170,7 +170,7 @@ export function useFlowData({
       if (!sourceAccount || !receiverAccount) return;
 
       const isActive =
-        setting.enabled &&
+        setting.status !== 0 &&
         sourceAccount.isOnline &&
         receiverAccount.isOnline &&
         !sourceAccount.hasError &&

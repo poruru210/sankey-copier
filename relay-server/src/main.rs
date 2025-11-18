@@ -23,6 +23,7 @@ use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
+use models::EaType;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
 
 /// Clean up old log files based on retention policy
@@ -262,11 +263,40 @@ async fn main() -> Result<()> {
     tracing::info!("Spawning timeout checker task...");
     {
         let conn_mgr = connection_manager.clone();
+        let db_clone = db.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
             loop {
                 interval.tick().await;
-                conn_mgr.check_timeouts().await;
+                let timed_out = conn_mgr.check_timeouts().await;
+
+                // Update database statuses for timed-out Master EAs
+                for (account_id, ea_type) in timed_out {
+                    if ea_type == EaType::Master {
+                        match db_clone
+                            .update_master_statuses_disconnected(&account_id)
+                            .await
+                        {
+                            Ok(count) if count > 0 => {
+                                tracing::info!(
+                                    "Master {} disconnected: updated {} settings to ENABLED",
+                                    account_id,
+                                    count
+                                );
+                            }
+                            Ok(_) => {
+                                // No settings updated
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to update master statuses for {}: {}",
+                                    account_id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
             }
         });
         tracing::info!("Timeout checker task spawned");

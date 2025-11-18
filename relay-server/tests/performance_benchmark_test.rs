@@ -16,7 +16,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_001".to_string(),
         trade_group_id: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_mappings: vec![],
@@ -42,7 +42,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_MODERATE_001".to_string(),
         trade_group_id: "MASTER_MODERATE_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_mappings: vec![
@@ -85,7 +85,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         trade_group_id: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(2.5),
         reverse_trade: true,
         symbol_mappings: vec![
@@ -195,7 +195,7 @@ async fn test_estimate_parsing_performance() {
 
     let settings = CopySettings {
         id: 1,
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         master_account: "MASTER_001".to_string(),
         slave_account: "SLAVE_001".to_string(),
         lot_multiplier: Some(1.5),

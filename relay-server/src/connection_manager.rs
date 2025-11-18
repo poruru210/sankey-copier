@@ -44,14 +44,16 @@ impl ConnectionManager {
             conn.balance = msg.balance;
             conn.equity = msg.equity;
             conn.status = ConnectionStatus::Online;
+            conn.is_trade_allowed = msg.is_trade_allowed;
 
             tracing::debug!(
-                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {})",
+                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {}, TradeAllowed: {})",
                 account_id,
                 conn.balance,
                 conn.currency,
                 conn.equity,
-                msg.version
+                msg.version,
+                msg.is_trade_allowed
             );
         } else {
             // 未登録のEA: Heartbeatの情報から自動登録
@@ -80,6 +82,7 @@ impl ConnectionManager {
                 last_heartbeat: now,
                 status: ConnectionStatus::Online,
                 connected_at: now,
+                is_trade_allowed: msg.is_trade_allowed,
             };
 
             connections.insert(account_id.clone(), connection);
@@ -99,7 +102,8 @@ impl ConnectionManager {
     }
 
     /// タイムアウトをチェックして、応答のないEAをタイムアウト状態にする
-    pub async fn check_timeouts(&self) {
+    /// Returns a list of (account_id, ea_type) for timed-out EAs
+    pub async fn check_timeouts(&self) -> Vec<(String, EaType)> {
         let now = Utc::now();
         let timeout_duration = Duration::seconds(self.timeout_seconds);
 
@@ -112,19 +116,28 @@ impl ConnectionManager {
 
                 if elapsed > timeout_duration {
                     tracing::warn!(
-                        "EA timed out: {} (last heartbeat: {:?} ago)",
+                        "EA timed out: {} (ea_type: {}, last heartbeat: {:?} ago)",
                         account_id,
+                        conn.ea_type,
                         elapsed
                     );
                     conn.status = ConnectionStatus::Timeout;
-                    timed_out_accounts.push(account_id.clone());
+                    timed_out_accounts.push((account_id.clone(), conn.ea_type));
                 }
             }
         }
 
         if !timed_out_accounts.is_empty() {
-            tracing::info!("Timed out EAs: {:?}", timed_out_accounts);
+            tracing::info!(
+                "Timed out EAs: {:?}",
+                timed_out_accounts
+                    .iter()
+                    .map(|(id, _)| id)
+                    .collect::<Vec<_>>()
+            );
         }
+
+        timed_out_accounts
     }
 }
 
@@ -149,6 +162,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         }
     }
 
@@ -196,6 +210,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         manager.update_heartbeat(hb_msg).await;
 
@@ -216,6 +231,7 @@ mod tests {
             server: "Test-Server".to_string(),
             currency: "USD".to_string(),
             leverage: 100,
+            is_trade_allowed: true,
         };
         manager.update_heartbeat(hb_msg2).await;
 
@@ -260,9 +276,14 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Run timeout check
-        manager.check_timeouts().await;
+        let timed_out = manager.check_timeouts().await;
 
-        // Verify timed out
+        // Verify one EA timed out
+        assert_eq!(timed_out.len(), 1);
+        assert_eq!(timed_out[0].0, account_id);
+        assert_eq!(timed_out[0].1, EaType::Master);
+
+        // Verify timed out status
         let ea = manager.get_ea(&account_id).await;
         assert_eq!(ea.unwrap().status, ConnectionStatus::Timeout);
     }
@@ -295,6 +316,7 @@ mod tests {
                 server: "Test-Server".to_string(),
                 currency: "USD".to_string(),
                 leverage: 100,
+                is_trade_allowed: true,
             })
             .await;
 
@@ -302,9 +324,12 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         // Run timeout check
-        manager.check_timeouts().await;
+        let timed_out = manager.check_timeouts().await;
 
-        // Should still be online because heartbeat was sent within timeout
+        // Should not have timed out because heartbeat was sent within timeout
+        assert_eq!(timed_out.len(), 0);
+
+        // Should still be online
         let ea = manager.get_ea(&account_id).await;
         assert_eq!(ea.unwrap().status, ConnectionStatus::Online);
     }
@@ -330,6 +355,7 @@ mod tests {
             server: "NewServer-Live".to_string(),
             currency: "EUR".to_string(),
             leverage: 200,
+            is_trade_allowed: true,
         };
 
         manager.update_heartbeat(hb_msg).await;

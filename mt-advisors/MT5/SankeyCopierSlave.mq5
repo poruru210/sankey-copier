@@ -41,13 +41,14 @@ datetime    g_last_heartbeat = 0;
 string      g_current_master = "";      // Currently configured master account
 string      g_trade_group_id = "";      // Current trade group subscription
 bool        g_config_requested = false; // Track if config has been requested
+bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
 // Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
-bool           g_config_enabled = true;          // Whether copying is enabled
+int            g_config_status = STATUS_DISABLED;   // Connection status (0=DISABLED, 1=ENABLED, 2=CONNECTED)
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
 bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
 SymbolMapping  g_symbol_mappings[];              // Symbol mappings
@@ -123,7 +124,7 @@ int OnInit()
 
       // Update panel immediately with current values to avoid showing "N/A"
       // (OnTimer will also update these every second, but this provides instant feedback)
-      g_config_panel.UpdateStatusRow(g_config_enabled);
+      g_config_panel.UpdateStatusRow(g_config_status);
       g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
       g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
       g_config_panel.UpdateReverseRow(g_config_reverse_trade);
@@ -161,10 +162,15 @@ void OnTimer()
    if(!g_initialized)
       return;
 
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS
-   datetime now = TimeLocal();
+   // Check for auto-trading state change (IsTradeAllowed)
+   bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
 
-   if(now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS)
+   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
+   datetime now = TimeLocal();
+   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
+
+   if(should_send_heartbeat)
    {
       bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT5");
 
@@ -172,18 +178,42 @@ void OnTimer()
       {
          g_last_heartbeat = TimeLocal();
 
-         // On first successful heartbeat, request configuration from server
-         if(!g_config_requested)
+         // If trade state changed, log it
+         if(trade_state_changed)
          {
-            Print("[INFO] First heartbeat successful, requesting configuration...");
-            if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
+            g_last_trade_allowed = current_trade_allowed;
+
+            // If auto-trading was just enabled, request configuration
+            if(current_trade_allowed && !g_config_requested)
             {
-               g_config_requested = true;
-               Print("[INFO] Configuration request sent successfully");
+               Print("[INFO] Auto-trading enabled, requesting configuration...");
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               {
+                  g_config_requested = true;
+                  Print("[INFO] Configuration request sent successfully");
+               }
+               else
+               {
+                  Print("[ERROR] Failed to send configuration request, will retry on next state change");
+               }
             }
-            else
+         }
+         else
+         {
+            // On first successful heartbeat (normal interval), request configuration if not yet requested
+            if(!g_config_requested)
             {
-               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+               Print("[INFO] First heartbeat successful, requesting configuration...");
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               {
+                  g_config_requested = true;
+                  Print("[INFO] Configuration request sent successfully");
+               }
+               else
+               {
+                  Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+               }
             }
          }
       }
@@ -221,13 +251,13 @@ void OnTimer()
 
          Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
          ProcessConfigMessage(msgpack_payload, payload_len, g_current_master, g_trade_group_id,
-                             g_config_enabled, g_config_lot_multiplier, g_config_reverse_trade,
+                             g_config_status, g_config_lot_multiplier, g_config_reverse_trade,
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
 
          // Update configuration panel
          if(ShowConfigPanel)
          {
-            g_config_panel.UpdateStatusRow(g_config_enabled);
+            g_config_panel.UpdateStatusRow(g_config_status);
             g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
             g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
             g_config_panel.UpdateReverseRow(g_config_reverse_trade);
@@ -309,10 +339,18 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    string timestamp = trade_signal_get_string(handle, "timestamp");
    string source_account = trade_signal_get_string(handle, "source_account");
 
+   // Check if connected to Master before processing any trades
+   if(g_config_status != STATUS_CONNECTED)
+   {
+      Print("Trade signal rejected: Not connected to Master (status=", g_config_status, "). Master ticket #", master_ticket);
+      trade_signal_free(handle);
+      return;
+   }
+
    if(action == "Open" && AllowNewOrders)
    {
       // Apply filtering
-      if(!ShouldProcessTrade(symbol, magic_number, g_config_enabled, g_filters))
+      if(!ShouldProcessTrade(symbol, magic_number, g_config_status, g_filters))
       {
          Print("Trade filtered out: ", symbol, " magic=", magic_number);
          trade_signal_free(handle);

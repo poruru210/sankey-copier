@@ -22,6 +22,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 3,
+    is_trade_allowed: true,
   },
   {
     account_id: 'OANDA_67890002',
@@ -39,6 +40,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Offline',
     connected_at: new Date().toISOString(),
     open_positions: 0,
+    is_trade_allowed: true,
   },
   {
     account_id: 'XM_11111003',
@@ -56,6 +58,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 5,
+    is_trade_allowed: true,
   },
   // Slave accounts
   {
@@ -74,6 +77,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 2,
+    is_trade_allowed: true,
   },
   {
     account_id: 'OANDA_33333005',
@@ -91,6 +95,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 1,
+    is_trade_allowed: true,
   },
   {
     account_id: 'XM_44444006',
@@ -108,6 +113,7 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 3,
+    is_trade_allowed: true,
   },
   {
     account_id: 'FxPro_55555007',
@@ -125,13 +131,14 @@ export const mockConnections: EaConnection[] = [
     status: 'Online',
     connected_at: new Date().toISOString(),
     open_positions: 1,
+    is_trade_allowed: true,
   },
 ];
 
 export const mockSettings: CopySettings[] = [
   {
     id: 1,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'FxPro_12345001',
     slave_account: 'FxPro_22222004',
     lot_multiplier: 1.5,
@@ -146,7 +153,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 2,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'FxPro_12345001',
     slave_account: 'OANDA_33333005',
     lot_multiplier: 0.5,
@@ -163,7 +170,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 3,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'OANDA_67890002',
     slave_account: 'XM_44444006',
     lot_multiplier: 2.0,
@@ -178,7 +185,7 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 4,
-    enabled: true,
+    status: 2, // STATUS_CONNECTED
     master_account: 'XM_11111003',
     slave_account: 'FxPro_55555007',
     lot_multiplier: 1.0,

@@ -15,7 +15,7 @@ impl Database {
             r#"
             CREATE TABLE IF NOT EXISTS copy_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                enabled BOOLEAN NOT NULL DEFAULT 1,
+                status INTEGER NOT NULL DEFAULT 0,
                 master_account TEXT NOT NULL,
                 slave_account TEXT NOT NULL,
                 lot_multiplier REAL,
@@ -64,7 +64,7 @@ impl Database {
 
     pub async fn get_copy_settings(&self, id: i32) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
-            "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
+            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
              FROM copy_settings WHERE id = ?",
         )
         .bind(id)
@@ -123,7 +123,7 @@ impl Database {
 
             Ok(Some(CopySettings {
                 id: row.get("id"),
-                enabled: row.get("enabled"),
+                status: row.get("status"),
                 master_account: row.get("master_account"),
                 slave_account: row.get("slave_account"),
                 lot_multiplier: row.get("lot_multiplier"),
@@ -143,8 +143,8 @@ impl Database {
         slave_account: &str,
     ) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
-            "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE slave_account = ? AND enabled = 1 LIMIT 1",
+            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
+             FROM copy_settings WHERE slave_account = ? AND status > 0 LIMIT 1",
         )
         .bind(slave_account)
         .fetch_optional(&self.pool)
@@ -202,7 +202,7 @@ impl Database {
 
             Ok(Some(CopySettings {
                 id: row.get("id"),
-                enabled: row.get("enabled"),
+                status: row.get("status"),
                 master_account: row.get("master_account"),
                 slave_account: row.get("slave_account"),
                 lot_multiplier: row.get("lot_multiplier"),
@@ -218,7 +218,7 @@ impl Database {
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
         // Fetch all copy_settings
         let settings_rows = sqlx::query(
-            "SELECT id, enabled, master_account, slave_account, lot_multiplier, reverse_trade
+            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
              FROM copy_settings ORDER BY id",
         )
         .fetch_all(&self.pool)
@@ -293,7 +293,7 @@ impl Database {
 
             settings.push(CopySettings {
                 id: row.get("id"),
-                enabled: row.get("enabled"),
+                status: row.get("status"),
                 master_account: row.get("master_account"),
                 slave_account: row.get("slave_account"),
                 lot_multiplier: row.get("lot_multiplier"),
@@ -310,10 +310,10 @@ impl Database {
         let id = if settings.id == 0 {
             // New record - INSERT
             let result = sqlx::query(
-                "INSERT INTO copy_settings (enabled, master_account, slave_account, lot_multiplier, reverse_trade)
+                "INSERT INTO copy_settings (status, master_account, slave_account, lot_multiplier, reverse_trade)
                  VALUES (?, ?, ?, ?, ?)"
             )
-            .bind(settings.enabled)
+            .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
             .bind(settings.lot_multiplier)
@@ -326,7 +326,7 @@ impl Database {
             // Existing record - UPDATE
             sqlx::query(
                 "UPDATE copy_settings SET
-                    enabled = ?,
+                    status = ?,
                     master_account = ?,
                     slave_account = ?,
                     lot_multiplier = ?,
@@ -334,7 +334,7 @@ impl Database {
                     updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?",
             )
-            .bind(settings.enabled)
+            .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
             .bind(settings.lot_multiplier)
@@ -382,15 +382,41 @@ impl Database {
         Ok(id)
     }
 
-    pub async fn update_enabled_status(&self, id: i32, enabled: bool) -> Result<()> {
+    pub async fn update_status(&self, id: i32, status: i32) -> Result<()> {
         sqlx::query(
-            "UPDATE copy_settings SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE copy_settings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
-        .bind(enabled)
+        .bind(status)
         .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Update all enabled settings for a master to CONNECTED (2) when master comes online
+    pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
+        let result = sqlx::query(
+            "UPDATE copy_settings
+             SET status = 2, updated_at = CURRENT_TIMESTAMP
+             WHERE master_account = ? AND status > 0",
+        )
+        .bind(master_account)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() as usize)
+    }
+
+    /// Update all connected settings for a master to ENABLED (1) when master goes offline
+    pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
+        let result = sqlx::query(
+            "UPDATE copy_settings
+             SET status = 1, updated_at = CURRENT_TIMESTAMP
+             WHERE master_account = ? AND status = 2",
+        )
+        .bind(master_account)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() as usize)
     }
 
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
@@ -413,7 +439,7 @@ mod tests {
     fn create_test_settings() -> CopySettings {
         CopySettings {
             id: 0,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: "MASTER_001".to_string(),
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.5),
@@ -565,23 +591,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_enabled_status() {
+    async fn test_update_status() {
         let db = create_test_db().await;
 
         let settings = create_test_settings();
         let id = db.save_copy_settings(&settings).await.unwrap();
 
-        // Disable
-        db.update_enabled_status(id, false).await.unwrap();
+        // Set to DISABLED (0)
+        db.update_status(id, 0).await.unwrap();
 
         let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
-        assert!(!retrieved.enabled);
+        assert_eq!(retrieved.status, 0);
 
-        // Enable again
-        db.update_enabled_status(id, true).await.unwrap();
+        // Set to ENABLED (1)
+        db.update_status(id, 1).await.unwrap();
 
         let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
-        assert!(retrieved.enabled);
+        assert_eq!(retrieved.status, 1);
+
+        // Set to CONNECTED (2)
+        db.update_status(id, 2).await.unwrap();
+
+        let retrieved = db.get_copy_settings(id).await.unwrap().unwrap();
+        assert_eq!(retrieved.status, 2);
     }
 
     #[tokio::test]
@@ -645,7 +677,7 @@ mod tests {
         let db = create_test_db().await;
 
         let mut settings = create_test_settings();
-        settings.enabled = false;
+        settings.status = 0; // STATUS_DISABLED
 
         db.save_copy_settings(&settings).await.unwrap();
 
@@ -748,5 +780,111 @@ mod tests {
         // Deleting non-existent settings should not error
         let result = db.delete_copy_settings(999).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_update_master_statuses_connected() {
+        let db = create_test_db().await;
+
+        // Create three settings for the same master: one disabled, two enabled
+        let mut settings1 = create_test_settings();
+        settings1.master_account = "MASTER_001".to_string();
+        settings1.slave_account = "SLAVE_001".to_string();
+        settings1.status = 0; // DISABLED
+        let id1 = db.save_copy_settings(&settings1).await.unwrap();
+
+        let mut settings2 = create_test_settings();
+        settings2.master_account = "MASTER_001".to_string();
+        settings2.slave_account = "SLAVE_002".to_string();
+        settings2.status = 1; // ENABLED
+        let id2 = db.save_copy_settings(&settings2).await.unwrap();
+
+        let mut settings3 = create_test_settings();
+        settings3.master_account = "MASTER_001".to_string();
+        settings3.slave_account = "SLAVE_003".to_string();
+        settings3.status = 1; // ENABLED
+        let id3 = db.save_copy_settings(&settings3).await.unwrap();
+
+        // Update master statuses to CONNECTED
+        let count = db
+            .update_master_statuses_connected("MASTER_001")
+            .await
+            .unwrap();
+
+        // Should update 2 settings (the enabled ones)
+        assert_eq!(count, 2);
+
+        // Verify statuses
+        let retrieved1 = db.get_copy_settings(id1).await.unwrap().unwrap();
+        assert_eq!(retrieved1.status, 0); // Still DISABLED
+
+        let retrieved2 = db.get_copy_settings(id2).await.unwrap().unwrap();
+        assert_eq!(retrieved2.status, 2); // Now CONNECTED
+
+        let retrieved3 = db.get_copy_settings(id3).await.unwrap().unwrap();
+        assert_eq!(retrieved3.status, 2); // Now CONNECTED
+    }
+
+    #[tokio::test]
+    async fn test_update_master_statuses_disconnected() {
+        let db = create_test_db().await;
+
+        // Create three settings for the same master with different statuses
+        let mut settings1 = create_test_settings();
+        settings1.master_account = "MASTER_001".to_string();
+        settings1.slave_account = "SLAVE_001".to_string();
+        settings1.status = 0; // DISABLED
+        let id1 = db.save_copy_settings(&settings1).await.unwrap();
+
+        let mut settings2 = create_test_settings();
+        settings2.master_account = "MASTER_001".to_string();
+        settings2.slave_account = "SLAVE_002".to_string();
+        settings2.status = 1; // ENABLED
+        let id2 = db.save_copy_settings(&settings2).await.unwrap();
+
+        let mut settings3 = create_test_settings();
+        settings3.master_account = "MASTER_001".to_string();
+        settings3.slave_account = "SLAVE_003".to_string();
+        settings3.status = 2; // CONNECTED
+        let id3 = db.save_copy_settings(&settings3).await.unwrap();
+
+        // Update master statuses to ENABLED (disconnected)
+        let count = db
+            .update_master_statuses_disconnected("MASTER_001")
+            .await
+            .unwrap();
+
+        // Should update 1 setting (the connected one)
+        assert_eq!(count, 1);
+
+        // Verify statuses
+        let retrieved1 = db.get_copy_settings(id1).await.unwrap().unwrap();
+        assert_eq!(retrieved1.status, 0); // Still DISABLED
+
+        let retrieved2 = db.get_copy_settings(id2).await.unwrap().unwrap();
+        assert_eq!(retrieved2.status, 1); // Still ENABLED
+
+        let retrieved3 = db.get_copy_settings(id3).await.unwrap().unwrap();
+        assert_eq!(retrieved3.status, 1); // Now ENABLED (was CONNECTED)
+    }
+
+    #[tokio::test]
+    async fn test_update_master_statuses_no_settings() {
+        let db = create_test_db().await;
+
+        // Try to update statuses for a master with no settings
+        let count = db
+            .update_master_statuses_connected("NONEXISTENT_MASTER")
+            .await
+            .unwrap();
+
+        assert_eq!(count, 0);
+
+        let count = db
+            .update_master_statuses_disconnected("NONEXISTENT_MASTER")
+            .await
+            .unwrap();
+
+        assert_eq!(count, 0);
     }
 }

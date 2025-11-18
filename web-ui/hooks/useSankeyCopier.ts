@@ -23,7 +23,7 @@ export function useSankeyCopier() {
         case 'delete':
           return state.filter(s => s.id !== action.id);
         case 'toggle':
-          return state.map(s => s.id === action.id ? { ...s, enabled: !s.enabled } : s);
+          return state.map(s => s.id === action.id ? { ...s, status: s.status === 0 ? 1 : 0 } : s);
         default:
           return state;
       }
@@ -144,16 +144,18 @@ export function useSankeyCopier() {
     return () => clearInterval(interval);
   }, [fetchSettings, fetchConnections]);
 
-  // Toggle enabled status
-  const toggleEnabled = async (id: number, currentStatus: boolean) => {
+  // Toggle status (DISABLED ⇄ ENABLED)
+  const toggleEnabled = async (id: number, currentStatus: number) => {
     // Optimistically update UI
     startTransition(() => {
       addOptimisticSettings({ type: 'toggle', id });
     });
 
     try {
+      // Toggle between DISABLED (0) and ENABLED (1)
+      const newStatus = currentStatus === 0 ? 1 : 0;
       // Rust API returns StatusCode::NO_CONTENT (204) on success
-      await apiClient.post<void>(`/settings/${id}/toggle`, { enabled: !currentStatus });
+      await apiClient.post<void>(`/settings/${id}/toggle`, { status: newStatus });
       fetchSettings();
     } catch (err) {
       fetchSettings(); // Revert on error
@@ -167,7 +169,6 @@ export function useSankeyCopier() {
     const tempSetting: CopySettings = {
       ...formData,
       id: Date.now(), // Temporary ID
-      enabled: true,
       symbol_mappings: [],
       filters: {
         allowed_symbols: null,

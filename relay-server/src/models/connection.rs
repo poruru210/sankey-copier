@@ -22,6 +22,7 @@ pub struct EaConnection {
     pub last_heartbeat: DateTime<Utc>,
     pub status: ConnectionStatus,
     pub connected_at: DateTime<Utc>,
+    pub is_trade_allowed: bool, // MT auto-trading enabled state
 }
 
 /// EAの種類
@@ -40,6 +41,15 @@ impl FromStr for EaType {
             "Master" => Ok(EaType::Master),
             "Slave" => Ok(EaType::Slave),
             _ => Err(()),
+        }
+    }
+}
+
+impl std::fmt::Display for EaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EaType::Master => write!(f, "Master"),
+            EaType::Slave => write!(f, "Slave"),
         }
     }
 }
@@ -83,7 +93,7 @@ impl From<crate::models::CopySettings> for ConfigMessage {
             master_account: settings.master_account.clone(),
             trade_group_id: settings.master_account, // master_accountと同じ
             timestamp: chrono::Utc::now().to_rfc3339(),
-            enabled: settings.enabled,
+            status: settings.status,
             lot_multiplier: settings.lot_multiplier,
             reverse_trade: settings.reverse_trade,
             symbol_mappings: settings.symbol_mappings,
@@ -102,7 +112,7 @@ mod tests {
     fn test_config_message_from_copy_settings() {
         let settings = CopySettings {
             id: 1,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: "MASTER_001".to_string(),
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.5),
@@ -121,7 +131,7 @@ mod tests {
         assert_eq!(config.account_id, "SLAVE_001");
         assert_eq!(config.master_account, "MASTER_001");
         assert_eq!(config.trade_group_id, "MASTER_001");
-        assert!(config.enabled);
+        assert_eq!(config.status, 2);
         assert_eq!(config.lot_multiplier, Some(1.5));
         assert!(!config.reverse_trade);
         assert_eq!(config.config_version, 1);
@@ -132,7 +142,7 @@ mod tests {
     fn test_config_message_with_mappings_and_filters() {
         let settings = CopySettings {
             id: 2,
-            enabled: false,
+            status: 0, // STATUS_DISABLED
             master_account: "MASTER_002".to_string(),
             slave_account: "SLAVE_002".to_string(),
             lot_multiplier: None,
@@ -151,7 +161,7 @@ mod tests {
 
         let config: ConfigMessage = settings.into();
 
-        assert!(!config.enabled);
+        assert_eq!(config.status, 0);
         assert_eq!(config.lot_multiplier, None);
         assert!(config.reverse_trade);
         assert_eq!(config.symbol_mappings.len(), 1);
@@ -170,7 +180,7 @@ mod tests {
             master_account: "MASTER_001".to_string(),
             trade_group_id: "MASTER_001".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(2.0),
             reverse_trade: false,
             symbol_mappings: vec![],
@@ -188,7 +198,7 @@ mod tests {
         // Verify deserialization works
         let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.account_id, "TEST_001");
-        assert!(deserialized.enabled);
+        assert_eq!(deserialized.status, 2);
         assert_eq!(deserialized.config_version, 1);
     }
 
@@ -196,7 +206,7 @@ mod tests {
     fn test_config_message_with_null_values() {
         let settings = CopySettings {
             id: 3,
-            enabled: true,
+            status: 2, // STATUS_CONNECTED
             master_account: "MASTER_003".to_string(),
             slave_account: "SLAVE_003".to_string(),
             lot_multiplier: None,

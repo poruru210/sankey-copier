@@ -22,7 +22,7 @@ fn create_test_signal() -> TradeSignal {
 fn create_test_settings() -> CopySettings {
     CopySettings {
         id: 1,
-        enabled: true,
+        status: 2, // STATUS_CONNECTED
         master_account: "MASTER_001".to_string(),
         slave_account: "SLAVE_001".to_string(),
         lot_multiplier: Some(1.0),
@@ -51,7 +51,7 @@ fn test_should_copy_trade_disabled() {
     let engine = CopyEngine::new();
     let signal = create_test_signal();
     let mut settings = create_test_settings();
-    settings.enabled = false;
+    settings.status = 0; // STATUS_DISABLED
 
     assert!(!engine.should_copy_trade(&signal, &settings));
 }

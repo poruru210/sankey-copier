@@ -26,6 +26,11 @@
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
 
+//--- Connection status constants (3 states)
+#define STATUS_DISABLED 0      // Slave is disabled
+#define STATUS_ENABLED 1       // Slave is enabled, Master disconnected
+#define STATUS_CONNECTED 2     // Slave is enabled, Master connected
+
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
    HANDLE_TYPE zmq_context_create();
@@ -47,7 +52,7 @@
                               double equity, int open_positions, string timestamp,
                               string ea_type, string platform, long account_number,
                               string broker, string account_name, string server,
-                              string currency, long leverage);
+                              string currency, long leverage, int is_trade_allowed);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
                                  long magic_number, string comment, string timestamp, string source_account);

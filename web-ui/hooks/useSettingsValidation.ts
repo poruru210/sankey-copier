@@ -81,7 +81,7 @@ export function useSettingsValidation({
       );
 
       if (duplicate) {
-        const status = duplicate.enabled ? messages.statusEnabled : messages.statusDisabled;
+        const status = duplicate.status !== 0 ? messages.statusEnabled : messages.statusDisabled;
         errors.push(
           messages.duplicateSettings
             .replace('{id}', String(duplicate.id))
@@ -141,7 +141,7 @@ export function useSettingsValidation({
         (setting) =>
           setting.master_account === slaveAccount &&
           setting.slave_account === masterAccount &&
-          setting.enabled
+          setting.status !== 0
       );
 
       if (reverseConnection) {

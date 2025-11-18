@@ -7,7 +7,7 @@ interface UseAccountToggleProps {
   receiverAccounts: AccountInfo[];
   setSourceAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
   setReceiverAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
-  onToggle: (id: number, currentStatus: boolean) => void;
+  onToggle: (id: number, currentStatus: number) => Promise<void>;
 }
 
 interface UseAccountToggleReturn {
@@ -39,7 +39,7 @@ export function useAccountToggle({
       // Find all settings for this source and toggle them
       const sourceSettings = settings.filter((s) => s.master_account === accountId);
       sourceSettings.forEach((setting) => {
-        onToggle(setting.id, !enabled);
+        onToggle(setting.id, setting.status);
       });
     },
     [settings, setSourceAccounts, onToggle]
@@ -55,7 +55,7 @@ export function useAccountToggle({
       // Find all settings for this receiver and toggle them
       const receiverSettings = settings.filter((s) => s.slave_account === accountId);
       receiverSettings.forEach((setting) => {
-        onToggle(setting.id, !enabled);
+        onToggle(setting.id, setting.status);
       });
     },
     [settings, setReceiverAccounts, onToggle]

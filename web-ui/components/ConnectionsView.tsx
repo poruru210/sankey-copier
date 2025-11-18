@@ -29,10 +29,10 @@ const ACCOUNT_LIST = 'space-y-3 md:space-y-4 w-full max-w-md md:max-w-none';
 interface ConnectionsViewProps {
   connections: EaConnection[];
   settings: CopySettings[];
-  onToggle: (id: number, currentStatus: boolean) => void;
-  onCreate: (data: CreateSettingsRequest) => void;
-  onUpdate: (id: number, data: CopySettings) => void;
-  onDelete: (id: number) => void;
+  onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onCreate: (data: CreateSettingsRequest) => Promise<void>;
+  onUpdate: (id: number, data: CopySettings) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
 }
 
 export function ConnectionsView({
@@ -65,6 +65,7 @@ export function ConnectionsView({
     content: {
       allSourcesInactive: content.allSourcesInactive,
       someSourcesInactive: content.someSourcesInactive,
+      autoTradingDisabled: content.autoTradingDisabled,
     },
   });
 

@@ -54,6 +54,7 @@ fn test_message_discriminator_heartbeat() {
         server: "Test-Server".to_string(),
         currency: "USD".to_string(),
         leverage: 100,
+        is_trade_allowed: true,
     };
 
     let bytes = rmp_serde::to_vec_named(&heartbeat).unwrap();
