@@ -120,6 +120,15 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
+
+      // Update panel immediately with current values to avoid showing "N/A"
+      // (OnTimer will also update these every second, but this provides instant feedback)
+      g_config_panel.UpdateStatusRow(g_config_enabled);
+      g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
+      g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
+      g_config_panel.UpdateReverseRow(g_config_reverse_trade);
+      g_config_panel.UpdateVersionRow(g_config_version);
+      g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
    }
 
    return INIT_SUCCEEDED;
