@@ -158,11 +158,7 @@ impl MessageHandler {
                         }
                     }
                     Err(e) => {
-                        tracing::error!(
-                            "Failed to get settings for Master {}: {}",
-                            account_id,
-                            e
-                        );
+                        tracing::error!("Failed to get settings for Master {}: {}", account_id, e);
                     }
                 }
             }

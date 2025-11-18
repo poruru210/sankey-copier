@@ -235,7 +235,11 @@ impl Database {
         let setting_ids: Vec<i32> = settings_rows.iter().map(|row| row.get("id")).collect();
 
         // Fetch all symbol_mappings for these settings
-        let placeholders = setting_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let placeholders = setting_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
         let query_str = format!(
             "SELECT setting_id, source_symbol, target_symbol
              FROM symbol_mappings
