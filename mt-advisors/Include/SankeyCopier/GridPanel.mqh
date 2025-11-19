@@ -706,6 +706,9 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
 //+------------------------------------------------------------------+
 //| Show a text message instead of the grid (e.g. "Not Configured") |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Show a text message instead of the grid (e.g. "Not Configured") |
+//+------------------------------------------------------------------+
 void CGridPanel::ShowMessage(string text, color clr = clrYellow)
 {
    // Hide all grid elements
@@ -713,11 +716,15 @@ void CGridPanel::ShowMessage(string text, color clr = clrYellow)
    string title_name = GenerateObjectName("Title");
    
    #ifdef IS_MT5
-      ObjectSetInteger(0, bg_name, OBJPROP_HIDDEN, true);
-      ObjectSetInteger(0, title_name, OBJPROP_HIDDEN, true);
+      // MQL5: Use OBJPROP_TIMEFRAMES to hide from all timeframes
+      ObjectSetInteger(0, bg_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+      ObjectSetInteger(0, title_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
    #else
-      ObjectSet(bg_name, OBJPROP_HIDDEN, true);
-      ObjectSet(title_name, OBJPROP_HIDDEN, true);
+      // MQL4: Move objects off-screen to hide them
+      ObjectSet(bg_name, OBJPROP_XDISTANCE, 10000);
+      ObjectSet(bg_name, OBJPROP_YDISTANCE, 10000);
+      ObjectSet(title_name, OBJPROP_XDISTANCE, 10000);
+      ObjectSet(title_name, OBJPROP_YDISTANCE, 10000);
    #endif
    
    for(int i = 0; i < m_row_count; i++)
@@ -726,9 +733,10 @@ void CGridPanel::ShowMessage(string text, color clr = clrYellow)
       {
          string obj_name = GenerateObjectName(m_row_keys[i] + "_col" + IntegerToString(col));
          #ifdef IS_MT5
-            ObjectSetInteger(0, obj_name, OBJPROP_HIDDEN, true);
+            ObjectSetInteger(0, obj_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
          #else
-            ObjectSet(obj_name, OBJPROP_HIDDEN, true);
+            ObjectSet(obj_name, OBJPROP_XDISTANCE, 10000);
+            ObjectSet(obj_name, OBJPROP_YDISTANCE, 10000);
          #endif
       }
    }
@@ -750,10 +758,16 @@ void CGridPanel::ShowMessage(string text, color clr = clrYellow)
    
    UpdatePanelLabel(msg_name, text, clr);
    
+   // Ensure message is visible
    #ifdef IS_MT5
-      ObjectSetInteger(0, msg_name, OBJPROP_HIDDEN, false);
+      ObjectSetInteger(0, msg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
    #else
-      ObjectSet(msg_name, OBJPROP_HIDDEN, false);
+      // MQL4: Ensure message is at correct position (in case it was hidden before)
+      // Note: CreatePanelLabel sets the position, but if it existed and was moved, we need to restore it
+      // However, ShowMessage creates/updates it, so we should just ensure it's visible/positioned
+      // Since we don't move the message offscreen in HideMessage (we delete it), this is fine.
+      // But just in case, let's make sure it's not hidden via TIMEFRAMES if we ever used that.
+      ObjectSet(msg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS); 
    #endif
 }
 
@@ -774,22 +788,36 @@ void CGridPanel::HideMessage()
    string title_name = GenerateObjectName("Title");
    
    #ifdef IS_MT5
-      ObjectSetInteger(0, bg_name, OBJPROP_HIDDEN, false);
-      ObjectSetInteger(0, title_name, OBJPROP_HIDDEN, false);
+      ObjectSetInteger(0, bg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+      ObjectSetInteger(0, title_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
    #else
-      ObjectSet(bg_name, OBJPROP_HIDDEN, false);
-      ObjectSet(title_name, OBJPROP_HIDDEN, false);
+      // MQL4: Restore positions
+      int bg_x = CalculateBackgroundX();
+      ObjectSet(bg_name, OBJPROP_XDISTANCE, bg_x);
+      ObjectSet(bg_name, OBJPROP_YDISTANCE, m_y_offset);
+      
+      // Title position (centered in panel width, but CreatePanelLabel uses specific logic)
+      // We need to check how CreatePanelLabel positions the title.
+      // In Initialize: CreatePanelLabel(..., m_x_offset + (m_panel_width/2), m_y_offset + 5, ...)
+      // Wait, SetTitle calls CreatePanelLabel.
+      // Let's check SetTitle logic or assume standard positioning.
+      // Actually, SetTitle uses: m_x_offset + (m_panel_width / 2), m_y_offset + 5
+      ObjectSet(title_name, OBJPROP_XDISTANCE, m_x_offset + (m_panel_width / 2));
+      ObjectSet(title_name, OBJPROP_YDISTANCE, m_y_offset + 5);
    #endif
    
    for(int i = 0; i < m_row_count; i++)
    {
+      int row_y = CalculateRowY(i);
       for(int col = 0; col < m_column_count; col++)
       {
          string obj_name = GenerateObjectName(m_row_keys[i] + "_col" + IntegerToString(col));
          #ifdef IS_MT5
-            ObjectSetInteger(0, obj_name, OBJPROP_HIDDEN, false);
+            ObjectSetInteger(0, obj_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
          #else
-            ObjectSet(obj_name, OBJPROP_HIDDEN, false);
+            // MQL4: Restore positions
+            ObjectSet(obj_name, OBJPROP_XDISTANCE, m_column_widths[col]);
+            ObjectSet(obj_name, OBJPROP_YDISTANCE, row_y);
          #endif
       }
    }
