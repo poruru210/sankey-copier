@@ -1,5 +1,11 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useAtom } from 'jotai';
 import type { CopySettings } from '@/types';
+import {
+  hoveredSourceIdAtom,
+  hoveredReceiverIdAtom,
+  selectedSourceIdAtom,
+} from '@/lib/atoms/ui';
 
 interface UseConnectionHighlightReturn {
   hoveredSourceId: string | null;
@@ -24,9 +30,9 @@ interface UseConnectionHighlightReturn {
 export function useConnectionHighlight(
   settings: CopySettings[]
 ): UseConnectionHighlightReturn {
-  const [hoveredSourceId, setHoveredSourceId] = useState<string | null>(null);
-  const [hoveredReceiverId, setHoveredReceiverId] = useState<string | null>(null);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [hoveredSourceId, setHoveredSourceId] = useAtom(hoveredSourceIdAtom);
+  const [hoveredReceiverId, setHoveredReceiverId] = useAtom(hoveredReceiverIdAtom);
+  const [selectedSourceId, setSelectedSourceId] = useAtom(selectedSourceIdAtom);
   const [isMobile, setIsMobile] = useState(false);
 
   // Detect mobile viewport
@@ -102,11 +108,11 @@ export function useConnectionHighlight(
   // Stable setter functions
   const setHoveredSource = useCallback((id: string | null) => {
     setHoveredSourceId(id);
-  }, []);
+  }, [setHoveredSourceId]);
 
   const setHoveredReceiver = useCallback((id: string | null) => {
     setHoveredReceiverId(id);
-  }, []);
+  }, [setHoveredReceiverId]);
 
   // Handle source selection on mobile (from dropdown)
   const handleSourceTap = useCallback(
@@ -116,13 +122,13 @@ export function useConnectionHighlight(
         setSelectedSourceId(id);
       }
     },
-    [isMobile]
+    [isMobile, setSelectedSourceId]
   );
 
   // Clear selection
   const clearSelection = useCallback(() => {
     setSelectedSourceId(null);
-  }, []);
+  }, [setSelectedSourceId]);
 
   return {
     hoveredSourceId,

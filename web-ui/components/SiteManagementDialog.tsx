@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAtom } from 'jotai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Trash2, Plus, Edit2 } from 'lucide-react';
-import { useSiteContext } from '@/lib/contexts/site-context';
-import { Site } from '@/lib/types/site';
+import { sitesAtom, selectedSiteIdAtom } from '@/lib/atoms/site';
+import { Site, DEFAULT_SITE } from '@/lib/types/site';
 
 interface SiteManagementDialogProps {
   open: boolean;
@@ -15,7 +16,9 @@ interface SiteManagementDialogProps {
 }
 
 export function SiteManagementDialog({ open, onOpenChange }: SiteManagementDialogProps) {
-  const { sites, addSite, updateSite, deleteSite, selectedSiteId, selectSite } = useSiteContext();
+  const [sites, setSites] = useAtom(sitesAtom);
+  const [selectedSiteId, setSelectedSiteId] = useAtom(selectedSiteIdAtom);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', siteUrl: '' });
   const [error, setError] = useState<string>('');
@@ -60,17 +63,25 @@ export function SiteManagementDialog({ open, onOpenChange }: SiteManagementDialo
       return;
     }
 
-    if (editingId) {
+    if (editingId && editingId !== 'new') {
       // Update existing site
-      updateSite(editingId, {
-        name: formData.name.trim(),
-        siteUrl: formData.siteUrl.trim(),
-      });
+      setSites((prev) =>
+        prev.map((site) =>
+          site.id === editingId
+            ? { ...site, name: formData.name.trim(), siteUrl: formData.siteUrl.trim() }
+            : site
+        )
+      );
     } else {
       // Add new site
-      const newSite = addSite(formData.name.trim(), formData.siteUrl.trim());
+      const newSite: Site = {
+        id: crypto.randomUUID(),
+        name: formData.name.trim(),
+        siteUrl: formData.siteUrl.trim(),
+      };
+      setSites((prev) => [...prev, newSite]);
       // Automatically select the newly created site
-      selectSite(newSite.id);
+      setSelectedSiteId(newSite.id);
     }
 
     // Reset form
@@ -84,7 +95,15 @@ export function SiteManagementDialog({ open, onOpenChange }: SiteManagementDialo
     }
 
     if (window.confirm(`「${site.name}」を削除しますか？`)) {
-      deleteSite(site.id);
+      setSites((prev) => prev.filter((s) => s.id !== site.id));
+
+      // If deleted site was selected, select the first available site
+      if (selectedSiteId === site.id) {
+        const remainingSites = sites.filter((s) => s.id !== site.id);
+        if (remainingSites.length > 0) {
+          setSelectedSiteId(remainingSites[0].id);
+        }
+      }
       setError('');
     }
   };
@@ -135,11 +154,10 @@ export function SiteManagementDialog({ open, onOpenChange }: SiteManagementDialo
               {sites.map((site) => (
                 <div
                   key={site.id}
-                  className={`p-3 rounded-lg border ${
-                    site.id === selectedSiteId
+                  className={`p-3 rounded-lg border ${site.id === selectedSiteId
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
                       : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                  }`}
+                    }`}
                 >
                   {editingId === site.id ? (
                     // Edit Mode

@@ -20,7 +20,6 @@ import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types'
 import {
   useAccountData,
   useConnectionHighlight,
-  useAccountToggle,
 } from '@/hooks/connections';
 import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
@@ -65,12 +64,8 @@ function ConnectionsViewReactFlowInner({
   const {
     sourceAccounts,
     receiverAccounts,
-    setSourceAccounts,
-    setReceiverAccounts,
     getAccountConnection,
     getAccountSettings,
-    toggleSourceExpand,
-    toggleReceiverExpand,
   } = useAccountData({
     connections,
     settings,
@@ -85,22 +80,11 @@ function ConnectionsViewReactFlowInner({
   const {
     hoveredSourceId,
     hoveredReceiverId,
-    selectedSourceId,
     setHoveredSource,
     setHoveredReceiver,
     isAccountHighlighted,
     isMobile,
   } = useConnectionHighlight(settings);
-
-  // Use custom hook for toggle operations
-  const { toggleSourceEnabled, toggleReceiverEnabled } = useAccountToggle({
-    settings,
-    sourceAccounts,
-    receiverAccounts,
-    setSourceAccounts,
-    setReceiverAccounts,
-    onToggle,
-  });
 
   // Use custom hook for master account filtering
   const {
@@ -211,18 +195,12 @@ function ConnectionsViewReactFlowInner({
     settings,
     getAccountConnection,
     getAccountSettings,
-    toggleSourceExpand,
-    toggleReceiverExpand,
-    toggleSourceEnabled,
-    toggleReceiverEnabled,
     handleEditSetting,
     handleDeleteSetting,
-    hoveredSourceId,
-    hoveredReceiverId,
-    selectedSourceId,
     isAccountHighlighted,
     isMobile,
     content: accountCardContent,
+    onToggle,
   });
 
   // Use React Flow's state management for nodes and edges

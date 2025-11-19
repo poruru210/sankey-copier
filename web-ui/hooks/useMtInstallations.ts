@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import type { MtInstallation, MtInstallationsResponse } from '@/types';
-import { useApiClient } from '@/lib/contexts/site-context';
+import { apiClientAtom } from '@/lib/atoms/site';
 
 export function useMtInstallations() {
-  const apiClient = useApiClient();
+  const apiClient = useAtomValue(apiClientAtom);
   const [installations, setInstallations] = useState<MtInstallation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -11,6 +12,7 @@ export function useMtInstallations() {
 
   // Fetch MT installations
   const fetchInstallations = useCallback(async () => {
+    if (!apiClient) return;
     try {
       setLoading(true);
       setError(null);
@@ -39,6 +41,7 @@ export function useMtInstallations() {
 
   // Install components to MT installation
   const installToMt = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    if (!apiClient) return { success: false, message: 'API Client not ready' };
     try {
       setInstalling(id);
       // Rust API returns a string message directly on success

@@ -1,12 +1,10 @@
 import { useCallback } from 'react';
-import type { CopySettings, AccountInfo } from '@/types';
+import { useAtom } from 'jotai';
+import type { CopySettings } from '@/types';
+import { disabledSourceIdsAtom } from '@/lib/atoms/ui';
 
 interface UseAccountToggleProps {
   settings: CopySettings[];
-  sourceAccounts: AccountInfo[];
-  receiverAccounts: AccountInfo[];
-  setSourceAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
-  setReceiverAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
   onToggle: (id: number, currentStatus: number) => Promise<void>;
 }
 
@@ -18,47 +16,55 @@ interface UseAccountToggleReturn {
 /**
  * Custom hook for managing account enable/disable toggle operations
  *
- * @param props - Settings, account states, and toggle callback
+ * @param props - Settings and toggle callback
  * @returns Toggle functions for sources and receivers
  */
 export function useAccountToggle({
   settings,
-  sourceAccounts,
-  receiverAccounts,
-  setSourceAccounts,
-  setReceiverAccounts,
   onToggle,
 }: UseAccountToggleProps): UseAccountToggleReturn {
+  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
+
   const toggleSourceEnabled = useCallback(
     (accountId: string, enabled: boolean) => {
-      // Update local state
-      setSourceAccounts((prev) =>
-        prev.map((acc) => (acc.id === accountId ? { ...acc, isEnabled: enabled } : acc))
-      );
+      // Update local state (disabledSourceIds)
+      setDisabledSourceIds((prev) => {
+        if (enabled) {
+          return prev.filter((id) => id !== accountId);
+        } else {
+          return prev.includes(accountId) ? prev : [...prev, accountId];
+        }
+      });
 
       // Find all settings for this source and toggle them
       const sourceSettings = settings.filter((s) => s.master_account === accountId);
       sourceSettings.forEach((setting) => {
-        onToggle(setting.id, setting.status);
+        // Only toggle if the target state matches the desired enabled state
+        // If we want to ENABLE (enabled=true), we should toggle if currently DISABLED (status=0)
+        // If we want to DISABLE (enabled=false), we should toggle if currently ENABLED (status!=0)
+        const isCurrentlyEnabled = setting.status !== 0;
+        if (isCurrentlyEnabled !== enabled) {
+          onToggle(setting.id, setting.status);
+        }
       });
     },
-    [settings, setSourceAccounts, onToggle]
+    [settings, setDisabledSourceIds, onToggle]
   );
 
   const toggleReceiverEnabled = useCallback(
     (accountId: string, enabled: boolean) => {
-      // Update local state
-      setReceiverAccounts((prev) =>
-        prev.map((acc) => (acc.id === accountId ? { ...acc, isEnabled: enabled } : acc))
-      );
+      // Receiver enabled state is derived from settings, so we just need to update settings
 
       // Find all settings for this receiver and toggle them
       const receiverSettings = settings.filter((s) => s.slave_account === accountId);
       receiverSettings.forEach((setting) => {
-        onToggle(setting.id, setting.status);
+        const isCurrentlyEnabled = setting.status !== 0;
+        if (isCurrentlyEnabled !== enabled) {
+          onToggle(setting.id, setting.status);
+        }
       });
     },
-    [settings, setReceiverAccounts, onToggle]
+    [settings, onToggle]
   );
 
   return {
