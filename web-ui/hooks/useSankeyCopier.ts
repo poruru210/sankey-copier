@@ -203,9 +203,11 @@ export function useSankeyCopier() {
   const createSetting = async (formData: CreateSettingsRequest) => {
     if (!apiClient) return;
     // Optimistically add to UI with temporary ID
+    // Use negative ID to avoid i32 overflow (Date.now() exceeds i32 max)
     const tempSetting: CopySettings = {
       ...formData,
-      id: Date.now(), // Temporary ID
+      id: -Date.now(), // Negative temporary ID to avoid i32 overflow
+      status: 0, // Default to DISABLED (OFF switch)
       symbol_mappings: [],
       filters: {
         allowed_symbols: null,
