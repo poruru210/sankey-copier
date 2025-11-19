@@ -15,6 +15,8 @@ pub struct Config {
     pub logging: LoggingConfig,
     #[serde(default)]
     pub installer: InstallerConfig,
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +111,43 @@ pub struct InstallerConfig {
     /// If not set, uses current_dir() (production default)
     #[serde(default)]
     pub components_base_path: Option<String>,
+}
+
+/// TLS configuration for HTTPS server
+/// Used for PNA (Private Network Access) compliance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Path to certificate file (.pem)
+    #[serde(default = "default_cert_path")]
+    pub cert_path: String,
+    /// Path to private key file (.pem)
+    #[serde(default = "default_key_path")]
+    pub key_path: String,
+    /// Certificate validity period in days
+    #[serde(default = "default_cert_validity_days")]
+    pub validity_days: u32,
+}
+
+fn default_cert_path() -> String {
+    "certs/server.pem".to_string()
+}
+
+fn default_key_path() -> String {
+    "certs/server-key.pem".to_string()
+}
+
+fn default_cert_validity_days() -> u32 {
+    3650 // 10 years
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            cert_path: default_cert_path(),
+            key_path: default_key_path(),
+            validity_days: default_cert_validity_days(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,6 +261,7 @@ impl Default for Config {
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
+            tls: TlsConfig::default(),
         }
     }
 }

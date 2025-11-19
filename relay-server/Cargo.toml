@@ -37,6 +37,14 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = { version = "1.0", features = ["backtrace"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 
+# TLS/HTTPS
+# Use tls-rustls-no-provider to avoid aws-lc-sys dependency, then use ring provider
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = "0.13"
+rustls-pemfile = "2.2"
+time = "0.3"
+
 # Windows Registry (for MT4/MT5 detection)
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

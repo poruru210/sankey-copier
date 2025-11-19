@@ -43,3 +43,10 @@ file_prefix = "sankey-copier-server"   # Prefix for log file names
 rotation = "daily"                      # Rotation strategy: "daily", "hourly", or "never"
 max_files = 3                           # Maximum number of log files to keep (0 = unlimited)
 max_age_days = 3                        # Maximum age of log files in days (0 = unlimited)
+
+[tls]
+# TLS/HTTPS configuration for PNA (Private Network Access) compliance
+# Certificate files are auto-generated and registered in Windows trusted root store on first run
+cert_path = "certs/server.pem"          # Path to certificate file (relative to executable)
+key_path = "certs/server-key.pem"       # Path to private key file (relative to executable)
+validity_days = 3650                    # Certificate validity period in days (default: 10 years)
