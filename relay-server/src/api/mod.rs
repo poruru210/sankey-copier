@@ -339,8 +339,12 @@ async fn create_settings(
             refresh_settings_cache(&state).await;
             send_config_to_ea(&state, &settings).await;
 
+            // Update settings object with the generated ID
+            let mut created_settings = settings.clone();
+            created_settings.id = id;
+
             // Notify via WebSocket
-            if let Ok(json) = serde_json::to_string(&settings) {
+            if let Ok(json) = serde_json::to_string(&created_settings) {
                 let _ = state.tx.send(format!("settings_created:{}", json));
             }
 

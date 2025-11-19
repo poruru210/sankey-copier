@@ -170,6 +170,16 @@ export function useSankeyCopier() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debouncedCallsRef = useRef<Map<number, any>>(new Map());
 
+  // Cleanup debounced functions on unmount or when apiClient changes
+  useEffect(() => {
+    return () => {
+      debouncedCallsRef.current.forEach((debouncedFn) => {
+        debouncedFn.cancel();
+      });
+      debouncedCallsRef.current.clear();
+    };
+  }, [apiClient]);
+
   // Toggle status (DISABLED ⇄ ENABLED)
   const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
     if (!apiClient) return;
@@ -183,6 +193,10 @@ export function useSankeyCopier() {
 
     // Get or create debounced function for this specific ID
     let debouncedFn = debouncedCallsRef.current.get(id);
+
+    // Create a new debounced function if it doesn't exist
+    // Note: We don't need to worry about stale apiClient here because we clear the map
+    // when apiClient changes (in the useEffect above), forcing recreation.
     if (!debouncedFn) {
       debouncedFn = debounce(async (status: number) => {
         try {
@@ -202,32 +216,12 @@ export function useSankeyCopier() {
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
     if (!apiClient) return;
-    // Optimistically add to UI with temporary ID
-    // Use negative ID within i32 range to avoid overflow
-    // i32 range: -2,147,483,648 to 2,147,483,647
-    const tempSetting: CopySettings = {
-      ...formData,
-      id: -(Date.now() % 2000000000), // Negative temporary ID within i32 range
-      status: 0, // Default to DISABLED (OFF switch)
-      symbol_mappings: [],
-      filters: {
-        allowed_symbols: null,
-        blocked_symbols: null,
-        allowed_magic_numbers: null,
-        blocked_magic_numbers: null,
-      },
-    };
-
-
-    const previousSettings = settings;
-    setSettings((prev) => [...prev, tempSetting]);
 
     try {
-      // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
+      // Send to server - WebSocket will handle adding to UI
       await apiClient.post<number>('/settings', formData);
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
+      // No optimistic update - WebSocket message 'settings_created:{json}' will add it
     } catch (err) {
-      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };
