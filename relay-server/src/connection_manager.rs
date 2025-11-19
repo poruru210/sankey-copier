@@ -39,16 +39,20 @@ impl ConnectionManager {
         let mut connections = self.connections.write().await;
 
         if let Some(conn) = connections.get_mut(account_id) {
-            // 既存のEA: ハートビート情報のみ更新
+            // 既存のEA: ハートビート情報を更新
+            // IMPORTANT: EA type can change (e.g., Master -> Slave if reconfigured)
             conn.last_heartbeat = Utc::now();
             conn.balance = msg.balance;
             conn.equity = msg.equity;
             conn.status = ConnectionStatus::Online;
             conn.is_trade_allowed = msg.is_trade_allowed;
+            conn.ea_type = msg.ea_type.parse().unwrap_or(conn.ea_type); // Update EA type
+            conn.platform = msg.platform.parse().unwrap_or(conn.platform); // Update platform
 
             tracing::debug!(
-                "Heartbeat received: {} (Balance: {:.2} {}, Equity: {:.2}, EA Version: {}, TradeAllowed: {})",
+                "Heartbeat received: {} (EA Type: {}, Balance: {:.2} {}, Equity: {:.2}, EA Version: {}, TradeAllowed: {})",
                 account_id,
+                conn.ea_type,
                 conn.balance,
                 conn.currency,
                 conn.equity,
