@@ -11,6 +11,13 @@ use std::process::Command;
 
 use crate::config::TlsConfig;
 
+/// Certificate Common Name used for identification
+/// This must be unique to prevent conflicts with other certificates
+const CERT_COMMON_NAME: &str = "SANKEY Copier Local Server";
+
+/// Certificate Organization Name
+const CERT_ORG_NAME: &str = "SANKEY Copier";
+
 /// Ensure certificate exists, generating and registering if necessary
 ///
 /// This function checks if the certificate files exist. If not, it generates
@@ -79,10 +86,10 @@ fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
     // Set distinguished name
     params
         .distinguished_name
-        .push(DnType::CommonName, "SANKEY Copier Local Server");
+        .push(DnType::CommonName, CERT_COMMON_NAME);
     params
         .distinguished_name
-        .push(DnType::OrganizationName, "SANKEY Copier");
+        .push(DnType::OrganizationName, CERT_ORG_NAME);
 
     // Set Subject Alternative Names for localhost
     let localhost_dns =
@@ -122,6 +129,9 @@ fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
 /// root certification authorities store. This requires administrator
 /// privileges (typically available when running as a Windows service).
 ///
+/// Before registering, removes any existing certificates with the same
+/// Common Name to prevent duplicate entries.
+///
 /// # Arguments
 /// * `cert_path` - Path to the certificate PEM file
 ///
@@ -131,9 +141,33 @@ fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
 fn register_to_windows_store(cert_path: &Path) -> Result<()> {
     tracing::info!("Registering certificate in Windows trusted root store");
 
-    // Use certutil to add certificate to Root store
-    // -addstore adds to specified store, Root is trusted root CAs
-    // -f forces overwrite if certificate already exists
+    // First, remove any existing certificate with the same CN to prevent duplicates
+    // This is safe because we use a unique CN for SANKEY Copier
+    let delete_output = Command::new("certutil")
+        .args(["-delstore", "Root", CERT_COMMON_NAME])
+        .output();
+
+    match delete_output {
+        Ok(output) if output.status.success() => {
+            tracing::info!(
+                "Removed existing certificate with CN '{}' from store",
+                CERT_COMMON_NAME
+            );
+        }
+        Ok(_) => {
+            // Certificate not found or deletion failed - this is fine for first-time install
+            tracing::debug!(
+                "No existing certificate with CN '{}' found in store (or deletion failed)",
+                CERT_COMMON_NAME
+            );
+        }
+        Err(e) => {
+            tracing::warn!("Failed to check/remove existing certificate: {}", e);
+        }
+    }
+
+    // Now add the new certificate to Root store
+    // -f forces overwrite if certificate already exists (belt and suspenders)
     let output = Command::new("certutil")
         .args([
             "-addstore",
