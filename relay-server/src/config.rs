@@ -314,6 +314,7 @@ mod tests {
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
+            tls: TlsConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");
