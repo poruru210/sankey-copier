@@ -27,9 +27,9 @@ timeout_seconds = 30      # Connection timeout in seconds
 # CORS configuration for Web UI access
 # WARNING: Setting disable=true allows ALL origins - use only in development!
 disable = true  # Set to true to disable CORS restrictions (allows all origins)
-# Origins are automatically generated from [webui] port setting:
-#   - http://localhost:{webui_port}
-#   - http://127.0.0.1:{webui_port}
+# HTTPS origins are automatically generated from [webui] port setting:
+#   - https://localhost:{webui_port}
+#   - https://127.0.0.1:{webui_port}
 # Additional custom origins can be specified below (e.g., for Vercel deployment, development ports)
 additional_origins = [
 	"https://copier.sankey.trade",

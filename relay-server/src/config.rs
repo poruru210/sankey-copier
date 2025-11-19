@@ -227,11 +227,11 @@ impl Config {
     }
 
     /// Get all allowed CORS origins
-    /// Auto-generates origins from webui port and includes additional custom origins
+    /// Auto-generates HTTPS origins from webui port and includes additional custom origins
     pub fn allowed_origins(&self) -> Vec<String> {
         let mut origins = vec![
-            format!("http://localhost:{}", self.webui.port),
-            format!("http://127.0.0.1:{}", self.webui.port),
+            format!("https://localhost:{}", self.webui.port),
+            format!("https://127.0.0.1:{}", self.webui.port),
         ];
 
         // Add additional custom origins (e.g., for Vercel deployment)
