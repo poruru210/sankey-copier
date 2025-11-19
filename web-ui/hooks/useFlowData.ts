@@ -232,13 +232,12 @@ export function useFlowData({
 
       if (!sourceAccount || !receiverAccount) return;
 
+      // Edge is active only if both source and receiver are active (green)
+      // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
       const isActive =
         setting.status !== 0 &&
-        sourceAccount.isOnline &&
-        receiverAccount.isOnline &&
-        !sourceAccount.hasError &&
-        !receiverAccount.hasError &&
-        !receiverAccount.hasWarning;
+        sourceAccount.isActive &&
+        receiverAccount.isActive;
 
       // Build label text with copy settings
       const labelParts: string[] = [];
