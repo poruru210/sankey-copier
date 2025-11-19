@@ -16,7 +16,7 @@ export interface Site {
 export const DEFAULT_SITE: Site = {
   id: 'local',
   name: 'Local',
-  siteUrl: 'http://localhost:3000',
+  siteUrl: 'https://localhost:3000',
 };
 
 /**

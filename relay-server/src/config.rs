@@ -15,6 +15,8 @@ pub struct Config {
     pub logging: LoggingConfig,
     #[serde(default)]
     pub installer: InstallerConfig,
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +113,43 @@ pub struct InstallerConfig {
     pub components_base_path: Option<String>,
 }
 
+/// TLS configuration for HTTPS server
+/// Used for PNA (Private Network Access) compliance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Path to certificate file (.pem)
+    #[serde(default = "default_cert_path")]
+    pub cert_path: String,
+    /// Path to private key file (.pem)
+    #[serde(default = "default_key_path")]
+    pub key_path: String,
+    /// Certificate validity period in days
+    #[serde(default = "default_cert_validity_days")]
+    pub validity_days: u32,
+}
+
+fn default_cert_path() -> String {
+    "certs/server.pem".to_string()
+}
+
+fn default_key_path() -> String {
+    "certs/server-key.pem".to_string()
+}
+
+fn default_cert_validity_days() -> u32 {
+    3650 // 10 years
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            cert_path: default_cert_path(),
+            key_path: default_key_path(),
+            validity_days: default_cert_validity_days(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
@@ -188,11 +227,11 @@ impl Config {
     }
 
     /// Get all allowed CORS origins
-    /// Auto-generates origins from webui port and includes additional custom origins
+    /// Auto-generates HTTPS origins from webui port and includes additional custom origins
     pub fn allowed_origins(&self) -> Vec<String> {
         let mut origins = vec![
-            format!("http://localhost:{}", self.webui.port),
-            format!("http://127.0.0.1:{}", self.webui.port),
+            format!("https://localhost:{}", self.webui.port),
+            format!("https://127.0.0.1:{}", self.webui.port),
         ];
 
         // Add additional custom origins (e.g., for Vercel deployment)
@@ -222,6 +261,7 @@ impl Default for Config {
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
+            tls: TlsConfig::default(),
         }
     }
 }
@@ -274,6 +314,7 @@ mod tests {
             cors: CorsConfig::default(),
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
+            tls: TlsConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");

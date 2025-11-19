@@ -1,4 +1,5 @@
 mod api;
+mod cert;
 mod config;
 mod connection_manager;
 mod db;
@@ -111,6 +112,12 @@ fn cleanup_old_logs(logging_config: &LoggingConfig) {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize rustls with ring crypto provider
+    // This must be done before any TLS operations
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Load configuration first (needed for file logging setup)
     // Loads config.toml, config.dev.toml, and config.local.toml (if they exist)
     let config = match Config::from_file("config") {
@@ -190,6 +197,11 @@ async fn main() -> Result<()> {
     tracing::info!("ZMQ Receiver: {}", config.zmq_receiver_address());
     tracing::info!("ZMQ Sender: {}", config.zmq_sender_address());
     tracing::info!("ZMQ Config Sender: {}", config.zmq_config_sender_address());
+
+    // Ensure TLS certificate exists (generate and register if needed)
+    let base_path = std::env::current_dir()?;
+    cert::ensure_certificate(&config.tls, &base_path)?;
+    tracing::info!("TLS certificate ready");
 
     // Initialize database
     let db = Arc::new(Database::new(&config.database.url).await?);
@@ -332,37 +344,37 @@ async fn main() -> Result<()> {
     let app = create_router(app_state);
     tracing::info!("API router built");
 
-    // Start HTTP server
+    // Start HTTPS server
     tracing::info!("Getting bind address...");
     let bind_address = config.server_address();
-    tracing::info!(
-        "Bind address: {}, attempting to bind with 5 second timeout...",
-        bind_address
-    );
+    tracing::info!("Bind address: {}, loading TLS certificate...", bind_address);
 
-    let listener = match tokio::time::timeout(
-        Duration::from_secs(5),
-        tokio::net::TcpListener::bind(&bind_address),
-    )
-    .await
-    {
-        Ok(Ok(listener)) => {
-            tracing::info!("Successfully bound to {}", bind_address);
-            listener
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Failed to bind: {}", e);
-            return Err(e.into());
-        }
-        Err(_) => {
-            tracing::error!("Bind operation timed out after 5 seconds");
-            anyhow::bail!("Failed to bind to {}: timeout", bind_address);
-        }
-    };
+    // Load TLS certificate and key
+    let cert_path = base_path.join(&config.tls.cert_path);
+    let key_path = base_path.join(&config.tls.key_path);
 
-    tracing::info!("HTTP server listening on http://{}", bind_address);
+    let rustls_config =
+        match axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert_path, &key_path).await {
+            Ok(config) => {
+                tracing::info!("TLS configuration loaded successfully");
+                config
+            }
+            Err(e) => {
+                tracing::error!("Failed to load TLS certificate: {}", e);
+                return Err(e.into());
+            }
+        };
 
-    axum::serve(listener, app).await?;
+    // Parse bind address
+    let addr: std::net::SocketAddr = bind_address
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid bind address '{}': {}", bind_address, e))?;
+
+    tracing::info!("HTTPS server listening on https://{}", bind_address);
+
+    axum_server::bind_rustls(addr, rustls_config)
+        .serve(app.into_make_service())
+        .await?;
 
     Ok(())
 }

@@ -12,3 +12,6 @@
 # *.db
 # *.db-shm
 # *.db-wal
+
+# TLS certificates (auto-generated)
+certs/

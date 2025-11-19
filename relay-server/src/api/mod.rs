@@ -4,8 +4,10 @@ mod mt_installations;
 pub use error::ProblemDetails;
 
 use axum::{
+    body::Body,
     extract::{ws::WebSocket, ws::WebSocketUpgrade, Path, State},
-    http::StatusCode,
+    http::{header::HeaderValue, Request, StatusCode},
+    middleware,
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -25,6 +27,23 @@ use crate::{
     models::{ConfigMessage, CopySettings, EaConnection},
     zeromq::ZmqConfigPublisher,
 };
+
+/// Middleware to add PNA (Private Network Access) headers
+///
+/// Adds Access-Control-Allow-Private-Network header to responses
+/// for browsers to allow HTTPS pages to access local network resources.
+async fn add_pna_headers(request: Request<Body>, next: middleware::Next) -> Response {
+    let mut response = next.run(request).await;
+
+    // Add PNA header to allow private network access
+    // This is required for Chrome's Private Network Access feature
+    response.headers_mut().insert(
+        "Access-Control-Allow-Private-Network",
+        HeaderValue::from_static("true"),
+    );
+
+    response
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -117,6 +136,11 @@ pub fn create_router(state: AppState) -> Router {
         )
         .layer(trace_layer)
         .layer(cors)
+        // PNA headers must be added after CORS layer (outermost) so they are included
+        // in CORS preflight responses. Axum layers are applied outside-in for requests
+        // and inside-out for responses, so this position ensures all responses
+        // (including OPTIONS preflight) get the PNA header.
+        .layer(middleware::from_fn(add_pna_headers))
         .with_state(state)
 }
 

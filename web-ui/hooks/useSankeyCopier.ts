@@ -65,9 +65,11 @@ export function useSankeyCopier() {
   useEffect(() => {
     if (!selectedSite?.siteUrl) return;
 
-    // Extract host from siteUrl (e.g., "http://localhost:3000" -> "localhost:3000")
+    // Extract host from siteUrl (e.g., "https://localhost:3000" -> "localhost:3000")
+    // Use wss:// for https:// sites, ws:// for http:// sites
     const siteHost = selectedSite.siteUrl.replace(/^https?:\/\//, '');
-    const wsUrl = `ws://${siteHost}/ws`;
+    const wsProtocol = selectedSite.siteUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsUrl = `${wsProtocol}://${siteHost}/ws`;
     console.log('WebSocket connecting to:', wsUrl);
 
     let ws: WebSocket | null = null;
