@@ -179,7 +179,7 @@ impl Database {
             // New record - INSERT
             let result = sqlx::query(
                 "INSERT INTO connections (status, master_account, slave_account, settings)
-                 VALUES (?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?)",
             )
             .bind(settings.status)
             .bind(&settings.master_account)
@@ -462,8 +462,6 @@ mod tests {
         let retrieved = db.get_copy_settings(id).await.unwrap();
         assert!(retrieved.is_none());
     }
-
-
 
     #[tokio::test]
     async fn test_get_settings_for_slave_disabled() {

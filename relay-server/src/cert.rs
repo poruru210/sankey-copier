@@ -258,7 +258,7 @@ fn register_to_windows_store(cert_path: &Path) -> Result<()> {
              Exit code: {:?}",
             output.status.code()
         );
-        
+
         // Return Ok to allow server startup to continue
         Ok(())
     }
