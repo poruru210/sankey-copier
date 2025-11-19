@@ -739,7 +739,11 @@ void CGridPanel::ShowMessage(string text, color clr = clrYellow)
    int y = m_y_offset + (m_padding_top + m_title_height + (m_row_count * m_row_height)) / 2;
    
    // If object doesn't exist, create it
-   if(ObjectFind(msg_name) < 0)
+   #ifdef IS_MT5
+      if(ObjectFind(0, msg_name) < 0)
+   #else
+      if(ObjectFind(msg_name) < 0)
+   #endif
    {
       CreatePanelLabel(msg_name, m_x_offset + 10, m_y_offset + 10, text, clr, 10, ANCHOR_RIGHT_UPPER);
    }
