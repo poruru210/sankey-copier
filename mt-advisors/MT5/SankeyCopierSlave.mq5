@@ -123,8 +123,18 @@ int OnInit()
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
 
       // Update panel immediately with current values to avoid showing "N/A"
-      // (OnTimer will also update these every second, but this provides instant feedback)
-      g_config_panel.UpdateStatusRow(g_config_status);
+      // Check local auto-trading state for initial status display
+      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+      if(!local_trade_allowed)
+      {
+         // Local auto-trading OFF -> show ENABLED (yellow) warning, like Web UI
+         g_config_panel.UpdateStatusRow(STATUS_ENABLED);
+      }
+      else
+      {
+         // Local auto-trading ON -> show actual config status
+         g_config_panel.UpdateStatusRow(g_config_status);
+      }
       g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
       g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
       g_config_panel.UpdateReverseRow(g_config_reverse_trade);
@@ -178,11 +188,28 @@ void OnTimer()
       {
          g_last_heartbeat = TimeLocal();
 
-         // If trade state changed, log it
+         // If trade state changed, log it and update panel
          if(trade_state_changed)
          {
             Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
             g_last_trade_allowed = current_trade_allowed;
+
+            // Update panel to reflect auto-trading state
+            // If auto-trading is OFF, show ENABLED (yellow warning) regardless of config status
+            // If auto-trading is ON, show the actual config status
+            if(ShowConfigPanel)
+            {
+               if(!current_trade_allowed)
+               {
+                  // Auto-trading OFF -> show ENABLED (yellow) as warning, like Web UI
+                  g_config_panel.UpdateStatusRow(STATUS_ENABLED);
+               }
+               else
+               {
+                  // Auto-trading ON -> show actual config status
+                  g_config_panel.UpdateStatusRow(g_config_status);
+               }
+            }
 
             // If auto-trading was just enabled, request configuration
             if(current_trade_allowed && !g_config_requested)
@@ -257,7 +284,18 @@ void OnTimer()
          // Update configuration panel
          if(ShowConfigPanel)
          {
-            g_config_panel.UpdateStatusRow(g_config_status);
+            // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
+            bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+            if(!local_trade_allowed)
+            {
+               // Local auto-trading OFF -> show ENABLED (yellow) warning, like Web UI
+               g_config_panel.UpdateStatusRow(STATUS_ENABLED);
+            }
+            else
+            {
+               // Local auto-trading ON -> show actual config status from server
+               g_config_panel.UpdateStatusRow(g_config_status);
+            }
             g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
             g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
             g_config_panel.UpdateReverseRow(g_config_reverse_trade);

@@ -52,7 +52,14 @@ export type AccountNodeType = Node<AccountNodeData & Record<string, unknown>, 'a
  * Interactive elements (switches, buttons) have the 'noDrag' class to prevent dragging.
  */
 export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>) => {
-  const { type, isMobile } = data;
+  const { type, isMobile, account } = data;
+
+  // Determine handle color based on account state (same logic as StatusIndicatorBar)
+  const handleColorClass = account.hasWarning
+    ? '!bg-yellow-500'  // Auto-trading OFF
+    : account.isActive
+    ? '!bg-green-500'   // Active (ready for trading)
+    : '!bg-gray-300';   // Inactive or disabled
 
   return (
     <div
@@ -68,7 +75,7 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
           <Handle
             type="source"
             position={isMobile ? Position.Bottom : Position.Right}
-            className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
+            className={`!w-3 !h-3 ${handleColorClass} !border-2 !border-white`}
             style={isMobile ? { bottom: -6 } : { right: -6 }}
           />
         </>
@@ -81,7 +88,7 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
           <Handle
             type="target"
             position={isMobile ? Position.Top : Position.Left}
-            className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
+            className={`!w-3 !h-3 ${handleColorClass} !border-2 !border-white`}
             style={isMobile ? { top: -6 } : { left: -6 }}
           />
         </>

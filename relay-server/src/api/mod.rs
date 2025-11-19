@@ -131,9 +131,51 @@ async fn refresh_settings_cache(state: &AppState) {
 ///
 /// CopySettingsから完全な設定情報を含むConfigMessageを生成し、
 /// ZeroMQ経由でSlaveEAに送信します。
+/// Build ConfigMessage with calculated effective status based on Master connection state
+async fn build_config_message(state: &AppState, settings: &CopySettings) -> ConfigMessage {
+    // Calculate effective status (0/1/2) based on Master's is_trade_allowed
+    let effective_status = if settings.status == 0 {
+        // User disabled -> DISABLED
+        0
+    } else {
+        // User enabled (status == 1)
+        // Check if Master is connected and has trading allowed
+        let master_conn = state
+            .connection_manager
+            .get_ea(&settings.master_account)
+            .await;
+
+        if let Some(conn) = master_conn {
+            if conn.is_trade_allowed {
+                // Master online && trading allowed -> CONNECTED
+                2
+            } else {
+                // Master online but trading NOT allowed -> ENABLED (but not connected)
+                1
+            }
+        } else {
+            // Master offline -> ENABLED (but not connected)
+            1
+        }
+    };
+
+    ConfigMessage {
+        account_id: settings.slave_account.clone(),
+        master_account: settings.master_account.clone(),
+        trade_group_id: settings.master_account.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        status: effective_status,
+        lot_multiplier: settings.lot_multiplier,
+        reverse_trade: settings.reverse_trade,
+        symbol_mappings: settings.symbol_mappings.clone(),
+        filters: settings.filters.clone(),
+        config_version: 1,
+    }
+}
+
 async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
-    // From<CopySettings>トレイトを使用して変換
-    let config: ConfigMessage = settings.clone().into();
+    // Build ConfigMessage with calculated effective status
+    let config = build_config_message(state, settings).await;
 
     if let Err(e) = state.config_sender.send_config(&config).await {
         tracing::error!(
@@ -143,10 +185,11 @@ async fn send_config_to_ea(state: &AppState, settings: &CopySettings) {
         );
     } else {
         tracing::info!(
-            "Sent full config to EA: {} (master: {}, status: {}, lot_mult: {:?})",
+            "Sent full config to EA: {} (master: {}, db_status: {}, effective_status: {}, lot_mult: {:?})",
             settings.slave_account,
             settings.master_account,
             settings.status,
+            config.status,
             settings.lot_multiplier
         );
     }
@@ -387,42 +430,15 @@ async fn toggle_settings(
     let span = tracing::info_span!("toggle_settings", settings_id = id, status = req.status);
     let _enter = span.enter();
 
-    // Determine the actual status to set based on Master connection state
-    let actual_status = if req.status == 1 {
-        // User wants to enable (status=1)
-        // Check if Master is connected to determine if we should use CONNECTED (2) instead
-        if let Ok(Some(settings)) = state.db.get_copy_settings(id).await {
-            if let Some(master_conn) = state
-                .connection_manager
-                .get_ea(&settings.master_account)
-                .await
-            {
-                if master_conn.status == crate::models::ConnectionStatus::Online {
-                    // Master is online, set to CONNECTED
-                    2
-                } else {
-                    // Master is offline/timeout, set to ENABLED
-                    1
-                }
-            } else {
-                // Master not found, set to ENABLED
-                1
-            }
-        } else {
-            // Settings not found, use requested status
-            req.status
-        }
-    } else {
-        // User wants to disable (status=0), use as-is
-        req.status
-    };
-
-    match state.db.update_status(id, actual_status).await {
+    // Simplified: Store user's switch state (0=OFF, 1=ON) as-is
+    // Active state will be calculated at runtime based on:
+    // - Master: is_trade_allowed && status == 1
+    // - Slave: is_trade_allowed && status == 1 && all_masters_active
+    match state.db.update_status(id, req.status).await {
         Ok(_) => {
             tracing::info!(
                 settings_id = id,
-                requested_status = req.status,
-                actual_status = actual_status,
+                status = req.status,
                 "Successfully toggled copy settings"
             );
 
@@ -436,7 +452,7 @@ async fn toggle_settings(
             // Notify via WebSocket
             let _ = state
                 .tx
-                .send(format!("settings_toggled:{}:{}", id, actual_status));
+                .send(format!("settings_toggled:{}:{}", id, req.status));
 
             Ok(StatusCode::NO_CONTENT)
         }

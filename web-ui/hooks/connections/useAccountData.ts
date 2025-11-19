@@ -70,28 +70,28 @@ export function useAccountData({
     const prevReceiverMap = new Map(receiverAccounts.map(acc => [acc.id, acc]));
 
     settings.forEach((setting, index) => {
-      // Add source
+      // Add source (Master)
       if (!sourceMap.has(setting.master_account)) {
         const existingSource = prevSourceMap.get(setting.master_account);
         const isOnline = getConnectionStatus(setting.master_account);
         const connection = getAccountConnection(setting.master_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
+        const isEnabled = existingSource?.isEnabled ?? true;
 
-        // Check for errors/warnings
-        const hasError = index === 0 && !isOnline;
+        // Calculate active state: Master is active if online && trade_allowed && enabled
+        const isActive = isOnline && isTradeAllowed && isEnabled;
+
+        // Warnings: only show if online but trade not allowed
         const hasWarning = isOnline && !isTradeAllowed;
-        let errorMsg = '';
-        if (hasError) {
-          errorMsg = 'エラー! チャート上のEAの問題';
-        } else if (hasWarning) {
-          errorMsg = content.autoTradingDisabled;
-        }
+        const hasError = false;
+        const errorMsg = hasWarning ? content.autoTradingDisabled : '';
 
         sourceMap.set(setting.master_account, {
           id: setting.master_account,
           name: setting.master_account,
           isOnline,
-          isEnabled: existingSource?.isEnabled ?? true,
+          isEnabled,
+          isActive,
           hasError,
           hasWarning,
           errorMsg,
@@ -99,12 +99,17 @@ export function useAccountData({
         });
       }
 
-      // Add receiver
+      // Add receiver (Slave)
       if (!receiverMap.has(setting.slave_account)) {
         const existingReceiver = prevReceiverMap.get(setting.slave_account);
         const isOnline = getConnectionStatus(setting.slave_account);
         const connection = getAccountConnection(setting.slave_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
+        const isEnabled = existingReceiver?.isEnabled ?? (setting.status !== 0);
+
+        // Active state calculation will be done after all masters are processed
+        // For now, set to false - will be updated in the next section
+        const isActive = false;
 
         // Check for MT auto-trading disabled warning
         const hasWarning = isOnline && !isTradeAllowed;
@@ -113,7 +118,8 @@ export function useAccountData({
           id: setting.slave_account,
           name: setting.slave_account,
           isOnline,
-          isEnabled: existingReceiver?.isEnabled ?? (setting.status !== 0),
+          isEnabled,
+          isActive, // Will be updated below based on connected masters
           hasError: false,
           hasWarning,
           errorMsg: hasWarning ? content.autoTradingDisabled : '',
@@ -126,52 +132,32 @@ export function useAccountData({
     const newSourceAccounts = Array.from(sourceMap.values());
     const newReceiverAccounts = Array.from(receiverMap.values());
 
-    // Update receiver errors/warnings based on connected source status
+    // Update receiver active state based on connected masters
     newReceiverAccounts.forEach((receiver) => {
-      // Get all connected sources for this receiver
-      const connectedSources = settings
+      // Get all connected masters for this receiver
+      const connectedMasters = settings
         .filter((s) => s.slave_account === receiver.id)
         .map((s) => s.master_account);
 
-      // Count active and inactive sources
-      let activeCount = 0;
-      let inactiveCount = 0;
-
-      connectedSources.forEach((sourceId) => {
-        const source = newSourceAccounts.find((acc) => acc.id === sourceId);
-        if (source) {
-          if (source.isEnabled && !source.hasError) {
-            activeCount++;
-          } else {
-            inactiveCount++;
-          }
-        }
+      // Check if ALL connected masters are active
+      const allMastersActive = connectedMasters.every((masterId) => {
+        const master = newSourceAccounts.find((acc) => acc.id === masterId);
+        return master?.isActive === true;
       });
 
-      // Check if receiver already has auto-trading warning (preserve it)
+      // Slave active = isOnline && isTradeAllowed && isEnabled && allMastersActive
       const connection = getAccountConnection(receiver.id);
-      const hasAutoTradingWarning = receiver.isOnline && !(connection?.is_trade_allowed ?? true);
+      const isTradeAllowed = connection?.is_trade_allowed ?? true;
+      receiver.isActive = receiver.isOnline && isTradeAllowed && receiver.isEnabled && allMastersActive;
 
-      // Determine receiver state based on source states
-      if (inactiveCount > 0 && activeCount === 0) {
-        // All sources are inactive - ERROR (takes priority over auto-trading warning)
-        receiver.hasError = true;
-        receiver.hasWarning = false;
-        receiver.errorMsg = content.allSourcesInactive;
-      } else if (inactiveCount > 0 && activeCount > 0) {
-        // Some sources are inactive - WARNING (takes priority over auto-trading warning)
-        receiver.hasError = false;
-        receiver.hasWarning = true;
-        receiver.errorMsg = content.someSourcesInactive;
-      } else if (hasAutoTradingWarning) {
-        // All sources are active, but auto-trading is disabled - WARNING
-        receiver.hasError = false;
+      // Simplify warnings: only show auto-trading warning if relevant
+      if (receiver.isOnline && !isTradeAllowed) {
         receiver.hasWarning = true;
         receiver.errorMsg = content.autoTradingDisabled;
       } else {
-        // All sources are active and auto-trading is enabled - NORMAL
-        receiver.hasError = false;
+        // No warnings/errors based on master states
         receiver.hasWarning = false;
+        receiver.hasError = false;
         receiver.errorMsg = '';
       }
     });
