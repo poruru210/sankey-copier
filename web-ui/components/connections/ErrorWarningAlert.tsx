@@ -16,8 +16,8 @@ export function ErrorWarningAlert({ account }: ErrorWarningAlertProps) {
   return (
     <div
       className={`${account.hasError
-          ? 'bg-pink-50 dark:bg-pink-900/20 border-pink-100 dark:border-pink-800'
-          : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-100 dark:border-yellow-800'
+        ? 'bg-pink-50 dark:bg-pink-900/20 border-pink-100 dark:border-pink-800'
+        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-100 dark:border-yellow-800'
         } px-3 py-2 flex items-center gap-2 border-t`}
     >
       <AlertCircle
