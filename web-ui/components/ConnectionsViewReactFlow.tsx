@@ -6,7 +6,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   NodeTypes,
   Edge,
   Node,
@@ -421,13 +420,6 @@ function ConnectionsViewReactFlowInner({
           >
             <Background />
             <Controls className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 [&>button]:!bg-white dark:[&>button]:!bg-gray-700 [&>button]:!border-gray-300 dark:[&>button]:!border-gray-600 [&>button]:hover:!bg-gray-50 dark:[&>button]:hover:!bg-gray-600 [&>button>svg]:!fill-gray-700 dark:[&>button>svg]:!fill-gray-200" />
-            <MiniMap
-              nodeColor={(node) => {
-                if (node.id.startsWith('source-')) return '#8b5cf6';
-                return '#22c55e';
-              }}
-              className="!bg-white dark:!bg-gray-800"
-            />
           </ReactFlow>
         </div>
 
