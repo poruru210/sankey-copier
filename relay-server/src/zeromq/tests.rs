@@ -75,9 +75,11 @@ fn test_message_discriminator_heartbeat() {
 fn test_message_discriminator_request_config() {
     let request = RequestConfigMessage {
         message_type: "RequestConfig".to_string(),
-        account_id: "SLAVE_001".to_string(),
-        timestamp: Utc::now().to_rfc3339(),
+        account_id: "test_slave_123".to_string(),
+        timestamp: "2025-01-15T10:30:45Z".to_string(),
+        ea_type: "Slave".to_string(),
     };
+
 
     let bytes = rmp_serde::to_vec_named(&request).unwrap();
 
@@ -91,7 +93,8 @@ fn test_message_discriminator_request_config() {
 
     // Should successfully deserialize as RequestConfigMessage
     let deserialized: RequestConfigMessage = rmp_serde::from_slice(&bytes).unwrap();
-    assert_eq!(deserialized.account_id, "SLAVE_001");
+    assert_eq!(deserialized.account_id, "test_slave_123");
+
 }
 
 /// Test that Unregister messages can be distinguished by message_type field
