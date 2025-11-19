@@ -52,6 +52,7 @@ int            g_config_status = STATUS_DISABLED;   // Connection status (0=DISA
 double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
 bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
 SymbolMapping  g_symbol_mappings[];              // Symbol mappings
+bool           g_has_received_config = false;    // Track if we have received at least one config
 
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
@@ -121,25 +122,9 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
-
-      // Update panel immediately with current values to avoid showing "N/A"
-      // Check local auto-trading state for initial status display
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
-      {
-         // Local auto-trading OFF -> show ENABLED (yellow) warning, like Web UI
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED);
-      }
-      else
-      {
-         // Local auto-trading ON -> show actual config status
-         g_config_panel.UpdateStatusRow(g_config_status);
-      }
-      g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
-      g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
-      g_config_panel.UpdateReverseRow(g_config_reverse_trade);
-      g_config_panel.UpdateVersionRow(g_config_version);
-      g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
+      
+      // Show "Waiting" message initially
+      g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
    return INIT_SUCCEEDED;
@@ -195,9 +180,8 @@ void OnTimer()
             g_last_trade_allowed = current_trade_allowed;
 
             // Update panel to reflect auto-trading state
-            // If auto-trading is OFF, show ENABLED (yellow warning) regardless of config status
-            // If auto-trading is ON, show the actual config status
-            if(ShowConfigPanel)
+            // Only update if we have received config, otherwise keep showing "Waiting"
+            if(ShowConfigPanel && g_has_received_config)
             {
                if(!current_trade_allowed)
                {
@@ -281,9 +265,13 @@ void OnTimer()
                              g_config_status, g_config_lot_multiplier, g_config_reverse_trade,
                              g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
 
+         g_has_received_config = true;
+
          // Update configuration panel
          if(ShowConfigPanel)
          {
+            g_config_panel.HideMessage(); // Switch to grid view
+            
             // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
             bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
             if(!local_trade_allowed)

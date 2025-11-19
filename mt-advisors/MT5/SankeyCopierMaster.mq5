@@ -13,11 +13,14 @@
 #include <SankeyCopier/Zmq.mqh>
 #include <SankeyCopier/Messages.mqh>
 #include <SankeyCopier/Trade.mqh>
+#include <SankeyCopier/GridPanel.mqh>
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
 input ulong    MagicFilter = 0;
 input int      ScanInterval = 100;
+input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
+input int      PanelWidth = 280;                        // Configuration panel width (pixels)
 
 //--- Position tracking structure
 struct PositionInfo
@@ -35,6 +38,9 @@ PositionInfo  g_tracked_positions[];
 bool          g_initialized = false;
 datetime      g_last_heartbeat = 0;
 bool          g_last_trade_allowed = false; // Track auto-trading state for change detection
+
+//--- Configuration panel
+CGridPanel     g_config_panel;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -66,6 +72,28 @@ int OnInit()
    // Set up timer for heartbeat (1 second interval)
    EventSetTimer(1);
 
+   // Initialize configuration panel
+   if(ShowConfigPanel)
+   {
+      g_config_panel.InitializeMasterPanel("SankeyCopierPanel_", PanelWidth);
+      
+      // Update panel immediately
+      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+      if(!local_trade_allowed)
+      {
+         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
+      }
+      else
+      {
+         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
+      }
+      
+      g_config_panel.UpdateCell("account", 1, AccountID);
+      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateMagicFilterRow((int)MagicFilter);
+      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions));
+   }
+
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
    return INIT_SUCCEEDED;
 }
@@ -80,6 +108,10 @@ void OnDeinit(const int reason)
 
    // Kill timer
    EventKillTimer();
+
+   // Delete configuration panel
+   if(ShowConfigPanel)
+      g_config_panel.Delete();
 
    // Cleanup ZMQ resources
    CleanupZmqResources(g_zmq_socket, g_zmq_context, "Master PUSH");
@@ -113,6 +145,19 @@ void OnTimer()
       {
          Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
          g_last_trade_allowed = current_trade_allowed;
+         
+         // Update panel status
+         if(ShowConfigPanel)
+         {
+            if(!current_trade_allowed)
+            {
+               g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
+            }
+            else
+            {
+               g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
+            }
+         }
       }
    }
 }
@@ -131,6 +176,12 @@ void OnTick()
       CheckForModifiedPositions();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
+      
+      // Update tracked orders count on panel
+      if(ShowConfigPanel)
+      {
+         g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions));
+      }
    }
 }
 
