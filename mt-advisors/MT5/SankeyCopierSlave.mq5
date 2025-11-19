@@ -199,7 +199,7 @@ void OnTimer()
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -216,7 +216,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
