@@ -190,7 +190,7 @@ export function useSankeyCopier() {
 
     // Debounce the actual API call
     debouncedApiCallRef.current(apiClient, id, newStatus, previousSettings);
-  }, [apiClient, settings]);
+  }, [apiClient, settings, setSettings]);
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
