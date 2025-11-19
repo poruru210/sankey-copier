@@ -236,9 +236,15 @@ impl MessageHandler {
                         *cache = settings;
                     }
                     // Notify WebSocket clients
-                    let _ = self
-                        .broadcast_tx
-                        .send(format!("master_connected:{}", account_id));
+                    // We need to broadcast the updated settings for all affected slaves
+                    if let Ok(settings_list) = self.db.get_settings_for_master(&account_id).await {
+                        for settings in settings_list {
+                            if let Ok(json) = serde_json::to_string(&settings) {
+                                let _ =
+                                    self.broadcast_tx.send(format!("settings_updated:{}", json));
+                            }
+                        }
+                    }
                 }
                 Ok(_) => {
                     // No settings updated (no enabled settings for this master)

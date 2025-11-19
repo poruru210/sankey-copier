@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
@@ -65,23 +65,23 @@ export function useFlowData({
   const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
-  const toggleSourceExpand = (accountId: string) => {
+  const toggleSourceExpand = useCallback((accountId: string) => {
     setExpandedSourceIds((prev) =>
       prev.includes(accountId)
         ? prev.filter((id) => id !== accountId)
         : [...prev, accountId]
     );
-  };
+  }, [setExpandedSourceIds]);
 
-  const toggleReceiverExpand = (accountId: string) => {
+  const toggleReceiverExpand = useCallback((accountId: string) => {
     setExpandedReceiverIds((prev) =>
       prev.includes(accountId)
         ? prev.filter((id) => id !== accountId)
         : [...prev, accountId]
     );
-  };
+  }, [setExpandedReceiverIds]);
 
-  const toggleSourceEnabled = (accountId: string, enabled: boolean) => {
+  const toggleSourceEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledSourceIds)
     setDisabledSourceIds((prev) => {
       if (enabled) {
@@ -99,9 +99,9 @@ export function useFlowData({
         onToggle(setting.id, setting.status);
       }
     });
-  };
+  }, [settings, onToggle, setDisabledSourceIds]);
 
-  const toggleReceiverEnabled = (accountId: string, enabled: boolean) => {
+  const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledReceiverIds)
     setDisabledReceiverIds((prev) => {
       if (enabled) {
@@ -119,7 +119,7 @@ export function useFlowData({
         onToggle(setting.id, setting.status);
       }
     });
-  };
+  }, [settings, onToggle, setDisabledReceiverIds]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
@@ -212,11 +212,10 @@ export function useFlowData({
     isAccountHighlighted,
     isMobile,
     content,
-    expandedSourceIds,
-    expandedReceiverIds,
-    disabledSourceIds,
-    settings,
-    onToggle
+    toggleSourceExpand,
+    toggleReceiverExpand,
+    toggleSourceEnabled,
+    toggleReceiverEnabled,
   ]);
 
   const edges = useMemo(() => {
@@ -233,13 +232,12 @@ export function useFlowData({
 
       if (!sourceAccount || !receiverAccount) return;
 
+      // Edge is active only if both source and receiver are active (green)
+      // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
       const isActive =
         setting.status !== 0 &&
-        sourceAccount.isOnline &&
-        receiverAccount.isOnline &&
-        !sourceAccount.hasError &&
-        !receiverAccount.hasError &&
-        !receiverAccount.hasWarning;
+        sourceAccount.isActive &&
+        receiverAccount.isActive;
 
       // Build label text with copy settings
       const labelParts: string[] = [];

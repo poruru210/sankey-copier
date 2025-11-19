@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useAtom } from 'jotai';
 import type { EaConnection, CopySettings, AccountInfo } from '@/types';
 import {
@@ -47,25 +47,25 @@ export function useAccountData({
   const [disabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
   // Helper function to check connection status
-  const getConnectionStatus = (accountId: string): boolean => {
+  const getConnectionStatus = useCallback((accountId: string): boolean => {
     const conn = connections.find((c) => c.account_id === accountId);
     // Support both old and new formats
     return conn?.is_online ?? (conn?.status === 'Online' || false);
-  };
+  }, [connections]);
 
   // Helper function to get account connection data
-  const getAccountConnection = (accountId: string): EaConnection | undefined => {
+  const getAccountConnection = useCallback((accountId: string): EaConnection | undefined => {
     return connections.find((c) => c.account_id === accountId);
-  };
+  }, [connections]);
 
   // Helper function to get settings for an account
-  const getAccountSettings = (accountId: string, type: 'source' | 'receiver'): CopySettings[] => {
+  const getAccountSettings = useCallback((accountId: string, type: 'source' | 'receiver'): CopySettings[] => {
     if (type === 'source') {
       return settings.filter((s) => s.master_account === accountId);
     } else {
       return settings.filter((s) => s.slave_account === accountId);
     }
-  };
+  }, [settings]);
 
   // Build account lists from settings
   const { sourceAccounts, receiverAccounts } = useMemo(() => {
@@ -171,14 +171,13 @@ export function useAccountData({
     return { sourceAccounts: newSourceAccounts, receiverAccounts: newReceiverAccounts };
   }, [
     settings,
-    connections,
-    content.allSourcesInactive,
-    content.someSourcesInactive,
     content.autoTradingDisabled,
     expandedSourceIds,
     expandedReceiverIds,
     disabledSourceIds,
-    disabledReceiverIds
+    disabledReceiverIds,
+    getAccountConnection,
+    getConnectionStatus,
   ]);
 
   // Toggle expand state for source accounts

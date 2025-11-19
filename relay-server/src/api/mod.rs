@@ -316,7 +316,9 @@ async fn create_settings(
             send_config_to_ea(&state, &settings).await;
 
             // Notify via WebSocket
-            let _ = state.tx.send(format!("settings_updated:{}", id));
+            if let Ok(json) = serde_json::to_string(&settings) {
+                let _ = state.tx.send(format!("settings_created:{}", json));
+            }
 
             Ok((StatusCode::CREATED, Json(id)))
         }
@@ -382,7 +384,9 @@ async fn update_settings(
             send_config_to_ea(&state, &updated).await;
 
             // Notify via WebSocket
-            let _ = state.tx.send(format!("settings_updated:{}", id));
+            if let Ok(json) = serde_json::to_string(&updated) {
+                let _ = state.tx.send(format!("settings_updated:{}", json));
+            }
 
             Ok(StatusCode::NO_CONTENT)
         }
@@ -450,9 +454,11 @@ async fn toggle_settings(
             }
 
             // Notify via WebSocket
-            let _ = state
-                .tx
-                .send(format!("settings_toggled:{}:{}", id, req.status));
+            if let Ok(Some(updated_settings)) = state.db.get_copy_settings(id).await {
+                if let Ok(json) = serde_json::to_string(&updated_settings) {
+                    let _ = state.tx.send(format!("settings_updated:{}", json));
+                }
+            }
 
             Ok(StatusCode::NO_CONTENT)
         }

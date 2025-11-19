@@ -92,8 +92,34 @@ export function useSankeyCopier() {
       console.log('WS message:', message);
       setWsMessages((prev) => [message, ...prev].slice(0, 20));
 
-      if (message.startsWith('settings_')) {
-        fetchSettings();
+      if (message.startsWith('settings_created:')) {
+        try {
+          const jsonStr = message.substring('settings_created:'.length);
+          const newSetting = JSON.parse(jsonStr) as CopySettings;
+          setSettings((prev) => [...prev, newSetting]);
+        } catch (e) {
+          console.error('Failed to parse settings_created message:', e);
+          fetchSettings(); // Fallback
+        }
+      } else if (message.startsWith('settings_updated:')) {
+        try {
+          const jsonStr = message.substring('settings_updated:'.length);
+          const updatedSetting = JSON.parse(jsonStr) as CopySettings;
+          setSettings((prev) =>
+            prev.map((s) => (s.id === updatedSetting.id ? updatedSetting : s))
+          );
+        } catch (e) {
+          console.error('Failed to parse settings_updated message:', e);
+          fetchSettings(); // Fallback
+        }
+      } else if (message.startsWith('settings_deleted:')) {
+        const idStr = message.substring('settings_deleted:'.length);
+        const id = parseInt(idStr, 10);
+        if (!isNaN(id)) {
+          setSettings((prev) => prev.filter((s) => s.id !== id));
+        } else {
+          fetchSettings(); // Fallback
+        }
       }
     };
 
@@ -124,6 +150,7 @@ export function useSankeyCopier() {
         }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSite?.siteUrl, fetchSettings]);
 
   // Initial load and periodic connection refresh
