@@ -80,7 +80,6 @@ fn test_message_discriminator_request_config() {
         ea_type: "Slave".to_string(),
     };
 
-
     let bytes = rmp_serde::to_vec_named(&request).unwrap();
 
     // Should successfully deserialize as MessageTypeDiscriminator
@@ -94,7 +93,6 @@ fn test_message_discriminator_request_config() {
     // Should successfully deserialize as RequestConfigMessage
     let deserialized: RequestConfigMessage = rmp_serde::from_slice(&bytes).unwrap();
     assert_eq!(deserialized.account_id, "test_slave_123");
-
 }
 
 /// Test that Unregister messages can be distinguished by message_type field
