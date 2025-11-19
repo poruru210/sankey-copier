@@ -68,7 +68,6 @@ pub struct RequestConfigMessage {
     pub ea_type: String, // "Master" or "Slave"
 }
 
-
 /// Heartbeat message structure (includes all EA information for auto-registration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartbeatMessage {
@@ -353,7 +352,6 @@ pub unsafe extern "C" fn serialize_request_config(
         Err(_) => 0,
     }
 }
-
 
 /// Serialize an UnregisterMessage to MessagePack
 #[no_mangle]
@@ -708,7 +706,6 @@ mod tests {
         assert_eq!(msg.timestamp, deserialized.timestamp);
         assert_eq!(msg.ea_type, deserialized.ea_type);
     }
-
 
     #[test]
     fn test_unregister_message_serialization() {

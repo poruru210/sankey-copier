@@ -519,10 +519,11 @@ async fn delete_settings(
                 error = %e,
                 "Failed to retrieve settings before deletion"
             );
-            return Err(
-                ProblemDetails::internal_error(format!("Failed to retrieve settings: {}", e))
-                    .with_instance(format!("/api/settings/{}", id)),
-            );
+            return Err(ProblemDetails::internal_error(format!(
+                "Failed to retrieve settings: {}",
+                e
+            ))
+            .with_instance(format!("/api/settings/{}", id)));
         }
     };
 
@@ -596,7 +597,6 @@ async fn delete_settings(
         }
     }
 }
-
 
 async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
