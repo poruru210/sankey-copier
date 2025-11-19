@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { debounce } from 'lodash-es';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
 import { settingsAtom } from '@/lib/atoms/settings';
@@ -165,26 +166,38 @@ export function useSankeyCopier() {
     }
   }, [apiClient, fetchSettings, fetchConnections]);
 
+  // Map to store debounced functions for each setting ID
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const debouncedCallsRef = useRef<Map<number, any>>(new Map());
+
   // Toggle status (DISABLED ⇄ ENABLED)
-  const toggleEnabled = async (id: number, currentStatus: number) => {
+  const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
     if (!apiClient) return;
+
     // Optimistically update UI
-    const previousSettings = settings;
     setSettings((prev) =>
       prev.map(s => s.id === id ? { ...s, status: s.status === 0 ? 1 : 0 } : s)
     );
 
-    try {
-      // Toggle between DISABLED (0) and ENABLED (1)
-      const newStatus = currentStatus === 0 ? 1 : 0;
-      // Rust API returns StatusCode::NO_CONTENT (204) on success
-      await apiClient.post<void>(`/settings/${id}/toggle`, { status: newStatus });
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
-    } catch (err) {
-      setSettings(previousSettings); // Revert on error
-      throw err; // Re-throw for caller to handle
+    const newStatus = currentStatus === 0 ? 1 : 0;
+
+    // Get or create debounced function for this specific ID
+    let debouncedFn = debouncedCallsRef.current.get(id);
+    if (!debouncedFn) {
+      debouncedFn = debounce(async (status: number) => {
+        try {
+          await apiClient.post<void>(`/settings/${id}/toggle`, { status });
+        } catch (err) {
+          console.error(`Failed to toggle setting ${id}`, err);
+          fetchSettings(); // Refresh on error
+        }
+      }, 300);
+      debouncedCallsRef.current.set(id, debouncedFn);
     }
-  };
+
+    // Call the debounced function for this ID
+    debouncedFn(newStatus);
+  }, [apiClient, fetchSettings, setSettings]);
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
