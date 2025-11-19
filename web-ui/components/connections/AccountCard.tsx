@@ -40,7 +40,6 @@ interface AccountCardProps {
     receivers: string;
     sources: string;
     lastHeartbeat: string;
-    fixError: string;
   };
 }
 
@@ -79,9 +78,8 @@ export const AccountCard = React.memo(
 
     return (
       <div
-        className={`bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg ${
-          isMobile ? 'flex flex-col' : 'flex'
-        } transition-all w-full text-sm md:text-base ${visibilityClass}`}
+        className={`bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg ${isMobile ? 'flex flex-col' : 'flex'
+          } transition-all w-full text-sm md:text-base ${visibilityClass}`}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
@@ -108,7 +106,7 @@ export const AccountCard = React.memo(
           )}
 
           {/* Error/Warning Alert */}
-          <ErrorWarningAlert account={account} fixErrorLabel={content.fixError} />
+          <ErrorWarningAlert account={account} />
         </div>
 
         {/* Status Bar - Bottom for source on mobile, right for source on desktop */}

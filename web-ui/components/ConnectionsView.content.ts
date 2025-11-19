@@ -83,10 +83,6 @@ const connectionsViewContent = {
       en: 'Connected Sources',
       ja: '接続元ソース',
     }),
-    fixError: t({
-      en: 'Fix Error',
-      ja: 'エラー修正',
-    }),
     settings: t({
       en: 'Settings',
       ja: '設定',
