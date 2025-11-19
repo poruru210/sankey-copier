@@ -263,6 +263,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
     async fn create_test_db() -> Database {
         Database::new("sqlite::memory:").await.unwrap()

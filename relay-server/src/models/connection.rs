@@ -106,7 +106,8 @@ impl From<crate::models::CopySettings> for ConfigMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{CopySettings, SymbolMapping, TradeFilters};
+    use crate::models::CopySettings;
+    use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
     #[test]
     fn test_config_message_from_copy_settings() {
