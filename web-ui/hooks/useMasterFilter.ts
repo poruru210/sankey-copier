@@ -1,5 +1,7 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo } from 'react';
+import { useAtom } from 'jotai';
 import type { CopySettings, EaConnection, AccountInfo } from '@/types';
+import { selectedMasterAtom } from '@/lib/atoms/ui';
 
 interface UseMasterFilterOptions {
   connections: EaConnection[];
@@ -25,7 +27,7 @@ export function useMasterFilter({
   sourceAccounts,
   receiverAccounts,
 }: UseMasterFilterOptions): UseMasterFilterReturn {
-  const [selectedMaster, setSelectedMaster] = useState<string | 'all'>('all');
+  const [selectedMaster, setSelectedMaster] = useAtom(selectedMasterAtom);
 
   // Filter source accounts based on selected master
   const visibleSourceAccounts = useMemo(() => {

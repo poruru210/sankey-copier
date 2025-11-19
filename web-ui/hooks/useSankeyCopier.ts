@@ -1,45 +1,30 @@
-import { useState, useEffect, useCallback, useOptimistic, startTransition } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
-import { useApiClient, useSiteContext } from '@/lib/contexts/site-context';
-
-type SettingsAction =
-  | { type: 'add'; data: CopySettings }
-  | { type: 'update'; id: number; data: CopySettings }
-  | { type: 'delete'; id: number }
-  | { type: 'toggle'; id: number };
+import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
+import { settingsAtom } from '@/lib/atoms/settings';
+import { connectionsAtom } from '@/lib/atoms/connections';
 
 export function useSankeyCopier() {
-  const apiClient = useApiClient();
-  const { selectedSite } = useSiteContext();
-  const [settings, setSettings] = useState<CopySettings[]>([]);
-  const [optimisticSettings, addOptimisticSettings] = useOptimistic(
-    settings,
-    (state, action: SettingsAction) => {
-      switch (action.type) {
-        case 'add':
-          return [...state, action.data];
-        case 'update':
-          return state.map(s => s.id === action.id ? action.data : s);
-        case 'delete':
-          return state.filter(s => s.id !== action.id);
-        case 'toggle':
-          return state.map(s => s.id === action.id ? { ...s, status: s.status === 0 ? 1 : 0 } : s);
-        default:
-          return state;
-      }
-    }
-  );
-  const [connections, setConnections] = useState<EaConnection[]>([]);
+  const apiClient = useAtomValue(apiClientAtom);
+  const selectedSite = useAtomValue(selectedSiteAtom);
+
+  const [settings, setSettings] = useAtom(settingsAtom);
+  const [connections, setConnections] = useAtom(connectionsAtom);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wsMessages, setWsMessages] = useState<string[]>([]);
 
   // Fetch connections
   const fetchConnections = useCallback(async () => {
+    if (!apiClient) return;
     try {
       // Rust API returns Vec<EaConnection> directly (not wrapped)
-      const connections = await apiClient.get<EaConnection[]>('/connections');
-      setConnections(connections);
+      const data = await apiClient.get<EaConnection[]>('/connections');
+      if (data) {
+        setConnections(data);
+      }
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
         console.error('Cannot connect to server - is relay-server running?');
@@ -47,15 +32,18 @@ export function useSankeyCopier() {
         console.error('Failed to fetch connections:', err);
       }
     }
-  }, [apiClient]);
+  }, [apiClient, setConnections]);
 
   // Fetch settings
   const fetchSettings = useCallback(async () => {
+    if (!apiClient) return;
     try {
       setLoading(true);
       // Rust API returns Vec<CopySettings> directly (not wrapped)
-      const settings = await apiClient.get<CopySettings[]>('/settings');
-      setSettings(settings);
+      const data = await apiClient.get<CopySettings[]>('/settings');
+      if (data) {
+        setSettings(data);
+      }
       setError(null);
     } catch (err) {
       if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('Failed to fetch'))) {
@@ -71,10 +59,12 @@ export function useSankeyCopier() {
     } finally {
       setLoading(false);
     }
-  }, [apiClient]);
+  }, [apiClient, setSettings]);
 
   // WebSocket connection
   useEffect(() => {
+    if (!selectedSite?.siteUrl) return;
+
     // Extract host from siteUrl (e.g., "http://localhost:3000" -> "localhost:3000")
     const siteHost = selectedSite.siteUrl.replace(/^https?:\/\//, '');
     const wsUrl = `ws://${siteHost}/ws`;
@@ -128,28 +118,32 @@ export function useSankeyCopier() {
         ws.onopen = null;
         ws.onmessage = null;
 
-        // Only close if connection is established
-        if (ws.readyState === WebSocket.OPEN) {
+        // Close connection if it's open or connecting
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
           ws.close();
         }
       }
     };
-  }, [selectedSite.siteUrl, fetchSettings]);
+  }, [selectedSite?.siteUrl, fetchSettings]);
 
   // Initial load and periodic connection refresh
   useEffect(() => {
-    fetchSettings();
-    fetchConnections();
-    const interval = setInterval(fetchConnections, 5000);
-    return () => clearInterval(interval);
-  }, [fetchSettings, fetchConnections]);
+    if (apiClient) {
+      fetchSettings();
+      fetchConnections();
+      const interval = setInterval(fetchConnections, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [apiClient, fetchSettings, fetchConnections]);
 
   // Toggle status (DISABLED ⇄ ENABLED)
   const toggleEnabled = async (id: number, currentStatus: number) => {
+    if (!apiClient) return;
     // Optimistically update UI
-    startTransition(() => {
-      addOptimisticSettings({ type: 'toggle', id });
-    });
+    const previousSettings = settings;
+    setSettings((prev) =>
+      prev.map(s => s.id === id ? { ...s, status: s.status === 0 ? 1 : 0 } : s)
+    );
 
     try {
       // Toggle between DISABLED (0) and ENABLED (1)
@@ -158,13 +152,14 @@ export function useSankeyCopier() {
       await apiClient.post<void>(`/settings/${id}/toggle`, { status: newStatus });
       fetchSettings();
     } catch (err) {
-      fetchSettings(); // Revert on error
+      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
+    if (!apiClient) return;
     // Optimistically add to UI with temporary ID
     const tempSetting: CopySettings = {
       ...formData,
@@ -177,56 +172,58 @@ export function useSankeyCopier() {
         blocked_magic_numbers: null,
       },
     };
-    startTransition(() => {
-      addOptimisticSettings({ type: 'add', data: tempSetting });
-    });
+
+    const previousSettings = settings;
+    setSettings((prev) => [...prev, tempSetting]);
 
     try {
       // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
       await apiClient.post<number>('/settings', formData);
       fetchSettings();
     } catch (err) {
-      fetchSettings(); // Revert on error
+      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };
 
   // Update setting
   const updateSetting = async (id: number, updatedData: CopySettings) => {
+    if (!apiClient) return;
     // Optimistically update UI
-    startTransition(() => {
-      addOptimisticSettings({ type: 'update', id, data: updatedData });
-    });
+    const previousSettings = settings;
+    setSettings((prev) =>
+      prev.map(s => s.id === id ? updatedData : s)
+    );
 
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.put<void>(`/settings/${id}`, updatedData);
       fetchSettings();
     } catch (err) {
-      fetchSettings(); // Revert on error
+      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };
 
   // Delete setting
   const deleteSetting = async (id: number) => {
+    if (!apiClient) return;
     // Optimistically remove from UI
-    startTransition(() => {
-      addOptimisticSettings({ type: 'delete', id });
-    });
+    const previousSettings = settings;
+    setSettings((prev) => prev.filter(s => s.id !== id));
 
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.delete<void>(`/settings/${id}`);
       fetchSettings();
     } catch (err) {
-      fetchSettings(); // Revert on error
+      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };
 
   return {
-    settings: optimisticSettings, // Use optimistic settings for instant UI updates
+    settings,
     connections,
     loading,
     error,

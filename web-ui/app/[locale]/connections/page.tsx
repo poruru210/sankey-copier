@@ -3,16 +3,17 @@
 import { useEffect } from 'react';
 import { preconnect } from 'react-dom';
 import { useIntlayer } from 'next-intlayer';
+import { useAtomValue } from 'jotai';
 import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
-import { useSiteContext } from '@/lib/contexts/site-context';
+import { selectedSiteAtom } from '@/lib/atoms/site';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const content = useIntlayer('connections-page');
-  const { selectedSite } = useSiteContext();
+  const selectedSite = useAtomValue(selectedSiteAtom);
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const {
     settings,
@@ -59,32 +60,32 @@ export default function Home() {
           }}
         >
           <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
-          {/* Page Title */}
-          <div className="mb-4">
-            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              {content.description}
-            </p>
-          </div>
-
-          {/* Error Display */}
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-              {error}
+            {/* Page Title */}
+            <div className="mb-4">
+              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
+              <p className="text-sm text-muted-foreground">
+                {content.description}
+              </p>
             </div>
-          )}
 
-          {/* Copy Connections */}
-          <div className="flex-1 min-h-0">
-            <ConnectionsViewReactFlow
-              connections={connections}
-              settings={settings}
-              onToggle={toggleEnabled}
-              onCreate={createSetting}
-              onUpdate={updateSetting}
-              onDelete={deleteSetting}
-            />
-          </div>
+            {/* Error Display */}
+            {error && (
+              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
+                {error}
+              </div>
+            )}
+
+            {/* Copy Connections */}
+            <div className="flex-1 min-h-0">
+              <ConnectionsViewReactFlow
+                connections={connections}
+                settings={settings}
+                onToggle={toggleEnabled}
+                onCreate={createSetting}
+                onUpdate={updateSetting}
+                onDelete={deleteSetting}
+              />
+            </div>
           </div>
         </div>
       </div>

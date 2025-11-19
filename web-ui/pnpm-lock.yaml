@@ -68,6 +68,9 @@ importers:
       intlayer:
         specifier: ^7.0.7
         version: 7.0.7(@intlayer/cli@7.0.7)(@intlayer/config@7.0.7)(@intlayer/core@7.0.7)(@intlayer/types@7.0.7)
+      jotai:
+        specifier: ^2.15.1
+        version: 2.15.1(@babel/core@7.28.5)(@babel/template@7.27.2)(@types/react@19.2.2)(react@19.2.0)
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.0)
@@ -93,9 +96,6 @@ importers:
         specifier: ^3.3.1
         version: 3.3.1
     devDependencies:
-      '@playwright/test':
-        specifier: ^1.48.2
-        version: 1.56.1
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.0
@@ -2778,6 +2778,24 @@ packages:
     resolution: {integrity: sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A==}
     hasBin: true
 
+  jotai@2.15.1:
+    resolution: {integrity: sha512-yHT1HAZ3ba2Q8wgaUQ+xfBzEtcS8ie687I8XVCBinfg4bNniyqLIN+utPXWKQE93LMF5fPbQSVRZqgpcN5yd6Q==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@babel/core': '>=7.0.0'
+      '@babel/template': '>=7.0.0'
+      '@types/react': '>=17.0.0'
+      react: '>=17.0.0'
+    peerDependenciesMeta:
+      '@babel/core':
+        optional: true
+      '@babel/template':
+        optional: true
+      '@types/react':
+        optional: true
+      react:
+        optional: true
+
   js-cookie@3.0.5:
     resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
     engines: {node: '>=14'}
@@ -4558,6 +4576,7 @@ snapshots:
   '@playwright/test@1.56.1':
     dependencies:
       playwright: 1.56.1
+    optional: true
 
   '@radix-ui/number@1.1.1': {}
 
@@ -6851,6 +6870,13 @@ snapshots:
 
   jiti@1.21.7: {}
 
+  jotai@2.15.1(@babel/core@7.28.5)(@babel/template@7.27.2)(@types/react@19.2.2)(react@19.2.0):
+    optionalDependencies:
+      '@babel/core': 7.28.5
+      '@babel/template': 7.27.2
+      '@types/react': 19.2.2
+      react: 19.2.0
+
   js-cookie@3.0.5: {}
 
   js-tokens@4.0.0: {}
@@ -7211,13 +7237,15 @@ snapshots:
 
   pirates@4.0.7: {}
 
-  playwright-core@1.56.1: {}
+  playwright-core@1.56.1:
+    optional: true
 
   playwright@1.56.1:
     dependencies:
       playwright-core: 1.56.1
     optionalDependencies:
       fsevents: 2.3.2
+    optional: true
 
   possible-typed-array-names@1.1.0: {}
 

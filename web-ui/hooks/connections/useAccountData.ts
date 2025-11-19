@@ -1,5 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useAtom } from 'jotai';
 import type { EaConnection, CopySettings, AccountInfo } from '@/types';
+import {
+  expandedSourceIdsAtom,
+  expandedReceiverIdsAtom,
+  disabledSourceIdsAtom,
+  disabledReceiverIdsAtom,
+} from '@/lib/atoms/ui';
 
 interface UseAccountDataProps {
   connections: EaConnection[];
@@ -14,8 +21,6 @@ interface UseAccountDataProps {
 interface UseAccountDataReturn {
   sourceAccounts: AccountInfo[];
   receiverAccounts: AccountInfo[];
-  setSourceAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
-  setReceiverAccounts: React.Dispatch<React.SetStateAction<AccountInfo[]>>;
   getConnectionStatus: (accountId: string) => boolean;
   getAccountConnection: (accountId: string) => EaConnection | undefined;
   getAccountSettings: (accountId: string, type: 'source' | 'receiver') => CopySettings[];
@@ -36,8 +41,10 @@ export function useAccountData({
   settings,
   content,
 }: UseAccountDataProps): UseAccountDataReturn {
-  const [sourceAccounts, setSourceAccounts] = useState<AccountInfo[]>([]);
-  const [receiverAccounts, setReceiverAccounts] = useState<AccountInfo[]>([]);
+  const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
+  const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
+  const [disabledSourceIds] = useAtom(disabledSourceIdsAtom);
+  const [disabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
   // Helper function to check connection status
   const getConnectionStatus = (accountId: string): boolean => {
@@ -61,22 +68,19 @@ export function useAccountData({
   };
 
   // Build account lists from settings
-  useEffect(() => {
+  const { sourceAccounts, receiverAccounts } = useMemo(() => {
     const sourceMap = new Map<string, AccountInfo>();
     const receiverMap = new Map<string, AccountInfo>();
-
-    // Get previous account states for preserving isEnabled
-    const prevSourceMap = new Map(sourceAccounts.map(acc => [acc.id, acc]));
-    const prevReceiverMap = new Map(receiverAccounts.map(acc => [acc.id, acc]));
 
     settings.forEach((setting, index) => {
       // Add source (Master)
       if (!sourceMap.has(setting.master_account)) {
-        const existingSource = prevSourceMap.get(setting.master_account);
         const isOnline = getConnectionStatus(setting.master_account);
         const connection = getAccountConnection(setting.master_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
-        const isEnabled = existingSource?.isEnabled ?? true;
+
+        const isEnabled = !disabledSourceIds.includes(setting.master_account);
+        const isExpanded = expandedSourceIds.includes(setting.master_account);
 
         // Calculate active state: Master is active if online && trade_allowed && enabled
         const isActive = isOnline && isTradeAllowed && isEnabled;
@@ -95,17 +99,19 @@ export function useAccountData({
           hasError,
           hasWarning,
           errorMsg,
-          isExpanded: existingSource?.isExpanded ?? false,
+          isExpanded,
         });
       }
 
       // Add receiver (Slave)
       if (!receiverMap.has(setting.slave_account)) {
-        const existingReceiver = prevReceiverMap.get(setting.slave_account);
         const isOnline = getConnectionStatus(setting.slave_account);
         const connection = getAccountConnection(setting.slave_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
-        const isEnabled = existingReceiver?.isEnabled ?? (setting.status !== 0);
+
+        // Receiver is enabled if not in disabled list (independent of settings status)
+        const isEnabled = !disabledReceiverIds.includes(setting.slave_account);
+        const isExpanded = expandedReceiverIds.includes(setting.slave_account);
 
         // Active state calculation will be done after all masters are processed
         // For now, set to false - will be updated in the next section
@@ -123,7 +129,7 @@ export function useAccountData({
           hasError: false,
           hasWarning,
           errorMsg: hasWarning ? content.autoTradingDisabled : '',
-          isExpanded: existingReceiver?.isExpanded ?? false,
+          isExpanded,
         });
       }
     });
@@ -162,30 +168,40 @@ export function useAccountData({
       }
     });
 
-    setSourceAccounts(newSourceAccounts);
-    setReceiverAccounts(newReceiverAccounts);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, connections, content.allSourcesInactive, content.someSourcesInactive, content.autoTradingDisabled]);
+    return { sourceAccounts: newSourceAccounts, receiverAccounts: newReceiverAccounts };
+  }, [
+    settings,
+    connections,
+    content.allSourcesInactive,
+    content.someSourcesInactive,
+    content.autoTradingDisabled,
+    expandedSourceIds,
+    expandedReceiverIds,
+    disabledSourceIds,
+    disabledReceiverIds
+  ]);
 
   // Toggle expand state for source accounts
   const toggleSourceExpand = (accountId: string) => {
-    setSourceAccounts((prev) =>
-      prev.map((acc) => (acc.id === accountId ? { ...acc, isExpanded: !acc.isExpanded } : acc))
+    setExpandedSourceIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId]
     );
   };
 
   // Toggle expand state for receiver accounts
   const toggleReceiverExpand = (accountId: string) => {
-    setReceiverAccounts((prev) =>
-      prev.map((acc) => (acc.id === accountId ? { ...acc, isExpanded: !acc.isExpanded } : acc))
+    setExpandedReceiverIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId]
     );
   };
 
   return {
     sourceAccounts,
     receiverAccounts,
-    setSourceAccounts,
-    setReceiverAccounts,
     getConnectionStatus,
     getAccountConnection,
     getAccountSettings,

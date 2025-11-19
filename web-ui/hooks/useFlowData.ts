@@ -1,7 +1,17 @@
 import { useMemo } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
 import type { AccountNodeData } from '@/components/flow-nodes';
+import {
+  hoveredSourceIdAtom,
+  hoveredReceiverIdAtom,
+  selectedSourceIdAtom,
+  expandedSourceIdsAtom,
+  expandedReceiverIdsAtom,
+  disabledSourceIdsAtom,
+  disabledReceiverIdsAtom,
+} from '@/lib/atoms/ui';
 
 interface UseFlowDataProps {
   sourceAccounts: AccountInfo[];
@@ -9,18 +19,12 @@ interface UseFlowDataProps {
   settings: CopySettings[];
   getAccountConnection: (accountId: string) => EaConnection | undefined;
   getAccountSettings: (accountId: string, type: 'source' | 'receiver') => CopySettings[];
-  toggleSourceExpand: (id: string) => void;
-  toggleReceiverExpand: (id: string) => void;
-  toggleSourceEnabled: (id: string, enabled: boolean) => void;
-  toggleReceiverEnabled: (id: string, enabled: boolean) => void;
   handleEditSetting: (setting: CopySettings) => void;
   handleDeleteSetting: (setting: CopySettings) => void;
-  hoveredSourceId: string | null;
-  hoveredReceiverId: string | null;
-  selectedSourceId: string | null;
   isAccountHighlighted: (accountId: string, type: 'source' | 'receiver') => boolean;
   isMobile: boolean;
   content: any;
+  onToggle: (id: number, currentStatus: number) => Promise<void>;
 }
 
 // Layout constants - Desktop (horizontal)
@@ -45,19 +49,78 @@ export function useFlowData({
   settings,
   getAccountConnection,
   getAccountSettings,
-  toggleSourceExpand,
-  toggleReceiverExpand,
-  toggleSourceEnabled,
-  toggleReceiverEnabled,
   handleEditSetting,
   handleDeleteSetting,
-  hoveredSourceId,
-  hoveredReceiverId,
-  selectedSourceId,
   isAccountHighlighted,
   isMobile,
   content,
+  onToggle,
 }: UseFlowDataProps): { nodes: Node[]; edges: Edge[] } {
+  const hoveredSourceId = useAtomValue(hoveredSourceIdAtom);
+  const hoveredReceiverId = useAtomValue(hoveredReceiverIdAtom);
+  const selectedSourceId = useAtomValue(selectedSourceIdAtom);
+
+  const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
+  const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
+  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
+  const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
+
+  const toggleSourceExpand = (accountId: string) => {
+    setExpandedSourceIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  const toggleReceiverExpand = (accountId: string) => {
+    setExpandedReceiverIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  const toggleSourceEnabled = (accountId: string, enabled: boolean) => {
+    // Update local state (disabledSourceIds)
+    setDisabledSourceIds((prev) => {
+      if (enabled) {
+        return prev.filter((id) => id !== accountId);
+      } else {
+        return prev.includes(accountId) ? prev : [...prev, accountId];
+      }
+    });
+
+    // Find all settings for this source and toggle them
+    const sourceSettings = settings.filter((s) => s.master_account === accountId);
+    sourceSettings.forEach((setting) => {
+      const isCurrentlyEnabled = setting.status !== 0;
+      if (isCurrentlyEnabled !== enabled) {
+        onToggle(setting.id, setting.status);
+      }
+    });
+  };
+
+  const toggleReceiverEnabled = (accountId: string, enabled: boolean) => {
+    // Update local state (disabledReceiverIds)
+    setDisabledReceiverIds((prev) => {
+      if (enabled) {
+        return prev.filter((id) => id !== accountId);
+      } else {
+        return prev.includes(accountId) ? prev : [...prev, accountId];
+      }
+    });
+
+    // Receiver enabled state is derived from settings, so we just need to update settings
+    const receiverSettings = settings.filter((s) => s.slave_account === accountId);
+    receiverSettings.forEach((setting) => {
+      const isCurrentlyEnabled = setting.status !== 0;
+      if (isCurrentlyEnabled !== enabled) {
+        onToggle(setting.id, setting.status);
+      }
+    });
+  };
+
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
 
@@ -104,12 +167,12 @@ export function useFlowData({
       // Mobile: vertical layout below source accounts, Desktop: horizontal layout
       const position = isMobile
         ? {
-            x: MOBILE_X,
-            y: MOBILE_SOURCE_START_Y +
-               sourceAccounts.length * MOBILE_VERTICAL_SPACING +
-               MOBILE_SECTION_GAP +
-               index * MOBILE_VERTICAL_SPACING,
-          }
+          x: MOBILE_X,
+          y: MOBILE_SOURCE_START_Y +
+            sourceAccounts.length * MOBILE_VERTICAL_SPACING +
+            MOBILE_SECTION_GAP +
+            index * MOBILE_VERTICAL_SPACING,
+        }
         : { x: RECEIVER_X, y: index * VERTICAL_SPACING };
 
       nodeList.push({
@@ -141,10 +204,6 @@ export function useFlowData({
     receiverAccounts,
     getAccountConnection,
     getAccountSettings,
-    toggleSourceExpand,
-    toggleReceiverExpand,
-    toggleSourceEnabled,
-    toggleReceiverEnabled,
     handleEditSetting,
     handleDeleteSetting,
     hoveredSourceId,
@@ -153,6 +212,11 @@ export function useFlowData({
     isAccountHighlighted,
     isMobile,
     content,
+    expandedSourceIds,
+    expandedReceiverIds,
+    disabledSourceIds,
+    settings,
+    onToggle
   ]);
 
   const edges = useMemo(() => {

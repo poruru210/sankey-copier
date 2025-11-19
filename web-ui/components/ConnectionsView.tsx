@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import {
@@ -53,8 +53,6 @@ export function ConnectionsView({
   const {
     sourceAccounts,
     receiverAccounts,
-    setSourceAccounts,
-    setReceiverAccounts,
     getAccountConnection,
     getAccountSettings,
     toggleSourceExpand,
@@ -91,10 +89,6 @@ export function ConnectionsView({
   // Use custom hook for toggle operations
   const { toggleSourceEnabled, toggleReceiverEnabled } = useAccountToggle({
     settings,
-    sourceAccounts,
-    receiverAccounts,
-    setSourceAccounts,
-    setReceiverAccounts,
     onToggle,
   });
 
@@ -255,100 +249,100 @@ export function ConnectionsView({
           </div>
         )}
 
-      <div className="max-w-7xl mx-auto relative">
-        <svg
-          id="connection-svg"
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ zIndex: 0 }}
-        />
+        <div className="max-w-7xl mx-auto relative">
+          <svg
+            id="connection-svg"
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ zIndex: 0 }}
+          />
 
-        {/* Main Content */}
-        <div className="relative z-10 px-4 md:px-0">
-          {/* Main Layout - Source and Receivers */}
-          <div className={GRID_LAYOUT}>
-            {/* Left Column: Source Accounts */}
-            <div className={ACCOUNT_LIST_WRAPPER}>
-              <div className={ACCOUNT_LIST}>
-                {visibleSourceAccounts.map((account) => {
-                  const isHighlighted = isAccountHighlighted(account.id, 'source');
-                  const connection = getAccountConnection(account.id);
-                  const accountSettings = getAccountSettings(account.id, 'source');
+          {/* Main Content */}
+          <div className="relative z-10 px-4 md:px-0">
+            {/* Main Layout - Source and Receivers */}
+            <div className={GRID_LAYOUT}>
+              {/* Left Column: Source Accounts */}
+              <div className={ACCOUNT_LIST_WRAPPER}>
+                <div className={ACCOUNT_LIST}>
+                  {visibleSourceAccounts.map((account) => {
+                    const isHighlighted = isAccountHighlighted(account.id, 'source');
+                    const connection = getAccountConnection(account.id);
+                    const accountSettings = getAccountSettings(account.id, 'source');
 
-                  return (
-                    <div
-                      key={account.id}
-                      ref={registerSourceRef(account.id)}
-                      className="animate-in fade-in duration-300"
-                    >
-                      <AccountCard
-                        account={account}
-                        connection={connection}
-                        accountSettings={accountSettings}
-                        onToggle={() => toggleSourceExpand(account.id)}
-                        onToggleEnabled={(enabled) => toggleSourceEnabled(account.id, enabled)}
-                        onEditSetting={handleEditSetting}
-                        onDeleteSetting={handleDeleteSetting}
-                        type="source"
-                        onMouseEnter={() => !isMobile && setHoveredSource(account.id)}
-                        onMouseLeave={() => !isMobile && setHoveredSource(null)}
-                        isHighlighted={isHighlighted}
-                        hoveredSourceId={hoveredSourceId}
-                        hoveredReceiverId={hoveredReceiverId}
-                        selectedSourceId={selectedSourceId}
-                        isMobile={isMobile}
-                        content={accountCardContent}
-                      />
-                    </div>
-                  );
-                })}
+                    return (
+                      <div
+                        key={account.id}
+                        ref={registerSourceRef(account.id)}
+                        className="animate-in fade-in duration-300"
+                      >
+                        <AccountCard
+                          account={account}
+                          connection={connection}
+                          accountSettings={accountSettings}
+                          onToggle={() => toggleSourceExpand(account.id)}
+                          onToggleEnabled={(enabled) => toggleSourceEnabled(account.id, enabled)}
+                          onEditSetting={handleEditSetting}
+                          onDeleteSetting={handleDeleteSetting}
+                          type="source"
+                          onMouseEnter={() => !isMobile && setHoveredSource(account.id)}
+                          onMouseLeave={() => !isMobile && setHoveredSource(null)}
+                          isHighlighted={isHighlighted}
+                          hoveredSourceId={hoveredSourceId}
+                          hoveredReceiverId={hoveredReceiverId}
+                          selectedSourceId={selectedSourceId}
+                          isMobile={isMobile}
+                          content={accountCardContent}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            {/* Middle Column: Server indicator */}
-            <div ref={middleColumnRef} className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
-              {/* Server icon will be drawn here by SVG */}
-            </div>
+              {/* Middle Column: Server indicator */}
+              <div ref={middleColumnRef} className={`${ACCOUNT_LIST_WRAPPER} my-2 md:my-0`}>
+                {/* Server icon will be drawn here by SVG */}
+              </div>
 
-            {/* Right Column: Receiver Accounts */}
-            <div className={ACCOUNT_LIST_WRAPPER}>
-              <div className={ACCOUNT_LIST}>
-                {visibleReceiverAccounts.map((account) => {
-                  const isHighlighted = isAccountHighlighted(account.id, 'receiver');
-                  const connection = getAccountConnection(account.id);
-                  const accountSettings = getAccountSettings(account.id, 'receiver');
+              {/* Right Column: Receiver Accounts */}
+              <div className={ACCOUNT_LIST_WRAPPER}>
+                <div className={ACCOUNT_LIST}>
+                  {visibleReceiverAccounts.map((account) => {
+                    const isHighlighted = isAccountHighlighted(account.id, 'receiver');
+                    const connection = getAccountConnection(account.id);
+                    const accountSettings = getAccountSettings(account.id, 'receiver');
 
-                  return (
-                    <div
-                      key={account.id}
-                      ref={registerReceiverRef(account.id)}
-                      className="animate-in fade-in duration-300"
-                    >
-                      <AccountCard
-                        account={account}
-                        connection={connection}
-                        accountSettings={accountSettings}
-                        onToggle={() => toggleReceiverExpand(account.id)}
-                        onToggleEnabled={(enabled) => toggleReceiverEnabled(account.id, enabled)}
-                        onEditSetting={handleEditSetting}
-                        onDeleteSetting={handleDeleteSetting}
-                        type="receiver"
-                        onMouseEnter={() => setHoveredReceiver(account.id)}
-                        onMouseLeave={() => setHoveredReceiver(null)}
-                        isHighlighted={isHighlighted}
-                        hoveredSourceId={hoveredSourceId}
-                        hoveredReceiverId={hoveredReceiverId}
-                        selectedSourceId={selectedSourceId}
-                        isMobile={isMobile}
-                        content={accountCardContent}
-                      />
-                    </div>
-                  );
-                })}
+                    return (
+                      <div
+                        key={account.id}
+                        ref={registerReceiverRef(account.id)}
+                        className="animate-in fade-in duration-300"
+                      >
+                        <AccountCard
+                          account={account}
+                          connection={connection}
+                          accountSettings={accountSettings}
+                          onToggle={() => toggleReceiverExpand(account.id)}
+                          onToggleEnabled={(enabled) => toggleReceiverEnabled(account.id, enabled)}
+                          onEditSetting={handleEditSetting}
+                          onDeleteSetting={handleDeleteSetting}
+                          type="receiver"
+                          onMouseEnter={() => setHoveredReceiver(account.id)}
+                          onMouseLeave={() => setHoveredReceiver(null)}
+                          isHighlighted={isHighlighted}
+                          hoveredSourceId={hoveredSourceId}
+                          hoveredReceiverId={hoveredReceiverId}
+                          selectedSourceId={selectedSourceId}
+                          isMobile={isMobile}
+                          content={accountCardContent}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
         {/* Settings Dialog */}
         <SettingsDialog

@@ -2,18 +2,19 @@
 
 import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
+import { useAtomValue } from 'jotai';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RefreshCw, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
-import { useApiClient } from '@/lib/contexts/site-context';
+import { apiClientAtom } from '@/lib/atoms/site';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { useServerLogs, useLogViewerResize, useLogViewerLayout } from './ServerLog.hooks';
 import { LOG_LEVEL_COLORS } from './ServerLog.constants';
 import { cn } from '@/lib/utils';
 
 export function ServerLog() {
-  const apiClient = useApiClient();
+  const apiClient = useAtomValue(apiClientAtom);
   const {
     isOpen: isSidebarOpen,
     isMobile,

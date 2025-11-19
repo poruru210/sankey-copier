@@ -1,0 +1,15 @@
+
+> forex-copier-ui@1.0.0 test:e2e C:\Users\AKIRA\Documents\GitHub\sankey-copier\web-ui
+> playwright test
+
+
+[1A[2K[WebServer]  ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+[WebServer]  We detected multiple lockfiles and selected the directory of C:\Users\AKIRA\pnpm-lock.yaml as the root directory.
+[WebServer]  To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+[WebServer]    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+[WebServer]  Detected additional lockfiles: 
+[WebServer]    * C:\Users\AKIRA\Documents\GitHub\sankey-copier\web-ui\pnpm-lock.yaml
+[WebServer] 
+Error: Timed out waiting 60000ms from config.webServer.
+
+[1A[2K ELIFECYCLE  Command failed with exit code 1.
