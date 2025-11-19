@@ -71,19 +71,22 @@ pub fn ensure_certificate(config: &TlsConfig, base_path: &Path) -> Result<()> {
 /// * Tuple of (certificate PEM, private key PEM)
 fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
     // Generate a new key pair
-    let key_pair = KeyPair::generate()
-        .context("Failed to generate key pair")?;
+    let key_pair = KeyPair::generate().context("Failed to generate key pair")?;
 
     // Configure certificate parameters
     let mut params = CertificateParams::default();
 
     // Set distinguished name
-    params.distinguished_name.push(DnType::CommonName, "SANKEY Copier Local Server");
-    params.distinguished_name.push(DnType::OrganizationName, "SANKEY Copier");
+    params
+        .distinguished_name
+        .push(DnType::CommonName, "SANKEY Copier Local Server");
+    params
+        .distinguished_name
+        .push(DnType::OrganizationName, "SANKEY Copier");
 
     // Set Subject Alternative Names for localhost
-    let localhost_dns = Ia5String::try_from("localhost")
-        .context("Failed to create Ia5String for localhost")?;
+    let localhost_dns =
+        Ia5String::try_from("localhost").context("Failed to create Ia5String for localhost")?;
     params.subject_alt_names = vec![
         SanType::DnsName(localhost_dns),
         SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))),
@@ -98,7 +101,8 @@ fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
     params.not_after = not_after;
 
     // Generate the certificate
-    let cert = params.self_signed(&key_pair)
+    let cert = params
+        .self_signed(&key_pair)
         .context("Failed to generate self-signed certificate")?;
 
     let cert_pem = cert.pem();

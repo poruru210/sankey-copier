@@ -347,30 +347,23 @@ async fn main() -> Result<()> {
     // Start HTTPS server
     tracing::info!("Getting bind address...");
     let bind_address = config.server_address();
-    tracing::info!(
-        "Bind address: {}, loading TLS certificate...",
-        bind_address
-    );
+    tracing::info!("Bind address: {}, loading TLS certificate...", bind_address);
 
     // Load TLS certificate and key
     let cert_path = base_path.join(&config.tls.cert_path);
     let key_path = base_path.join(&config.tls.key_path);
 
-    let rustls_config = match axum_server::tls_rustls::RustlsConfig::from_pem_file(
-        &cert_path,
-        &key_path,
-    )
-    .await
-    {
-        Ok(config) => {
-            tracing::info!("TLS configuration loaded successfully");
-            config
-        }
-        Err(e) => {
-            tracing::error!("Failed to load TLS certificate: {}", e);
-            return Err(e.into());
-        }
-    };
+    let rustls_config =
+        match axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert_path, &key_path).await {
+            Ok(config) => {
+                tracing::info!("TLS configuration loaded successfully");
+                config
+            }
+            Err(e) => {
+                tracing::error!("Failed to load TLS certificate: {}", e);
+                return Err(e.into());
+            }
+        };
 
     // Parse bind address
     let addr: std::net::SocketAddr = bind_address
