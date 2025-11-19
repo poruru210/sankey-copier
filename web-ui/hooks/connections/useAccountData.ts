@@ -81,15 +81,10 @@ export function useAccountData({
         // Calculate active state: Master is active if online && trade_allowed && enabled
         const isActive = isOnline && isTradeAllowed && isEnabled;
 
-        // Warnings/errors: only show if online but trade not allowed
+        // Warnings: only show if online but trade not allowed
         const hasWarning = isOnline && !isTradeAllowed;
-        const hasError = index === 0 && !isOnline;
-        let errorMsg = '';
-        if (hasError) {
-          errorMsg = 'エラー! チャート上のEAの問題';
-        } else if (hasWarning) {
-          errorMsg = content.autoTradingDisabled;
-        }
+        const hasError = false;
+        const errorMsg = hasWarning ? content.autoTradingDisabled : '';
 
         sourceMap.set(setting.master_account, {
           id: setting.master_account,
