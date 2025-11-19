@@ -203,10 +203,11 @@ export function useSankeyCopier() {
   const createSetting = async (formData: CreateSettingsRequest) => {
     if (!apiClient) return;
     // Optimistically add to UI with temporary ID
-    // Use negative ID to avoid i32 overflow (Date.now() exceeds i32 max)
+    // Use negative ID within i32 range to avoid overflow
+    // i32 range: -2,147,483,648 to 2,147,483,647
     const tempSetting: CopySettings = {
       ...formData,
-      id: -Date.now(), // Negative temporary ID to avoid i32 overflow
+      id: -(Date.now() % 2000000000), // Negative temporary ID within i32 range
       status: 0, // Default to DISABLED (OFF switch)
       symbol_mappings: [],
       filters: {
@@ -216,6 +217,7 @@ export function useSankeyCopier() {
         blocked_magic_numbers: null,
       },
     };
+
 
     const previousSettings = settings;
     setSettings((prev) => [...prev, tempSetting]);
