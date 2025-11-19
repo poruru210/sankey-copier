@@ -10,7 +10,7 @@
 //+------------------------------------------------------------------+
 //| Send configuration request message to server (for Slave EAs)     |
 //+------------------------------------------------------------------+
-bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, string account_id)
+bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, string account_id, string ea_type)
 {
    // Create temporary PUSH socket for config request
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
@@ -29,7 +29,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
 
    // Serialize request config message using MessagePack
    int len = serialize_request_config("RequestConfig", account_id,
-                                      FormatTimestampISO8601(TimeCurrent()));
+                                      FormatTimestampISO8601(TimeCurrent()), ea_type);
 
    if(len <= 0)
    {
@@ -61,6 +61,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
    zmq_socket_destroy(push_socket);
    return success;
 }
+
 
 //+------------------------------------------------------------------+
 //| Send unregistration message to server                            |

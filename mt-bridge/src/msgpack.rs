@@ -65,7 +65,9 @@ pub struct RequestConfigMessage {
     pub message_type: String, // "RequestConfig"
     pub account_id: String,
     pub timestamp: String,
+    pub ea_type: String, // "Master" or "Slave"
 }
+
 
 /// Heartbeat message structure (includes all EA information for auto-registration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,11 +335,13 @@ pub unsafe extern "C" fn serialize_request_config(
     message_type: *const u16,
     account_id: *const u16,
     timestamp: *const u16,
+    ea_type: *const u16,
 ) -> i32 {
     let msg = RequestConfigMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
         account_id: utf16_to_string(account_id).unwrap_or_default(),
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
+        ea_type: utf16_to_string(ea_type).unwrap_or_default(),
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -349,6 +353,7 @@ pub unsafe extern "C" fn serialize_request_config(
         Err(_) => 0,
     }
 }
+
 
 /// Serialize an UnregisterMessage to MessagePack
 #[no_mangle]
@@ -686,6 +691,7 @@ mod tests {
             message_type: "RequestConfig".to_string(),
             account_id: "test_account_123".to_string(),
             timestamp: "2025-01-01T00:00:00Z".to_string(),
+            ea_type: "Slave".to_string(),
         };
 
         // Serialize
@@ -700,7 +706,9 @@ mod tests {
         assert_eq!(msg.message_type, deserialized.message_type);
         assert_eq!(msg.account_id, deserialized.account_id);
         assert_eq!(msg.timestamp, deserialized.timestamp);
+        assert_eq!(msg.ea_type, deserialized.ea_type);
     }
+
 
     #[test]
     fn test_unregister_message_serialization() {

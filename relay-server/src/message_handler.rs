@@ -58,7 +58,17 @@ impl MessageHandler {
     async fn handle_request_config(&self, msg: RequestConfigMessage) {
         let account_id = msg.account_id.clone();
 
-        tracing::info!("Config request received from: {}", account_id);
+        tracing::info!("Config request received from: {} (ea_type: {})", account_id, msg.ea_type);
+
+        // Validate that only Slave EAs can request Slave configuration
+        if msg.ea_type != "Slave" {
+            tracing::warn!(
+                "Config request rejected: account {} sent request with ea_type '{}' (only 'Slave' is allowed)",
+                account_id,
+                msg.ea_type
+            );
+            return;
+        }
 
         match self.db.get_settings_for_slave(&account_id).await {
             Ok(Some(settings)) => {

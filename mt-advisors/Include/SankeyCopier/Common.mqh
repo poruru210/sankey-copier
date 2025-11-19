@@ -46,7 +46,8 @@
    int         zmq_socket_subscribe(HANDLE_TYPE socket, string topic);
 
    // MessagePack serialization functions
-   int    serialize_request_config(string message_type, string account_id, string timestamp);
+   int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
+
    int    serialize_unregister(string message_type, string account_id, string timestamp);
    int    serialize_heartbeat(string message_type, string account_id, double balance,
                               double equity, int open_positions, string timestamp,

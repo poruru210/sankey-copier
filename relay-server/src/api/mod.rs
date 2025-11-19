@@ -510,6 +510,66 @@ async fn delete_settings(
     let span = tracing::info_span!("delete_settings", settings_id = id);
     let _enter = span.enter();
 
+    // Retrieve settings before deletion to send notification to Slave EA
+    let settings_opt = match state.db.get_copy_settings(id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(
+                settings_id = id,
+                error = %e,
+                "Failed to retrieve settings before deletion"
+            );
+            return Err(
+                ProblemDetails::internal_error(format!("Failed to retrieve settings: {}", e))
+                    .with_instance(format!("/api/settings/{}", id)),
+            );
+        }
+    };
+
+    // If settings exist, send notification to Slave EA
+    if let Some(settings) = settings_opt {
+        tracing::info!(
+            settings_id = id,
+            slave_account = %settings.slave_account,
+            "Sending delete notification to Slave EA"
+        );
+
+        // Send config with status=0 to indicate deletion
+        let delete_config = ConfigMessage {
+            account_id: settings.slave_account.clone(),
+            master_account: settings.master_account.clone(),
+            trade_group_id: settings.master_account.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            status: 0, // DISABLED - indicates config was deleted
+            lot_multiplier: None,
+            reverse_trade: false,
+            symbol_mappings: vec![],
+            filters: crate::models::TradeFilters {
+                allowed_symbols: None,
+                blocked_symbols: None,
+                allowed_magic_numbers: None,
+                blocked_magic_numbers: None,
+            },
+            config_version: 1,
+        };
+
+        if let Err(e) = state.config_sender.send_config(&delete_config).await {
+            tracing::warn!(
+                settings_id = id,
+                slave_account = %settings.slave_account,
+                error = %e,
+                "Failed to send delete notification to Slave EA (continuing with deletion)"
+            );
+        } else {
+            tracing::info!(
+                settings_id = id,
+                slave_account = %settings.slave_account,
+                "Delete notification sent successfully"
+            );
+        }
+    }
+
+    // Delete from database
     match state.db.delete_copy_settings(id).await {
         Ok(_) => {
             tracing::info!(settings_id = id, "Successfully deleted copy settings");
@@ -536,6 +596,7 @@ async fn delete_settings(
         }
     }
 }
+
 
 async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
