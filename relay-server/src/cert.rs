@@ -8,6 +8,7 @@ use rcgen::{CertificateParams, DnType, Ia5String, KeyPair, SanType};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::time::SystemTime;
 
 use crate::config::TlsConfig;
 
@@ -17,6 +18,9 @@ const CERT_COMMON_NAME: &str = "SANKEY Copier Local Server";
 
 /// Certificate Organization Name
 const CERT_ORG_NAME: &str = "SANKEY Copier";
+
+/// Number of days before expiry to warn user
+const EXPIRY_WARNING_DAYS: u64 = 30;
 
 /// Ensure certificate exists, generating and registering if necessary
 ///
@@ -38,6 +42,10 @@ pub fn ensure_certificate(config: &TlsConfig, base_path: &Path) -> Result<()> {
     // Check if both certificate files exist
     if cert_path.exists() && key_path.exists() {
         tracing::info!("Certificate files found at {:?}", cert_path);
+
+        // Check certificate expiry based on file modification time
+        check_certificate_expiry(&cert_path, config.validity_days);
+
         return Ok(());
     }
 
@@ -121,6 +129,56 @@ fn generate_self_signed_cert(validity_days: u32) -> Result<(String, String)> {
     );
 
     Ok((cert_pem, key_pem))
+}
+
+/// Check certificate expiry and warn if expiring soon
+///
+/// Estimates expiry date based on file modification time and validity_days.
+/// Logs a warning if the certificate will expire within EXPIRY_WARNING_DAYS.
+fn check_certificate_expiry(cert_path: &Path, validity_days: u32) {
+    let metadata = match fs::metadata(cert_path) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::debug!("Could not read certificate metadata: {}", e);
+            return;
+        }
+    };
+
+    let modified = match metadata.modified() {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::debug!("Could not get certificate modification time: {}", e);
+            return;
+        }
+    };
+
+    // Calculate estimated expiry time
+    let validity_secs = (validity_days as u64) * 24 * 60 * 60;
+    let expiry_time = modified + std::time::Duration::from_secs(validity_secs);
+
+    let now = SystemTime::now();
+    if let Ok(time_until_expiry) = expiry_time.duration_since(now) {
+        let days_until_expiry = time_until_expiry.as_secs() / (24 * 60 * 60);
+
+        if days_until_expiry <= EXPIRY_WARNING_DAYS {
+            tracing::warn!(
+                "TLS certificate will expire in {} days. Consider regenerating by deleting {:?}",
+                days_until_expiry,
+                cert_path
+            );
+        } else {
+            tracing::debug!(
+                "Certificate valid for approximately {} more days",
+                days_until_expiry
+            );
+        }
+    } else {
+        // Expiry time is in the past
+        tracing::error!(
+            "TLS certificate has expired! Delete {:?} to regenerate",
+            cert_path
+        );
+    }
 }
 
 /// Register certificate in Windows trusted root certificate store

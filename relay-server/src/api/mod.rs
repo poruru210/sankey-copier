@@ -136,6 +136,10 @@ pub fn create_router(state: AppState) -> Router {
         )
         .layer(trace_layer)
         .layer(cors)
+        // PNA headers must be added after CORS layer (outermost) so they are included
+        // in CORS preflight responses. Axum layers are applied outside-in for requests
+        // and inside-out for responses, so this position ensures all responses
+        // (including OPTIONS preflight) get the PNA header.
         .layer(middleware::from_fn(add_pna_headers))
         .with_state(state)
 }
