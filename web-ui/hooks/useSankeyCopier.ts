@@ -150,7 +150,7 @@ export function useSankeyCopier() {
       const newStatus = currentStatus === 0 ? 1 : 0;
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.post<void>(`/settings/${id}/toggle`, { status: newStatus });
-      fetchSettings();
+      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
@@ -179,7 +179,7 @@ export function useSankeyCopier() {
     try {
       // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
       await apiClient.post<number>('/settings', formData);
-      fetchSettings();
+      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
@@ -198,7 +198,7 @@ export function useSankeyCopier() {
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.put<void>(`/settings/${id}`, updatedData);
-      fetchSettings();
+      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
@@ -215,7 +215,7 @@ export function useSankeyCopier() {
     try {
       // Rust API returns StatusCode::NO_CONTENT (204) on success
       await apiClient.delete<void>(`/settings/${id}`);
-      fetchSettings();
+      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
