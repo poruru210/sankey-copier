@@ -240,7 +240,8 @@ impl MessageHandler {
                     if let Ok(settings_list) = self.db.get_settings_for_master(&account_id).await {
                         for settings in settings_list {
                             if let Ok(json) = serde_json::to_string(&settings) {
-                                let _ = self.broadcast_tx.send(format!("settings_updated:{}", json));
+                                let _ =
+                                    self.broadcast_tx.send(format!("settings_updated:{}", json));
                             }
                         }
                     }
