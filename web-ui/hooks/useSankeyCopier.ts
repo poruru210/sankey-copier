@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { debounce } from 'lodash-es';
 import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
 import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
 import { settingsAtom } from '@/lib/atoms/settings';
@@ -163,26 +164,33 @@ export function useSankeyCopier() {
     }
   }, [apiClient, fetchSettings, fetchConnections]);
 
+  // Debounced API call function (separate from UI update)
+  const debouncedApiCallRef = useRef(
+    debounce(async (apiClient: any, id: number, newStatus: number, previousSettings: CopySettings[]) => {
+      try {
+        await apiClient.post(`/settings/${id}/toggle`, { status: newStatus });
+      } catch (err) {
+        // Revert on error
+        setSettings(previousSettings);
+        console.error('Failed to toggle setting:', err);
+      }
+    }, 300) // Wait 300ms after last toggle before sending API request
+  );
+
   // Toggle status (DISABLED ⇄ ENABLED)
-  const toggleEnabled = async (id: number, currentStatus: number) => {
+  const toggleEnabled = useCallback(async (id: number, currentStatus: number): Promise<void> => {
     if (!apiClient) return;
-    // Optimistically update UI
+
+    // Immediately update UI for responsive UX
     const previousSettings = settings;
+    const newStatus = currentStatus === 0 ? 1 : 0;
     setSettings((prev) =>
-      prev.map(s => s.id === id ? { ...s, status: s.status === 0 ? 1 : 0 } : s)
+      prev.map(s => s.id === id ? { ...s, status: newStatus } : s)
     );
 
-    try {
-      // Toggle between DISABLED (0) and ENABLED (1)
-      const newStatus = currentStatus === 0 ? 1 : 0;
-      // Rust API returns StatusCode::NO_CONTENT (204) on success
-      await apiClient.post<void>(`/settings/${id}/toggle`, { status: newStatus });
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
-    } catch (err) {
-      setSettings(previousSettings); // Revert on error
-      throw err; // Re-throw for caller to handle
-    }
-  };
+    // Debounce the actual API call
+    debouncedApiCallRef.current(apiClient, id, newStatus, previousSettings);
+  }, [apiClient, settings]);
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
