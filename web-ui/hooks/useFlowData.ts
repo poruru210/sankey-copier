@@ -9,8 +9,6 @@ import {
   selectedSourceIdAtom,
   expandedSourceIdsAtom,
   expandedReceiverIdsAtom,
-  disabledSourceIdsAtom,
-  disabledReceiverIdsAtom,
 } from '@/lib/atoms/ui';
 
 interface UseFlowDataProps {
@@ -62,8 +60,6 @@ export function useFlowData({
 
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
-  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
-  const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
   const toggleSourceExpand = useCallback((accountId: string) => {
     setExpandedSourceIds((prev) =>
@@ -82,15 +78,6 @@ export function useFlowData({
   }, [setExpandedReceiverIds]);
 
   const toggleSourceEnabled = useCallback((accountId: string, enabled: boolean) => {
-    // Update local state (disabledSourceIds)
-    setDisabledSourceIds((prev) => {
-      if (enabled) {
-        return prev.filter((id) => id !== accountId);
-      } else {
-        return prev.includes(accountId) ? prev : [...prev, accountId];
-      }
-    });
-
     // Find all settings for this source and toggle them
     const sourceSettings = settings.filter((s) => s.master_account === accountId);
     sourceSettings.forEach((setting) => {
@@ -99,18 +86,9 @@ export function useFlowData({
         onToggle(setting.id, setting.status);
       }
     });
-  }, [settings, onToggle, setDisabledSourceIds]);
+  }, [settings, onToggle]);
 
   const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
-    // Update local state (disabledReceiverIds)
-    setDisabledReceiverIds((prev) => {
-      if (enabled) {
-        return prev.filter((id) => id !== accountId);
-      } else {
-        return prev.includes(accountId) ? prev : [...prev, accountId];
-      }
-    });
-
     // Receiver enabled state is derived from settings, so we just need to update settings
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
     receiverSettings.forEach((setting) => {
@@ -119,7 +97,7 @@ export function useFlowData({
         onToggle(setting.id, setting.status);
       }
     });
-  }, [settings, onToggle, setDisabledReceiverIds]);
+  }, [settings, onToggle]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
