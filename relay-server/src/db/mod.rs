@@ -65,10 +65,7 @@ impl Database {
 
     /// Get enabled copy settings for a specific slave account
     /// Used in Phase 2 for registration-triggered CONFIG distribution
-    pub async fn get_settings_for_slave(
-        &self,
-        slave_account: &str,
-    ) -> Result<Vec<CopySettings>> {
+    pub async fn get_settings_for_slave(&self, slave_account: &str) -> Result<Vec<CopySettings>> {
         let rows = sqlx::query(
             "SELECT id, status, master_account, slave_account, settings
              FROM connections WHERE slave_account = ? AND status > 0",
