@@ -19,10 +19,12 @@ impl MockEaClient {
 
         // PUSH socket for sending messages to server
         let push_socket = context.socket(zmq::PUSH)?;
+        push_socket.set_linger(0)?; // Don't wait for unsent messages on close
         push_socket.connect(push_address)?;
 
         // SUB socket for receiving config messages
         let sub_socket = context.socket(zmq::SUB)?;
+        sub_socket.set_linger(0)?; // Don't wait for unsent messages on close
         sub_socket.connect(sub_address)?;
         sub_socket.set_subscribe(b"")?; // Subscribe to all messages
 
