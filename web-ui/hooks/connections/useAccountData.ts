@@ -4,6 +4,8 @@ import type { EaConnection, CopySettings, AccountInfo } from '@/types';
 import {
   expandedSourceIdsAtom,
   expandedReceiverIdsAtom,
+  disabledSourceIdsAtom,
+  disabledReceiverIdsAtom,
 } from '@/lib/atoms/ui';
 
 interface UseAccountDataProps {
@@ -41,6 +43,8 @@ export function useAccountData({
 }: UseAccountDataProps): UseAccountDataReturn {
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
+  const [disabledSourceIds] = useAtom(disabledSourceIdsAtom);
+  const [disabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
   // Helper function to check connection status
   const getConnectionStatus = useCallback((accountId: string): boolean => {
@@ -75,10 +79,7 @@ export function useAccountData({
         const connection = getAccountConnection(setting.master_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
-        // Check if any setting for this master is enabled
-        const masterSettings = settings.filter(s => s.master_account === setting.master_account);
-        const isEnabled = masterSettings.some(s => s.status !== 0);
-
+        const isEnabled = !disabledSourceIds.includes(setting.master_account);
         const isExpanded = expandedSourceIds.includes(setting.master_account);
 
         // Calculate active state: Master is active if online && trade_allowed && enabled
@@ -108,10 +109,8 @@ export function useAccountData({
         const connection = getAccountConnection(setting.slave_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
-        // Receiver is enabled if any setting for this slave is enabled
-        const slaveSettings = settings.filter(s => s.slave_account === setting.slave_account);
-        const isEnabled = slaveSettings.some(s => s.status !== 0);
-
+        // Receiver is enabled if not in disabled list (independent of settings status)
+        const isEnabled = !disabledReceiverIds.includes(setting.slave_account);
         const isExpanded = expandedReceiverIds.includes(setting.slave_account);
 
         // Active state calculation will be done after all masters are processed
@@ -175,6 +174,8 @@ export function useAccountData({
     content.autoTradingDisabled,
     expandedSourceIds,
     expandedReceiverIds,
+    disabledSourceIds,
+    disabledReceiverIds,
     getAccountConnection,
     getConnectionStatus,
   ]);
