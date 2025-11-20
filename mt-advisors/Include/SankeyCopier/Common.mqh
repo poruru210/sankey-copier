@@ -46,7 +46,8 @@
    int         zmq_socket_subscribe(HANDLE_TYPE socket, string topic);
 
    // MessagePack serialization functions
-   int    serialize_request_config(string message_type, string account_id, string timestamp);
+   int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
+
    int    serialize_unregister(string message_type, string account_id, string timestamp);
    int    serialize_heartbeat(string message_type, string account_id, double balance,
                               double equity, int open_positions, string timestamp,
@@ -87,6 +88,17 @@ struct TradeFilters {
     string blocked_symbols[];
     int    allowed_magic_numbers[];
     int    blocked_magic_numbers[];
+};
+
+struct CopyConfig {
+    string master_account;
+    string trade_group_id;
+    int    status;
+    double lot_multiplier;
+    bool   reverse_trade;
+    int    config_version;
+    SymbolMapping symbol_mappings[];
+    TradeFilters filters;
 };
 
 //+------------------------------------------------------------------+
@@ -289,4 +301,38 @@ string GetServerName()
    #else
       return AccountServer();
    #endif
+}
+
+//+------------------------------------------------------------------+
+//| Get string representation of order type                          |
+//+------------------------------------------------------------------+
+string GetOrderTypeString(int type)
+{
+   #ifdef IS_MT5
+      if(type == POSITION_TYPE_BUY) return "ORDER_TYPE_BUY";
+      if(type == POSITION_TYPE_SELL) return "ORDER_TYPE_SELL";
+   #else
+      if(type == OP_BUY) return "ORDER_TYPE_BUY";
+      if(type == OP_SELL) return "ORDER_TYPE_SELL";
+      if(type == OP_BUYLIMIT) return "ORDER_TYPE_BUY_LIMIT";
+      if(type == OP_SELLLIMIT) return "ORDER_TYPE_SELL_LIMIT";
+      if(type == OP_BUYSTOP) return "ORDER_TYPE_BUY_STOP";
+      if(type == OP_SELLSTOP) return "ORDER_TYPE_SELL_STOP";
+   #endif
+   return "UNKNOWN";
+}
+
+//+------------------------------------------------------------------+
+//| Get enum order type from string                                  |
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
+{
+   if(type_str == "ORDER_TYPE_BUY") return ORDER_TYPE_BUY;
+   if(type_str == "ORDER_TYPE_SELL") return ORDER_TYPE_SELL;
+   if(type_str == "ORDER_TYPE_BUY_LIMIT") return ORDER_TYPE_BUY_LIMIT;
+   if(type_str == "ORDER_TYPE_SELL_LIMIT") return ORDER_TYPE_SELL_LIMIT;
+   if(type_str == "ORDER_TYPE_BUY_STOP") return ORDER_TYPE_BUY_STOP;
+   if(type_str == "ORDER_TYPE_SELL_STOP") return ORDER_TYPE_SELL_STOP;
+   
+   return (ENUM_ORDER_TYPE)-1;
 }

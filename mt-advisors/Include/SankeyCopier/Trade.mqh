@@ -10,24 +10,26 @@
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
 //+------------------------------------------------------------------+
-bool ShouldProcessTrade(string symbol, int magic_number, int status,
-                        TradeFilters &filters)
+//+------------------------------------------------------------------+
+//| Check if trade should be processed based on filters              |
+//+------------------------------------------------------------------+
+bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 {
    // Check if copying is enabled and connected
    // STATUS_CONNECTED (2) means both Slave is enabled AND Master is connected
-   if(status != STATUS_CONNECTED)
+   if(config.status != STATUS_CONNECTED)
    {
-      Print("Trade filtering: Status is ", status, " (need STATUS_CONNECTED=2)");
+      Print("Trade filtering: Status is ", config.status, " (need STATUS_CONNECTED=2)");
       return false;
    }
 
    // Check allowed symbols filter
-   if(ArraySize(filters.allowed_symbols) > 0)
+   if(ArraySize(config.filters.allowed_symbols) > 0)
    {
       bool symbol_found = false;
-      for(int i = 0; i < ArraySize(filters.allowed_symbols); i++)
+      for(int i = 0; i < ArraySize(config.filters.allowed_symbols); i++)
       {
-         if(filters.allowed_symbols[i] == symbol)
+         if(config.filters.allowed_symbols[i] == symbol)
          {
             symbol_found = true;
             break;
@@ -42,11 +44,11 @@ bool ShouldProcessTrade(string symbol, int magic_number, int status,
    }
 
    // Check blocked symbols filter
-   if(ArraySize(filters.blocked_symbols) > 0)
+   if(ArraySize(config.filters.blocked_symbols) > 0)
    {
-      for(int i = 0; i < ArraySize(filters.blocked_symbols); i++)
+      for(int i = 0; i < ArraySize(config.filters.blocked_symbols); i++)
       {
-         if(filters.blocked_symbols[i] == symbol)
+         if(config.filters.blocked_symbols[i] == symbol)
          {
             Print("Trade filtering: Symbol ", symbol, " is blocked");
             return false;
@@ -55,12 +57,12 @@ bool ShouldProcessTrade(string symbol, int magic_number, int status,
    }
 
    // Check allowed magic numbers filter
-   if(ArraySize(filters.allowed_magic_numbers) > 0)
+   if(ArraySize(config.filters.allowed_magic_numbers) > 0)
    {
       bool magic_found = false;
-      for(int i = 0; i < ArraySize(filters.allowed_magic_numbers); i++)
+      for(int i = 0; i < ArraySize(config.filters.allowed_magic_numbers); i++)
       {
-         if(filters.allowed_magic_numbers[i] == magic_number)
+         if(config.filters.allowed_magic_numbers[i] == magic_number)
          {
             magic_found = true;
             break;
@@ -75,11 +77,11 @@ bool ShouldProcessTrade(string symbol, int magic_number, int status,
    }
 
    // Check blocked magic numbers filter
-   if(ArraySize(filters.blocked_magic_numbers) > 0)
+   if(ArraySize(config.filters.blocked_magic_numbers) > 0)
    {
-      for(int i = 0; i < ArraySize(filters.blocked_magic_numbers); i++)
+      for(int i = 0; i < ArraySize(config.filters.blocked_magic_numbers); i++)
       {
-         if(filters.blocked_magic_numbers[i] == magic_number)
+         if(config.filters.blocked_magic_numbers[i] == magic_number)
          {
             Print("Trade filtering: Magic number ", magic_number, " is blocked");
             return false;
@@ -92,119 +94,11 @@ bool ShouldProcessTrade(string symbol, int magic_number, int status,
 }
 
 //+------------------------------------------------------------------+
-//| Transform symbol using symbol mappings                           |
-//+------------------------------------------------------------------+
-string TransformSymbol(string source_symbol, SymbolMapping &mappings[])
-{
-   // Check if there's a mapping for this symbol
-   for(int i = 0; i < ArraySize(mappings); i++)
-   {
-      if(mappings[i].source_symbol == source_symbol)
-      {
-         Print("Symbol transformation: ", source_symbol, " -> ", mappings[i].target_symbol);
-         return mappings[i].target_symbol;
-      }
-   }
-
-   // No mapping found, return original symbol
-   return source_symbol;
-}
-
-//+------------------------------------------------------------------+
-//| Apply lot multiplier to lot size                                 |
-//+------------------------------------------------------------------+
-double TransformLotSize(double source_lots, double multiplier)
-{
-   double transformed = source_lots * multiplier;
-   transformed = NormalizeDouble(transformed, 2);
-
-   Print("Lot transformation: ", source_lots, " * ", multiplier, " = ", transformed);
-
-   return transformed;
-}
-
-//+------------------------------------------------------------------+
-//| Reverse order type if configured                                 |
-//+------------------------------------------------------------------+
-string ReverseOrderType(string order_type, bool reverse_trade)
-{
-   if(!reverse_trade)
-   {
-      return order_type; // No reversal
-   }
-
-   // Reverse Buy <-> Sell
-   if(order_type == "Buy")
-   {
-      Print("Order type reversed: Buy -> Sell");
-      return "Sell";
-   }
-   else if(order_type == "Sell")
-   {
-      Print("Order type reversed: Sell -> Buy");
-      return "Buy";
-   }
-
-   return order_type;
-}
-
-//+------------------------------------------------------------------+
-//| Get order type string from enum (MT5)                            |
-//+------------------------------------------------------------------+
-#ifdef IS_MT5
-string GetOrderTypeString(ENUM_POSITION_TYPE type)
-{
-   return (type == POSITION_TYPE_BUY) ? "Buy" : "Sell";
-}
-
-ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
-{
-   if(type_str == "Buy") return ORDER_TYPE_BUY;
-   if(type_str == "Sell") return ORDER_TYPE_SELL;
-   return (ENUM_ORDER_TYPE)-1;
-}
-#endif
-
-//+------------------------------------------------------------------+
-//| Get order type string from enum (MT4)                            |
-//+------------------------------------------------------------------+
-#ifdef IS_MT4
-string GetOrderTypeString(int type)
-{
-   switch(type)
-   {
-      case OP_BUY:       return "Buy";
-      case OP_SELL:      return "Sell";
-      case OP_BUYLIMIT:  return "BuyLimit";
-      case OP_SELLLIMIT: return "SellLimit";
-      case OP_BUYSTOP:   return "BuyStop";
-      case OP_SELLSTOP:  return "SellStop";
-      default:           return "Unknown";
-   }
-}
-
-int GetOrderTypeEnum(string type_str)
-{
-   if(type_str == "Buy")       return OP_BUY;
-   if(type_str == "Sell")      return OP_SELL;
-   if(type_str == "BuyLimit")  return OP_BUYLIMIT;
-   if(type_str == "SellLimit") return OP_SELLLIMIT;
-   if(type_str == "BuyStop")   return OP_BUYSTOP;
-   if(type_str == "SellStop")  return OP_SELLSTOP;
-   return -1;
-}
-#endif
-
-//+------------------------------------------------------------------+
 //| Process configuration message (MessagePack)                      |
 //+------------------------------------------------------------------+
 void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
-                         string &current_master, string &trade_group_id,
-                         int &status, double &lot_multiplier,
-                         bool &reverse_trade, int &config_version,
-                         SymbolMapping &symbol_mappings[],
-                         TradeFilters &filters,
-                         int zmq_trade_socket)
+                          CopyConfig &configs[],
+                          int zmq_trade_socket)
 {
    Print("=== Processing Configuration Message ===");
 
@@ -241,43 +135,128 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    Print("Reverse Trade: ", new_reverse);
    Print("Config Version: ", new_version);
 
-   // TODO: Parse symbol mappings and filters from MessagePack
-   // For now, skip arrays until we implement array support in DLL
-   ArrayResize(symbol_mappings, 0);
-   ArrayResize(filters.allowed_symbols, 0);
-   ArrayResize(filters.blocked_symbols, 0);
-   ArrayResize(filters.allowed_magic_numbers, 0);
-   ArrayResize(filters.blocked_magic_numbers, 0);
+   Print("DEBUG: Current configs count: ", ArraySize(configs));
+   for(int i=0; i<ArraySize(configs); i++) Print("DEBUG: Config[", i, "]: ", configs[i].master_account);
 
-   // Update global configuration
-   status = new_status;
-   lot_multiplier = new_lot_mult;
-   reverse_trade = new_reverse;
-   config_version = new_version;
-
-   // Check if master/group changed
-   if(new_master != current_master || new_group != trade_group_id)
+   // Find existing config
+   int index = -1;
+   for(int i = 0; i < ArraySize(configs); i++)
    {
-      Print("Master Account: ", current_master, " -> ", new_master);
-      Print("Trade Group ID: ", trade_group_id, " -> ", new_group);
-
-      // Update master and group
-      current_master = new_master;
-      trade_group_id = new_group;
-
-      // Subscribe to new trade group
-      if(zmq_socket_subscribe(zmq_trade_socket, trade_group_id) == 0)
+      if(configs[i].master_account == new_master)
       {
-         Print("ERROR: Failed to subscribe to trade group: ", trade_group_id);
+         index = i;
+         break;
+      }
+   }
+   
+   Print("DEBUG: Found index: ", index);
+
+   if(new_status == STATUS_DISABLED)
+   {
+      // Remove configuration if disabled
+      if(index >= 0)
+      {
+         Print("DEBUG: Removing configuration for master ", new_master, " at index ", index);
+         
+         // Shift remaining elements
+         for(int i = index; i < ArraySize(configs) - 1; i++)
+         {
+            configs[i] = configs[i + 1];
+         }
+         ArrayResize(configs, ArraySize(configs) - 1);
+         Print("DEBUG: Configuration removed. New count: ", ArraySize(configs));
       }
       else
       {
-         Print("Successfully subscribed to trade group: ", trade_group_id);
+         Print("DEBUG: Removal requested but config not found for ", new_master);
       }
+      
+      // Free the config handle before returning
+      config_free(config_handle);
+      return;
+   }
+   else
+   {
+      // Add or Update configuration
+      if(index == -1)
+      {
+         // Add new
+         Print("DEBUG: Adding new configuration for ", new_master);
+         index = ArraySize(configs);
+         ArrayResize(configs, index + 1);
+         configs[index].master_account = new_master;
+         
+         // Subscribe to new trade group
+         if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
+         {
+            Print("ERROR: Failed to subscribe to trade group: ", new_group);
+         }
+         else
+         {
+            Print("Successfully subscribed to trade group: ", new_group);
+         }
+      }
+      else
+      {
+         Print("DEBUG: Updating existing configuration for ", new_master, " at index ", index);
+         if(configs[index].trade_group_id != new_group)
+         {
+            // Group changed, subscribe to new one
+            if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
+            {
+                Print("ERROR: Failed to subscribe to trade group: ", new_group);
+            }
+            else
+            {
+                Print("Successfully subscribed to trade group: ", new_group);
+            }
+         }
+      }
+      
+      // Update fields
+      configs[index].trade_group_id = new_group;
+      configs[index].status = new_status;
+      configs[index].lot_multiplier = new_lot_mult;
+      configs[index].reverse_trade = new_reverse;
+      configs[index].config_version = new_version;
+      
+      // TODO: Parse symbol mappings and filters from MessagePack
+      // For now, skip arrays until we implement array support in DLL
+      ArrayResize(configs[index].symbol_mappings, 0);
+      ArrayResize(configs[index].filters.allowed_symbols, 0);
+      ArrayResize(configs[index].filters.blocked_symbols, 0);
+      ArrayResize(configs[index].filters.allowed_magic_numbers, 0);
+      ArrayResize(configs[index].filters.blocked_magic_numbers, 0);
    }
 
    // Free the config handle
    config_free(config_handle);
 
    Print("=== Configuration Updated ===");
+}
+
+//+------------------------------------------------------------------+
+//| Transform lot size based on multiplier                           |
+//+------------------------------------------------------------------+
+double TransformLotSize(double lots, double multiplier)
+{
+   double new_lots = lots * multiplier;
+   return NormalizeDouble(new_lots, 2);
+}
+
+//+------------------------------------------------------------------+
+//| Reverse order type if enabled                                    |
+//+------------------------------------------------------------------+
+string ReverseOrderType(string type, bool reverse)
+{
+   if(!reverse) return type;
+   
+   if(type == "ORDER_TYPE_BUY") return "ORDER_TYPE_SELL";
+   if(type == "ORDER_TYPE_SELL") return "ORDER_TYPE_BUY";
+   if(type == "ORDER_TYPE_BUY_LIMIT") return "ORDER_TYPE_SELL_LIMIT";
+   if(type == "ORDER_TYPE_SELL_LIMIT") return "ORDER_TYPE_BUY_LIMIT";
+   if(type == "ORDER_TYPE_BUY_STOP") return "ORDER_TYPE_SELL_STOP";
+   if(type == "ORDER_TYPE_SELL_STOP") return "ORDER_TYPE_BUY_STOP";
+   
+   return type;
 }

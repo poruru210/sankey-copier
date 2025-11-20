@@ -167,8 +167,18 @@ export function useSankeyCopier() {
   }, [apiClient, fetchSettings, fetchConnections]);
 
   // Map to store debounced functions for each setting ID
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const debouncedCallsRef = useRef<Map<number, any>>(new Map());
+  const debouncedCallsRef = useRef<Map<number, ReturnType<typeof debounce>>>(new Map());
+
+  // Cleanup debounced functions on unmount or when apiClient changes
+  useEffect(() => {
+    const debouncedCalls = debouncedCallsRef.current;
+    return () => {
+      debouncedCalls.forEach((debouncedFn) => {
+        debouncedFn.cancel();
+      });
+      debouncedCalls.clear();
+    };
+  }, []);
 
   // Toggle status (DISABLED ⇄ ENABLED)
   const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
@@ -183,6 +193,10 @@ export function useSankeyCopier() {
 
     // Get or create debounced function for this specific ID
     let debouncedFn = debouncedCallsRef.current.get(id);
+
+    // Create a new debounced function if it doesn't exist
+    // Note: We don't need to worry about stale apiClient here because we clear the map
+    // when apiClient changes (in the useEffect above), forcing recreation.
     if (!debouncedFn) {
       debouncedFn = debounce(async (status: number) => {
         try {
@@ -202,28 +216,12 @@ export function useSankeyCopier() {
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
     if (!apiClient) return;
-    // Optimistically add to UI with temporary ID
-    const tempSetting: CopySettings = {
-      ...formData,
-      id: Date.now(), // Temporary ID
-      symbol_mappings: [],
-      filters: {
-        allowed_symbols: null,
-        blocked_symbols: null,
-        allowed_magic_numbers: null,
-        blocked_magic_numbers: null,
-      },
-    };
-
-    const previousSettings = settings;
-    setSettings((prev) => [...prev, tempSetting]);
 
     try {
-      // Rust API returns the new ID as Json<i32> with StatusCode::CREATED (201)
+      // Send to server - WebSocket will handle adding to UI
       await apiClient.post<number>('/settings', formData);
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
+      // No optimistic update - WebSocket message 'settings_created:{json}' will add it
     } catch (err) {
-      setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
     }
   };

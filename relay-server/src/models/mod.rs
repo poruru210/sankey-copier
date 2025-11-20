@@ -56,6 +56,14 @@ pub struct CopySettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionSettings {
+    pub lot_multiplier: Option<f64>,
+    pub reverse_trade: bool,
+    pub symbol_mappings: Vec<SymbolMapping>,
+    pub filters: TradeFilters,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolConverter {
     pub prefix_remove: Option<String>,
     pub suffix_remove: Option<String>,

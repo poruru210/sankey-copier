@@ -251,12 +251,16 @@ fn register_to_windows_store(cert_path: &Path) -> Result<()> {
             tracing::error!("certutil stderr: {}", stderr);
         }
 
-        anyhow::bail!(
+        tracing::warn!(
             "Failed to register certificate in Windows store. \
              This typically requires administrator privileges. \
+             Continuing without registration (browser may warn about self-signed cert). \
              Exit code: {:?}",
             output.status.code()
-        )
+        );
+
+        // Return Ok to allow server startup to continue
+        Ok(())
     }
 }
 

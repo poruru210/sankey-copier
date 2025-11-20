@@ -241,12 +241,25 @@ public:
 
    // Slave EA panel helpers (high-level update methods)
    bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
+   
+   // Master EA panel helpers
+   bool     InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
+   void     UpdateTrackedOrdersRow(int count);
+   void     UpdateMagicFilterRow(int magic);
+   void     UpdateServerRow(string address);
+   void     UpdateConfigList(CopyConfig &configs[]);
+
+   // Common helpers
    void     UpdateStatusRow(int status);
    void     UpdateMasterRow(string master_name);
    void     UpdateLotMultiplierRow(double multiplier);
    void     UpdateReverseRow(bool reverse);
    void     UpdateVersionRow(int version);
    void     UpdateSymbolCountRow(int count);
+
+   // Message mode (for "Not Configured" state)
+   void     ShowMessage(string text, color clr = clrYellow);
+   void     HideMessage();
 
    // Appearance
    void     SetColors(color bg, color border, color title);
@@ -628,27 +641,224 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
    color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
    AddRow("status", status_vals, status_cols);
 
-   string master_vals[] = {"Master:", "N/A"};
+   string master_vals[] = {"Active:", "0"};
    color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("master", master_vals, master_cols);
 
-   string lot_vals[] = {"Lot x:", "N/A"};
-   color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("lot", lot_vals, lot_cols);
+   return true;
+}
 
-   string reverse_vals[] = {"Reverse:", "N/A"};
-   color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("reverse", reverse_vals, reverse_cols);
+//+------------------------------------------------------------------+
+//| Update configuration list rows                                   |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateConfigList(CopyConfig &configs[])
+{
+   // Update Active count
+   string master_vals[2];
+   master_vals[0] = "Active:";
+   master_vals[1] = IntegerToString(ArraySize(configs));
+   
+   color master_cols[2];
+   master_cols[0] = PANEL_COLOR_LABEL;
+   master_cols[1] = PANEL_COLOR_VALUE;
+   
+   UpdateRow("master", master_vals, master_cols);
 
-   string version_vals[] = {"Version:", "N/A"};
-   color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("version", version_vals, version_cols);
+   // Dynamic rows for each config
+   for(int i=0; i<ArraySize(configs); i++)
+   {
+       string key = "cfg_" + IntegerToString(i);
+       // Truncate account name if too long
+       string label = TruncateText(configs[i].master_account, 12); 
+       
+       string status_str = "DIS";
+       color status_clr = PANEL_COLOR_DISABLED;
+       if(configs[i].status == STATUS_CONNECTED) { status_str = "ON"; status_clr = PANEL_COLOR_CONNECTED; }
+       else if(configs[i].status == STATUS_ENABLED) { status_str = "WAIT"; status_clr = PANEL_COLOR_WAITING; }
+       
+       string val = status_str + " x" + DoubleToString(configs[i].lot_multiplier, 1);
+       if(configs[i].reverse_trade) val += " R";
+       
+       string vals[2];
+       vals[0] = label;
+       vals[1] = val;
+       
+       color cols[2];
+       cols[0] = PANEL_COLOR_LABEL;
+       cols[1] = status_clr;
+       
+       if(!UpdateRow(key, vals, cols))
+       {
+           AddRow(key, vals, cols);
+       }
+   }
+   
+   // Remove excess rows
+   int i = ArraySize(configs);
+   while(RemoveRow("cfg_" + IntegerToString(i)))
+   {
+       i++;
+   }
+}
 
-   string symbols_vals[] = {"Symbols:", "N/A"};
-   color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("symbols", symbols_vals, symbols_cols);
+//+------------------------------------------------------------------+
+//| Initialize Master EA panel with standard layout                  |
+//| Parameters:                                                       |
+//|   prefix      - Object name prefix for panel objects            |
+//|   panel_width - Panel width in pixels (default: 280)           |
+//| Returns: true on success                                         |
+//+------------------------------------------------------------------+
+bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH)
+{
+   // Initialize panel with specified or default dimensions
+   if(!Initialize(prefix, DEFAULT_X_OFFSET, DEFAULT_Y_OFFSET, panel_width, DEFAULT_ROW_HEIGHT))
+      return false;
+
+   // Set title
+   SetTitle("Sankey Copier - Master", PANEL_COLOR_TITLE);
+
+   // Add standard rows with initial values
+   string status_vals[] = {"Status:", "ACTIVE"};
+   color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_CONNECTED};
+   AddRow("status", status_vals, status_cols);
+
+   string account_vals[] = {"Account:", "N/A"};
+   color account_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("account", account_vals, account_cols);
+
+   string server_vals[] = {"Server:", "N/A"};
+   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("server", server_vals, server_cols);
+
+   string magic_vals[] = {"Magic Filter:", "All"};
+   color magic_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("magic", magic_vals, magic_cols);
+
+   string tracked_vals[] = {"Tracked Orders:", "0"};
+   color tracked_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("tracked", tracked_vals, tracked_cols);
 
    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Show a text message instead of the grid (e.g. "Not Configured") |
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Show a text message instead of the grid (e.g. "Not Configured") |
+//+------------------------------------------------------------------+
+void CGridPanel::ShowMessage(string text, color clr = clrYellow)
+{
+   // Hide all grid elements
+   string bg_name = GenerateObjectName("BG");
+   string title_name = GenerateObjectName("Title");
+   
+   #ifdef IS_MT5
+      // MQL5: Use OBJPROP_TIMEFRAMES to hide from all timeframes
+      ObjectSetInteger(0, bg_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+      ObjectSetInteger(0, title_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+   #else
+      // MQL4: Move objects off-screen to hide them
+      ObjectSet(bg_name, OBJPROP_XDISTANCE, 10000);
+      ObjectSet(bg_name, OBJPROP_YDISTANCE, 10000);
+      ObjectSet(title_name, OBJPROP_XDISTANCE, 10000);
+      ObjectSet(title_name, OBJPROP_YDISTANCE, 10000);
+   #endif
+   
+   for(int i = 0; i < m_row_count; i++)
+   {
+      for(int col = 0; col < m_column_count; col++)
+      {
+         string obj_name = GenerateObjectName(m_row_keys[i] + "_col" + IntegerToString(col));
+         #ifdef IS_MT5
+            ObjectSetInteger(0, obj_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+         #else
+            ObjectSet(obj_name, OBJPROP_XDISTANCE, 10000);
+            ObjectSet(obj_name, OBJPROP_YDISTANCE, 10000);
+         #endif
+      }
+   }
+   
+   // Create or update message label
+   string msg_name = GenerateObjectName("Message");
+   int x = m_x_offset + (m_panel_width / 2);
+   int y = m_y_offset + (m_padding_top + m_title_height + (m_row_count * m_row_height)) / 2;
+   
+   // If object doesn't exist, create it
+   #ifdef IS_MT5
+      if(ObjectFind(0, msg_name) < 0)
+   #else
+      if(ObjectFind(msg_name) < 0)
+   #endif
+   {
+      CreatePanelLabel(msg_name, m_x_offset + 10, m_y_offset + 10, text, clr, 10, ANCHOR_RIGHT_UPPER);
+   }
+   
+   UpdatePanelLabel(msg_name, text, clr);
+   
+   // Ensure message is visible
+   #ifdef IS_MT5
+      ObjectSetInteger(0, msg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+   #else
+      // MQL4: Ensure message is at correct position (in case it was hidden before)
+      // Note: CreatePanelLabel sets the position, but if it existed and was moved, we need to restore it
+      // However, ShowMessage creates/updates it, so we should just ensure it's visible/positioned
+      // Since we don't move the message offscreen in HideMessage (we delete it), this is fine.
+      // But just in case, let's make sure it's not hidden via TIMEFRAMES if we ever used that.
+      ObjectSet(msg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS); 
+   #endif
+}
+
+//+------------------------------------------------------------------+
+//| Hide the message and restore the grid                           |
+//+------------------------------------------------------------------+
+void CGridPanel::HideMessage()
+{
+   string msg_name = GenerateObjectName("Message");
+   #ifdef IS_MT5
+      ObjectDelete(0, msg_name);
+   #else
+      ObjectDelete(msg_name);
+   #endif
+   
+   // Restore grid elements
+   string bg_name = GenerateObjectName("BG");
+   string title_name = GenerateObjectName("Title");
+   
+   #ifdef IS_MT5
+      ObjectSetInteger(0, bg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+      ObjectSetInteger(0, title_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+   #else
+      // MQL4: Restore positions
+      int bg_x = CalculateBackgroundX();
+      ObjectSet(bg_name, OBJPROP_XDISTANCE, bg_x);
+      ObjectSet(bg_name, OBJPROP_YDISTANCE, m_y_offset);
+      
+      // Title position (centered in panel width, but CreatePanelLabel uses specific logic)
+      // We need to check how CreatePanelLabel positions the title.
+      // In Initialize: CreatePanelLabel(..., m_x_offset + (m_panel_width/2), m_y_offset + 5, ...)
+      // Wait, SetTitle calls CreatePanelLabel.
+      // Let's check SetTitle logic or assume standard positioning.
+      // Actually, SetTitle uses: m_x_offset + (m_panel_width / 2), m_y_offset + 5
+      ObjectSet(title_name, OBJPROP_XDISTANCE, m_x_offset + (m_panel_width / 2));
+      ObjectSet(title_name, OBJPROP_YDISTANCE, m_y_offset + 5);
+   #endif
+   
+   for(int i = 0; i < m_row_count; i++)
+   {
+      int row_y = CalculateRowY(i);
+      for(int col = 0; col < m_column_count; col++)
+      {
+         string obj_name = GenerateObjectName(m_row_keys[i] + "_col" + IntegerToString(col));
+         #ifdef IS_MT5
+            ObjectSetInteger(0, obj_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+         #else
+            // MQL4: Restore positions
+            ObjectSet(obj_name, OBJPROP_XDISTANCE, m_column_widths[col]);
+            ObjectSet(obj_name, OBJPROP_YDISTANCE, row_y);
+         #endif
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -775,6 +985,48 @@ void CGridPanel::UpdateSymbolCountRow(int count)
    cols[0] = PANEL_COLOR_LABEL;
    cols[1] = PANEL_COLOR_VALUE;
    UpdateRow("symbols", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update tracked orders row (Master EA)                            |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateTrackedOrdersRow(int count)
+{
+   string vals[2];
+   vals[0] = "Tracked Orders:";
+   vals[1] = IntegerToString(count);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("tracked", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update magic filter row (Master EA)                              |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateMagicFilterRow(int magic)
+{
+   string vals[2];
+   vals[0] = "Magic Filter:";
+   vals[1] = (magic == 0) ? "All" : IntegerToString(magic);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("magic", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update server row (Master EA)                                    |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateServerRow(string address)
+{
+   string vals[2];
+   vals[0] = "Server:";
+   vals[1] = TruncateText(address, 25);
+   color cols[2];
+   cols[0] = PANEL_COLOR_LABEL;
+   cols[1] = PANEL_COLOR_VALUE;
+   UpdateRow("server", vals, cols);
 }
 
 //+------------------------------------------------------------------+

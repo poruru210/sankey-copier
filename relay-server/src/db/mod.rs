@@ -1,4 +1,4 @@
-use crate::models::{CopySettings, SymbolMapping, TradeFilters};
+use crate::models::{ConnectionSettings, CopySettings};
 use anyhow::Result;
 use sqlx::{sqlite::SqlitePool, Row};
 
@@ -13,46 +13,15 @@ impl Database {
         // Create tables
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS copy_settings (
+            CREATE TABLE IF NOT EXISTS connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 status INTEGER NOT NULL DEFAULT 0,
                 master_account TEXT NOT NULL,
                 slave_account TEXT NOT NULL,
-                lot_multiplier REAL,
-                reverse_trade BOOLEAN NOT NULL DEFAULT 0,
+                settings JSON NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(master_account, slave_account)
-            )
-            "#,
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS symbol_mappings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                setting_id INTEGER NOT NULL,
-                source_symbol TEXT NOT NULL,
-                target_symbol TEXT NOT NULL,
-                FOREIGN KEY (setting_id) REFERENCES copy_settings(id) ON DELETE CASCADE
-            )
-            "#,
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS trade_filters (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                setting_id INTEGER NOT NULL,
-                allowed_symbols TEXT,
-                blocked_symbols TEXT,
-                allowed_magic_numbers TEXT,
-                blocked_magic_numbers TEXT,
-                FOREIGN KEY (setting_id) REFERENCES copy_settings(id) ON DELETE CASCADE
             )
             "#,
         )
@@ -64,72 +33,30 @@ impl Database {
 
     pub async fn get_copy_settings(&self, id: i32) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
-            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE id = ?",
+            "SELECT id, status, master_account, slave_account, settings
+             FROM connections WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row {
-            let setting_id: i32 = row.get("id");
-
-            // Get symbol mappings
-            let mappings = sqlx::query_as::<_, (String, String)>(
-                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?",
-            )
-            .bind(setting_id)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|(source, target)| SymbolMapping {
-                source_symbol: source,
-                target_symbol: target,
-            })
-            .collect();
-
-            // Get filters
-            let filter_row = sqlx::query(
-                "SELECT allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers
-                 FROM trade_filters WHERE setting_id = ?"
-            )
-            .bind(setting_id)
-            .fetch_optional(&self.pool)
-            .await?;
-
-            let filters = if let Some(f) = filter_row {
-                TradeFilters {
-                    allowed_symbols: f
-                        .get::<Option<String>, _>("allowed_symbols")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_symbols: f
-                        .get::<Option<String>, _>("blocked_symbols")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    allowed_magic_numbers: f
-                        .get::<Option<String>, _>("allowed_magic_numbers")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_magic_numbers: f
-                        .get::<Option<String>, _>("blocked_magic_numbers")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                }
-            } else {
-                TradeFilters {
-                    allowed_symbols: None,
-                    blocked_symbols: None,
-                    allowed_magic_numbers: None,
-                    blocked_magic_numbers: None,
-                }
-            };
+            let id: i32 = row.get("id");
+            let status: i32 = row.get("status");
+            let master_account: String = row.get("master_account");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
+            let settings = settings_json.0;
 
             Ok(Some(CopySettings {
-                id: row.get("id"),
-                status: row.get("status"),
-                master_account: row.get("master_account"),
-                slave_account: row.get("slave_account"),
-                lot_multiplier: row.get("lot_multiplier"),
-                reverse_trade: row.get("reverse_trade"),
-                symbol_mappings: mappings,
-                filters,
+                id,
+                status,
+                master_account,
+                slave_account,
+                lot_multiplier: settings.lot_multiplier,
+                reverse_trade: settings.reverse_trade,
+                symbol_mappings: settings.symbol_mappings,
+                filters: settings.filters,
             }))
         } else {
             Ok(None)
@@ -138,300 +65,125 @@ impl Database {
 
     /// Get enabled copy settings for a specific slave account
     /// Used in Phase 2 for registration-triggered CONFIG distribution
-    pub async fn get_settings_for_slave(
-        &self,
-        slave_account: &str,
-    ) -> Result<Option<CopySettings>> {
-        let row = sqlx::query(
-            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE slave_account = ? AND status > 0 LIMIT 1",
+    pub async fn get_settings_for_slave(&self, slave_account: &str) -> Result<Vec<CopySettings>> {
+        let rows = sqlx::query(
+            "SELECT id, status, master_account, slave_account, settings
+             FROM connections WHERE slave_account = ? AND status > 0",
         )
         .bind(slave_account)
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
 
-        if let Some(row) = row {
-            let setting_id: i32 = row.get("id");
+        let mut settings_list = Vec::new();
 
-            // Get symbol mappings
-            let mappings = sqlx::query_as::<_, (String, String)>(
-                "SELECT source_symbol, target_symbol FROM symbol_mappings WHERE setting_id = ?",
-            )
-            .bind(setting_id)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|(source, target)| SymbolMapping {
-                source_symbol: source,
-                target_symbol: target,
-            })
-            .collect();
+        for row in rows {
+            let id: i32 = row.get("id");
+            let status: i32 = row.get("status");
+            let master_account: String = row.get("master_account");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
+            let settings = settings_json.0;
 
-            // Get filters
-            let filter_row = sqlx::query(
-                "SELECT allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers
-                 FROM trade_filters WHERE setting_id = ?"
-            )
-            .bind(setting_id)
-            .fetch_optional(&self.pool)
-            .await?;
-
-            let filters = if let Some(f) = filter_row {
-                TradeFilters {
-                    allowed_symbols: f
-                        .get::<Option<String>, _>("allowed_symbols")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_symbols: f
-                        .get::<Option<String>, _>("blocked_symbols")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    allowed_magic_numbers: f
-                        .get::<Option<String>, _>("allowed_magic_numbers")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    blocked_magic_numbers: f
-                        .get::<Option<String>, _>("blocked_magic_numbers")
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                }
-            } else {
-                TradeFilters {
-                    allowed_symbols: None,
-                    blocked_symbols: None,
-                    allowed_magic_numbers: None,
-                    blocked_magic_numbers: None,
-                }
-            };
-
-            Ok(Some(CopySettings {
-                id: row.get("id"),
-                status: row.get("status"),
-                master_account: row.get("master_account"),
-                slave_account: row.get("slave_account"),
-                lot_multiplier: row.get("lot_multiplier"),
-                reverse_trade: row.get("reverse_trade"),
-                symbol_mappings: mappings,
-                filters,
-            }))
-        } else {
-            Ok(None)
+            settings_list.push(CopySettings {
+                id,
+                status,
+                master_account,
+                slave_account,
+                lot_multiplier: settings.lot_multiplier,
+                reverse_trade: settings.reverse_trade,
+                symbol_mappings: settings.symbol_mappings,
+                filters: settings.filters,
+            });
         }
+
+        Ok(settings_list)
     }
 
     /// Get all copy settings for a specific master account
     /// Used to notify all slaves when master's is_trade_allowed changes
     pub async fn get_settings_for_master(&self, master_account: &str) -> Result<Vec<CopySettings>> {
-        // Fetch all copy_settings for this master
-        let settings_rows = sqlx::query(
-            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings WHERE master_account = ? ORDER BY id",
+        let rows = sqlx::query(
+            "SELECT id, status, master_account, slave_account, settings
+             FROM connections WHERE master_account = ? ORDER BY id",
         )
         .bind(master_account)
         .fetch_all(&self.pool)
         .await?;
 
-        if settings_rows.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Collect setting IDs
-        let setting_ids: Vec<i32> = settings_rows.iter().map(|row| row.get("id")).collect();
-
-        // Fetch all symbol_mappings for these settings
-        let placeholders = setting_ids
-            .iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        let query_str = format!(
-            "SELECT setting_id, source_symbol, target_symbol
-             FROM symbol_mappings
-             WHERE setting_id IN ({})
-             ORDER BY setting_id, id",
-            placeholders
-        );
-
-        let mut query = sqlx::query_as::<_, (i32, String, String)>(&query_str);
-        for id in &setting_ids {
-            query = query.bind(id);
-        }
-        let mappings_rows = query.fetch_all(&self.pool).await?;
-
-        // Fetch all trade_filters for these settings
-        let filters_query_str = format!(
-            "SELECT setting_id, allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers
-             FROM trade_filters
-             WHERE setting_id IN ({})",
-            placeholders
-        );
-
-        let mut filters_query = sqlx::query(&filters_query_str);
-        for id in &setting_ids {
-            filters_query = filters_query.bind(id);
-        }
-        let filters_rows = filters_query.fetch_all(&self.pool).await?;
-
-        // Build lookup maps
-        let mut mappings_map: std::collections::HashMap<i32, Vec<SymbolMapping>> =
-            std::collections::HashMap::new();
-        for (setting_id, source, target) in mappings_rows {
-            mappings_map
-                .entry(setting_id)
-                .or_default()
-                .push(SymbolMapping {
-                    source_symbol: source,
-                    target_symbol: target,
-                });
-        }
-
-        let mut filters_map: std::collections::HashMap<i32, TradeFilters> =
-            std::collections::HashMap::new();
-        for row in filters_rows {
-            let setting_id: i32 = row.get("setting_id");
-            let filters = TradeFilters {
-                allowed_symbols: row
-                    .get::<Option<String>, _>("allowed_symbols")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_symbols: row
-                    .get::<Option<String>, _>("blocked_symbols")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                allowed_magic_numbers: row
-                    .get::<Option<String>, _>("allowed_magic_numbers")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_magic_numbers: row
-                    .get::<Option<String>, _>("blocked_magic_numbers")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-            };
-            filters_map.insert(setting_id, filters);
-        }
-
-        // Assemble CopySettings
-        let mut settings = Vec::new();
-        for row in settings_rows {
+        let mut result = Vec::new();
+        for row in rows {
             let id: i32 = row.get("id");
-            let symbol_mappings = mappings_map.remove(&id).unwrap_or_default();
-            let filters = filters_map.remove(&id).unwrap_or(TradeFilters {
-                allowed_symbols: None,
-                blocked_symbols: None,
-                allowed_magic_numbers: None,
-                blocked_magic_numbers: None,
-            });
+            let status: i32 = row.get("status");
+            let master_account: String = row.get("master_account");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
+            let settings = settings_json.0;
 
-            settings.push(CopySettings {
-                id: row.get("id"),
-                status: row.get("status"),
-                master_account: row.get("master_account"),
-                slave_account: row.get("slave_account"),
-                lot_multiplier: row.get("lot_multiplier"),
-                reverse_trade: row.get("reverse_trade"),
-                symbol_mappings,
-                filters,
+            result.push(CopySettings {
+                id,
+                status,
+                master_account,
+                slave_account,
+                lot_multiplier: settings.lot_multiplier,
+                reverse_trade: settings.reverse_trade,
+                symbol_mappings: settings.symbol_mappings,
+                filters: settings.filters,
             });
         }
 
-        Ok(settings)
+        Ok(result)
     }
 
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
-        // Fetch all copy_settings
-        let settings_rows = sqlx::query(
-            "SELECT id, status, master_account, slave_account, lot_multiplier, reverse_trade
-             FROM copy_settings ORDER BY id",
+        let rows = sqlx::query(
+            "SELECT id, status, master_account, slave_account, settings
+             FROM connections ORDER BY id",
         )
         .fetch_all(&self.pool)
         .await?;
 
-        if settings_rows.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Fetch all symbol_mappings in one query
-        let mappings_rows = sqlx::query_as::<_, (i32, String, String)>(
-            "SELECT setting_id, source_symbol, target_symbol
-             FROM symbol_mappings
-             ORDER BY setting_id, id",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        // Fetch all trade_filters in one query
-        let filters_rows = sqlx::query(
-            "SELECT setting_id, allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers
-             FROM trade_filters"
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        // Build lookup maps
-        let mut mappings_map: std::collections::HashMap<i32, Vec<SymbolMapping>> =
-            std::collections::HashMap::new();
-        for (setting_id, source, target) in mappings_rows {
-            mappings_map
-                .entry(setting_id)
-                .or_default()
-                .push(SymbolMapping {
-                    source_symbol: source,
-                    target_symbol: target,
-                });
-        }
-
-        let mut filters_map: std::collections::HashMap<i32, TradeFilters> =
-            std::collections::HashMap::new();
-        for row in filters_rows {
-            let setting_id: i32 = row.get("setting_id");
-            let filters = TradeFilters {
-                allowed_symbols: row
-                    .get::<Option<String>, _>("allowed_symbols")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_symbols: row
-                    .get::<Option<String>, _>("blocked_symbols")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                allowed_magic_numbers: row
-                    .get::<Option<String>, _>("allowed_magic_numbers")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                blocked_magic_numbers: row
-                    .get::<Option<String>, _>("blocked_magic_numbers")
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-            };
-            filters_map.insert(setting_id, filters);
-        }
-
-        // Assemble CopySettings
-        let mut settings = Vec::new();
-        for row in settings_rows {
+        let mut result = Vec::new();
+        for row in rows {
             let id: i32 = row.get("id");
-            let symbol_mappings = mappings_map.remove(&id).unwrap_or_default();
-            let filters = filters_map.remove(&id).unwrap_or(TradeFilters {
-                allowed_symbols: None,
-                blocked_symbols: None,
-                allowed_magic_numbers: None,
-                blocked_magic_numbers: None,
-            });
+            let status: i32 = row.get("status");
+            let master_account: String = row.get("master_account");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
+            let settings = settings_json.0;
 
-            settings.push(CopySettings {
-                id: row.get("id"),
-                status: row.get("status"),
-                master_account: row.get("master_account"),
-                slave_account: row.get("slave_account"),
-                lot_multiplier: row.get("lot_multiplier"),
-                reverse_trade: row.get("reverse_trade"),
-                symbol_mappings,
-                filters,
+            result.push(CopySettings {
+                id,
+                status,
+                master_account,
+                slave_account,
+                lot_multiplier: settings.lot_multiplier,
+                reverse_trade: settings.reverse_trade,
+                symbol_mappings: settings.symbol_mappings,
+                filters: settings.filters,
             });
         }
 
-        Ok(settings)
+        Ok(result)
     }
 
     pub async fn save_copy_settings(&self, settings: &CopySettings) -> Result<i32> {
+        let connection_settings = ConnectionSettings {
+            lot_multiplier: settings.lot_multiplier,
+            reverse_trade: settings.reverse_trade,
+            symbol_mappings: settings.symbol_mappings.clone(),
+            filters: settings.filters.clone(),
+        };
+
         let id = if settings.id == 0 {
             // New record - INSERT
             let result = sqlx::query(
-                "INSERT INTO copy_settings (status, master_account, slave_account, lot_multiplier, reverse_trade)
-                 VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO connections (status, master_account, slave_account, settings)
+                 VALUES (?, ?, ?, ?)",
             )
             .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
-            .bind(settings.lot_multiplier)
-            .bind(settings.reverse_trade)
+            .bind(sqlx::types::Json(&connection_settings))
             .execute(&self.pool)
             .await?;
 
@@ -439,20 +191,18 @@ impl Database {
         } else {
             // Existing record - UPDATE
             sqlx::query(
-                "UPDATE copy_settings SET
+                "UPDATE connections SET
                     status = ?,
                     master_account = ?,
                     slave_account = ?,
-                    lot_multiplier = ?,
-                    reverse_trade = ?,
+                    settings = ?,
                     updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?",
             )
             .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
-            .bind(settings.lot_multiplier)
-            .bind(settings.reverse_trade)
+            .bind(sqlx::types::Json(&connection_settings))
             .bind(settings.id)
             .execute(&self.pool)
             .await?;
@@ -460,45 +210,12 @@ impl Database {
             settings.id
         };
 
-        // Clear and insert symbol mappings
-        sqlx::query("DELETE FROM symbol_mappings WHERE setting_id = ?")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-
-        for mapping in &settings.symbol_mappings {
-            sqlx::query("INSERT INTO symbol_mappings (setting_id, source_symbol, target_symbol) VALUES (?, ?, ?)")
-                .bind(id)
-                .bind(&mapping.source_symbol)
-                .bind(&mapping.target_symbol)
-                .execute(&self.pool)
-                .await?;
-        }
-
-        // Clear and insert filters
-        sqlx::query("DELETE FROM trade_filters WHERE setting_id = ?")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query(
-            "INSERT INTO trade_filters (setting_id, allowed_symbols, blocked_symbols, allowed_magic_numbers, blocked_magic_numbers)
-             VALUES (?, ?, ?, ?, ?)"
-        )
-        .bind(id)
-        .bind(serde_json::to_string(&settings.filters.allowed_symbols)?)
-        .bind(serde_json::to_string(&settings.filters.blocked_symbols)?)
-        .bind(serde_json::to_string(&settings.filters.allowed_magic_numbers)?)
-        .bind(serde_json::to_string(&settings.filters.blocked_magic_numbers)?)
-        .execute(&self.pool)
-        .await?;
-
         Ok(id)
     }
 
     pub async fn update_status(&self, id: i32, status: i32) -> Result<()> {
         sqlx::query(
-            "UPDATE copy_settings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE connections SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(status)
         .bind(id)
@@ -510,7 +227,7 @@ impl Database {
     /// Update all enabled settings for a master to CONNECTED (2) when master comes online
     pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
         let result = sqlx::query(
-            "UPDATE copy_settings
+            "UPDATE connections
              SET status = 2, updated_at = CURRENT_TIMESTAMP
              WHERE master_account = ? AND status > 0",
         )
@@ -523,7 +240,7 @@ impl Database {
     /// Update all connected settings for a master to ENABLED (1) when master goes offline
     pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
         let result = sqlx::query(
-            "UPDATE copy_settings
+            "UPDATE connections
              SET status = 1, updated_at = CURRENT_TIMESTAMP
              WHERE master_account = ? AND status = 2",
         )
@@ -534,7 +251,7 @@ impl Database {
     }
 
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
-        sqlx::query("DELETE FROM copy_settings WHERE id = ?")
+        sqlx::query("DELETE FROM connections WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -545,6 +262,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
     async fn create_test_db() -> Database {
         Database::new("sqlite::memory:").await.unwrap()
@@ -585,7 +303,7 @@ mod tests {
         // Try to get settings for a slave that doesn't exist
         let result = db.get_settings_for_slave("NONEXISTENT").await.unwrap();
 
-        assert!(result.is_none());
+        assert!(result.is_empty());
     }
 
     #[tokio::test]
@@ -746,47 +464,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_cascades_to_related_tables() {
-        let db = create_test_db().await;
-
-        let mut settings = create_test_settings();
-        settings.symbol_mappings = vec![SymbolMapping {
-            source_symbol: "EURUSD".to_string(),
-            target_symbol: "EURUSDm".to_string(),
-        }];
-        settings.filters = TradeFilters {
-            allowed_symbols: Some(vec!["EURUSD".to_string()]),
-            blocked_symbols: None,
-            allowed_magic_numbers: None,
-            blocked_magic_numbers: None,
-        };
-
-        let id = db.save_copy_settings(&settings).await.unwrap();
-
-        // Delete parent
-        db.delete_copy_settings(id).await.unwrap();
-
-        // Related records should also be deleted (CASCADE)
-        let mappings_count: i32 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM symbol_mappings WHERE setting_id = ?")
-                .bind(id)
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
-
-        assert_eq!(mappings_count, 0);
-
-        let filters_count: i32 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM trade_filters WHERE setting_id = ?")
-                .bind(id)
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
-
-        assert_eq!(filters_count, 0);
-    }
-
-    #[tokio::test]
     async fn test_get_settings_for_slave_disabled() {
         let db = create_test_db().await;
 
@@ -797,7 +474,7 @@ mod tests {
 
         // Should not return disabled settings
         let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
-        assert!(result.is_none());
+        assert!(result.is_empty());
     }
 
     #[tokio::test]
@@ -809,9 +486,9 @@ mod tests {
 
         // Should return enabled settings
         let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
-        assert!(result.is_some());
+        assert!(!result.is_empty());
 
-        let retrieved = result.unwrap();
+        let retrieved = &result[0];
         assert_eq!(retrieved.slave_account, "SLAVE_001");
         assert_eq!(retrieved.master_account, "MASTER_001");
     }

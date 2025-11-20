@@ -38,8 +38,6 @@ HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 CTrade      g_trade;
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
-string      g_current_master = "";      // Currently configured master account
-string      g_trade_group_id = "";      // Current trade group subscription
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
@@ -48,15 +46,12 @@ TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
-int            g_config_status = STATUS_DISABLED;   // Connection status (0=DISABLED, 1=ENABLED, 2=CONNECTED)
-double         g_config_lot_multiplier = 1.0;    // Lot multiplier (default 1.0)
-bool           g_config_reverse_trade = false;   // Reverse trades (Buy<->Sell)
-SymbolMapping  g_symbol_mappings[];              // Symbol mappings
+CopyConfig     g_configs[];                      // Array of active configurations
+bool           g_has_received_config = false;    // Track if we have received at least one config
 
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
-TradeFilters   g_filters;                        // Trade filters
-int            g_config_version = 0;             // Configuration version
+int            g_last_config_count = -1;         // Debug: track config count changes
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -106,11 +101,7 @@ int OnInit()
    ArrayResize(g_pending_order_map, 0);
 
    // Initialize configuration arrays
-   ArrayResize(g_symbol_mappings, 0);
-   ArrayResize(g_filters.allowed_symbols, 0);
-   ArrayResize(g_filters.blocked_symbols, 0);
-   ArrayResize(g_filters.allowed_magic_numbers, 0);
-   ArrayResize(g_filters.blocked_magic_numbers, 0);
+   ArrayResize(g_configs, 0);
 
    g_initialized = true;
 
@@ -121,25 +112,9 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
-
-      // Update panel immediately with current values to avoid showing "N/A"
-      // Check local auto-trading state for initial status display
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
-      {
-         // Local auto-trading OFF -> show ENABLED (yellow) warning, like Web UI
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED);
-      }
-      else
-      {
-         // Local auto-trading ON -> show actual config status
-         g_config_panel.UpdateStatusRow(g_config_status);
-      }
-      g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
-      g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
-      g_config_panel.UpdateReverseRow(g_config_reverse_trade);
-      g_config_panel.UpdateVersionRow(g_config_version);
-      g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
+      
+      // Show "Waiting" message initially
+      g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
    return INIT_SUCCEEDED;
@@ -195,9 +170,8 @@ void OnTimer()
             g_last_trade_allowed = current_trade_allowed;
 
             // Update panel to reflect auto-trading state
-            // If auto-trading is OFF, show ENABLED (yellow warning) regardless of config status
-            // If auto-trading is ON, show the actual config status
-            if(ShowConfigPanel)
+            // Only update if we have received config, otherwise keep showing "Waiting"
+            if(ShowConfigPanel && g_has_received_config)
             {
                if(!current_trade_allowed)
                {
@@ -207,7 +181,23 @@ void OnTimer()
                else
                {
                   // Auto-trading ON -> show actual config status
-                  g_config_panel.UpdateStatusRow(g_config_status);
+                  // If we have at least one connected master, show CONNECTED
+                  bool any_connected = false;
+                  for(int i=0; i<ArraySize(g_configs); i++)
+                  {
+                     if(g_configs[i].status == STATUS_CONNECTED)
+                     {
+                        any_connected = true;
+                        break;
+                     }
+                  }
+                  
+                  if(any_connected)
+                     g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
+                  else if(ArraySize(g_configs) > 0)
+                     g_config_panel.UpdateStatusRow(STATUS_ENABLED);
+                  else
+                     g_config_panel.UpdateStatusRow(STATUS_DISABLED);
                }
             }
 
@@ -215,7 +205,7 @@ void OnTimer()
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -232,7 +222,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID))
+               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -277,13 +267,21 @@ void OnTimer()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessConfigMessage(msgpack_payload, payload_len, g_current_master, g_trade_group_id,
-                             g_config_status, g_config_lot_multiplier, g_config_reverse_trade,
-                             g_config_version, g_symbol_mappings, g_filters, g_zmq_trade_socket);
+         ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket);
+
+         g_has_received_config = true;
+         
+         if(ArraySize(g_configs) != g_last_config_count)
+         {
+            Print("DEBUG: Config count changed: ", g_last_config_count, " -> ", ArraySize(g_configs));
+            g_last_config_count = ArraySize(g_configs);
+         }
 
          // Update configuration panel
          if(ShowConfigPanel)
          {
+            g_config_panel.HideMessage(); // Switch to grid view
+            
             // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
             bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
             if(!local_trade_allowed)
@@ -294,13 +292,27 @@ void OnTimer()
             else
             {
                // Local auto-trading ON -> show actual config status from server
-               g_config_panel.UpdateStatusRow(g_config_status);
+               // If we have at least one connected master, show CONNECTED
+               bool any_connected = false;
+               for(int i=0; i<ArraySize(g_configs); i++)
+               {
+                  if(g_configs[i].status == STATUS_CONNECTED)
+                  {
+                     any_connected = true;
+                     break;
+                  }
+               }
+               
+               if(any_connected)
+                  g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
+               else if(ArraySize(g_configs) > 0)
+                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected?
+               else
+                  g_config_panel.UpdateStatusRow(STATUS_DISABLED);
             }
-            g_config_panel.UpdateMasterRow(g_current_master == "" ? "N/A" : g_current_master);
-            g_config_panel.UpdateLotMultiplierRow(g_config_lot_multiplier);
-            g_config_panel.UpdateReverseRow(g_config_reverse_trade);
-            g_config_panel.UpdateVersionRow(g_config_version);
-            g_config_panel.UpdateSymbolCountRow(ArraySize(g_symbol_mappings));
+            
+            // Update dynamic config list
+            g_config_panel.UpdateConfigList(g_configs);
          }
       }
    }
@@ -377,10 +389,28 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    string timestamp = trade_signal_get_string(handle, "timestamp");
    string source_account = trade_signal_get_string(handle, "source_account");
 
-   // Check if connected to Master before processing any trades
-   if(g_config_status != STATUS_CONNECTED)
+   // Find matching config for this master
+   int config_index = -1;
+   for(int i=0; i<ArraySize(g_configs); i++)
    {
-      Print("Trade signal rejected: Not connected to Master (status=", g_config_status, "). Master ticket #", master_ticket);
+      if(g_configs[i].master_account == source_account)
+      {
+         config_index = i;
+         break;
+      }
+   }
+
+   if(config_index == -1)
+   {
+      Print("Trade signal rejected: No active configuration for master ", source_account);
+      trade_signal_free(handle);
+      return;
+   }
+
+   // Check if connected to Master before processing any trades
+   if(g_configs[config_index].status != STATUS_CONNECTED)
+   {
+      Print("Trade signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
       trade_signal_free(handle);
       return;
    }
@@ -388,7 +418,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    if(action == "Open" && AllowNewOrders)
    {
       // Apply filtering
-      if(!ShouldProcessTrade(symbol, magic_number, g_config_status, g_filters))
+      if(!ShouldProcessTrade(symbol, magic_number, g_configs[config_index]))
       {
          Print("Trade filtered out: ", symbol, " magic=", magic_number);
          trade_signal_free(handle);
@@ -396,9 +426,9 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       }
 
       // Apply transformations
-      string transformed_symbol = TransformSymbol(symbol, g_symbol_mappings);
-      double transformed_lots = TransformLotSize(lots, g_config_lot_multiplier);
-      string transformed_order_type = ReverseOrderType(order_type_str, g_config_reverse_trade);
+      string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier);
+      string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
       // Open position with transformed values
       OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account);

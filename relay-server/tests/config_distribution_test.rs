@@ -214,8 +214,8 @@ async fn test_get_settings_for_slave_method() {
         .await
         .expect("Query failed");
 
-    assert!(result.is_some(), "Should find active slave settings");
-    let found_settings = result.unwrap();
+    assert!(!result.is_empty(), "Should find active slave settings");
+    let found_settings = &result[0];
     assert_eq!(found_settings.slave_account, "SLAVE_ACTIVE");
     assert_eq!(found_settings.master_account, "MASTER_001");
     assert_eq!(found_settings.status, 2); // STATUS_CONNECTED
@@ -226,7 +226,7 @@ async fn test_get_settings_for_slave_method() {
         .await
         .expect("Query failed");
 
-    assert!(result.is_none(), "Should not find disabled slave settings");
+    assert!(result.is_empty(), "Should not find disabled slave settings");
 
     // Test 3: Query for non-existent slave - should return None
     let result = db
@@ -234,7 +234,7 @@ async fn test_get_settings_for_slave_method() {
         .await
         .expect("Query failed");
 
-    assert!(result.is_none(), "Should not find non-existent slave");
+    assert!(result.is_empty(), "Should not find non-existent slave");
 
     println!("✓ Integration test passed: get_settings_for_slave() method verified");
 }
