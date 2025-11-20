@@ -654,8 +654,14 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
 void CGridPanel::UpdateConfigList(CopyConfig &configs[])
 {
    // Update Active count
-   string master_vals[] = {"Active:", IntegerToString(ArraySize(configs))};
-   color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   string master_vals[2];
+   master_vals[0] = "Active:";
+   master_vals[1] = IntegerToString(ArraySize(configs));
+   
+   color master_cols[2];
+   master_cols[0] = PANEL_COLOR_LABEL;
+   master_cols[1] = PANEL_COLOR_VALUE;
+   
    UpdateRow("master", master_vals, master_cols);
 
    // Dynamic rows for each config
@@ -673,8 +679,13 @@ void CGridPanel::UpdateConfigList(CopyConfig &configs[])
        string val = status_str + " x" + DoubleToString(configs[i].lot_multiplier, 1);
        if(configs[i].reverse_trade) val += " R";
        
-       string vals[] = {label, val};
-       color cols[] = {PANEL_COLOR_LABEL, status_clr};
+       string vals[2];
+       vals[0] = label;
+       vals[1] = val;
+       
+       color cols[2];
+       cols[0] = PANEL_COLOR_LABEL;
+       cols[1] = status_clr;
        
        if(!UpdateRow(key, vals, cols))
        {

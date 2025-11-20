@@ -50,6 +50,8 @@ bool           g_has_received_config = false;    // Track if we have received at
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
 
+int g_last_config_count = 0;
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
 //+------------------------------------------------------------------+
@@ -180,7 +182,18 @@ void OnTimer()
                else
                {
                   // Auto-trading ON -> show actual config status
-                  g_config_panel.UpdateStatusRow(g_config_status);
+                  int status_to_show = STATUS_DISABLED;
+                  if(ArraySize(g_configs) > 0) status_to_show = STATUS_ENABLED; 
+                  
+                  for(int i=0; i<ArraySize(g_configs); i++)
+                  {
+                     if(g_configs[i].status == STATUS_CONNECTED)
+                     {
+                        status_to_show = STATUS_CONNECTED;
+                        break;
+                     }
+                  }
+                  g_config_panel.UpdateStatusRow(status_to_show);
                }
             }
 
