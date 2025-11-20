@@ -167,18 +167,18 @@ export function useSankeyCopier() {
   }, [apiClient, fetchSettings, fetchConnections]);
 
   // Map to store debounced functions for each setting ID
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const debouncedCallsRef = useRef<Map<number, any>>(new Map());
+  const debouncedCallsRef = useRef<Map<number, ReturnType<typeof debounce>>>(new Map());
 
   // Cleanup debounced functions on unmount or when apiClient changes
   useEffect(() => {
+    const debouncedCalls = debouncedCallsRef.current;
     return () => {
-      debouncedCallsRef.current.forEach((debouncedFn) => {
+      debouncedCalls.forEach((debouncedFn) => {
         debouncedFn.cancel();
       });
-      debouncedCallsRef.current.clear();
+      debouncedCalls.clear();
     };
-  }, [apiClient]);
+  }, []);
 
   // Toggle status (DISABLED ⇄ ENABLED)
   const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
