@@ -89,7 +89,7 @@ export function CreateConnectionDialog({
       slave_account: formData.slave_account,
       lot_multiplier: 1.0,
       reverse_trade: false,
-      status: 1, // STATUS_ENABLED
+      status: 0, // STATUS_DISABLED (default OFF)
     });
     onOpenChange(false);
   };
