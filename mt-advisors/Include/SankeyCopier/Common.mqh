@@ -321,3 +321,18 @@ string GetOrderTypeString(int type)
    #endif
    return "UNKNOWN";
 }
+
+//+------------------------------------------------------------------+
+//| Get enum order type from string                                  |
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
+{
+   if(type_str == "ORDER_TYPE_BUY") return ORDER_TYPE_BUY;
+   if(type_str == "ORDER_TYPE_SELL") return ORDER_TYPE_SELL;
+   if(type_str == "ORDER_TYPE_BUY_LIMIT") return ORDER_TYPE_BUY_LIMIT;
+   if(type_str == "ORDER_TYPE_SELL_LIMIT") return ORDER_TYPE_SELL_LIMIT;
+   if(type_str == "ORDER_TYPE_BUY_STOP") return ORDER_TYPE_BUY_STOP;
+   if(type_str == "ORDER_TYPE_SELL_STOP") return ORDER_TYPE_SELL_STOP;
+   
+   return (ENUM_ORDER_TYPE)-1;
+}
