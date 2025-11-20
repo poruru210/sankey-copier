@@ -247,6 +247,7 @@ public:
    void     UpdateTrackedOrdersRow(int count);
    void     UpdateMagicFilterRow(int magic);
    void     UpdateServerRow(string address);
+   void     UpdateConfigList(CopyConfig &configs[]);
 
    // Common helpers
    void     UpdateStatusRow(int status);

@@ -234,3 +234,29 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    Print("=== Configuration Updated ===");
 }
+
+//+------------------------------------------------------------------+
+//| Transform lot size based on multiplier                           |
+//+------------------------------------------------------------------+
+double TransformLotSize(double lots, double multiplier)
+{
+   double new_lots = lots * multiplier;
+   return NormalizeDouble(new_lots, 2);
+}
+
+//+------------------------------------------------------------------+
+//| Reverse order type if enabled                                    |
+//+------------------------------------------------------------------+
+string ReverseOrderType(string type, bool reverse)
+{
+   if(!reverse) return type;
+   
+   if(type == "ORDER_TYPE_BUY") return "ORDER_TYPE_SELL";
+   if(type == "ORDER_TYPE_SELL") return "ORDER_TYPE_BUY";
+   if(type == "ORDER_TYPE_BUY_LIMIT") return "ORDER_TYPE_SELL_LIMIT";
+   if(type == "ORDER_TYPE_SELL_LIMIT") return "ORDER_TYPE_BUY_LIMIT";
+   if(type == "ORDER_TYPE_BUY_STOP") return "ORDER_TYPE_SELL_STOP";
+   if(type == "ORDER_TYPE_SELL_STOP") return "ORDER_TYPE_BUY_STOP";
+   
+   return type;
+}

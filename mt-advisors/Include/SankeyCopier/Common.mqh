@@ -302,3 +302,22 @@ string GetServerName()
       return AccountServer();
    #endif
 }
+
+//+------------------------------------------------------------------+
+//| Get string representation of order type                          |
+//+------------------------------------------------------------------+
+string GetOrderTypeString(int type)
+{
+   #ifdef IS_MT5
+      if(type == POSITION_TYPE_BUY) return "ORDER_TYPE_BUY";
+      if(type == POSITION_TYPE_SELL) return "ORDER_TYPE_SELL";
+   #else
+      if(type == OP_BUY) return "ORDER_TYPE_BUY";
+      if(type == OP_SELL) return "ORDER_TYPE_SELL";
+      if(type == OP_BUYLIMIT) return "ORDER_TYPE_BUY_LIMIT";
+      if(type == OP_SELLLIMIT) return "ORDER_TYPE_SELL_LIMIT";
+      if(type == OP_BUYSTOP) return "ORDER_TYPE_BUY_STOP";
+      if(type == OP_SELLSTOP) return "ORDER_TYPE_SELL_STOP";
+   #endif
+   return "UNKNOWN";
+}

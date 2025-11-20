@@ -145,3 +145,16 @@ void RemovePendingTicketMapping(PendingTicketMapping &map[], TICKET_TYPE master_
       }
    }
 }
+
+//+------------------------------------------------------------------+
+//| Transform symbol based on mappings                               |
+//+------------------------------------------------------------------+
+string TransformSymbol(string symbol, SymbolMapping &mappings[])
+{
+   for(int i=0; i<ArraySize(mappings); i++)
+   {
+      if(mappings[i].source_symbol == symbol)
+         return mappings[i].target_symbol;
+   }
+   return symbol;
+}
