@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import type { EaConnection, CopySettings, AccountInfo } from '@/types';
 import {
@@ -43,8 +43,38 @@ export function useAccountData({
 }: UseAccountDataProps): UseAccountDataReturn {
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
-  const [disabledSourceIds] = useAtom(disabledSourceIdsAtom);
-  const [disabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
+  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
+  const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize disabled lists from settings on first load
+  useEffect(() => {
+    if (!initialized && settings.length > 0) {
+      const newDisabledSources: string[] = [];
+      const newDisabledReceivers: string[] = [];
+
+      settings.forEach((setting) => {
+        if (setting.status === 0) {
+          if (!disabledSourceIds.includes(setting.master_account) && !newDisabledSources.includes(setting.master_account)) {
+            newDisabledSources.push(setting.master_account);
+          }
+          if (!disabledReceiverIds.includes(setting.slave_account) && !newDisabledReceivers.includes(setting.slave_account)) {
+            newDisabledReceivers.push(setting.slave_account);
+          }
+        }
+      });
+
+      if (newDisabledSources.length > 0) {
+        setDisabledSourceIds((prev) => [...prev, ...newDisabledSources]);
+      }
+      if (newDisabledReceivers.length > 0) {
+        setDisabledReceiverIds((prev) => [...prev, ...newDisabledReceivers]);
+      }
+
+      setInitialized(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, initialized]);
 
   // Helper function to check connection status
   const getConnectionStatus = useCallback((accountId: string): boolean => {
