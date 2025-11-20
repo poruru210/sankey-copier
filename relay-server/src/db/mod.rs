@@ -68,16 +68,18 @@ impl Database {
     pub async fn get_settings_for_slave(
         &self,
         slave_account: &str,
-    ) -> Result<Option<CopySettings>> {
-        let row = sqlx::query(
+    ) -> Result<Vec<CopySettings>> {
+        let rows = sqlx::query(
             "SELECT id, status, master_account, slave_account, settings
-             FROM connections WHERE slave_account = ? AND status > 0 LIMIT 1",
+             FROM connections WHERE slave_account = ? AND status > 0",
         )
         .bind(slave_account)
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
 
-        if let Some(row) = row {
+        let mut settings_list = Vec::new();
+
+        for row in rows {
             let id: i32 = row.get("id");
             let status: i32 = row.get("status");
             let master_account: String = row.get("master_account");
@@ -85,7 +87,7 @@ impl Database {
             let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
             let settings = settings_json.0;
 
-            Ok(Some(CopySettings {
+            settings_list.push(CopySettings {
                 id,
                 status,
                 master_account,
@@ -94,10 +96,10 @@ impl Database {
                 reverse_trade: settings.reverse_trade,
                 symbol_mappings: settings.symbol_mappings,
                 filters: settings.filters,
-            }))
-        } else {
-            Ok(None)
+            });
         }
+
+        Ok(settings_list)
     }
 
     /// Get all copy settings for a specific master account
@@ -304,7 +306,7 @@ mod tests {
         // Try to get settings for a slave that doesn't exist
         let result = db.get_settings_for_slave("NONEXISTENT").await.unwrap();
 
-        assert!(result.is_none());
+        assert!(result.is_empty());
     }
 
     #[tokio::test]
@@ -475,7 +477,7 @@ mod tests {
 
         // Should not return disabled settings
         let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
-        assert!(result.is_none());
+        assert!(result.is_empty());
     }
 
     #[tokio::test]
@@ -487,9 +489,9 @@ mod tests {
 
         // Should return enabled settings
         let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
-        assert!(result.is_some());
+        assert!(!result.is_empty());
 
-        let retrieved = result.unwrap();
+        let retrieved = &result[0];
         assert_eq!(retrieved.slave_account, "SLAVE_001");
         assert_eq!(retrieved.master_account, "MASTER_001");
     }

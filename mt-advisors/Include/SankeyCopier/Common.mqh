@@ -90,6 +90,17 @@ struct TradeFilters {
     int    blocked_magic_numbers[];
 };
 
+struct CopyConfig {
+    string master_account;
+    string trade_group_id;
+    int    status;
+    double lot_multiplier;
+    bool   reverse_trade;
+    int    config_version;
+    SymbolMapping symbol_mappings[];
+    TradeFilters filters;
+};
+
 //+------------------------------------------------------------------+
 //| Generate AccountID from broker and account number                |
 //+------------------------------------------------------------------+

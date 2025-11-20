@@ -640,27 +640,53 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
    color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
    AddRow("status", status_vals, status_cols);
 
-   string master_vals[] = {"Master:", "N/A"};
+   string master_vals[] = {"Active:", "0"};
    color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("master", master_vals, master_cols);
 
-   string lot_vals[] = {"Lot x:", "N/A"};
-   color lot_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("lot", lot_vals, lot_cols);
-
-   string reverse_vals[] = {"Reverse:", "N/A"};
-   color reverse_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("reverse", reverse_vals, reverse_cols);
-
-   string version_vals[] = {"Version:", "N/A"};
-   color version_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("version", version_vals, version_cols);
-
-   string symbols_vals[] = {"Symbols:", "N/A"};
-   color symbols_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("symbols", symbols_vals, symbols_cols);
-
    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Update configuration list rows                                   |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateConfigList(CopyConfig &configs[])
+{
+   // Update Active count
+   string master_vals[] = {"Active:", IntegerToString(ArraySize(configs))};
+   color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   UpdateRow("master", master_vals, master_cols);
+
+   // Dynamic rows for each config
+   for(int i=0; i<ArraySize(configs); i++)
+   {
+       string key = "cfg_" + IntegerToString(i);
+       // Truncate account name if too long
+       string label = TruncateText(configs[i].master_account, 12); 
+       
+       string status_str = "DIS";
+       color status_clr = PANEL_COLOR_DISABLED;
+       if(configs[i].status == STATUS_CONNECTED) { status_str = "ON"; status_clr = PANEL_COLOR_CONNECTED; }
+       else if(configs[i].status == STATUS_ENABLED) { status_str = "WAIT"; status_clr = PANEL_COLOR_WAITING; }
+       
+       string val = status_str + " x" + DoubleToString(configs[i].lot_multiplier, 1);
+       if(configs[i].reverse_trade) val += " R";
+       
+       string vals[] = {label, val};
+       color cols[] = {PANEL_COLOR_LABEL, status_clr};
+       
+       if(!UpdateRow(key, vals, cols))
+       {
+           AddRow(key, vals, cols);
+       }
+   }
+   
+   // Remove excess rows
+   int i = ArraySize(configs);
+   while(RemoveRow("cfg_" + IntegerToString(i)))
+   {
+       i++;
+   }
 }
 
 //+------------------------------------------------------------------+
