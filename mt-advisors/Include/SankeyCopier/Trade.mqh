@@ -259,6 +259,111 @@ double NormalizeLotSize(double lots, string symbol)
 }
 
 //+------------------------------------------------------------------+
+//| Check if symbol matches prefix/suffix filter                     |
+//+------------------------------------------------------------------+
+bool MatchesSymbolFilter(string symbol, string prefix, string suffix)
+{
+   // If no filter, everything matches
+   if(prefix == "" && suffix == "") return true;
+   
+   // Check prefix
+   if(prefix != "")
+   {
+      if(StringFind(symbol, prefix) != 0) return false;
+   }
+   
+   // Check suffix
+   if(suffix != "")
+   {
+      int suffix_len = StringLen(suffix);
+      int symbol_len = StringLen(symbol);
+      
+      if(symbol_len < suffix_len) return false;
+      
+      string symbol_suffix = StringSubstr(symbol, symbol_len - suffix_len);
+      if(symbol_suffix != suffix) return false;
+   }
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Remove prefix and suffix from symbol                             |
+//+------------------------------------------------------------------+
+string GetCleanSymbol(string symbol, string prefix, string suffix)
+{
+   string clean = symbol;
+   
+   // Remove prefix
+   if(prefix != "" && StringFind(clean, prefix) == 0)
+   {
+      clean = StringSubstr(clean, StringLen(prefix));
+   }
+   
+   // Remove suffix
+   if(suffix != "")
+   {
+      int suffix_len = StringLen(suffix);
+      int clean_len = StringLen(clean);
+      
+      if(clean_len >= suffix_len)
+      {
+         string current_suffix = StringSubstr(clean, clean_len - suffix_len);
+         if(current_suffix == suffix)
+         {
+            clean = StringSubstr(clean, 0, clean_len - suffix_len);
+         }
+      }
+   }
+   
+   return clean;
+}
+
+//+------------------------------------------------------------------+
+//| Parse symbol mapping string (Format: "Source=Target,Src2=Tgt2")  |
+//+------------------------------------------------------------------+
+void ParseSymbolMappingString(string mapping_str, SymbolMapping &mappings[])
+{
+   ArrayResize(mappings, 0);
+   
+   if(mapping_str == "") return;
+   
+   string pairs[];
+   int pair_count = StringSplit(mapping_str, ',', pairs);
+   
+   for(int i = 0; i < pair_count; i++)
+   {
+      string pair = pairs[i];
+      StringTrimLeft(pair);
+      StringTrimRight(pair);
+      
+      if(pair == "") continue;
+      
+      string parts[];
+      int part_count = StringSplit(pair, '=', parts);
+      
+      if(part_count == 2)
+      {
+         string source = parts[0];
+         string target = parts[1];
+         
+         StringTrimLeft(source);
+         StringTrimRight(source);
+         StringTrimLeft(target);
+         StringTrimRight(target);
+         
+         if(source != "" && target != "")
+         {
+            int size = ArraySize(mappings);
+            ArrayResize(mappings, size + 1);
+            mappings[size].source_symbol = source;
+            mappings[size].target_symbol = target;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Transform lot size based on multiplier                           |
 //+------------------------------------------------------------------+
 double TransformLotSize(double lots, double multiplier, string symbol)

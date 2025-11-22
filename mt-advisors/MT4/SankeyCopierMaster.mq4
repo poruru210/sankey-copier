@@ -19,6 +19,8 @@
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
 input int      MagicFilter = 0;                         // Magic number filter (0 = all)
+input string   SymbolPrefix = "";                       // Symbol prefix to filter and strip (e.g. "pro.")
+input string   SymbolSuffix = "";                       // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;                      // Scan interval in milliseconds
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
@@ -209,10 +211,14 @@ void ScanExistingOrders()
       {
          if(MagicFilter == 0 || OrderMagicNumber() == MagicFilter)
          {
-            int ticket = OrderTicket();
-            AddTrackedOrder(ticket);
-            SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
-            Print("Tracking existing order: #", ticket);
+            string symbol = OrderSymbol();
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               int ticket = OrderTicket();
+               AddTrackedOrder(ticket);
+               SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
+               Print("Tracking existing order: #", ticket);
+            }
          }
       }
    }
@@ -236,9 +242,13 @@ void CheckForNewOrders()
 
          if(!IsOrderTracked(ticket))
          {
-            AddTrackedOrder(ticket);
-            SendOpenSignalFromOrder(ticket);
-            Print("New order detected: #", ticket, " ", OrderSymbol(), " ", OrderLots(), " lots");
+            string symbol = OrderSymbol();
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               AddTrackedOrder(ticket);
+               SendOpenSignalFromOrder(ticket);
+               Print("New order detected: #", ticket, " ", symbol, " ", OrderLots(), " lots");
+            }
          }
       }
    }
@@ -323,7 +333,10 @@ void SendOpenSignalFromOrder(int ticket)
    }
 
    string order_type = GetOrderTypeString(OrderType());
-   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, OrderSymbol(),
+   string raw_symbol = OrderSymbol();
+   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   
+   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, symbol,
                   order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
                   OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
 }

@@ -19,7 +19,7 @@
 #include <SankeyCopier/Trade.mqh>
 
 //--- Input parameters
-input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
+input string   ServerAddress = "tcp://localhost:5556";
 input string   ConfigServerAddress = "tcp://localhost:5557"; // Configuration channel
 input int      Slippage = 3;
 input int      MaxRetries = 3;
@@ -27,6 +27,9 @@ input bool     AllowNewOrders = true;
 input bool     AllowCloseOrders = true;
 input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
 input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
+input string   SymbolPrefix = "";       // Symbol prefix to add (e.g. "pro.")
+input string   SymbolSuffix = "";       // Symbol suffix to add (e.g. ".m")
+input string   SymbolMap = "";          // Symbol mapping (e.g. "XAUUSD=GOLD,BTCUSD=Bitcoin")
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
 
@@ -36,12 +39,14 @@ HANDLE_TYPE g_zmq_context = -1;
 HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 CTrade      g_trade;
+TicketMapping g_order_map[];
+PendingTicketMapping g_pending_order_map[];
+SymbolMapping g_local_mappings[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
-// Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
 
@@ -63,6 +68,10 @@ int OnInit()
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
+
+   // Parse symbol mapping
+   ParseSymbolMappingString(SymbolMap, g_local_mappings);
+   Print("Parsed ", ArraySize(g_local_mappings), " local symbol mappings");
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -426,7 +435,10 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       }
 
       // Apply transformations
-      string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
+      string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+      
       // Transform lot size
       double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);

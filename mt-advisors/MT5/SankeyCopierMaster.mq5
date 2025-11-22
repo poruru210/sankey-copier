@@ -18,6 +18,8 @@
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
 input ulong    MagicFilter = 0;
+input string   SymbolPrefix = "";       // Symbol prefix to filter and strip (e.g. "pro.")
+input string   SymbolSuffix = "";       // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
@@ -236,12 +238,15 @@ void OnTick()
                   break;
                }
             }
-            
-            if(!is_tracked)
-            {
-               SendOrderOpenSignal(ticket);
-               AddTrackedOrder(ticket);
-            }
+                        if(!is_tracked)
+             {
+                string symbol = OrderGetString(ORDER_SYMBOL);
+                if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+                {
+                   SendOrderOpenSignal(ticket);
+                   AddTrackedOrder(ticket);
+                }
+             }
          }
       }
       
@@ -276,8 +281,12 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       {
          if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
          {
-            SendPositionOpenSignal(trans.position);
-            AddTrackedPosition(trans.position);
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               SendPositionOpenSignal(trans.position);
+               AddTrackedPosition(trans.position);
+            }
          }
       }
    }
@@ -303,8 +312,12 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          {
             if(MagicFilter == 0 || OrderGetInteger(ORDER_MAGIC) == MagicFilter)
             {
-               SendOrderOpenSignal(ticket);
-               AddTrackedOrder(ticket);
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+               {
+                  SendOrderOpenSignal(ticket);
+                  AddTrackedOrder(ticket);
+               }
             }
          }
       }
@@ -364,8 +377,12 @@ void ScanExistingPositions()
       {
          if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
          {
-            AddTrackedPosition(ticket);
-            SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               AddTrackedPosition(ticket);
+               SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
+            }
          }
       }
    }
@@ -384,11 +401,15 @@ void CheckForNewPositions()
          if(MagicFilter != 0 && PositionGetInteger(POSITION_MAGIC) != MagicFilter)
             continue;
 
-         if(!IsPositionTracked(ticket))
-         {
-            AddTrackedPosition(ticket);
-            SendPositionOpenSignal(ticket);
-         }
+          if(!IsPositionTracked(ticket))
+          {
+             string symbol = PositionGetString(POSITION_SYMBOL);
+             if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+             {
+                AddTrackedPosition(ticket);
+                SendPositionOpenSignal(ticket);
+             }
+          }
       }
    }
 }
@@ -444,7 +465,9 @@ void SendPositionOpenSignal(ulong ticket)
    if(!PositionSelectByTicket(ticket))
       return;
 
-   string symbol = PositionGetString(POSITION_SYMBOL);
+   string raw_symbol = PositionGetString(POSITION_SYMBOL);
+   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   
    long type = PositionGetInteger(POSITION_TYPE);
    double volume = PositionGetDouble(POSITION_VOLUME);
    double price = PositionGetDouble(POSITION_PRICE_OPEN);
