@@ -188,7 +188,7 @@ pub unsafe extern "C" fn config_get_string(
 
     // Use a static empty string to avoid temporary value dropped error
     static EMPTY_STRING: LazyLock<String> = LazyLock::new(|| String::new());
-    
+
     let value = match field.as_str() {
         "account_id" => &config.account_id,
         "master_account" => &config.master_account,

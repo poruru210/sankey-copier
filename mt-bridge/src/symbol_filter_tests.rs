@@ -35,18 +35,15 @@ fn test_symbol_filter_fields_roundtrip() {
 
     // Verify symbol filter fields
     assert_eq!(
-        heartbeat.symbol_prefix,
-        deserialized.symbol_prefix,
+        heartbeat.symbol_prefix, deserialized.symbol_prefix,
         "symbol_prefix should match"
     );
     assert_eq!(
-        heartbeat.symbol_suffix,
-        deserialized.symbol_suffix,
+        heartbeat.symbol_suffix, deserialized.symbol_suffix,
         "symbol_suffix should match"
     );
     assert_eq!(
-        heartbeat.symbol_map,
-        deserialized.symbol_map,
+        heartbeat.symbol_map, deserialized.symbol_map,
         "symbol_map should match"
     );
 }
@@ -110,13 +107,11 @@ fn test_config_message_some_symbol_filters() {
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(
-        config.symbol_prefix,
-        deserialized.symbol_prefix,
+        config.symbol_prefix, deserialized.symbol_prefix,
         "symbol_prefix should match"
     );
     assert_eq!(
-        config.symbol_suffix,
-        deserialized.symbol_suffix,
+        config.symbol_suffix, deserialized.symbol_suffix,
         "symbol_suffix should match"
     );
 }
