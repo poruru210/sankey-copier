@@ -74,7 +74,7 @@ int OnInit()
    g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, ServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
-      CleanupZmqContext(g_zmq_context);
+      zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
@@ -105,7 +105,7 @@ int OnInit()
       
       g_config_panel.UpdateCell("account", 1, AccountID);
       g_config_panel.UpdateServerRow(ServerAddress);
-      g_config_panel.UpdateMagicFilterRow(MagicFilter);
+      g_config_panel.UpdateMagicFilterRow((int)MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
       g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
    }
@@ -363,6 +363,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          }
       }
    }
+}
 
 //+------------------------------------------------------------------+
 //| Scan existing positions                                           |
