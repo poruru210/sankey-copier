@@ -427,11 +427,12 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 
       // Apply transformations
       string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier);
+      // Transform lot size
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
       // Open position with transformed values
-      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account);
+      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account, magic_number);
    }
    else if(action == "Close" && AllowCloseOrders)
    {
@@ -451,7 +452,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open position                                                     |
 //+------------------------------------------------------------------+
 void OpenPosition(ulong master_ticket, string symbol, string type_str,
-                  double lots, double price, double sl, double tp, string timestamp, string source_account)
+                  double lots, double price, double sl, double tp, string timestamp, string source_account, int magic)
 {
    if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
    {
@@ -461,7 +462,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeCurrent();
+   datetime current_time = TimeGMT();
    int delay_ms = (int)((current_time - signal_time) * 1000);
 
    if(delay_ms > MaxSignalDelayMs)
@@ -474,7 +475,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
       else
       {
          Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
-         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms);
+         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms, magic);
          return;
       }
    }
@@ -487,7 +488,9 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
    // Extract account number and build traceable comment: "M12345#98765"
    string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
-   g_trade.SetExpertMagicNumber(0);
+   string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+
+   g_trade.SetExpertMagicNumber(magic);
    bool result = false;
 
    for(int i = 0; i < MaxRetries; i++)
@@ -562,7 +565,7 @@ void ModifyPosition(ulong master_ticket, double sl, double tp)
 //| Place pending order at original price                            |
 //+------------------------------------------------------------------+
 void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
-                       double lots, double price, double sl, double tp, string source_account, int delay_ms)
+                       double lots, double price, double sl, double tp, string source_account, int delay_ms, int magic)
 {
    // Check if pending order already exists
    if(GetPendingTicketFromMapping(g_pending_order_map, master_ticket) > 0)
@@ -594,7 +597,9 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
    // Extract account number and build traceable comment: "P12345#98765"
    string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
-   g_trade.SetExpertMagicNumber(0);
+   string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+
+   g_trade.SetExpertMagicNumber(magic);
 
    bool result = g_trade.OrderOpen(symbol, pending_type, lots, 0, price, sl, tp,
                                     ORDER_TIME_GTC, 0, comment);

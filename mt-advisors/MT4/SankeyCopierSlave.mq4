@@ -423,12 +423,11 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          {
             Print("Trade filtered out: ", symbol, " magic=", magic);
             trade_signal_free(handle);
-            return;
-         }
 
          // Apply transformations
          string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-         double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier);
+      // Transform lot size
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
          string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
          // Open order with transformed values
@@ -468,7 +467,7 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeCurrent();
+   datetime current_time = TimeGMT();
    int delay_ms = (int)((current_time - signal_time) * 1000);
 
    if(delay_ms > MaxSignalDelayMs)

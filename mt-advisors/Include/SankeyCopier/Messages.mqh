@@ -29,7 +29,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
 
    // Serialize request config message using MessagePack
    int len = serialize_request_config("RequestConfig", account_id,
-                                      FormatTimestampISO8601(TimeCurrent()), ea_type);
+                                      FormatTimestampISO8601(TimeGMT()), ea_type);
 
    if(len <= 0)
    {
@@ -85,7 +85,7 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 
    // Serialize unregistration message using MessagePack
    int len = serialize_unregister("Unregister", account_id,
-                                          FormatTimestampISO8601(TimeCurrent()));
+                                          FormatTimestampISO8601(TimeGMT()));
 
    if(len <= 0)
    {
@@ -144,7 +144,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string
    // Serialize heartbeat message using MessagePack (includes EA info for auto-registration)
    int len = serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
                                  GetAccountEquity(), GetOpenPositionsCount(),
-                                 FormatTimestampISO8601(TimeCurrent()),
+                                 FormatTimestampISO8601(TimeGMT()),
                                  ea_type, platform,
                                  GetAccountNumber(), GetBrokerName(), GetAccountName(),
                                  GetServerName(), GetAccountCurrency(), GetAccountLeverage(),
@@ -186,7 +186,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
    // Serialize open signal message using MessagePack
    int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
-                                            FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {
@@ -217,7 +217,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string account_
    // For close signals, we send a trade signal with action="Close"
    // Only ticket, timestamp, and source_account are needed
    int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
-                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {
@@ -248,7 +248,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
    // For modify signals, we send a trade signal with action="Modify"
    // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
    int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
-                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {

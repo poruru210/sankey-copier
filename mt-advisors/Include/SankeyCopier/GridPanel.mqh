@@ -1092,6 +1092,14 @@ void CGridPanel::Delete()
       ObjectDelete(title_name);
    #endif
 
+   // Delete message (if exists)
+   string msg_name = GenerateObjectName("Message");
+   #ifdef IS_MT5
+      ObjectDelete(0, msg_name);
+   #else
+      ObjectDelete(msg_name);
+   #endif
+
    // Delete all rows
    ClearRows();
 

@@ -309,8 +309,12 @@ string GetServerName()
 string GetOrderTypeString(int type)
 {
    #ifdef IS_MT5
-      if(type == POSITION_TYPE_BUY) return "ORDER_TYPE_BUY";
-      if(type == POSITION_TYPE_SELL) return "ORDER_TYPE_SELL";
+      if(type == ORDER_TYPE_BUY) return "ORDER_TYPE_BUY";
+      if(type == ORDER_TYPE_SELL) return "ORDER_TYPE_SELL";
+      if(type == ORDER_TYPE_BUY_LIMIT) return "ORDER_TYPE_BUY_LIMIT";
+      if(type == ORDER_TYPE_SELL_LIMIT) return "ORDER_TYPE_SELL_LIMIT";
+      if(type == ORDER_TYPE_BUY_STOP) return "ORDER_TYPE_BUY_STOP";
+      if(type == ORDER_TYPE_SELL_STOP) return "ORDER_TYPE_SELL_STOP";
    #else
       if(type == OP_BUY) return "ORDER_TYPE_BUY";
       if(type == OP_SELL) return "ORDER_TYPE_SELL";

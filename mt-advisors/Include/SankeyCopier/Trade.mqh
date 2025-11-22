@@ -236,12 +236,35 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 }
 
 //+------------------------------------------------------------------+
+//| Normalize lot size based on symbol properties                    |
+//+------------------------------------------------------------------+
+double NormalizeLotSize(double lots, string symbol)
+{
+   double step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double min = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   
+   if(step <= 0) return lots;
+   
+   // Normalize to step
+   double normalized = MathFloor(lots / step + 0.5) * step;
+   
+   // Clamp to min/max
+   if(normalized < min) normalized = min;
+   if(normalized > max) normalized = max;
+   
+   // Normalize decimals to avoid floating point errors (e.g. 0.100000001)
+   // Use 8 decimals as safe upper bound for volume precision
+   return NormalizeDouble(normalized, 8);
+}
+
+//+------------------------------------------------------------------+
 //| Transform lot size based on multiplier                           |
 //+------------------------------------------------------------------+
-double TransformLotSize(double lots, double multiplier)
+double TransformLotSize(double lots, double multiplier, string symbol)
 {
    double new_lots = lots * multiplier;
-   return NormalizeDouble(new_lots, 2);
+   return NormalizeLotSize(new_lots, symbol);
 }
 
 //+------------------------------------------------------------------+
