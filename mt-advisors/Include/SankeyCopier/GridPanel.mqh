@@ -205,6 +205,9 @@ private:
    color    m_bg_color;
    color    m_border_color;
    color    m_title_color;
+   
+   // State
+   bool     m_initialized;
 
    // Internal coordinate calculation methods
    int      CalculateBackgroundX();
@@ -370,6 +373,7 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
    Print("Padding: L=", m_padding_left, " R=", m_padding_right);
    Print("Column spacing: ", (m_column_widths[0] - m_column_widths[1]), "px (label width)");
    Print("===============================");
+   m_initialized = true;
    return true;
 }
 
@@ -765,9 +769,27 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    color tracked_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("tracked", tracked_vals, tracked_cols);
 
+   return true;
+}
+
 //+------------------------------------------------------------------+
-//| Show a text message instead of the grid (e.g. "Not Configured") |
+//| Update symbol configuration row (prefix/suffix/map)             |
 //+------------------------------------------------------------------+
+void CGridPanel::UpdateSymbolConfig(string prefix, string suffix, string map)
+{
+   // Update prefix row
+   if(prefix != "")
+      UpdateCell("prefix", 1, prefix, PANEL_COLOR_VALUE);
+   else
+      UpdateCell("prefix", 1, "-", PANEL_COLOR_VALUE);
+   
+   // Update suffix row
+   if(suffix != "")
+      UpdateCell("suffix", 1, suffix, PANEL_COLOR_VALUE);
+   else
+      UpdateCell("suffix", 1, "-", PANEL_COLOR_VALUE);
+}
+
 //+------------------------------------------------------------------+
 //| Show a text message instead of the grid (e.g. "Not Configured") |
 //+------------------------------------------------------------------+
