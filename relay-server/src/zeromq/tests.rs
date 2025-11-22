@@ -55,6 +55,9 @@ fn test_message_discriminator_heartbeat() {
         currency: "USD".to_string(),
         leverage: 100,
         is_trade_allowed: true,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_map: None,
     };
 
     let bytes = rmp_serde::to_vec_named(&heartbeat).unwrap();

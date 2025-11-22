@@ -6,8 +6,13 @@
 //|          Eliminates code duplication between MT4 and MT5 versions|
 //|          Manages master-slave ticket associations               |
 //+------------------------------------------------------------------+
-#property copyright "Sankey Copier"
+#property copyright "Copyright 2025, SANKEY Copier Project"
 #property strict
+
+#ifndef SANKEY_COPIER_MAPPING_MQH
+#define SANKEY_COPIER_MAPPING_MQH
+
+#include "Common.mqh"
 
 // Platform detection
 #ifndef IS_MT4
@@ -158,3 +163,5 @@ string TransformSymbol(string symbol, SymbolMapping &mappings[])
    }
    return symbol;
 }
+
+#endif // SANKEY_COPIER_MAPPING_MQH

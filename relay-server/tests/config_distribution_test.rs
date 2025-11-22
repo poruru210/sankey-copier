@@ -26,6 +26,8 @@ async fn test_config_message_distribution_flow() {
         slave_account: "SLAVE_TEST_001".to_string(),
         lot_multiplier: Some(2.5),
         reverse_trade: true,
+        symbol_prefix: None,
+        symbol_suffix: None,
         symbol_mappings: vec![
             SymbolMapping {
                 source_symbol: "EURUSD".to_string(),
@@ -175,6 +177,8 @@ async fn test_get_settings_for_slave_method() {
         slave_account: "SLAVE_ACTIVE".to_string(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
         symbol_mappings: vec![],
         filters: TradeFilters {
             allowed_symbols: None,
@@ -191,6 +195,8 @@ async fn test_get_settings_for_slave_method() {
         slave_account: "SLAVE_DISABLED".to_string(),
         lot_multiplier: Some(2.0),
         reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
         symbol_mappings: vec![],
         filters: TradeFilters {
             allowed_symbols: None,
@@ -254,6 +260,8 @@ async fn test_config_message_with_null_values() {
         slave_account: "SLAVE_MIN".to_string(),
         lot_multiplier: None, // null
         reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
         symbol_mappings: vec![], // empty
         filters: TradeFilters {
             allowed_symbols: None,

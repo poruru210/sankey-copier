@@ -68,6 +68,9 @@ impl MockEaClient {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            symbol_map: Some("XAUUSD=GOLD".to_string()),
         };
 
         let bytes = rmp_serde::to_vec_named(&msg)?;

@@ -3,7 +3,7 @@
 //|                             Copyright 2000-2025, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#include <Object.mqh>
+#include "../Object.mqh"
 //+------------------------------------------------------------------+
 //| Class CAccountInfo.                                              |
 //| Appointment: Class for access to account info.                   |

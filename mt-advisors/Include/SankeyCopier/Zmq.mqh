@@ -9,6 +9,9 @@
 #property copyright "Sankey Copier"
 #property strict
 
+#ifndef SANKEY_COPIER_ZMQ_MQH
+#define SANKEY_COPIER_ZMQ_MQH
+
 // Platform detection
 #ifndef IS_MT4
 #ifndef IS_MT5
@@ -152,3 +155,5 @@ void CleanupZmqMultiSocket(HANDLE_TYPE &socket1, HANDLE_TYPE &socket2, HANDLE_TY
    CleanupZmqSocket(socket2, socket2_name);
    CleanupZmqContext(context);
 }
+
+#endif // SANKEY_COPIER_ZMQ_MQH

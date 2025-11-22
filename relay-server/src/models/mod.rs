@@ -51,6 +51,10 @@ pub struct CopySettings {
     pub slave_account: String,
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
+    #[serde(default)]
+    pub symbol_prefix: Option<String>,
+    #[serde(default)]
+    pub symbol_suffix: Option<String>,
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
 }
@@ -59,6 +63,10 @@ pub struct CopySettings {
 pub struct ConnectionSettings {
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
+    #[serde(default)]
+    pub symbol_prefix: Option<String>,
+    #[serde(default)]
+    pub symbol_suffix: Option<String>,
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
 }
