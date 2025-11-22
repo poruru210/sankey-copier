@@ -29,6 +29,16 @@
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
 
+//--- Port Definitions
+#define PORT_RELAY_PULL       5555  // Heartbeat, ConfigReq, Unregister (Client -> Server)
+#define PORT_RELAY_PUB_TRADE  5556  // Trade Signals (Server -> Client)
+#define PORT_RELAY_PUB_CONFIG 5557  // Config Updates (Server -> Client)
+
+//--- Default Addresses
+#define DEFAULT_ADDR_PULL       "tcp://localhost:5555"
+#define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
+#define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
+
 //--- Connection status constants (3 states)
 #define STATUS_DISABLED 0      // Slave is disabled
 #define STATUS_ENABLED 1       // Slave is enabled, Master disconnected

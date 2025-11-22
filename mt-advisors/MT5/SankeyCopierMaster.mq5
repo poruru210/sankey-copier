@@ -17,7 +17,7 @@
 #include "../Include/SankeyCopier/GridPanel.mqh"
 
 //--- Input parameters
-input string   ServerAddress = "tcp://localhost:5555";
+input string   RelayServerAddress = DEFAULT_ADDR_PULL; // Address to send signals/heartbeats (PULL)
 input ulong    MagicFilter = 0;
 input string   SymbolPrefix = "";       // Symbol prefix to filter and strip (e.g. "pro.")
 input string   SymbolSuffix = "";       // Symbol suffix to filter and strip (e.g. ".m")
@@ -72,7 +72,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, ServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
@@ -105,7 +105,7 @@ int OnInit()
       }
       
       g_config_panel.UpdateCell("account", 1, AccountID);
-      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateMagicFilterRow((int)MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
       g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
@@ -121,7 +121,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -154,7 +154,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5", SymbolPrefix, SymbolSuffix, "");
+      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT5", SymbolPrefix, SymbolSuffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable
