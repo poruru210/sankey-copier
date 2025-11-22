@@ -194,6 +194,8 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
         symbol_mappings: settings.symbol_mappings.clone(),
         filters: settings.filters.clone(),
         config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     }
 }
 
@@ -556,6 +558,8 @@ async fn delete_settings(
                 blocked_magic_numbers: None,
             },
             config_version: 1,
+            symbol_prefix: None,
+            symbol_suffix: None,
         };
 
         if let Err(e) = state.config_sender.send_config(&delete_config).await {

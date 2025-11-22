@@ -121,6 +121,9 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
+      g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Initial state
+      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
       
       // Show "Waiting" message initially
       g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
@@ -166,7 +169,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT5");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Slave", "MT5", SymbolPrefix, SymbolSuffix, SymbolMap);
 
       if(heartbeat_sent)
       {

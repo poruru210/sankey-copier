@@ -99,6 +99,8 @@ impl From<crate::models::CopySettings> for ConfigMessage {
             symbol_mappings: settings.symbol_mappings,
             filters: settings.filters,
             config_version: 1, // 初期バージョン
+            symbol_prefix: None,
+            symbol_suffix: None,
         }
     }
 }
@@ -192,6 +194,8 @@ mod tests {
                 blocked_magic_numbers: None,
             },
             config_version: 1,
+            symbol_prefix: None,
+            symbol_suffix: None,
         };
 
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();

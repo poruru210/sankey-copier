@@ -105,8 +105,9 @@ int OnInit()
       
       g_config_panel.UpdateCell("account", 1, AccountID);
       g_config_panel.UpdateServerRow(ServerAddress);
-      g_config_panel.UpdateMagicFilterRow((int)MagicFilter);
-      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions));
+      g_config_panel.UpdateMagicFilterRow(MagicFilter);
+      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
    }
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
@@ -152,7 +153,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5");
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5", SymbolPrefix, SymbolSuffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable

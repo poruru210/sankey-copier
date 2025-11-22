@@ -49,11 +49,11 @@
    int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
 
    int    serialize_unregister(string message_type, string account_id, string timestamp);
-   int    serialize_heartbeat(string message_type, string account_id, double balance,
-                              double equity, int open_positions, string timestamp,
-                              string ea_type, string platform, long account_number,
-                              string broker, string account_name, string server,
-                              string currency, long leverage, int is_trade_allowed);
+   int serialize_heartbeat(string message_type, string account_id, double balance, double equity,
+                          int open_positions, string timestamp, string ea_type, string platform,
+                          long account_number, string broker, string account_name, string server,
+                          string currency, long leverage, int is_trade_allowed,
+                          string symbol_prefix, string symbol_suffix, string symbol_map);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
                                  long magic_number, string comment, string timestamp, string source_account);

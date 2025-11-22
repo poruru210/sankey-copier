@@ -98,6 +98,7 @@ int OnInit()
       g_config_panel.UpdateServerRow(ServerAddress);
       g_config_panel.UpdateMagicFilterRow(MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
    }
 
    g_initialized = true;
@@ -148,7 +149,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4");
+      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4", SymbolPrefix, SymbolSuffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable

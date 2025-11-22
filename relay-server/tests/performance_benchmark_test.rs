@@ -27,6 +27,8 @@ async fn test_config_message_size_benchmark() {
             blocked_magic_numbers: None,
         },
         config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -70,6 +72,8 @@ async fn test_config_message_size_benchmark() {
             blocked_magic_numbers: None,
         },
         config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -152,6 +156,8 @@ async fn test_config_message_size_benchmark() {
             blocked_magic_numbers: Some(vec![999, 666, 111]),
         },
         config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();

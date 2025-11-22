@@ -245,7 +245,8 @@ public:
    // Master EA panel helpers
    bool     InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
    void     UpdateTrackedOrdersRow(int count);
-   void     UpdateMagicFilterRow(int magic);
+   void     UpdateMagicFilterRow(ulong magic);
+   void     UpdateSymbolConfig(string prefix, string suffix, string map);
    void     UpdateServerRow(string address);
    void     UpdateConfigList(CopyConfig &configs[]);
 
@@ -258,7 +259,7 @@ public:
    void     UpdateSymbolCountRow(int count);
 
    // Message mode (for "Not Configured" state)
-   void     ShowMessage(string text, color clr = clrYellow);
+   void     ShowMessage(string message);
    void     HideMessage();
 
    // Appearance
@@ -291,6 +292,7 @@ CGridPanel::CGridPanel()
    m_bg_color = PANEL_COLOR_BG;
    m_border_color = PANEL_COLOR_BORDER;
    m_title_color = PANEL_COLOR_TITLE;
+   m_initialized = false;
 }
 
 //+------------------------------------------------------------------+
@@ -645,6 +647,23 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
    color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("master", master_vals, master_cols);
 
+   string server_vals[] = {"Server:", "N/A"};
+   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("server", server_vals, server_cols);
+   
+   string prefix_vals[] = {"Prefix:", "-"};
+   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("prefix", prefix_vals, prefix_cols);
+   
+   string suffix_vals[] = {"Suffix:", "-"};
+   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("suffix", suffix_vals, suffix_cols);
+   
+   string map_vals[] = {"Map:", "-"};
+   color map_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("map", map_vals, map_cols);
+
+   m_initialized = true;
    return true;
 }
 
@@ -733,13 +752,18 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    string magic_vals[] = {"Magic Filter:", "All"};
    color magic_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("magic", magic_vals, magic_cols);
+   
+   string prefix_vals[] = {"Prefix:", "-"};
+   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("prefix", prefix_vals, prefix_cols);
+   
+   string suffix_vals[] = {"Suffix:", "-"};
+   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   AddRow("suffix", suffix_vals, suffix_cols);
 
    string tracked_vals[] = {"Tracked Orders:", "0"};
    color tracked_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("tracked", tracked_vals, tracked_cols);
-
-   return true;
-}
 
 //+------------------------------------------------------------------+
 //| Show a text message instead of the grid (e.g. "Not Configured") |

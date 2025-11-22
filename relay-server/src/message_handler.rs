@@ -131,6 +131,8 @@ impl MessageHandler {
                         symbol_mappings: settings.symbol_mappings.clone(),
                         filters: settings.filters.clone(),
                         config_version: 1,
+                        symbol_prefix: None,
+                        symbol_suffix: None,
                     };
 
                     // Send CONFIG via MessagePack
@@ -214,6 +216,8 @@ impl MessageHandler {
                                     symbol_mappings: settings.symbol_mappings.clone(),
                                     filters: settings.filters.clone(),
                                     config_version: 1,
+                                    symbol_prefix: None,
+                                    symbol_suffix: None,
                                 };
 
                                 if let Err(e) = self.config_sender.send_config(&config).await {
@@ -462,6 +466,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         handler.handle_heartbeat(hb_msg).await;
 
@@ -503,6 +510,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         handler.handle_heartbeat(hb_msg).await;
 
