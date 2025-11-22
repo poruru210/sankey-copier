@@ -99,8 +99,8 @@ impl From<crate::models::CopySettings> for ConfigMessage {
             symbol_mappings: settings.symbol_mappings,
             filters: settings.filters,
             config_version: 1, // 初期バージョン
-            symbol_prefix: None,
-            symbol_suffix: None,
+            symbol_prefix: settings.symbol_prefix,
+            symbol_suffix: settings.symbol_suffix,
         }
     }
 }
@@ -120,6 +120,8 @@ mod tests {
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.5),
             reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
             symbol_mappings: vec![],
             filters: TradeFilters {
                 allowed_symbols: None,
@@ -150,6 +152,8 @@ mod tests {
             slave_account: "SLAVE_002".to_string(),
             lot_multiplier: None,
             reverse_trade: true,
+            symbol_prefix: Some("pfx".to_string()),
+            symbol_suffix: Some("sfx".to_string()),
             symbol_mappings: vec![SymbolMapping {
                 source_symbol: "EURUSD".to_string(),
                 target_symbol: "EURUSDm".to_string(),
@@ -174,6 +178,8 @@ mod tests {
             config.filters.allowed_magic_numbers.as_ref().unwrap().len(),
             2
         );
+        assert_eq!(config.symbol_prefix, Some("pfx".to_string()));
+        assert_eq!(config.symbol_suffix, Some("sfx".to_string()));
     }
 
     #[test]
@@ -216,6 +222,8 @@ mod tests {
             slave_account: "SLAVE_003".to_string(),
             lot_multiplier: None,
             reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
             symbol_mappings: vec![],
             filters: TradeFilters {
                 allowed_symbols: None,

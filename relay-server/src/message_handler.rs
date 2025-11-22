@@ -433,6 +433,8 @@ mod tests {
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.0),
             reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
             symbol_mappings: vec![],
             filters: TradeFilters {
                 allowed_symbols: None,
