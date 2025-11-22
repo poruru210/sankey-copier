@@ -76,7 +76,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ServerAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
