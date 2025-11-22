@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
 import type { CreateSettingsRequest, EaConnection, CopySettings } from '@/types';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 
 interface CreateConnectionDialogProps {
@@ -25,6 +28,7 @@ export function CreateConnectionDialog({
   existingSettings
 }: CreateConnectionDialogProps) {
   const content = useIntlayer('settings-dialog');
+  const [step, setStep] = useState(1);
 
   // Convert all validation messages to plain strings
   const validationMessages = useMemo(() => ({
@@ -46,6 +50,8 @@ export function CreateConnectionDialog({
   const [formData, setFormData] = useState({
     master_account: '',
     slave_account: '',
+    lot_multiplier: 1.0,
+    reverse_trade: false,
   });
 
   useEffect(() => {
@@ -53,7 +59,10 @@ export function CreateConnectionDialog({
       setFormData({
         master_account: '',
         slave_account: '',
+        lot_multiplier: 1.0,
+        reverse_trade: false,
       });
+      setStep(1);
     }
   }, [open]);
 
@@ -61,7 +70,7 @@ export function CreateConnectionDialog({
   const validation = useSettingsValidation({
     masterAccount: formData.master_account,
     slaveAccount: formData.slave_account,
-    lotMultiplier: 1.0,
+    lotMultiplier: formData.lot_multiplier,
     existingSettings,
     connections,
     currentSettingId: undefined,
@@ -79,6 +88,14 @@ export function CreateConnectionDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // If we are in step 1, just move to step 2
+    if (step === 1) {
+      if (isStep1Valid) {
+        setStep(2);
+      }
+      return;
+    }
+
     // Don't submit if validation fails
     if (!validation.isValid) {
       return;
@@ -87,64 +104,135 @@ export function CreateConnectionDialog({
     onCreate({
       master_account: formData.master_account,
       slave_account: formData.slave_account,
-      lot_multiplier: 1.0,
-      reverse_trade: false,
+      lot_multiplier: formData.lot_multiplier,
+      reverse_trade: formData.reverse_trade,
       status: 0, // STATUS_DISABLED (default OFF)
     });
     onOpenChange(false);
   };
 
+  // Check if step 1 is valid to proceed
+  const isStep1Valid = useMemo(() => {
+    // Basic fields must be filled
+    if (!formData.master_account || !formData.slave_account) return false;
+
+    // Check for critical errors related to accounts
+    const accountErrors = validation.errors.filter(err =>
+      err === validationMessages.sameAccountError ||
+      err.includes(validationMessages.duplicateSettings.split('{id}')[0]) || // Approximate check for duplicate
+      err.includes(validationMessages.circularReference.split('{slave}')[0]) // Approximate check for circular
+    );
+
+    return accountErrors.length === 0;
+  }, [formData.master_account, formData.slave_account, validation.errors, validationMessages]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{content.createTitle.value}</DialogTitle>
+          <DialogTitle>
+            {content.createTitle.value} {step > 1 && `(${step}/2)`}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
-          <div className="space-y-4 overflow-y-auto pr-2">
-            {/* Master Account Selection */}
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">📤</span>
-                  {content.masterAccountLabel.value}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {content.masterAccountDescription.value}
-                </p>
-              </div>
-              <SimpleAccountSelector
-                label=""
-                value={formData.master_account}
-                onChange={handleMasterChange}
-                connections={connections}
-                filterType="Master"
-                required
-              />
-            </div>
+          <div className="space-y-4 overflow-y-auto pr-2 min-h-[300px]">
 
-            {/* Slave Account Selection */}
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">📥</span>
-                  {content.slaveAccountLabel.value}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {content.slaveAccountDescription.value}
-                </p>
-              </div>
-              <SimpleAccountSelector
-                label=""
-                value={formData.slave_account}
-                onChange={handleSlaveChange}
-                connections={connections}
-                filterType="Slave"
-                required
-              />
-            </div>
+            {step === 1 && (
+              <>
+                {/* Master Account Selection */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">📤</span>
+                      {content.masterAccountLabel.value}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {content.masterAccountDescription.value}
+                    </p>
+                  </div>
+                  <SimpleAccountSelector
+                    label=""
+                    value={formData.master_account}
+                    onChange={handleMasterChange}
+                    connections={connections}
+                    filterType="Master"
+                    required
+                  />
+                </div>
 
-            {/* Validation Messages */}
+                {/* Slave Account Selection */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">📥</span>
+                      {content.slaveAccountLabel.value}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {content.slaveAccountDescription.value}
+                    </p>
+                  </div>
+                  <SimpleAccountSelector
+                    label=""
+                    value={formData.slave_account}
+                    onChange={handleSlaveChange}
+                    connections={connections}
+                    filterType="Slave"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {step === 2 && (
+              /* Copy Settings Section */
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <span className="text-lg">⚙️</span>
+                    {content.copySettingsLabel?.value || "Copy Settings"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Configure how trades are copied.
+                  </p>
+                </div>
+
+                {/* Lot Multiplier */}
+                <div>
+                  <Label htmlFor="lot_multiplier">
+                    {content.lotMultiplier?.value || "Lot Multiplier"}
+                  </Label>
+                  <Input
+                    id="lot_multiplier"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max="100"
+                    value={formData.lot_multiplier}
+                    onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
+                  </p>
+                </div>
+
+                {/* Reverse Trade */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="reverse_trade"
+                    checked={formData.reverse_trade}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, reverse_trade: checked as boolean })
+                    }
+                  />
+                  <Label htmlFor="reverse_trade" className="cursor-pointer">
+                    {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
+                  </Label>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Messages - Show always if present, but contextually relevant */}
             {validation.errors.length > 0 && (
               <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 border border-red-200 dark:border-red-800">
                 <div className="flex">
@@ -183,13 +271,35 @@ export function CreateConnectionDialog({
           </div>
 
           <DialogFooter className="mt-6 flex-shrink-0 pt-4 border-t">
-            <div className="flex gap-2 justify-end w-full">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <div className="flex gap-2 justify-between w-full">
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 {content.cancel.value}
               </Button>
-              <Button type="submit" disabled={!validation.isValid}>
-                {content.saveAndEnable.value}
-              </Button>
+
+              <div className="flex gap-2">
+                {step === 2 && (
+                  <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                    Back
+                  </Button>
+                )}
+
+                {step === 1 ? (
+                  <Button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setStep(2);
+                    }}
+                    disabled={!isStep1Valid}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button type="submit" disabled={!validation.isValid}>
+                    {content.saveAndEnable.value}
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogFooter>
         </form>
