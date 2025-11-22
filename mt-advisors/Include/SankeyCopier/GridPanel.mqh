@@ -480,7 +480,7 @@ bool CGridPanel::UpdateRow(string row_key, string &values[], color &colors[])
 
    if(row_index == -1)
    {
-      Print("Row '", row_key, "' not found");
+      // Print("Row '", row_key, "' not found"); // Silenced to avoid log spam on first update
       return false;
    }
 
@@ -807,6 +807,8 @@ void CGridPanel::ShowMessage(string text, color clr = clrYellow)
       // But just in case, let's make sure it's not hidden via TIMEFRAMES if we ever used that.
       ObjectSet(msg_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS); 
    #endif
+   
+   ChartRedraw();
 }
 
 //+------------------------------------------------------------------+
@@ -859,6 +861,8 @@ void CGridPanel::HideMessage()
          #endif
       }
    }
+   
+   ChartRedraw();
 }
 
 //+------------------------------------------------------------------+
