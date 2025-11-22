@@ -8,15 +8,15 @@
 #property version   "1.00"  // VERSION_PLACEHOLDER
 #property icon      "app.ico"
 
-#include <Trade/Trade.mqh>
+#include "../Include/Trade/Trade.mqh"
 
 //--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Mapping.mqh>
-#include <SankeyCopier/GridPanel.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Mapping.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5556";
@@ -166,7 +166,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Slave", "MT5", SymbolPrefix, SymbolSuffix, SymbolMap);
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT5", SymbolPrefix, SymbolSuffix, SymbolMap);
 
       if(heartbeat_sent)
       {
