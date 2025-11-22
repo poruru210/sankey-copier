@@ -45,9 +45,6 @@ datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
-TicketMapping g_order_map[];
-PendingTicketMapping g_pending_order_map[];
-
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
 bool           g_has_received_config = false;    // Track if we have received at least one config

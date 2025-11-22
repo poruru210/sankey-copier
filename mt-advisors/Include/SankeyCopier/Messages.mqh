@@ -139,7 +139,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
       }
    #endif
    
-   string timestamp = GetTimestampISO();
+   string timestamp = TimeToString(TimeGMT(), TIME_DATE|TIME_MINUTES|TIME_SECONDS);
    long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
    string broker = AccountInfoString(ACCOUNT_COMPANY);
    string account_name = AccountInfoString(ACCOUNT_NAME);
@@ -156,7 +156,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
    if(len <= 0)
    {
       Print("ERROR: Failed to serialize heartbeat message");
-      zmq_socket_destroy(push_socket);
+      zmq_socket_destroy(socket);
       return false;
    }
 
@@ -168,14 +168,14 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
    if(copied != len)
    {
       Print("ERROR: Failed to copy heartbeat message buffer");
-      zmq_socket_destroy(push_socket);
+      zmq_socket_destroy(socket);
       return false;
    }
 
    // Send binary MessagePack data
-   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
+   bool success = (zmq_socket_send_binary(socket, buffer, len) == 1);
 
-   zmq_socket_destroy(push_socket);
+   zmq_socket_destroy(socket);
    return success;
 }
 

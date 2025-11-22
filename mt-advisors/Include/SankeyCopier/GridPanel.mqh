@@ -248,7 +248,7 @@ public:
    // Master EA panel helpers
    bool     InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
    void     UpdateTrackedOrdersRow(int count);
-   void     UpdateMagicFilterRow(ulong magic);
+   void     UpdateMagicFilterRow(int magic);
    void     UpdateSymbolConfig(string prefix, string suffix, string map);
    void     UpdateServerRow(string address);
    void     UpdateConfigList(CopyConfig &configs[]);
@@ -262,7 +262,7 @@ public:
    void     UpdateSymbolCountRow(int count);
 
    // Message mode (for "Not Configured" state)
-   void     ShowMessage(string message);
+   void     ShowMessage(string message, color clr = clrYellow);
    void     HideMessage();
 
    // Appearance

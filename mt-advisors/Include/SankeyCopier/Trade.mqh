@@ -320,6 +320,28 @@ string GetCleanSymbol(string symbol, string prefix, string suffix)
 }
 
 //+------------------------------------------------------------------+
+//| Add prefix and suffix to symbol                                  |
+//+------------------------------------------------------------------+
+string GetLocalSymbol(string symbol, string prefix, string suffix)
+{
+   string local = symbol;
+   
+   // Add prefix
+   if(prefix != "")
+   {
+      local = prefix + local;
+   }
+   
+   // Add suffix
+   if(suffix != "")
+   {
+      local = local + suffix;
+   }
+   
+   return local;
+}
+
+//+------------------------------------------------------------------+
 //| Parse symbol mapping string (Format: "Source=Target,Src2=Tgt2")  |
 //+------------------------------------------------------------------+
 void ParseSymbolMappingString(string mapping_str, SymbolMapping &mappings[])
