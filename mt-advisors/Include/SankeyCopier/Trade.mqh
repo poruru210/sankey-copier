@@ -98,7 +98,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 //+------------------------------------------------------------------+
 void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
                           CopyConfig &configs[],
-                          int zmq_trade_socket)
+                          HANDLE_TYPE zmq_trade_socket)
 {
    Print("=== Processing Configuration Message ===");
 

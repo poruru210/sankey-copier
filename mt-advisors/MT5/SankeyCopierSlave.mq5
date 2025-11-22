@@ -47,9 +47,6 @@ datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 
-TicketMapping g_order_map[];
-PendingTicketMapping g_pending_order_map[];
-
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
 bool           g_has_received_config = false;    // Track if we have received at least one config
@@ -82,7 +79,7 @@ int OnInit()
    g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
-      CleanupZmqContext(g_zmq_context);
+      zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
@@ -503,8 +500,6 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
    // Extract account number and build traceable comment: "M12345#98765"
    string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
-   string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
-
    g_trade.SetExpertMagicNumber(magic);
    bool result = false;
 
@@ -610,8 +605,6 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
    lots = NormalizeDouble(lots, 2);
 
    // Extract account number and build traceable comment: "P12345#98765"
-   string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
-
    string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
    g_trade.SetExpertMagicNumber(magic);
