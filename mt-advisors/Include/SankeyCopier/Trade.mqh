@@ -5,6 +5,9 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_TRADE_MQH
+#define SANKEY_COPIER_TRADE_MQH
+
 #include "Common.mqh"
 
 //+------------------------------------------------------------------+
@@ -410,3 +413,5 @@ string ReverseOrderType(string type, bool reverse)
    
    return type;
 }
+
+#endif // SANKEY_COPIER_TRADE_MQH

@@ -5,6 +5,9 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_COMMON_MQH
+#define SANKEY_COPIER_COMMON_MQH
+
 //--- Platform detection and type aliases
 #ifdef __MQL5__
    #define IS_MT5
@@ -340,3 +343,5 @@ ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
    
    return (ENUM_ORDER_TYPE)-1;
 }
+
+#endif // SANKEY_COPIER_COMMON_MQH

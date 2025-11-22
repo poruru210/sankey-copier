@@ -6,7 +6,13 @@
 //|          management, coordinate calculation, and panel sizing.  |
 //|          Supports runtime addition/removal of data rows.        |
 //+------------------------------------------------------------------+
-#property copyright "Sankey Copier"
+#property copyright "Copyright 2025, SANKEY Copier Project"
+
+#ifndef SANKEY_COPIER_GRIDPANEL_MQH
+#define SANKEY_COPIER_GRIDPANEL_MQH
+
+#include "Common.mqh"
+
 #property strict
 
 // Platform detection (reuse existing pattern)
@@ -1252,3 +1258,5 @@ string CGridPanel::GenerateObjectName(string suffix)
 {
    return m_prefix + suffix;
 }
+
+#endif // SANKEY_COPIER_GRIDPANEL_MQH

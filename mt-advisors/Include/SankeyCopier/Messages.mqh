@@ -5,7 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_MESSAGES_MQH
+#define SANKEY_COPIER_MESSAGES_MQH
+
 #include "Common.mqh"
+#include "Zmq.mqh"
 
 //+------------------------------------------------------------------+
 //| Send configuration request message to server (for Slave EAs)     |
@@ -273,3 +277,5 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
    // Send binary MessagePack data
    return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 }
+
+#endif // SANKEY_COPIER_MESSAGES_MQH

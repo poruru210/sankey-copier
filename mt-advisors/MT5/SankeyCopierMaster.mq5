@@ -9,11 +9,12 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
-#include <SankeyCopier/GridPanel.mqh>
+//--- Include common headers
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
 
 //--- Input parameters
 input string   ServerAddress = "tcp://localhost:5555";
@@ -561,5 +562,107 @@ void RemoveTrackedPosition(ulong ticket)
          break;
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Check if order is already being tracked                          |
+//+------------------------------------------------------------------+
+bool IsOrderTracked(ulong ticket)
+{
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+      if(g_tracked_orders[i].ticket == ticket) return true;
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Remove order from tracking list                                  |
+//+------------------------------------------------------------------+
+void RemoveTrackedOrder(ulong ticket)
+{
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+   {
+      if(g_tracked_orders[i].ticket == ticket)
+      {
+         for(int j = i; j < ArraySize(g_tracked_orders) - 1; j++)
+            g_tracked_orders[j] = g_tracked_orders[j + 1];
+         ArrayResize(g_tracked_orders, ArraySize(g_tracked_orders) - 1);
+         break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Scan existing pending orders                                      |
+//+------------------------------------------------------------------+
+void ScanExistingOrders()
+{
+   ArrayResize(g_tracked_orders, 0);
+
+   for(int i = 0; i < OrdersTotal(); i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket > 0)
+      {
+         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+         // Only process pending orders
+         if(type != ORDER_TYPE_BUY && type != ORDER_TYPE_SELL)
+         {
+            if(MagicFilter == 0 || OrderGetInteger(ORDER_MAGIC) == MagicFilter)
+            {
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+               {
+                  AddTrackedOrder(ticket);
+                  SendOrderOpenSignal(ticket);
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Send order open signal                                           |
+//+------------------------------------------------------------------+
+void SendOrderOpenSignal(ulong ticket)
+{
+   if(!OrderSelect(ticket)) return;
+
+   string raw_symbol = OrderGetString(ORDER_SYMBOL);
+   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   
+   long type = OrderGetInteger(ORDER_TYPE);
+   double volume = OrderGetDouble(ORDER_VOLUME_INITIAL);
+   double price = OrderGetDouble(ORDER_PRICE_OPEN);
+   double sl = OrderGetDouble(ORDER_SL);
+   double tp = OrderGetDouble(ORDER_TP);
+   long magic = OrderGetInteger(ORDER_MAGIC);
+   string comment = OrderGetString(ORDER_COMMENT);
+
+   string order_type = GetOrderTypeString((int)type);
+
+   SendOpenSignal(g_zmq_socket, ticket, symbol, order_type,
+                  volume, price, sl, tp, magic, comment, AccountID);
+}
+
+//+------------------------------------------------------------------+
+//| Send order modify signal                                         |
+//+------------------------------------------------------------------+
+void SendOrderModifySignal(ulong ticket)
+{
+    if(!OrderSelect(ticket)) return;
+    
+    double sl = OrderGetDouble(ORDER_SL);
+    double tp = OrderGetDouble(ORDER_TP);
+    
+    SendModifySignal(g_zmq_socket, ticket, sl, tp, AccountID);
+}
+
+//+------------------------------------------------------------------+
+//| Send order close signal (delete)                                 |
+//+------------------------------------------------------------------+
+void SendOrderCloseSignal(ulong ticket)
+{
+   SendCloseSignal(g_zmq_socket, ticket, AccountID);
 }
 
