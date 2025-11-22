@@ -194,8 +194,8 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
         symbol_mappings: settings.symbol_mappings.clone(),
         filters: settings.filters.clone(),
         config_version: 1,
-        symbol_prefix: None,
-        symbol_suffix: None,
+        symbol_prefix: settings.symbol_prefix.clone(),
+        symbol_suffix: settings.symbol_suffix.clone(),
     }
 }
 
@@ -298,6 +298,12 @@ struct CreateSettingsRequest {
     lot_multiplier: Option<f64>,
     reverse_trade: bool,
     status: Option<i32>, // Allow frontend to control initial status (0=DISABLED, 1=ENABLED, 2=CONNECTED)
+    #[serde(default)]
+    symbol_prefix: Option<String>,
+    #[serde(default)]
+    symbol_suffix: Option<String>,
+    #[serde(default)]
+    symbol_mappings: Option<Vec<crate::models::SymbolMapping>>,
 }
 
 async fn create_settings(
@@ -318,7 +324,9 @@ async fn create_settings(
         slave_account: req.slave_account.clone(),
         lot_multiplier: req.lot_multiplier,
         reverse_trade: req.reverse_trade,
-        symbol_mappings: vec![],
+        symbol_prefix: req.symbol_prefix.clone(),
+        symbol_suffix: req.symbol_suffix.clone(),
+        symbol_mappings: req.symbol_mappings.unwrap_or_default(),
         filters: crate::models::TradeFilters {
             allowed_symbols: None,
             blocked_symbols: None,

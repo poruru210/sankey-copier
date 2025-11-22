@@ -55,6 +55,8 @@ impl Database {
                 slave_account,
                 lot_multiplier: settings.lot_multiplier,
                 reverse_trade: settings.reverse_trade,
+                symbol_prefix: settings.symbol_prefix,
+                symbol_suffix: settings.symbol_suffix,
                 symbol_mappings: settings.symbol_mappings,
                 filters: settings.filters,
             }))
@@ -91,6 +93,8 @@ impl Database {
                 slave_account,
                 lot_multiplier: settings.lot_multiplier,
                 reverse_trade: settings.reverse_trade,
+                symbol_prefix: settings.symbol_prefix,
+                symbol_suffix: settings.symbol_suffix,
                 symbol_mappings: settings.symbol_mappings,
                 filters: settings.filters,
             });
@@ -126,6 +130,8 @@ impl Database {
                 slave_account,
                 lot_multiplier: settings.lot_multiplier,
                 reverse_trade: settings.reverse_trade,
+                symbol_prefix: settings.symbol_prefix,
+                symbol_suffix: settings.symbol_suffix,
                 symbol_mappings: settings.symbol_mappings,
                 filters: settings.filters,
             });
@@ -158,6 +164,8 @@ impl Database {
                 slave_account,
                 lot_multiplier: settings.lot_multiplier,
                 reverse_trade: settings.reverse_trade,
+                symbol_prefix: settings.symbol_prefix,
+                symbol_suffix: settings.symbol_suffix,
                 symbol_mappings: settings.symbol_mappings,
                 filters: settings.filters,
             });
@@ -170,6 +178,8 @@ impl Database {
         let connection_settings = ConnectionSettings {
             lot_multiplier: settings.lot_multiplier,
             reverse_trade: settings.reverse_trade,
+            symbol_prefix: settings.symbol_prefix.clone(),
+            symbol_suffix: settings.symbol_suffix.clone(),
             symbol_mappings: settings.symbol_mappings.clone(),
             filters: settings.filters.clone(),
         };

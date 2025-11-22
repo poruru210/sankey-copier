@@ -131,8 +131,8 @@ impl MessageHandler {
                         symbol_mappings: settings.symbol_mappings.clone(),
                         filters: settings.filters.clone(),
                         config_version: 1,
-                        symbol_prefix: None,
-                        symbol_suffix: None,
+                        symbol_prefix: settings.symbol_prefix.clone(),
+                        symbol_suffix: settings.symbol_suffix.clone(),
                     };
 
                     // Send CONFIG via MessagePack
@@ -216,8 +216,8 @@ impl MessageHandler {
                                     symbol_mappings: settings.symbol_mappings.clone(),
                                     filters: settings.filters.clone(),
                                     config_version: 1,
-                                    symbol_prefix: None,
-                                    symbol_suffix: None,
+                                    symbol_prefix: settings.symbol_prefix.clone(),
+                                    symbol_suffix: settings.symbol_suffix.clone(),
                                 };
 
                                 if let Err(e) = self.config_sender.send_config(&config).await {
