@@ -18,8 +18,9 @@
 #include <SankeyCopier/Trade.mqh>
 
 //--- Input parameters
-input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
-input string   ServerAddress = "tcp://localhost:5555"; // Server ZMQ address (for heartbeat, config requests)
+input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
+input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to receive trade signals (SUB)
+input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input int      Slippage = 3;                                 // Maximum slippage in points
 input int      MaxRetries = 3;                               // Maximum order retries
 input bool     AllowNewOrders = true;                        // Allow opening new orders
@@ -75,7 +76,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeSignalSourceAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       CleanupZmqContext(g_zmq_context);
@@ -83,7 +84,7 @@ int OnInit()
    }
 
    // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ServerAddress + ":5557", "Slave Config SUB");
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
@@ -114,7 +115,7 @@ int OnInit()
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
       g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Initial state
-      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
       // Show "Waiting" message initially
       g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
@@ -122,6 +123,7 @@ int OnInit()
 
    Print("=== SankeyCopier Slave EA Initialized ===");
 
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
@@ -133,7 +135,7 @@ void OnDeinit(const int reason)
    Print("=== SankeyCopier Slave EA (MT4) Stopping ===");
 
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, ServerAddress + ":5555", AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -166,7 +168,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, ServerAddress + ":5555", AccountID, "Slave", "MT4", SymbolPrefix, SymbolSuffix, SymbolMap);
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT4", SymbolPrefix, SymbolSuffix, SymbolMap);
 
       if(heartbeat_sent)
       {
@@ -209,7 +211,7 @@ void OnTimer()
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, ServerAddress + ":5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -226,7 +228,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, ServerAddress + ":5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");

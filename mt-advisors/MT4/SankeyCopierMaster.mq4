@@ -17,7 +17,7 @@
 #include <SankeyCopier/GridPanel.mqh>
 
 //--- Input parameters
-input string   ServerAddress = "tcp://localhost:5555";  // Server ZMQ address
+input string   RelayServerAddress = DEFAULT_ADDR_PULL;  // Server ZMQ address (PULL)
 input int      MagicFilter = 0;                         // Magic number filter (0 = all)
 input string   SymbolPrefix = "";                       // Symbol prefix to filter and strip (e.g. "pro.")
 input string   SymbolSuffix = "";                       // Symbol suffix to filter and strip (e.g. ".m")
@@ -56,7 +56,7 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   Print("Server Address: ", ServerAddress);
+   Print("Relay Server Address: ", RelayServerAddress);
    Print("Magic Filter: ", MagicFilter);
 
    // Initialize ZMQ context
@@ -65,7 +65,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, ServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
       CleanupZmqContext(g_zmq_context);
@@ -94,7 +94,7 @@ int OnInit()
          g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
       }
       
-      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateMagicFilterRow(MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
       g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
@@ -103,6 +103,7 @@ int OnInit()
    g_initialized = true;
    Print("=== SankeyCopier Master EA (MT4) Initialized ===");
 
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
@@ -114,7 +115,7 @@ void OnDeinit(const int reason)
    Print("=== SankeyCopier Master EA (MT4) Stopping ===");
 
    // Send unregister message
-   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -148,7 +149,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT4", SymbolPrefix, SymbolSuffix, "");
+      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT4", SymbolPrefix, SymbolSuffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable
