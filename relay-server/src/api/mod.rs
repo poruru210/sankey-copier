@@ -209,7 +209,7 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{EaType, Platform, ConnectionStatus};
+    use crate::models::{ConnectionStatus, EaType, Platform};
     use chrono::Utc;
 
     fn create_test_connection(is_trade_allowed: bool) -> EaConnection {
@@ -237,7 +237,7 @@ mod tests {
         // Case 1: Slave is disabled (status 0)
         // Should be 0 regardless of master state
         assert_eq!(calculate_effective_status(0, None), 0);
-        
+
         let conn = create_test_connection(true);
         assert_eq!(calculate_effective_status(0, Some(&conn)), 0);
     }
