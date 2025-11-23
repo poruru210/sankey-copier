@@ -156,32 +156,39 @@ async fn refresh_settings_cache(state: &AppState) {
 /// CopySettingsから完全な設定情報を含むConfigMessageを生成し、
 /// ZeroMQ経由でSlaveEAに送信します。
 /// Build ConfigMessage with calculated effective status based on Master connection state
-async fn build_config_message(state: &AppState, settings: &CopySettings) -> ConfigMessage {
-    // Calculate effective status (0/1/2) based on Master's is_trade_allowed
-    let effective_status = if settings.status == 0 {
-        // User disabled -> DISABLED
+/// Calculate effective status based on settings status and master connection state
+fn calculate_effective_status(settings_status: i32, master_conn: Option<&EaConnection>) -> i32 {
+    if settings_status == 0 {
+        // Slave disabled -> DISABLED
         0
     } else {
-        // User enabled (status == 1)
-        // Check if Master is connected and has trading allowed
-        let master_conn = state
-            .connection_manager
-            .get_ea(&settings.master_account)
-            .await;
-
-        if let Some(conn) = master_conn {
-            if conn.is_trade_allowed {
-                // Master online && trading allowed -> CONNECTED
+        // Slave enabled (status == 1 or 2)
+        match master_conn {
+            Some(conn) if conn.is_trade_allowed => {
+                // Both master trade-allowed and slave enabled -> CONNECTED
                 2
-            } else {
-                // Master online but trading NOT allowed -> ENABLED (but not connected)
+            }
+            _ => {
+                // Master not ready or trade not allowed -> ENABLED (but not connected)
                 1
             }
-        } else {
-            // Master offline -> ENABLED (but not connected)
-            1
         }
-    };
+    }
+}
+
+/// Send configuration message to slave EA
+///
+/// CopySettingsから完全な設定情報を含むConfigMessageを生成し、
+/// ZeroMQ経由でSlaveEAに送信します。
+/// Build ConfigMessage with calculated effective status based on Master connection state
+async fn build_config_message(state: &AppState, settings: &CopySettings) -> ConfigMessage {
+    // Check if Master is connected and has trading allowed
+    let master_conn = state
+        .connection_manager
+        .get_ea(&settings.master_account)
+        .await;
+
+    let effective_status = calculate_effective_status(settings.status, master_conn.as_ref());
 
     ConfigMessage {
         account_id: settings.slave_account.clone(),
@@ -196,6 +203,66 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
         config_version: 1,
         symbol_prefix: settings.symbol_prefix.clone(),
         symbol_suffix: settings.symbol_suffix.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{EaType, Platform, ConnectionStatus};
+    use chrono::Utc;
+
+    fn create_test_connection(is_trade_allowed: bool) -> EaConnection {
+        EaConnection {
+            account_id: "MASTER".to_string(),
+            ea_type: EaType::Master,
+            platform: Platform::MT5,
+            account_number: 12345,
+            broker: "Broker".to_string(),
+            account_name: "Name".to_string(),
+            server: "Server".to_string(),
+            balance: 1000.0,
+            equity: 1000.0,
+            currency: "USD".to_string(),
+            leverage: 100,
+            last_heartbeat: Utc::now(),
+            status: ConnectionStatus::Online,
+            connected_at: Utc::now(),
+            is_trade_allowed,
+        }
+    }
+
+    #[test]
+    fn test_calculate_effective_status_slave_disabled() {
+        // Case 1: Slave is disabled (status 0)
+        // Should be 0 regardless of master state
+        assert_eq!(calculate_effective_status(0, None), 0);
+        
+        let conn = create_test_connection(true);
+        assert_eq!(calculate_effective_status(0, Some(&conn)), 0);
+    }
+
+    #[test]
+    fn test_calculate_effective_status_slave_enabled_master_offline() {
+        // Case 2: Slave enabled (1), Master offline (None)
+        // Should be 1 (ENABLED)
+        assert_eq!(calculate_effective_status(1, None), 1);
+    }
+
+    #[test]
+    fn test_calculate_effective_status_slave_enabled_master_trade_allowed() {
+        // Case 3: Slave enabled (1), Master online & trade allowed
+        // Should be 2 (CONNECTED)
+        let conn = create_test_connection(true);
+        assert_eq!(calculate_effective_status(1, Some(&conn)), 2);
+    }
+
+    #[test]
+    fn test_calculate_effective_status_slave_enabled_master_trade_not_allowed() {
+        // Case 4: Slave enabled (1), Master online but trade NOT allowed
+        // Should be 1 (ENABLED)
+        let conn = create_test_connection(false);
+        assert_eq!(calculate_effective_status(1, Some(&conn)), 1);
     }
 }
 
