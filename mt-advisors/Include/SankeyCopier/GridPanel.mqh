@@ -755,10 +755,6 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_CONNECTED};
    AddRow("status", status_vals, status_cols);
 
-   string account_vals[] = {"Account:", "N/A"};
-   color account_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("account", account_vals, account_cols);
-
    string server_vals[] = {"Server:", "N/A"};
    color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
    AddRow("server", server_vals, server_cols);

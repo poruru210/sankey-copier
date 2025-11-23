@@ -94,7 +94,6 @@ int OnInit()
          g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
       }
       
-      g_config_panel.UpdateCell("account", 1, AccountID);
       g_config_panel.UpdateServerRow(ServerAddress);
       g_config_panel.UpdateMagicFilterRow(MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
