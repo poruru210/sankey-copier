@@ -5,7 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_MESSAGES_MQH
+#define SANKEY_COPIER_MESSAGES_MQH
+
 #include "Common.mqh"
+#include "Zmq.mqh"
 
 //+------------------------------------------------------------------+
 //| Send configuration request message to server (for Slave EAs)     |
@@ -29,7 +33,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
 
    // Serialize request config message using MessagePack
    int len = serialize_request_config("RequestConfig", account_id,
-                                      FormatTimestampISO8601(TimeCurrent()), ea_type);
+                                      FormatTimestampISO8601(TimeGMT()), ea_type);
 
    if(len <= 0)
    {
@@ -85,7 +89,7 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 
    // Serialize unregistration message using MessagePack
    int len = serialize_unregister("Unregister", account_id,
-                                          FormatTimestampISO8601(TimeCurrent()));
+                                          FormatTimestampISO8601(TimeGMT()));
 
    if(len <= 0)
    {
@@ -119,41 +123,44 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 }
 
 //+------------------------------------------------------------------+
-//| Send heartbeat message to server (includes EA info for auto-registration) |
+//| Send heartbeat message                                           |
 //+------------------------------------------------------------------+
-bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string account_id, string ea_type, string platform)
+bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id, string ea_type, string platform,
+                         string symbol_prefix="", string symbol_suffix="", string symbol_map="")
 {
-   // Create temporary PUSH socket for heartbeat
-   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-   if(push_socket < 0)
-   {
-      Print("ERROR: Failed to create heartbeat socket");
-      return false;
-   }
-
-   if(zmq_socket_connect(push_socket, server_address) == 0)
-   {
-      Print("ERROR: Failed to connect to heartbeat server: ", server_address);
-      zmq_socket_destroy(push_socket);
-      return false;
-   }
-
-   // Get current auto-trading state (TERMINAL_TRADE_ALLOWED)
+   HANDLE_TYPE socket = CreateAndConnectZmqSocket(context, ZMQ_PUSH, address, "Heartbeat PUSH");
+   if(socket < 0) return false;
+   
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   int open_positions = 0;
+   
+   #ifdef IS_MT5
+      open_positions = PositionsTotal();
+   #else
+      for(int i=0; i<OrdersTotal(); i++) {
+         if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) open_positions++;
+      }
+   #endif
+   
+   string timestamp = TimeToString(TimeGMT(), TIME_DATE|TIME_MINUTES|TIME_SECONDS);
+   long account_number = AccountInfoInteger(ACCOUNT_LOGIN);
+   string broker = AccountInfoString(ACCOUNT_COMPANY);
+   string account_name = AccountInfoString(ACCOUNT_NAME);
+   string server = AccountInfoString(ACCOUNT_SERVER);
+   string currency = AccountInfoString(ACCOUNT_CURRENCY);
+   long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
    int is_trade_allowed = (int)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-
-   // Serialize heartbeat message using MessagePack (includes EA info for auto-registration)
-   int len = serialize_heartbeat("Heartbeat", account_id, GetAccountBalance(),
-                                 GetAccountEquity(), GetOpenPositionsCount(),
-                                 FormatTimestampISO8601(TimeCurrent()),
-                                 ea_type, platform,
-                                 GetAccountNumber(), GetBrokerName(), GetAccountName(),
-                                 GetServerName(), GetAccountCurrency(), GetAccountLeverage(),
-                                 is_trade_allowed);
+   
+   int len = serialize_heartbeat("Heartbeat", account_id, balance, equity, open_positions, timestamp,
+                                ea_type, platform, account_number, broker, account_name, server,
+                                currency, leverage, is_trade_allowed,
+                                symbol_prefix, symbol_suffix, symbol_map);
 
    if(len <= 0)
    {
       Print("ERROR: Failed to serialize heartbeat message");
-      zmq_socket_destroy(push_socket);
+      zmq_socket_destroy(socket);
       return false;
    }
 
@@ -165,14 +172,14 @@ bool SendHeartbeatMessage(HANDLE_TYPE zmq_context, string server_address, string
    if(copied != len)
    {
       Print("ERROR: Failed to copy heartbeat message buffer");
-      zmq_socket_destroy(push_socket);
+      zmq_socket_destroy(socket);
       return false;
    }
 
    // Send binary MessagePack data
-   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
+   bool success = (zmq_socket_send_binary(socket, buffer, len) == 1);
 
-   zmq_socket_destroy(push_socket);
+   zmq_socket_destroy(socket);
    return success;
 }
 
@@ -186,7 +193,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
    // Serialize open signal message using MessagePack
    int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
-                                            FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {
@@ -217,7 +224,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string account_
    // For close signals, we send a trade signal with action="Close"
    // Only ticket, timestamp, and source_account are needed
    int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
-                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {
@@ -248,7 +255,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
    // For modify signals, we send a trade signal with action="Modify"
    // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
    int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
-                                            0, "", FormatTimestampISO8601(TimeCurrent()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
 
    if(len <= 0)
    {
@@ -270,3 +277,5 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
    // Send binary MessagePack data
    return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 }
+
+#endif // SANKEY_COPIER_MESSAGES_MQH

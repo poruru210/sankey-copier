@@ -7,6 +7,9 @@ export interface CopySettings {
   reverse_trade: boolean;
   symbol_mappings: SymbolMapping[];
   filters: TradeFilters;
+  symbol_prefix?: string;
+  symbol_suffix?: string;
+  symbol_map?: string; // Comma-separated format for Slave EA
 }
 
 export interface SymbolMapping {
@@ -55,6 +58,9 @@ export interface CreateSettingsRequest {
   lot_multiplier: number | null;
   reverse_trade: boolean;
   status: number; // 0=OFF (user disabled), 1=ON (user enabled)
+  symbol_prefix?: string;
+  symbol_suffix?: string;
+  symbol_mappings?: string; // Comma-separated format: "XAUUSD=GOLD,EURUSD=EUR"
 }
 
 // ConnectionsView specific types

@@ -91,15 +91,27 @@ export function useFlowData({
       }
     });
 
-    // Find all settings for this source and toggle them
+    // Find all settings for this source and toggle them based on logic
     const sourceSettings = settings.filter((s) => s.master_account === accountId);
     sourceSettings.forEach((setting) => {
       const isCurrentlyEnabled = setting.status !== 0;
-      if (isCurrentlyEnabled !== enabled) {
-        onToggle(setting.id, setting.status);
+
+      if (enabled) {
+        // Master is being enabled
+        // Only enable connection if Slave is ALSO enabled
+        // Note: We use the current disabledReceiverIds state
+        const isSlaveEnabled = !disabledReceiverIds.includes(setting.slave_account);
+        if (isSlaveEnabled && !isCurrentlyEnabled) {
+          onToggle(setting.id, setting.status);
+        }
+      } else {
+        // Master is being disabled -> Always disable connection
+        if (isCurrentlyEnabled) {
+          onToggle(setting.id, setting.status);
+        }
       }
     });
-  }, [settings, onToggle, setDisabledSourceIds]);
+  }, [settings, onToggle, setDisabledSourceIds, disabledReceiverIds]);
 
   const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledReceiverIds)
@@ -115,11 +127,22 @@ export function useFlowData({
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
     receiverSettings.forEach((setting) => {
       const isCurrentlyEnabled = setting.status !== 0;
-      if (isCurrentlyEnabled !== enabled) {
-        onToggle(setting.id, setting.status);
+
+      if (enabled) {
+        // Slave is being enabled
+        // Only enable connection if Master is ALSO enabled
+        const isMasterEnabled = !disabledSourceIds.includes(setting.master_account);
+        if (isMasterEnabled && !isCurrentlyEnabled) {
+          onToggle(setting.id, setting.status);
+        }
+      } else {
+        // Slave is being disabled -> Always disable connection
+        if (isCurrentlyEnabled) {
+          onToggle(setting.id, setting.status);
+        }
       }
     });
-  }, [settings, onToggle, setDisabledReceiverIds]);
+  }, [settings, onToggle, setDisabledReceiverIds, disabledSourceIds]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];

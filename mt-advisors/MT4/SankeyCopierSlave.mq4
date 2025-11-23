@@ -18,14 +18,18 @@
 #include <SankeyCopier/Trade.mqh>
 
 //--- Input parameters
-input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
-input string   ConfigServerAddress = "tcp://localhost:5557"; // Configuration channel
+input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
+input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to receive trade signals (SUB)
+input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input int      Slippage = 3;                                 // Maximum slippage in points
 input int      MaxRetries = 3;                               // Maximum order retries
 input bool     AllowNewOrders = true;                        // Allow opening new orders
 input bool     AllowCloseOrders = true;                      // Allow closing orders
 input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
 input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
+input string   SymbolPrefix = "";                       // Symbol prefix to add (e.g. "pro.")
+input string   SymbolSuffix = "";                       // Symbol suffix to add (e.g. ".m")
+input string   SymbolMap = "";                          // Symbol mapping (e.g. "XAUUSD=GOLD")
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
 
@@ -34,14 +38,13 @@ string      AccountID;                  // Auto-generated from broker + account 
 HANDLE_TYPE g_zmq_context = -1;
 HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
+TicketMapping g_order_map[];
+PendingTicketMapping g_pending_order_map[];
+SymbolMapping g_local_mappings[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
-
-// Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
-TicketMapping g_order_map[];
-PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
@@ -58,6 +61,10 @@ int g_last_config_count = 0;
 int OnInit()
 {
    Print("=== SankeyCopier Slave EA (MT4) Starting ===");
+   
+   // Parse symbol mapping
+   ParseSymbolMappingString(SymbolMap, g_local_mappings);
+   Print("Parsed ", ArraySize(g_local_mappings), " local symbol mappings");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
@@ -69,7 +76,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeSignalSourceAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       CleanupZmqContext(g_zmq_context);
@@ -77,7 +84,7 @@ int OnInit()
    }
 
    // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigServerAddress, "Slave Config SUB");
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
@@ -107,13 +114,16 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
-      
+      g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Initial state
+      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
       // Show "Waiting" message initially
       g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
    Print("=== SankeyCopier Slave EA Initialized ===");
 
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
@@ -125,7 +135,7 @@ void OnDeinit(const int reason)
    Print("=== SankeyCopier Slave EA (MT4) Stopping ===");
 
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -158,7 +168,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT4");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT4", SymbolPrefix, SymbolSuffix, SymbolMap);
 
       if(heartbeat_sent)
       {
@@ -201,7 +211,7 @@ void OnTimer()
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -218,7 +228,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -423,12 +433,16 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          {
             Print("Trade filtered out: ", symbol, " magic=", magic);
             trade_signal_free(handle);
-            return;
+            return; // Do not proceed if filtered
          }
 
          // Apply transformations
-         string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-         double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier);
+         string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+         mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
+         string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+         
+         // Transform lot size
+         double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
          string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
          // Open order with transformed values
@@ -468,7 +482,7 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeCurrent();
+   datetime current_time = TimeGMT();
    int delay_ms = (int)((current_time - signal_time) * 1000);
 
    if(delay_ms > MaxSignalDelayMs)

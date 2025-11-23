@@ -5,6 +5,9 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_COMMON_MQH
+#define SANKEY_COPIER_COMMON_MQH
+
 //--- Platform detection and type aliases
 #ifdef __MQL5__
    #define IS_MT5
@@ -25,6 +28,16 @@
 #define HEARTBEAT_INTERVAL_SECONDS 30
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
+
+//--- Port Definitions
+#define PORT_RELAY_PULL       5555  // Heartbeat, ConfigReq, Unregister (Client -> Server)
+#define PORT_RELAY_PUB_TRADE  5556  // Trade Signals (Server -> Client)
+#define PORT_RELAY_PUB_CONFIG 5557  // Config Updates (Server -> Client)
+
+//--- Default Addresses
+#define DEFAULT_ADDR_PULL       "tcp://localhost:5555"
+#define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
+#define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
 
 //--- Connection status constants (3 states)
 #define STATUS_DISABLED 0      // Slave is disabled
@@ -49,11 +62,11 @@
    int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
 
    int    serialize_unregister(string message_type, string account_id, string timestamp);
-   int    serialize_heartbeat(string message_type, string account_id, double balance,
-                              double equity, int open_positions, string timestamp,
-                              string ea_type, string platform, long account_number,
-                              string broker, string account_name, string server,
-                              string currency, long leverage, int is_trade_allowed);
+   int serialize_heartbeat(string message_type, string account_id, double balance, double equity,
+                          int open_positions, string timestamp, string ea_type, string platform,
+                          long account_number, string broker, string account_name, string server,
+                          string currency, long leverage, int is_trade_allowed,
+                          string symbol_prefix, string symbol_suffix, string symbol_map);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
                                  long magic_number, string comment, string timestamp, string source_account);
@@ -309,8 +322,12 @@ string GetServerName()
 string GetOrderTypeString(int type)
 {
    #ifdef IS_MT5
-      if(type == POSITION_TYPE_BUY) return "ORDER_TYPE_BUY";
-      if(type == POSITION_TYPE_SELL) return "ORDER_TYPE_SELL";
+      if(type == ORDER_TYPE_BUY) return "ORDER_TYPE_BUY";
+      if(type == ORDER_TYPE_SELL) return "ORDER_TYPE_SELL";
+      if(type == ORDER_TYPE_BUY_LIMIT) return "ORDER_TYPE_BUY_LIMIT";
+      if(type == ORDER_TYPE_SELL_LIMIT) return "ORDER_TYPE_SELL_LIMIT";
+      if(type == ORDER_TYPE_BUY_STOP) return "ORDER_TYPE_BUY_STOP";
+      if(type == ORDER_TYPE_SELL_STOP) return "ORDER_TYPE_SELL_STOP";
    #else
       if(type == OP_BUY) return "ORDER_TYPE_BUY";
       if(type == OP_SELL) return "ORDER_TYPE_SELL";
@@ -336,3 +353,5 @@ ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
    
    return (ENUM_ORDER_TYPE)-1;
 }
+
+#endif // SANKEY_COPIER_COMMON_MQH

@@ -167,6 +167,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         }
     }
 
@@ -215,6 +218,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         manager.update_heartbeat(hb_msg).await;
 
@@ -236,6 +242,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         manager.update_heartbeat(hb_msg2).await;
 
@@ -321,6 +330,9 @@ mod tests {
                 currency: "USD".to_string(),
                 leverage: 100,
                 is_trade_allowed: true,
+                symbol_prefix: None,
+                symbol_suffix: None,
+                symbol_map: None,
             })
             .await;
 
@@ -360,6 +372,9 @@ mod tests {
             currency: "EUR".to_string(),
             leverage: 200,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
 
         manager.update_heartbeat(hb_msg).await;
