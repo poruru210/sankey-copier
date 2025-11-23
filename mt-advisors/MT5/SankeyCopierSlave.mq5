@@ -127,6 +127,7 @@ int OnInit()
       g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 

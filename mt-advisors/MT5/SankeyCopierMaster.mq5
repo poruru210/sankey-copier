@@ -112,6 +112,7 @@ int OnInit()
    }
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 

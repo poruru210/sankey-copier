@@ -82,7 +82,9 @@ void CreatePanelLabel(string name, int x, int y, string text, color clr, int fon
       ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_ZORDER, 10); // Ensure text is on top
    #else
       ObjectCreate(name, OBJ_LABEL, 0, 0, 0);
       ObjectSet(name, OBJPROP_XDISTANCE, x);
@@ -131,7 +133,9 @@ void CreatePanelBackground(string name, int x, int y, int width, int height, col
       ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
       ObjectSetInteger(0, name, OBJPROP_BACK, false);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_ZORDER, 0); // Ensure background is behind
    #else
       ObjectCreate(name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
       ObjectSet(name, OBJPROP_XDISTANCE, x);
