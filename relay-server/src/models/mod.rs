@@ -1,8 +1,12 @@
 mod connection;
 mod mt_installation;
+mod trade_group;
+mod trade_group_member;
 
 pub use connection::*;
 pub use mt_installation::*;
+pub use trade_group::*;
+pub use trade_group_member::*;
 
 // Re-export shared types from DLL
 pub use sankey_copier_zmq::{SymbolMapping, TradeFilters};

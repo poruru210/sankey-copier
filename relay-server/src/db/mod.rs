@@ -7,23 +7,62 @@ pub struct Database {
 }
 
 impl Database {
+    /// Get a reference to the underlying connection pool
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = SqlitePool::connect(database_url).await?;
 
-        // Create tables
+        // Drop old connections table (clean migration, no data preservation)
+        sqlx::query("DROP TABLE IF EXISTS connections")
+            .execute(&pool)
+            .await?;
+
+        // Create trade_groups table
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS connections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                status INTEGER NOT NULL DEFAULT 0,
-                master_account TEXT NOT NULL,
-                slave_account TEXT NOT NULL,
-                settings JSON NOT NULL,
+            CREATE TABLE IF NOT EXISTS trade_groups (
+                id TEXT PRIMARY KEY,
+                master_settings TEXT NOT NULL DEFAULT '{}',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(master_account, slave_account)
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create trade_group_members table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS trade_group_members (
+                trade_group_id TEXT NOT NULL,
+                slave_account TEXT NOT NULL,
+                slave_settings TEXT NOT NULL DEFAULT '{}',
+                status INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (trade_group_id, slave_account),
+                FOREIGN KEY (trade_group_id) REFERENCES trade_groups(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create indexes for performance
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_trade_group_members_slave
+             ON trade_group_members(slave_account)"
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_trade_group_members_status
+             ON trade_group_members(status)"
         )
         .execute(&pool)
         .await?;

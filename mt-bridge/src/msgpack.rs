@@ -23,7 +23,7 @@ pub struct SymbolMapping {
 }
 
 /// Trade filters structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TradeFilters {
     #[serde(default)]
     pub allowed_symbols: Option<Vec<String>>,
