@@ -343,7 +343,7 @@ void OnTick()
 
    if(trade_bytes > 0)
    {
-      // PUB/SUB format: topic(trade_group_id) + space + MessagePack payload
+      // PUB/SUB format: topic(master_account) + space + MessagePack payload
       int space_pos = -1;
       for(int i = 0; i < trade_bytes; i++)
       {

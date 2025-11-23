@@ -160,7 +160,6 @@ mod tests {
         let config = ConfigMessage {
             account_id: "TEST123".to_string(),
             master_account: "MASTER456".to_string(),
-            trade_group_id: "GROUP789".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: 1,
             lot_multiplier: Some(2.0),
@@ -218,7 +217,6 @@ mod tests {
                 let config = ConfigMessage {
                     account_id: format!("SLAVE{}", i),
                     master_account: "MASTER".to_string(),
-                    trade_group_id: "GROUP".to_string(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                     status: 1,
                     lot_multiplier: Some(1.0),

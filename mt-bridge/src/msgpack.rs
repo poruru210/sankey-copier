@@ -40,7 +40,6 @@ pub struct TradeFilters {
 pub struct ConfigMessage {
     pub account_id: String,
     pub master_account: String,
-    pub trade_group_id: String,
     pub timestamp: String, // ISO 8601 format
     pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
@@ -204,7 +203,6 @@ pub unsafe extern "C" fn config_get_string(
     let value = match field.as_str() {
         "account_id" => &config.account_id,
         "master_account" => &config.master_account,
-        "trade_group_id" => &config.trade_group_id,
         "timestamp" => &config.timestamp,
         "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
         "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
@@ -875,7 +873,6 @@ mod tests {
         let config = ConfigMessage {
             account_id: "slave_account_123".to_string(),
             master_account: "master_account_456".to_string(),
-            trade_group_id: "group_789".to_string(),
             timestamp: "2025-01-01T00:00:00Z".to_string(),
             status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(1.5),

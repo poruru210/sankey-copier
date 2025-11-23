@@ -193,7 +193,6 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
     ConfigMessage {
         account_id: settings.slave_account.clone(),
         master_account: settings.master_account.clone(),
-        trade_group_id: settings.master_account.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: effective_status,
         lot_multiplier: settings.lot_multiplier,
@@ -827,7 +826,6 @@ async fn delete_settings(
         let delete_config = ConfigMessage {
             account_id: settings.slave_account.clone(),
             master_account: settings.master_account.clone(),
-            trade_group_id: settings.master_account.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: 0, // DISABLED - indicates config was deleted
             lot_multiplier: None,

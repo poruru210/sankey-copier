@@ -90,8 +90,7 @@ impl From<crate::models::CopySettings> for ConfigMessage {
     fn from(settings: crate::models::CopySettings) -> Self {
         Self {
             account_id: settings.slave_account.clone(),
-            master_account: settings.master_account.clone(),
-            trade_group_id: settings.master_account, // master_accountと同じ
+            master_account: settings.master_account,
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: settings.status,
             lot_multiplier: settings.lot_multiplier,
@@ -135,7 +134,6 @@ mod tests {
 
         assert_eq!(config.account_id, "SLAVE_001");
         assert_eq!(config.master_account, "MASTER_001");
-        assert_eq!(config.trade_group_id, "MASTER_001");
         assert_eq!(config.status, 2);
         assert_eq!(config.lot_multiplier, Some(1.5));
         assert!(!config.reverse_trade);
@@ -187,7 +185,6 @@ mod tests {
         let config = ConfigMessage {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
-            trade_group_id: "MASTER_001".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(2.0),
