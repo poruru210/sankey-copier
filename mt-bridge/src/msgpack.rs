@@ -35,7 +35,7 @@ pub struct TradeFilters {
     pub blocked_magic_numbers: Option<Vec<i32>>,
 }
 
-/// Configuration message structure
+/// Configuration message structure (for Slave EAs)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigMessage {
     pub account_id: String,
@@ -53,6 +53,18 @@ pub struct ConfigMessage {
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
     pub config_version: u32,
+}
+
+/// Master configuration message structure (for Master EAs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasterConfigMessage {
+    pub account_id: String,
+    #[serde(default)]
+    pub symbol_prefix: Option<String>,
+    #[serde(default)]
+    pub symbol_suffix: Option<String>,
+    pub config_version: u32,
+    pub timestamp: String, // ISO 8601 format
 }
 
 /// Unregistration message structure
@@ -983,5 +995,51 @@ mod tests {
         for handle in handles {
             handle.join().expect("Thread panicked");
         }
+    }
+
+    #[test]
+    fn test_master_config_message_serialization() {
+        let msg = MasterConfigMessage {
+            account_id: "master_account_123".to_string(),
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            config_version: 1,
+            timestamp: "2025-01-01T00:00:00Z".to_string(),
+        };
+
+        // Serialize
+        let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
+        assert!(serialized.len() > 0, "Serialized data should not be empty");
+
+        // Deserialize
+        let deserialized: MasterConfigMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
+
+        // Verify fields
+        assert_eq!(msg.account_id, deserialized.account_id);
+        assert_eq!(msg.symbol_prefix, deserialized.symbol_prefix);
+        assert_eq!(msg.symbol_suffix, deserialized.symbol_suffix);
+        assert_eq!(msg.config_version, deserialized.config_version);
+        assert_eq!(msg.timestamp, deserialized.timestamp);
+    }
+
+    #[test]
+    fn test_master_config_message_with_none_values() {
+        let msg = MasterConfigMessage {
+            account_id: "master_account_456".to_string(),
+            symbol_prefix: None,
+            symbol_suffix: None,
+            config_version: 2,
+            timestamp: "2025-01-02T12:30:00Z".to_string(),
+        };
+
+        let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
+        let deserialized: MasterConfigMessage =
+            rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
+
+        assert_eq!(msg.account_id, deserialized.account_id);
+        assert!(deserialized.symbol_prefix.is_none());
+        assert!(deserialized.symbol_suffix.is_none());
+        assert_eq!(msg.config_version, deserialized.config_version);
     }
 }

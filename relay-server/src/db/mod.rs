@@ -1,6 +1,6 @@
 use crate::models::{
-    ConnectionSettings, CopySettings, MasterSettings, SlaveConfigWithMaster, SlaveSettings,
-    TradeGroup, TradeGroupMember,
+    CopySettings, MasterSettings, SlaveConfigWithMaster, SlaveSettings, TradeGroup,
+    TradeGroupMember,
 };
 use anyhow::{anyhow, Result};
 use sqlx::{sqlite::SqlitePool, Row};
@@ -59,14 +59,14 @@ impl Database {
         // Create indexes for performance
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_trade_group_members_slave
-             ON trade_group_members(slave_account)"
+             ON trade_group_members(slave_account)",
         )
         .execute(&pool)
         .await?;
 
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_trade_group_members_status
-             ON trade_group_members(status)"
+             ON trade_group_members(status)",
         )
         .execute(&pool)
         .await?;
@@ -113,7 +113,6 @@ impl Database {
         }
     }
 
-
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
         let rows = sqlx::query(
             "SELECT id, trade_group_id, slave_account, slave_settings, status
@@ -150,22 +149,18 @@ impl Database {
 
     pub async fn save_copy_settings(&self, settings: &CopySettings) -> Result<i32> {
         // Ensure trade_group exists for this master
-        let trade_group_exists = sqlx::query(
-            "SELECT 1 FROM trade_groups WHERE id = ?"
-        )
-        .bind(&settings.master_account)
-        .fetch_optional(&self.pool)
-        .await?
-        .is_some();
+        let trade_group_exists = sqlx::query("SELECT 1 FROM trade_groups WHERE id = ?")
+            .bind(&settings.master_account)
+            .fetch_optional(&self.pool)
+            .await?
+            .is_some();
 
         if !trade_group_exists {
             // Create trade_group with default master settings
-            sqlx::query(
-                "INSERT INTO trade_groups (id, master_settings) VALUES (?, '{}')"
-            )
-            .bind(&settings.master_account)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO trade_groups (id, master_settings) VALUES (?, '{}')")
+                .bind(&settings.master_account)
+                .execute(&self.pool)
+                .await?;
         }
 
         // Convert CopySettings to SlaveSettings
@@ -230,7 +225,6 @@ impl Database {
         Ok(())
     }
 
-
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
         sqlx::query("DELETE FROM trade_group_members WHERE id = ?")
             .bind(id)
@@ -248,13 +242,11 @@ impl Database {
         let master_settings = MasterSettings::default();
         let settings_json = serde_json::to_string(&master_settings)?;
 
-        sqlx::query(
-            "INSERT INTO trade_groups (id, master_settings) VALUES (?, ?)"
-        )
-        .bind(master_account)
-        .bind(&settings_json)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO trade_groups (id, master_settings) VALUES (?, ?)")
+            .bind(master_account)
+            .bind(&settings_json)
+            .execute(&self.pool)
+            .await?;
 
         self.get_trade_group(master_account)
             .await?
@@ -265,7 +257,7 @@ impl Database {
     pub async fn get_trade_group(&self, master_account: &str) -> Result<Option<TradeGroup>> {
         let row = sqlx::query(
             "SELECT id, master_settings, created_at, updated_at
-             FROM trade_groups WHERE id = ?"
+             FROM trade_groups WHERE id = ?",
         )
         .bind(master_account)
         .fetch_optional(&self.pool)
@@ -300,7 +292,7 @@ impl Database {
         sqlx::query(
             "UPDATE trade_groups
              SET master_settings = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?"
+             WHERE id = ?",
         )
         .bind(&settings_json)
         .bind(master_account)
@@ -434,7 +426,7 @@ impl Database {
         sqlx::query(
             "UPDATE trade_group_members
              SET slave_settings = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE trade_group_id = ? AND slave_account = ?"
+             WHERE trade_group_id = ? AND slave_account = ?",
         )
         .bind(&settings_json)
         .bind(trade_group_id)
@@ -455,7 +447,7 @@ impl Database {
         sqlx::query(
             "UPDATE trade_group_members
              SET status = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE trade_group_id = ? AND slave_account = ?"
+             WHERE trade_group_id = ? AND slave_account = ?",
         )
         .bind(status)
         .bind(trade_group_id)
@@ -470,7 +462,7 @@ impl Database {
     pub async fn delete_member(&self, trade_group_id: &str, slave_account: &str) -> Result<()> {
         sqlx::query(
             "DELETE FROM trade_group_members
-             WHERE trade_group_id = ? AND slave_account = ?"
+             WHERE trade_group_id = ? AND slave_account = ?",
         )
         .bind(trade_group_id)
         .bind(slave_account)
@@ -486,7 +478,9 @@ impl Database {
 
     /// Get Master settings for config distribution to Master EA
     pub async fn get_settings_for_master(&self, master_account: &str) -> Result<MasterSettings> {
-        let trade_group = self.get_trade_group(master_account).await?
+        let trade_group = self
+            .get_trade_group(master_account)
+            .await?
             .ok_or_else(|| anyhow!("TradeGroup not found for master: {}", master_account))?;
 
         Ok(trade_group.master_settings)
@@ -502,7 +496,7 @@ impl Database {
             "SELECT trade_group_id, slave_account, slave_settings, status
              FROM trade_group_members
              WHERE slave_account = ? AND status > 0
-             ORDER BY trade_group_id"
+             ORDER BY trade_group_id",
         )
         .bind(slave_account)
         .fetch_all(&self.pool)
@@ -532,7 +526,7 @@ impl Database {
         let result = sqlx::query(
             "UPDATE trade_group_members
              SET status = 2, updated_at = CURRENT_TIMESTAMP
-             WHERE trade_group_id = ? AND status > 0"
+             WHERE trade_group_id = ? AND status > 0",
         )
         .bind(master_account)
         .execute(&self.pool)
@@ -546,7 +540,7 @@ impl Database {
         let result = sqlx::query(
             "UPDATE trade_group_members
              SET status = 1, updated_at = CURRENT_TIMESTAMP
-             WHERE trade_group_id = ? AND status = 2"
+             WHERE trade_group_id = ? AND status = 2",
         )
         .bind(master_account)
         .execute(&self.pool)

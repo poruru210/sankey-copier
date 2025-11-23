@@ -1,0 +1,20 @@
+warning: sankey-copier-mt-bridge@1.0.0: Successfully embedded Windows resources
+warning: sankey-copier-relay-server@1.0.0: Skipping Windows resource embedding (not a binary build)
+warning: unused import: `ConnectionSettings`
+ --> src\db\mod.rs:2:5
+  |
+2 |     ConnectionSettings, CopySettings, MasterSettings, SlaveConfigWithMaster, SlaveSettings,
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sankey-copier-relay-server` (lib test) generated 1 warning (run `cargo fix --lib -p sankey-copier-relay-server --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running unittests src\lib.rs (target\debug\deps\sankey_copier_relay_server-a93aa991ec1d7d69.exe)
+
+running 2 tests
+test mt_installer::tests::test_install_dll_32bit ... ok
+test mt_installer::tests::test_full_install_mt4_32bit ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 119 filtered out; finished in 0.01s
+

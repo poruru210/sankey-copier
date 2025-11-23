@@ -209,8 +209,9 @@ async fn build_config_message(state: &AppState, settings: &CopySettings) -> Conf
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{ConnectionStatus, EaType, Platform};
+    use crate::models::{ConnectionStatus, EaType, Platform, SymbolMapping, TradeFilters};
     use chrono::Utc;
+    use tokio::sync::broadcast;
 
     fn create_test_connection(is_trade_allowed: bool) -> EaConnection {
         EaConnection {
@@ -229,6 +230,87 @@ mod tests {
             status: ConnectionStatus::Online,
             connected_at: Utc::now(),
             is_trade_allowed,
+        }
+    }
+
+    async fn create_test_app_state() -> AppState {
+        use std::sync::atomic::{AtomicU16, Ordering};
+        static PORT_COUNTER: AtomicU16 = AtomicU16::new(15557);
+
+        let db = Arc::new(Database::new(":memory:").await.unwrap());
+        let (tx, _) = broadcast::channel(100);
+        let settings_cache = Arc::new(RwLock::new(vec![]));
+        let connection_manager = Arc::new(ConnectionManager::new(60)); // 60 second timeout
+
+        // Use unique port for each test to avoid "Address in use" errors
+        let port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let config_sender = Arc::new(
+            ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port))
+                .expect("Failed to create test config publisher"),
+        );
+        let log_buffer = LogBuffer::default();
+        let config = Arc::new(Config::default());
+
+        AppState {
+            db,
+            tx,
+            settings_cache,
+            connection_manager,
+            config_sender,
+            log_buffer,
+            allowed_origins: vec![],
+            cors_disabled: true,
+            config,
+        }
+    }
+
+    fn create_test_heartbeat(
+        account_id: &str,
+        is_trade_allowed: bool,
+    ) -> crate::models::HeartbeatMessage {
+        crate::models::HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
+            account_id: account_id.to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            version: "1.0.0".to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            is_trade_allowed,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        }
+    }
+
+    fn create_test_copy_settings() -> CopySettings {
+        CopySettings {
+            id: 1,
+            status: 1,
+            master_account: "MASTER123".to_string(),
+            slave_account: "SLAVE456".to_string(),
+            lot_multiplier: Some(2.0),
+            reverse_trade: false,
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            symbol_mappings: vec![SymbolMapping {
+                source_symbol: "EURUSD".to_string(),
+                target_symbol: "EURUSD.e".to_string(),
+            }],
+            filters: TradeFilters {
+                allowed_symbols: Some(vec!["EURUSD".to_string()]),
+                blocked_symbols: None,
+                allowed_magic_numbers: Some(vec![12345]),
+                blocked_magic_numbers: None,
+            },
         }
     }
 
@@ -263,6 +345,131 @@ mod tests {
         // Should be 1 (ENABLED)
         let conn = create_test_connection(false);
         assert_eq!(calculate_effective_status(1, Some(&conn)), 1);
+    }
+
+    #[tokio::test]
+    async fn test_build_config_message_master_online_trade_allowed() {
+        // Test ConfigMessage building when Master is online with trade allowed
+        let state = create_test_app_state().await;
+        let settings = create_test_copy_settings();
+
+        // Register master connection with trade allowed
+        let heartbeat = create_test_heartbeat("MASTER123", true);
+        state.connection_manager.update_heartbeat(heartbeat).await;
+
+        let config = build_config_message(&state, &settings).await;
+
+        // Verify config fields
+        assert_eq!(config.account_id, "SLAVE456");
+        assert_eq!(config.master_account, "MASTER123");
+        assert_eq!(config.status, 2); // CONNECTED (slave enabled + master trade allowed)
+        assert_eq!(config.lot_multiplier, Some(2.0));
+        assert_eq!(config.reverse_trade, false);
+        assert_eq!(config.symbol_mappings.len(), 1);
+        assert_eq!(config.symbol_prefix, Some("pro.".to_string()));
+        assert_eq!(config.symbol_suffix, Some(".m".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_build_config_message_master_offline() {
+        // Test ConfigMessage building when Master is offline
+        let state = create_test_app_state().await;
+        let settings = create_test_copy_settings();
+
+        // No master connection registered
+        let config = build_config_message(&state, &settings).await;
+
+        // Verify status is ENABLED (1) when master is offline
+        assert_eq!(config.status, 1);
+        assert_eq!(config.account_id, "SLAVE456");
+        assert_eq!(config.master_account, "MASTER123");
+    }
+
+    #[tokio::test]
+    async fn test_build_config_message_master_trade_not_allowed() {
+        // Test ConfigMessage building when Master is online but trade not allowed
+        let state = create_test_app_state().await;
+        let settings = create_test_copy_settings();
+
+        // Register master connection with trade NOT allowed
+        let heartbeat = create_test_heartbeat("MASTER123", false);
+        state.connection_manager.update_heartbeat(heartbeat).await;
+
+        let config = build_config_message(&state, &settings).await;
+
+        // Verify status is ENABLED (1) when master trade is not allowed
+        assert_eq!(config.status, 1);
+    }
+
+    #[tokio::test]
+    async fn test_build_config_message_slave_disabled() {
+        // Test ConfigMessage building when Slave is disabled
+        let state = create_test_app_state().await;
+        let mut settings = create_test_copy_settings();
+        settings.status = 0; // Disabled
+
+        // Register master connection with trade allowed
+        let heartbeat = create_test_heartbeat("MASTER123", true);
+        state.connection_manager.update_heartbeat(heartbeat).await;
+
+        let config = build_config_message(&state, &settings).await;
+
+        // Verify status is DISABLED (0) regardless of master state
+        assert_eq!(config.status, 0);
+    }
+
+    #[tokio::test]
+    async fn test_refresh_settings_cache_success() {
+        // Test successful cache refresh
+        let state = create_test_app_state().await;
+        let mut settings = create_test_copy_settings();
+        settings.id = 0; // Use 0 for new record creation
+
+        // Save settings to DB
+        state.db.save_copy_settings(&settings).await.unwrap();
+
+        // Initial cache should be empty
+        assert_eq!(state.settings_cache.read().await.len(), 0);
+
+        // Refresh cache
+        refresh_settings_cache(&state).await;
+
+        // Cache should now contain the setting
+        let cache = state.settings_cache.read().await;
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache[0].master_account, "MASTER123");
+        assert_eq!(cache[0].slave_account, "SLAVE456");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_settings_cache_empty_db() {
+        // Test cache refresh with empty database
+        let state = create_test_app_state().await;
+
+        // Refresh cache with empty DB
+        refresh_settings_cache(&state).await;
+
+        // Cache should remain empty
+        assert_eq!(state.settings_cache.read().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_build_config_message_with_null_values() {
+        // Test ConfigMessage building with null optional fields
+        let state = create_test_app_state().await;
+        let mut settings = create_test_copy_settings();
+        settings.lot_multiplier = None;
+        settings.symbol_prefix = None;
+        settings.symbol_suffix = None;
+        settings.symbol_mappings = vec![];
+
+        let config = build_config_message(&state, &settings).await;
+
+        // Verify null fields are correctly passed through
+        assert_eq!(config.lot_multiplier, None);
+        assert_eq!(config.symbol_prefix, None);
+        assert_eq!(config.symbol_suffix, None);
+        assert_eq!(config.symbol_mappings.len(), 0);
     }
 }
 

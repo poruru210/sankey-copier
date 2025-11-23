@@ -3,8 +3,8 @@
 // TradeGroupMember model: Represents a Slave account connected to a Master (TradeGroup).
 // Each member has Slave-specific configuration and connection status.
 
-use serde::{Deserialize, Serialize};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
+use serde::{Deserialize, Serialize};
 
 /// Status constants for TradeGroupMember
 pub const STATUS_DISABLED: i32 = 0;
@@ -105,11 +105,7 @@ mod tests {
 
     #[test]
     fn test_member_creation() {
-        let member = TradeGroupMember::new(
-            1,
-            "MASTER_001".to_string(),
-            "SLAVE_001".to_string(),
-        );
+        let member = TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
 
         assert_eq!(member.id, 1);
         assert_eq!(member.trade_group_id, "MASTER_001");
@@ -122,11 +118,8 @@ mod tests {
 
     #[test]
     fn test_increment_version() {
-        let mut member = TradeGroupMember::new(
-            1,
-            "MASTER_001".to_string(),
-            "SLAVE_001".to_string(),
-        );
+        let mut member =
+            TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
         let initial_version = member.slave_settings.config_version;
 
         member.increment_version();
@@ -136,11 +129,8 @@ mod tests {
 
     #[test]
     fn test_is_enabled() {
-        let mut member = TradeGroupMember::new(
-            1,
-            "MASTER_001".to_string(),
-            "SLAVE_001".to_string(),
-        );
+        let mut member =
+            TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
 
         member.status = STATUS_DISABLED;
         assert!(!member.is_enabled());
@@ -154,11 +144,8 @@ mod tests {
 
     #[test]
     fn test_is_connected() {
-        let mut member = TradeGroupMember::new(
-            1,
-            "MASTER_001".to_string(),
-            "SLAVE_001".to_string(),
-        );
+        let mut member =
+            TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
 
         member.status = STATUS_DISABLED;
         assert!(!member.is_connected());
@@ -177,12 +164,10 @@ mod tests {
             reverse_trade: true,
             symbol_prefix: None,
             symbol_suffix: None,
-            symbol_mappings: vec![
-                SymbolMapping {
-                    source_symbol: "EURUSD".to_string(),
-                    target_symbol: "EURUSDm".to_string(),
-                },
-            ],
+            symbol_mappings: vec![SymbolMapping {
+                source_symbol: "EURUSD".to_string(),
+                target_symbol: "EURUSDm".to_string(),
+            }],
             filters: TradeFilters {
                 allowed_symbols: Some(vec!["EURUSD".to_string()]),
                 blocked_symbols: None,

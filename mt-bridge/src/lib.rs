@@ -9,8 +9,8 @@ use std::sync::{LazyLock, Mutex};
 
 // Re-export message types for use in relay-server
 pub use msgpack::{
-    ConfigMessage, HeartbeatMessage, RequestConfigMessage, SymbolMapping, TradeFilters,
-    TradeSignalMessage, UnregisterMessage,
+    ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SymbolMapping,
+    TradeFilters, TradeSignalMessage, UnregisterMessage,
 };
 
 // ZeroMQ socket types

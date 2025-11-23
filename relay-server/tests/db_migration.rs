@@ -15,12 +15,11 @@ async fn test_migration_creates_trade_groups_table() {
     let db = create_test_db().await;
 
     // Query sqlite_master to check if trade_groups table exists
-    let result = sqlx::query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='trade_groups'"
-    )
-    .fetch_optional(db.pool())
-    .await
-    .unwrap();
+    let result =
+        sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_groups'")
+            .fetch_optional(db.pool())
+            .await
+            .unwrap();
 
     assert!(result.is_some(), "trade_groups table should exist");
 }
@@ -31,7 +30,7 @@ async fn test_migration_creates_trade_group_members_table() {
 
     // Query sqlite_master to check if trade_group_members table exists
     let result = sqlx::query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='trade_group_members'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='trade_group_members'",
     )
     .fetch_optional(db.pool())
     .await
@@ -52,7 +51,10 @@ async fn test_migration_creates_indexes() {
     .await
     .unwrap();
 
-    assert!(result1.is_some(), "idx_trade_group_members_slave index should exist");
+    assert!(
+        result1.is_some(),
+        "idx_trade_group_members_slave index should exist"
+    );
 
     // Check for status index
     let result2 = sqlx::query(
@@ -62,7 +64,10 @@ async fn test_migration_creates_indexes() {
     .await
     .unwrap();
 
-    assert!(result2.is_some(), "idx_trade_group_members_status index should exist");
+    assert!(
+        result2.is_some(),
+        "idx_trade_group_members_status index should exist"
+    );
 }
 
 #[tokio::test]
@@ -70,14 +75,16 @@ async fn test_migration_drops_old_connections_table() {
     let db = create_test_db().await;
 
     // Query sqlite_master to check if connections table does NOT exist
-    let result = sqlx::query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='connections'"
-    )
-    .fetch_optional(db.pool())
-    .await
-    .unwrap();
+    let result =
+        sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='connections'")
+            .fetch_optional(db.pool())
+            .await
+            .unwrap();
 
-    assert!(result.is_none(), "connections table should not exist after migration");
+    assert!(
+        result.is_none(),
+        "connections table should not exist after migration"
+    );
 }
 
 #[tokio::test]
@@ -85,13 +92,15 @@ async fn test_trade_groups_table_schema() {
     let db = create_test_db().await;
 
     // Validate table schema by attempting to query with expected columns
-    let result = sqlx::query(
-        "SELECT id, master_settings, created_at, updated_at FROM trade_groups LIMIT 0"
-    )
-    .fetch_optional(db.pool())
-    .await;
+    let result =
+        sqlx::query("SELECT id, master_settings, created_at, updated_at FROM trade_groups LIMIT 0")
+            .fetch_optional(db.pool())
+            .await;
 
-    assert!(result.is_ok(), "trade_groups table should have expected columns");
+    assert!(
+        result.is_ok(),
+        "trade_groups table should have expected columns"
+    );
 }
 
 #[tokio::test]
@@ -101,12 +110,15 @@ async fn test_trade_group_members_table_schema() {
     // Validate table schema by attempting to query with expected columns
     let result = sqlx::query(
         "SELECT trade_group_id, slave_account, slave_settings, status, created_at, updated_at
-         FROM trade_group_members LIMIT 0"
+         FROM trade_group_members LIMIT 0",
     )
     .fetch_optional(db.pool())
     .await;
 
-    assert!(result.is_ok(), "trade_group_members table should have expected columns");
+    assert!(
+        result.is_ok(),
+        "trade_group_members table should have expected columns"
+    );
 }
 
 #[tokio::test]
@@ -122,13 +134,16 @@ async fn test_foreign_key_constraint() {
     // Try to insert a member without a corresponding trade_group
     let result = sqlx::query(
         "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
-         VALUES ('NONEXISTENT_MASTER', 'SLAVE_001', '{}', 1)"
+         VALUES ('NONEXISTENT_MASTER', 'SLAVE_001', '{}', 1)",
     )
     .execute(db.pool())
     .await;
 
     // Should fail due to foreign key constraint
-    assert!(result.is_err(), "Foreign key constraint should prevent insertion of orphan member");
+    assert!(
+        result.is_err(),
+        "Foreign key constraint should prevent insertion of orphan member"
+    );
 }
 
 #[tokio::test]
@@ -142,17 +157,15 @@ async fn test_cascade_delete() {
         .unwrap();
 
     // Create a trade_group
-    sqlx::query(
-        "INSERT INTO trade_groups (id, master_settings) VALUES ('MASTER_001', '{}')"
-    )
-    .execute(db.pool())
-    .await
-    .unwrap();
+    sqlx::query("INSERT INTO trade_groups (id, master_settings) VALUES ('MASTER_001', '{}')")
+        .execute(db.pool())
+        .await
+        .unwrap();
 
     // Create a member
     sqlx::query(
         "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
-         VALUES ('MASTER_001', 'SLAVE_001', '{}', 1)"
+         VALUES ('MASTER_001', 'SLAVE_001', '{}', 1)",
     )
     .execute(db.pool())
     .await
@@ -165,12 +178,14 @@ async fn test_cascade_delete() {
         .unwrap();
 
     // Check that the member was also deleted (cascade)
-    let result = sqlx::query(
-        "SELECT * FROM trade_group_members WHERE trade_group_id = 'MASTER_001'"
-    )
-    .fetch_optional(db.pool())
-    .await
-    .unwrap();
+    let result =
+        sqlx::query("SELECT * FROM trade_group_members WHERE trade_group_id = 'MASTER_001'")
+            .fetch_optional(db.pool())
+            .await
+            .unwrap();
 
-    assert!(result.is_none(), "CASCADE DELETE should remove associated members");
+    assert!(
+        result.is_none(),
+        "CASCADE DELETE should remove associated members"
+    );
 }

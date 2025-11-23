@@ -6,11 +6,12 @@ use crate::{
     db::Database,
     engine::CopyEngine,
     models::{
-        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage,
-        SlaveConfigWithMaster, SymbolConverter, TradeSignal, UnregisterMessage,
+        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage, SlaveConfigWithMaster,
+        SymbolConverter, TradeSignal, UnregisterMessage,
     },
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
 };
+use sankey_copier_zmq::MasterConfigMessage;
 
 /// Handles incoming ZMQ messages and coordinates trade copying logic
 pub struct MessageHandler {
@@ -54,7 +55,7 @@ impl MessageHandler {
         }
     }
 
-    /// Handle configuration request from Slave EA
+    /// Handle configuration request from Master or Slave EA
     async fn handle_request_config(&self, msg: RequestConfigMessage) {
         let account_id = msg.account_id.clone();
 
@@ -64,17 +65,52 @@ impl MessageHandler {
             msg.ea_type
         );
 
-        // Validate that only Slave EAs can request Slave configuration
-        if msg.ea_type != "Slave" {
-            tracing::warn!(
-                "Config request rejected: account {} sent request with ea_type '{}' (only 'Slave' is allowed)",
-                account_id,
-                msg.ea_type
-            );
-            return;
+        // Route to appropriate handler based on EA type
+        match msg.ea_type.as_str() {
+            "Master" => self.handle_master_config_request(&account_id).await,
+            "Slave" => self.handle_slave_config_request(&account_id).await,
+            _ => {
+                tracing::warn!(
+                    "Config request rejected: account {} sent request with unknown ea_type '{}'",
+                    account_id,
+                    msg.ea_type
+                );
+            }
         }
+    }
 
-        match self.db.get_settings_for_slave(&account_id).await {
+    /// Handle configuration request from Master EA
+    async fn handle_master_config_request(&self, account_id: &str) {
+        match self.db.get_settings_for_master(account_id).await {
+            Ok(master_settings) => {
+                let config = MasterConfigMessage {
+                    account_id: account_id.to_string(),
+                    symbol_prefix: master_settings.symbol_prefix,
+                    symbol_suffix: master_settings.symbol_suffix,
+                    config_version: master_settings.config_version,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                };
+
+                // Send Master CONFIG via MessagePack
+                if let Err(e) = self.config_sender.send_master_config(&config).await {
+                    tracing::error!("Failed to send master config to {}: {}", account_id, e);
+                } else {
+                    tracing::info!(
+                        "Successfully sent Master CONFIG to: {} (version: {})",
+                        account_id,
+                        config.config_version
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to get master settings for {}: {}", account_id, e);
+            }
+        }
+    }
+
+    /// Handle configuration request from Slave EA
+    async fn handle_slave_config_request(&self, account_id: &str) {
+        match self.db.get_settings_for_slave(account_id).await {
             Ok(settings_list) => {
                 if settings_list.is_empty() {
                     tracing::info!(
@@ -581,5 +617,139 @@ mod tests {
 
         // Process trade signal (should be filtered out, no panic)
         handler.handle_trade_signal(signal).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_config_master() {
+        use crate::models::RequestConfigMessage;
+
+        let handler = create_test_handler().await;
+        let master_account = "MASTER_TEST_001".to_string();
+
+        // Step 1: Create TradeGroup in DB with default Master settings
+        handler
+            .db
+            .create_trade_group(&master_account)
+            .await
+            .expect("Failed to create trade group");
+
+        // Step 2: Create RequestConfig message with ea_type="Master"
+        let request_msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: master_account.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: "Master".to_string(),
+        };
+
+        // Step 3: Call handle_request_config via handle_message
+        let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+        handler.handle_message(zmq_msg).await;
+
+        // Step 4: Verify no panic occurred (implementation will be added in Phase 3.2b)
+        // In Red phase, this test logs warning because Master EA type is rejected
+        // In Green phase, this test should pass after implementing Master config logic
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_config_master_not_found() {
+        use crate::models::RequestConfigMessage;
+
+        let handler = create_test_handler().await;
+        let master_account = "NONEXISTENT_MASTER".to_string();
+
+        // Create RequestConfig message for non-existent Master
+        let request_msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: master_account.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: "Master".to_string(),
+        };
+
+        // Call handle_request_config via handle_message
+        let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+        handler.handle_message(zmq_msg).await;
+
+        // Should not panic even if Master not found (graceful handling)
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_config_slave() {
+        use crate::models::{CopySettings, RequestConfigMessage, TradeFilters};
+
+        let handler = create_test_handler().await;
+        let master_account = "MASTER123".to_string();
+        let slave_account = "SLAVE456".to_string();
+
+        // Create and save a copy setting for the slave
+        let settings = CopySettings {
+            id: 0, // New record
+            master_account: master_account.clone(),
+            slave_account: slave_account.clone(),
+            status: 1,
+            lot_multiplier: Some(2.0),
+            reverse_trade: false,
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            symbol_mappings: vec![],
+            filters: TradeFilters::default(),
+        };
+        handler.db.save_copy_settings(&settings).await.unwrap();
+
+        // Create RequestConfig message for Slave
+        let request_msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: slave_account.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: "Slave".to_string(),
+        };
+
+        // Call handle_request_config via handle_message
+        let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+        handler.handle_message(zmq_msg).await;
+
+        // Should successfully send config to Slave (no panic)
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_config_slave_not_found() {
+        use crate::models::RequestConfigMessage;
+
+        let handler = create_test_handler().await;
+        let slave_account = "NONEXISTENT_SLAVE".to_string();
+
+        // Create RequestConfig message for non-existent Slave
+        let request_msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: slave_account.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: "Slave".to_string(),
+        };
+
+        // Call handle_request_config via handle_message
+        let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+        handler.handle_message(zmq_msg).await;
+
+        // Should not panic even if Slave not found (graceful handling)
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_config_unknown_ea_type() {
+        use crate::models::RequestConfigMessage;
+
+        let handler = create_test_handler().await;
+
+        // Create RequestConfig message with unknown EA type
+        let request_msg = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: "TEST123".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: "UnknownType".to_string(), // Invalid EA type
+        };
+
+        // Call handle_request_config via handle_message
+        let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+        handler.handle_message(zmq_msg).await;
+
+        // Should handle gracefully (log warning, no panic)
     }
 }

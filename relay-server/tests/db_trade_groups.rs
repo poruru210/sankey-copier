@@ -4,7 +4,9 @@
 // Following TDD principles: write tests first, then implement.
 
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{MasterSettings, SlaveSettings, TradeGroup, TradeGroupMember};
+use sankey_copier_relay_server::models::{
+    MasterSettings, SlaveSettings, TradeGroup, TradeGroupMember,
+};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 /// Helper to create an in-memory test database
@@ -77,8 +79,14 @@ async fn test_update_master_settings() {
         .unwrap();
 
     let trade_group = db.get_trade_group("MASTER_001").await.unwrap().unwrap();
-    assert_eq!(trade_group.master_settings.symbol_prefix, Some("pro.".to_string()));
-    assert_eq!(trade_group.master_settings.symbol_suffix, Some(".m".to_string()));
+    assert_eq!(
+        trade_group.master_settings.symbol_prefix,
+        Some("pro.".to_string())
+    );
+    assert_eq!(
+        trade_group.master_settings.symbol_suffix,
+        Some(".m".to_string())
+    );
     assert_eq!(trade_group.master_settings.config_version, 1);
 }
 
@@ -131,7 +139,9 @@ async fn test_add_member_without_trade_group() {
     let db = create_test_db().await;
 
     let settings = SlaveSettings::default();
-    let result = db.add_member("NONEXISTENT_MASTER", "SLAVE_001", settings).await;
+    let result = db
+        .add_member("NONEXISTENT_MASTER", "SLAVE_001", settings)
+        .await;
 
     // Should fail due to foreign key constraint
     assert!(result.is_err());
@@ -144,7 +154,9 @@ async fn test_add_duplicate_member() {
     db.create_trade_group("MASTER_001").await.unwrap();
     let settings = SlaveSettings::default();
 
-    db.add_member("MASTER_001", "SLAVE_001", settings.clone()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", settings.clone())
+        .await
+        .unwrap();
     let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
 
     // Should fail due to PRIMARY KEY constraint
@@ -157,8 +169,12 @@ async fn test_get_members() {
 
     db.create_trade_group("MASTER_001").await.unwrap();
 
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+        .await
+        .unwrap();
 
     let members = db.get_members("MASTER_001").await.unwrap();
 
@@ -183,7 +199,9 @@ async fn test_get_member() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
 
     let result = db.get_member("MASTER_001", "SLAVE_001").await.unwrap();
 
@@ -208,7 +226,9 @@ async fn test_update_member_settings() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
 
     let new_settings = SlaveSettings {
         lot_multiplier: Some(2.0),
@@ -220,9 +240,15 @@ async fn test_update_member_settings() {
         config_version: 1,
     };
 
-    db.update_member_settings("MASTER_001", "SLAVE_001", new_settings).await.unwrap();
+    db.update_member_settings("MASTER_001", "SLAVE_001", new_settings)
+        .await
+        .unwrap();
 
-    let member = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    let member = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member.slave_settings.lot_multiplier, Some(2.0));
     assert!(member.slave_settings.reverse_trade);
     assert_eq!(member.slave_settings.config_version, 1);
@@ -233,11 +259,19 @@ async fn test_update_member_status() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
 
-    db.update_member_status("MASTER_001", "SLAVE_001", 2).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 2)
+        .await
+        .unwrap();
 
-    let member = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    let member = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member.status, 2);
 }
 
@@ -246,7 +280,9 @@ async fn test_delete_member() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
 
     db.delete_member("MASTER_001", "SLAVE_001").await.unwrap();
 
@@ -259,8 +295,12 @@ async fn test_cascade_delete_members() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+        .await
+        .unwrap();
 
     db.delete_trade_group("MASTER_001").await.unwrap();
 
@@ -283,7 +323,9 @@ async fn test_get_settings_for_master() {
     };
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.update_master_settings("MASTER_001", settings.clone()).await.unwrap();
+    db.update_master_settings("MASTER_001", settings.clone())
+        .await
+        .unwrap();
 
     let result = db.get_settings_for_master("MASTER_001").await.unwrap();
 
@@ -328,8 +370,12 @@ async fn test_get_settings_for_slave() {
         config_version: 0,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings1).await.unwrap();
-    db.add_member("MASTER_002", "SLAVE_001", settings2).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", settings1)
+        .await
+        .unwrap();
+    db.add_member("MASTER_002", "SLAVE_001", settings2)
+        .await
+        .unwrap();
 
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
@@ -343,10 +389,14 @@ async fn test_get_settings_for_slave_only_enabled() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
 
     // Set status to DISABLED (0)
-    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+        .await
+        .unwrap();
 
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
@@ -361,24 +411,51 @@ async fn test_update_master_statuses_connected() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     // Add members with different statuses
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default())
+        .await
+        .unwrap();
 
     // Set statuses: DISABLED, ENABLED, ENABLED
-    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 1).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 1)
+        .await
+        .unwrap();
 
     // Update to CONNECTED
-    let count = db.update_master_statuses_connected("MASTER_001").await.unwrap();
+    let count = db
+        .update_master_statuses_connected("MASTER_001")
+        .await
+        .unwrap();
 
     // Should update 2 members (ENABLED → CONNECTED)
     assert_eq!(count, 2);
 
-    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
-    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
-    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    let member1 = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
+    let member2 = db
+        .get_member("MASTER_001", "SLAVE_002")
+        .await
+        .unwrap()
+        .unwrap();
+    let member3 = db
+        .get_member("MASTER_001", "SLAVE_003")
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(member1.status, 0); // Still DISABLED
     assert_eq!(member2.status, 2); // Now CONNECTED
@@ -392,24 +469,51 @@ async fn test_update_master_statuses_disconnected() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     // Add members with different statuses
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default()).await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default()).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+        .await
+        .unwrap();
+    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default())
+        .await
+        .unwrap();
 
     // Set statuses: DISABLED, ENABLED, CONNECTED
-    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 2).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 2)
+        .await
+        .unwrap();
 
     // Update to ENABLED (disconnected)
-    let count = db.update_master_statuses_disconnected("MASTER_001").await.unwrap();
+    let count = db
+        .update_master_statuses_disconnected("MASTER_001")
+        .await
+        .unwrap();
 
     // Should update 1 member (CONNECTED → ENABLED)
     assert_eq!(count, 1);
 
-    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
-    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
-    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    let member1 = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
+    let member2 = db
+        .get_member("MASTER_001", "SLAVE_002")
+        .await
+        .unwrap()
+        .unwrap();
+    let member3 = db
+        .get_member("MASTER_001", "SLAVE_003")
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(member1.status, 0); // Still DISABLED
     assert_eq!(member2.status, 1); // Still ENABLED
@@ -445,11 +549,20 @@ async fn test_member_with_symbol_mappings() {
         config_version: 0,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", settings)
+        .await
+        .unwrap();
 
-    let member = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    let member = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member.slave_settings.symbol_mappings.len(), 2);
-    assert_eq!(member.slave_settings.symbol_mappings[0].source_symbol, "EURUSD");
+    assert_eq!(
+        member.slave_settings.symbol_mappings[0].source_symbol,
+        "EURUSD"
+    );
 }
 
 #[tokio::test]
@@ -473,9 +586,21 @@ async fn test_member_with_filters() {
         config_version: 0,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings).await.unwrap();
+    db.add_member("MASTER_001", "SLAVE_001", settings)
+        .await
+        .unwrap();
 
-    let member = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
-    assert_eq!(member.slave_settings.filters.allowed_symbols, Some(vec!["EURUSD".to_string(), "GBPUSD".to_string()]));
-    assert_eq!(member.slave_settings.filters.blocked_magic_numbers, Some(vec![999]));
+    let member = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member.slave_settings.filters.allowed_symbols,
+        Some(vec!["EURUSD".to_string(), "GBPUSD".to_string()])
+    );
+    assert_eq!(
+        member.slave_settings.filters.blocked_magic_numbers,
+        Some(vec![999])
+    );
 }
