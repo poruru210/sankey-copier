@@ -4,20 +4,24 @@
 // This test uses EA simulators to verify the complete flow:
 // - Master EA: Heartbeat -> RequestConfig -> MasterConfigMessage
 // - Slave EA: Heartbeat -> RequestConfig -> ConfigMessage
+//
+// These tests automatically spawn a relay-server instance with dynamic ports,
+// making them suitable for CI/CD environments.
 
-use sankey_copier_relay_server::db::Database;
+mod test_server;
+
 use sankey_copier_relay_server::models::SlaveSettings;
 use sankey_copier_zmq::{
     ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage,
 };
-use std::sync::Arc;
+use test_server::TestServer;
 use tokio::time::{sleep, Duration};
 use zmq::{Context, Socket};
 
 /// Master EA Simulator for integration testing
 /// Simulates a Master EA connecting to the relay server via ZMQ
 struct MasterEaSimulator {
-    context: Arc<Context>,
+    _context: Context, // Owned context (not Arc) for proper cleanup
     push_socket: Socket,
     config_socket: Socket,
     account_id: String,
@@ -31,7 +35,7 @@ impl MasterEaSimulator {
     /// - config_address: Address for SUB socket (e.g., "tcp://localhost:5557")
     /// - account_id: Master account ID for topic subscription
     fn new(push_address: &str, config_address: &str, account_id: &str) -> anyhow::Result<Self> {
-        let context = Arc::new(Context::new());
+        let context = Context::new();
 
         // PUSH socket for sending Heartbeat and RequestConfig
         let push_socket = context.socket(zmq::PUSH)?;
@@ -46,7 +50,7 @@ impl MasterEaSimulator {
         config_socket.set_subscribe(account_id.as_bytes())?;
 
         Ok(Self {
-            context,
+            _context: context,
             push_socket,
             config_socket,
             account_id: account_id.to_string(),
@@ -144,10 +148,10 @@ impl MasterEaSimulator {
 /// Slave EA Simulator for integration testing
 /// Simulates a Slave EA connecting to the relay server via ZMQ
 struct SlaveEaSimulator {
-    context: Arc<Context>,
+    _context: Context, // Owned context (not Arc) for proper cleanup
     push_socket: Socket,
     config_socket: Socket,
-    trade_socket: Socket,
+    _trade_socket: Socket,
     account_id: String,
 }
 
@@ -165,7 +169,7 @@ impl SlaveEaSimulator {
         trade_address: &str,
         account_id: &str,
     ) -> anyhow::Result<Self> {
-        let context = Arc::new(Context::new());
+        let context = Context::new();
 
         // PUSH socket for sending Heartbeat and RequestConfig
         let push_socket = context.socket(zmq::PUSH)?;
@@ -186,17 +190,18 @@ impl SlaveEaSimulator {
         // Trade socket subscription will be set based on master_account
 
         Ok(Self {
-            context,
+            _context: context,
             push_socket,
             config_socket,
-            trade_socket,
+            _trade_socket: trade_socket,
             account_id: account_id.to_string(),
         })
     }
 
     /// Subscribe to trade signals from a specific Master account
     fn subscribe_to_master(&self, master_account: &str) -> anyhow::Result<()> {
-        self.trade_socket.set_subscribe(master_account.as_bytes())?;
+        self._trade_socket
+            .set_subscribe(master_account.as_bytes())?;
         Ok(())
     }
 
@@ -290,15 +295,16 @@ impl SlaveEaSimulator {
 /// Test Master EA config distribution flow
 #[tokio::test]
 async fn test_master_config_distribution() {
-    // Setup: Create in-memory test database and insert Master settings
-    let db = Database::new("sqlite::memory:")
+    // Start test server with dynamic ports
+    let server = TestServer::start()
         .await
-        .expect("Failed to create test database");
+        .expect("Failed to start test server");
 
     let master_account = "MASTER_E2E_TEST_001";
 
-    // Create TradeGroup with Master settings
-    let trade_group = db
+    // Create TradeGroup with Master settings using server's database
+    let trade_group = server
+        .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
@@ -306,13 +312,16 @@ async fn test_master_config_distribution() {
     // Verify TradeGroup was created
     assert_eq!(trade_group.id, master_account);
 
-    // Create Master EA simulator
+    // Create Master EA simulator with dynamic ports
     let simulator = MasterEaSimulator::new(
-        "tcp://localhost:5555",
-        "tcp://localhost:5557",
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
         master_account,
     )
     .expect("Failed to create Master EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
 
     // Step 1: Send Heartbeat (auto-registration)
     simulator
@@ -364,15 +373,23 @@ async fn test_master_config_distribution() {
 /// Test Master EA config distribution with non-existent account
 #[tokio::test]
 async fn test_master_config_not_found() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
     let master_account = "NONEXISTENT_MASTER_E2E";
 
-    // Create Master EA simulator (no DB setup)
+    // Create Master EA simulator (no DB setup) with dynamic ports
     let simulator = MasterEaSimulator::new(
-        "tcp://localhost:5555",
-        "tcp://localhost:5557",
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
         master_account,
     )
     .expect("Failed to create Master EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
 
     // Send Heartbeat
     simulator
@@ -403,32 +420,39 @@ async fn test_master_config_not_found() {
 /// Test Slave EA config distribution flow
 #[tokio::test]
 async fn test_slave_config_distribution() {
-    // Setup: Create in-memory test database
-    let db = Database::new("sqlite::memory:")
+    // Start test server with dynamic ports
+    let server = TestServer::start()
         .await
-        .expect("Failed to create test database");
+        .expect("Failed to start test server");
 
     let master_account = "MASTER_E2E_002";
     let slave_account = "SLAVE_E2E_001";
 
     // Create TradeGroup (Master)
-    db.create_trade_group(master_account)
+    server
+        .db
+        .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
 
     // Add Slave member to TradeGroup with default settings
-    db.add_member(master_account, slave_account, SlaveSettings::default())
+    server
+        .db
+        .add_member(master_account, slave_account, SlaveSettings::default())
         .await
         .expect("Failed to add member");
 
-    // Create Slave EA simulator
+    // Create Slave EA simulator with dynamic ports
     let simulator = SlaveEaSimulator::new(
-        "tcp://localhost:5555",
-        "tcp://localhost:5557",
-        "tcp://localhost:5556",
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
         slave_account,
     )
     .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
 
     // Step 1: Send Heartbeat (auto-registration)
     simulator
@@ -475,40 +499,47 @@ async fn test_slave_config_distribution() {
 /// Test Master-Slave config distribution flow (both EAs)
 #[tokio::test]
 async fn test_master_slave_config_distribution() {
-    // Setup: Create in-memory test database
-    let db = Database::new("sqlite::memory:")
+    // Start test server with dynamic ports
+    let server = TestServer::start()
         .await
-        .expect("Failed to create test database");
+        .expect("Failed to start test server");
 
     let master_account = "MASTER_E2E_003";
     let slave_account = "SLAVE_E2E_002";
 
     // Create TradeGroup (Master)
-    db.create_trade_group(master_account)
+    server
+        .db
+        .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
 
     // Add Slave member to TradeGroup with default settings
-    db.add_member(master_account, slave_account, SlaveSettings::default())
+    server
+        .db
+        .add_member(master_account, slave_account, SlaveSettings::default())
         .await
         .expect("Failed to add member");
 
-    // Create Master EA simulator
+    // Create Master EA simulator with dynamic ports
     let master_sim = MasterEaSimulator::new(
-        "tcp://localhost:5555",
-        "tcp://localhost:5557",
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
         master_account,
     )
     .expect("Failed to create Master EA simulator");
 
-    // Create Slave EA simulator
+    // Create Slave EA simulator with dynamic ports
     let slave_sim = SlaveEaSimulator::new(
-        "tcp://localhost:5555",
-        "tcp://localhost:5557",
-        "tcp://localhost:5556",
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
         slave_account,
     )
     .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
 
     // Step 1: Both EAs send Heartbeat
     master_sim
