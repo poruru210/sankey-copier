@@ -41,13 +41,14 @@ impl Database {
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS trade_group_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 trade_group_id TEXT NOT NULL,
                 slave_account TEXT NOT NULL,
                 slave_settings TEXT NOT NULL DEFAULT '{}',
                 status INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (trade_group_id, slave_account),
+                UNIQUE (trade_group_id, slave_account),
                 FOREIGN KEY (trade_group_id) REFERENCES trade_groups(id) ON DELETE CASCADE
             )
             "#,
@@ -80,8 +81,8 @@ impl Database {
 
     pub async fn get_copy_settings(&self, id: i32) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
-            "SELECT id, status, master_account, slave_account, settings
-             FROM connections WHERE id = ?",
+            "SELECT id, trade_group_id, slave_account, slave_settings, status
+             FROM trade_group_members WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -89,23 +90,23 @@ impl Database {
 
         if let Some(row) = row {
             let id: i32 = row.get("id");
-            let status: i32 = row.get("status");
-            let master_account: String = row.get("master_account");
+            let master_account: String = row.get("trade_group_id");
             let slave_account: String = row.get("slave_account");
-            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
-            let settings = settings_json.0;
+            let status: i32 = row.get("status");
+            let settings_json: String = row.get("slave_settings");
+            let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
 
             Ok(Some(CopySettings {
                 id,
                 status,
                 master_account,
                 slave_account,
-                lot_multiplier: settings.lot_multiplier,
-                reverse_trade: settings.reverse_trade,
-                symbol_prefix: settings.symbol_prefix,
-                symbol_suffix: settings.symbol_suffix,
-                symbol_mappings: settings.symbol_mappings,
-                filters: settings.filters,
+                lot_multiplier: slave_settings.lot_multiplier,
+                reverse_trade: slave_settings.reverse_trade,
+                symbol_prefix: slave_settings.symbol_prefix,
+                symbol_suffix: slave_settings.symbol_suffix,
+                symbol_mappings: slave_settings.symbol_mappings,
+                filters: slave_settings.filters,
             }))
         } else {
             Ok(None)
@@ -115,8 +116,8 @@ impl Database {
 
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
         let rows = sqlx::query(
-            "SELECT id, status, master_account, slave_account, settings
-             FROM connections ORDER BY id",
+            "SELECT id, trade_group_id, slave_account, slave_settings, status
+             FROM trade_group_members ORDER BY id",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -124,23 +125,23 @@ impl Database {
         let mut result = Vec::new();
         for row in rows {
             let id: i32 = row.get("id");
-            let status: i32 = row.get("status");
-            let master_account: String = row.get("master_account");
+            let master_account: String = row.get("trade_group_id");
             let slave_account: String = row.get("slave_account");
-            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
-            let settings = settings_json.0;
+            let status: i32 = row.get("status");
+            let settings_json: String = row.get("slave_settings");
+            let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
 
             result.push(CopySettings {
                 id,
                 status,
                 master_account,
                 slave_account,
-                lot_multiplier: settings.lot_multiplier,
-                reverse_trade: settings.reverse_trade,
-                symbol_prefix: settings.symbol_prefix,
-                symbol_suffix: settings.symbol_suffix,
-                symbol_mappings: settings.symbol_mappings,
-                filters: settings.filters,
+                lot_multiplier: slave_settings.lot_multiplier,
+                reverse_trade: slave_settings.reverse_trade,
+                symbol_prefix: slave_settings.symbol_prefix,
+                symbol_suffix: slave_settings.symbol_suffix,
+                symbol_mappings: slave_settings.symbol_mappings,
+                filters: slave_settings.filters,
             });
         }
 
@@ -148,25 +149,47 @@ impl Database {
     }
 
     pub async fn save_copy_settings(&self, settings: &CopySettings) -> Result<i32> {
-        let connection_settings = ConnectionSettings {
+        // Ensure trade_group exists for this master
+        let trade_group_exists = sqlx::query(
+            "SELECT 1 FROM trade_groups WHERE id = ?"
+        )
+        .bind(&settings.master_account)
+        .fetch_optional(&self.pool)
+        .await?
+        .is_some();
+
+        if !trade_group_exists {
+            // Create trade_group with default master settings
+            sqlx::query(
+                "INSERT INTO trade_groups (id, master_settings) VALUES (?, '{}')"
+            )
+            .bind(&settings.master_account)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        // Convert CopySettings to SlaveSettings
+        let slave_settings = SlaveSettings {
             lot_multiplier: settings.lot_multiplier,
             reverse_trade: settings.reverse_trade,
             symbol_prefix: settings.symbol_prefix.clone(),
             symbol_suffix: settings.symbol_suffix.clone(),
             symbol_mappings: settings.symbol_mappings.clone(),
             filters: settings.filters.clone(),
+            config_version: 1,
         };
+        let settings_json = serde_json::to_string(&slave_settings)?;
 
         let id = if settings.id == 0 {
             // New record - INSERT
             let result = sqlx::query(
-                "INSERT INTO connections (status, master_account, slave_account, settings)
+                "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
                  VALUES (?, ?, ?, ?)",
             )
-            .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
-            .bind(sqlx::types::Json(&connection_settings))
+            .bind(&settings_json)
+            .bind(settings.status)
             .execute(&self.pool)
             .await?;
 
@@ -174,18 +197,18 @@ impl Database {
         } else {
             // Existing record - UPDATE
             sqlx::query(
-                "UPDATE connections SET
-                    status = ?,
-                    master_account = ?,
+                "UPDATE trade_group_members SET
+                    trade_group_id = ?,
                     slave_account = ?,
-                    settings = ?,
+                    slave_settings = ?,
+                    status = ?,
                     updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?",
             )
-            .bind(settings.status)
             .bind(&settings.master_account)
             .bind(&settings.slave_account)
-            .bind(sqlx::types::Json(&connection_settings))
+            .bind(&settings_json)
+            .bind(settings.status)
             .bind(settings.id)
             .execute(&self.pool)
             .await?;
@@ -198,7 +221,7 @@ impl Database {
 
     pub async fn update_status(&self, id: i32, status: i32) -> Result<()> {
         sqlx::query(
-            "UPDATE connections SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE trade_group_members SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(status)
         .bind(id)
@@ -209,7 +232,7 @@ impl Database {
 
 
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
-        sqlx::query("DELETE FROM connections WHERE id = ?")
+        sqlx::query("DELETE FROM trade_group_members WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -325,7 +348,7 @@ impl Database {
     /// Get all members for a TradeGroup
     pub async fn get_members(&self, trade_group_id: &str) -> Result<Vec<TradeGroupMember>> {
         let rows = sqlx::query(
-            "SELECT trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ?
              ORDER BY slave_account"
@@ -336,6 +359,7 @@ impl Database {
 
         let mut members = Vec::new();
         for row in rows {
+            let id: i32 = row.get("id");
             let trade_group_id: String = row.get("trade_group_id");
             let slave_account: String = row.get("slave_account");
             let settings_json: String = row.get("slave_settings");
@@ -345,6 +369,7 @@ impl Database {
             let updated_at: String = row.get("updated_at");
 
             members.push(TradeGroupMember {
+                id,
                 trade_group_id,
                 slave_account,
                 slave_settings,
@@ -364,7 +389,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Option<TradeGroupMember>> {
         let row = sqlx::query(
-            "SELECT trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ? AND slave_account = ?"
         )
@@ -374,6 +399,7 @@ impl Database {
         .await?;
 
         if let Some(row) = row {
+            let id: i32 = row.get("id");
             let trade_group_id: String = row.get("trade_group_id");
             let slave_account: String = row.get("slave_account");
             let settings_json: String = row.get("slave_settings");
@@ -383,6 +409,7 @@ impl Database {
             let updated_at: String = row.get("updated_at");
 
             Ok(Some(TradeGroupMember {
+                id,
                 trade_group_id,
                 slave_account,
                 slave_settings,

@@ -14,6 +14,9 @@ pub const STATUS_CONNECTED: i32 = 2;
 /// TradeGroupMember represents a Slave account connected to a TradeGroup (Master)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeGroupMember {
+    /// Unique ID for backward compatibility with REST API
+    pub id: i32,
+
     /// TradeGroup ID (master_account)
     pub trade_group_id: String,
 
@@ -67,8 +70,9 @@ pub struct SlaveSettings {
 
 impl TradeGroupMember {
     /// Create a new TradeGroupMember with default settings
-    pub fn new(trade_group_id: String, slave_account: String) -> Self {
+    pub fn new(id: i32, trade_group_id: String, slave_account: String) -> Self {
         Self {
+            id,
             trade_group_id,
             slave_account,
             slave_settings: SlaveSettings::default(),
@@ -102,10 +106,12 @@ mod tests {
     #[test]
     fn test_member_creation() {
         let member = TradeGroupMember::new(
+            1,
             "MASTER_001".to_string(),
             "SLAVE_001".to_string(),
         );
 
+        assert_eq!(member.id, 1);
         assert_eq!(member.trade_group_id, "MASTER_001");
         assert_eq!(member.slave_account, "SLAVE_001");
         assert_eq!(member.status, STATUS_ENABLED);
@@ -117,6 +123,7 @@ mod tests {
     #[test]
     fn test_increment_version() {
         let mut member = TradeGroupMember::new(
+            1,
             "MASTER_001".to_string(),
             "SLAVE_001".to_string(),
         );
@@ -130,6 +137,7 @@ mod tests {
     #[test]
     fn test_is_enabled() {
         let mut member = TradeGroupMember::new(
+            1,
             "MASTER_001".to_string(),
             "SLAVE_001".to_string(),
         );
@@ -147,6 +155,7 @@ mod tests {
     #[test]
     fn test_is_connected() {
         let mut member = TradeGroupMember::new(
+            1,
             "MASTER_001".to_string(),
             "SLAVE_001".to_string(),
         );
