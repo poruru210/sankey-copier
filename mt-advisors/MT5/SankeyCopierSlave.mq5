@@ -8,25 +8,29 @@
 #property version   "1.00"  // VERSION_PLACEHOLDER
 #property icon      "app.ico"
 
-#include <Trade/Trade.mqh>
+#include "../Include/Trade/Trade.mqh"
 
 //--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Mapping.mqh>
-#include <SankeyCopier/GridPanel.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Mapping.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
 
 //--- Input parameters
-input string   TradeServerAddress = "tcp://localhost:5556";  // Trade signal channel
-input string   ConfigServerAddress = "tcp://localhost:5557"; // Configuration channel
+input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
+input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to receive trade signals (SUB)
+input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input int      Slippage = 3;
 input int      MaxRetries = 3;
 input bool     AllowNewOrders = true;
 input bool     AllowCloseOrders = true;
 input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
 input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
+input string   SymbolPrefix = "";       // Symbol prefix to add (e.g. "pro.")
+input string   SymbolSuffix = "";       // Symbol suffix to add (e.g. ".m")
+input string   SymbolMap = "";          // Symbol mapping (e.g. "XAUUSD=GOLD,BTCUSD=Bitcoin")
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
 
@@ -36,14 +40,13 @@ HANDLE_TYPE g_zmq_context = -1;
 HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 CTrade      g_trade;
+TicketMapping g_order_map[];
+PendingTicketMapping g_pending_order_map[];
+SymbolMapping g_local_mappings[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
-
-// Ticket mapping arrays (structures defined in SankeyCopierMapping.mqh)
-TicketMapping g_order_map[];
-PendingTicketMapping g_pending_order_map[];
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
@@ -64,21 +67,25 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
+   // Parse symbol mapping
+   ParseSymbolMappingString(SymbolMap, g_local_mappings);
+   Print("Parsed ", ArraySize(g_local_mappings), " local symbol mappings");
+
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
    // Create and connect trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeServerAddress, "Slave Trade SUB");
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeSignalSourceAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
-      CleanupZmqContext(g_zmq_context);
+      zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
    // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigServerAddress, "Slave Config SUB");
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
@@ -112,11 +119,15 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
+      g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Initial state
+      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
       
       // Show "Waiting" message initially
       g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
@@ -126,7 +137,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, "tcp://localhost:5555", AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -157,7 +168,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave", "MT5");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT5", SymbolPrefix, SymbolSuffix, SymbolMap);
 
       if(heartbeat_sent)
       {
@@ -205,7 +216,7 @@ void OnTimer()
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -222,7 +233,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, "tcp://localhost:5555", AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -426,12 +437,16 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       }
 
       // Apply transformations
-      string transformed_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier);
+      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
+      string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+      
+      // Transform lot size
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
       // Open position with transformed values
-      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account);
+      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account, magic_number);
    }
    else if(action == "Close" && AllowCloseOrders)
    {
@@ -451,7 +466,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //| Open position                                                     |
 //+------------------------------------------------------------------+
 void OpenPosition(ulong master_ticket, string symbol, string type_str,
-                  double lots, double price, double sl, double tp, string timestamp, string source_account)
+                  double lots, double price, double sl, double tp, string timestamp, string source_account, int magic)
 {
    if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
    {
@@ -461,7 +476,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeCurrent();
+   datetime current_time = TimeGMT();
    int delay_ms = (int)((current_time - signal_time) * 1000);
 
    if(delay_ms > MaxSignalDelayMs)
@@ -474,7 +489,7 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
       else
       {
          Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
-         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms);
+         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms, magic);
          return;
       }
    }
@@ -483,11 +498,14 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
    if((int)order_type == -1) return;
 
    lots = NormalizeDouble(lots, 2);
+   price = NormalizeDouble(price, _Digits);
+   sl = (sl > 0) ? NormalizeDouble(sl, _Digits) : 0;
+   tp = (tp > 0) ? NormalizeDouble(tp, _Digits) : 0;
 
    // Extract account number and build traceable comment: "M12345#98765"
    string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
-   g_trade.SetExpertMagicNumber(0);
+   g_trade.SetExpertMagicNumber(magic);
    bool result = false;
 
    for(int i = 0; i < MaxRetries; i++)
@@ -562,7 +580,7 @@ void ModifyPosition(ulong master_ticket, double sl, double tp)
 //| Place pending order at original price                            |
 //+------------------------------------------------------------------+
 void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
-                       double lots, double price, double sl, double tp, string source_account, int delay_ms)
+                       double lots, double price, double sl, double tp, string source_account, int delay_ms, int magic)
 {
    // Check if pending order already exists
    if(GetPendingTicketFromMapping(g_pending_order_map, master_ticket) > 0)
@@ -594,7 +612,7 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
    // Extract account number and build traceable comment: "P12345#98765"
    string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
 
-   g_trade.SetExpertMagicNumber(0);
+   g_trade.SetExpertMagicNumber(magic);
 
    bool result = g_trade.OrderOpen(symbol, pending_type, lots, 0, price, sl, tp,
                                     ORDER_TIME_GTC, 0, comment);

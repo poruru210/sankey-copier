@@ -40,6 +40,9 @@ export function EditCopySettingsDialog({
   const [formData, setFormData] = useState({
     lot_multiplier: 1.0,
     reverse_trade: false,
+    symbol_prefix: '',
+    symbol_suffix: '',
+    symbol_mappings: '',
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -49,6 +52,9 @@ export function EditCopySettingsDialog({
       setFormData({
         lot_multiplier: setting.lot_multiplier || 1.0,
         reverse_trade: setting.reverse_trade,
+        symbol_prefix: setting.symbol_prefix || '',
+        symbol_suffix: setting.symbol_suffix || '',
+        symbol_mappings: setting.symbol_map || '',
       });
     }
   }, [setting, open]);
@@ -58,7 +64,11 @@ export function EditCopySettingsDialog({
 
     onSave({
       ...setting,
-      ...formData,
+      lot_multiplier: formData.lot_multiplier,
+      reverse_trade: formData.reverse_trade,
+      symbol_prefix: formData.symbol_prefix || undefined,
+      symbol_suffix: formData.symbol_suffix || undefined,
+      symbol_map: formData.symbol_mappings || undefined,
     });
     onOpenChange(false);
   };
@@ -180,6 +190,68 @@ export function EditCopySettingsDialog({
                   <Label htmlFor="reverse_trade" className="cursor-pointer">
                     {content.reverseTrade.value} - {content.reverseDescription.value}
                   </Label>
+                </div>
+
+                {/* Symbol Filters Section */}
+                <div className="space-y-1 mt-6">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <span className="text-lg">🔍</span>
+                    Symbol Filters (Optional)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Configure symbol name transformations for this connection.
+                  </p>
+                </div>
+
+                {/* Symbol Prefix */}
+                <div>
+                  <Label htmlFor="symbol_prefix">
+                    Symbol Prefix
+                  </Label>
+                  <Input
+                    id="symbol_prefix"
+                    type="text"
+                    placeholder="e.g. 'pro.' or 'FX.'"
+                    value={formData.symbol_prefix}
+                    onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
+                  </p>
+                </div>
+
+                {/* Symbol Suffix */}
+                <div>
+                  <Label htmlFor="symbol_suffix">
+                    Symbol Suffix
+                  </Label>
+                  <Input
+                    id="symbol_suffix"
+                    type="text"
+                    placeholder="e.g. '.m' or '-ECN'"
+                    value={formData.symbol_suffix}
+                    onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
+                  </p>
+                </div>
+
+                {/* Symbol Mappings */}
+                <div>
+                  <Label htmlFor="symbol_mappings">
+                    Symbol Mappings
+                  </Label>
+                  <Input
+                    id="symbol_mappings"
+                    type="text"
+                    placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
+                    value={formData.symbol_mappings}
+                    onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
+                  </p>
                 </div>
               </div>
             </div>

@@ -131,6 +131,8 @@ impl MessageHandler {
                         symbol_mappings: settings.symbol_mappings.clone(),
                         filters: settings.filters.clone(),
                         config_version: 1,
+                        symbol_prefix: settings.symbol_prefix.clone(),
+                        symbol_suffix: settings.symbol_suffix.clone(),
                     };
 
                     // Send CONFIG via MessagePack
@@ -214,6 +216,8 @@ impl MessageHandler {
                                     symbol_mappings: settings.symbol_mappings.clone(),
                                     filters: settings.filters.clone(),
                                     config_version: 1,
+                                    symbol_prefix: settings.symbol_prefix.clone(),
+                                    symbol_suffix: settings.symbol_suffix.clone(),
                                 };
 
                                 if let Err(e) = self.config_sender.send_config(&config).await {
@@ -429,6 +433,8 @@ mod tests {
             slave_account: "SLAVE_001".to_string(),
             lot_multiplier: Some(1.0),
             reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
             symbol_mappings: vec![],
             filters: TradeFilters {
                 allowed_symbols: None,
@@ -462,6 +468,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         handler.handle_heartbeat(hb_msg).await;
 
@@ -503,6 +512,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
         };
         handler.handle_heartbeat(hb_msg).await;
 

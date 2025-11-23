@@ -5,6 +5,9 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
+#ifndef SANKEY_COPIER_TRADE_MQH
+#define SANKEY_COPIER_TRADE_MQH
+
 #include "Common.mqh"
 
 //+------------------------------------------------------------------+
@@ -98,7 +101,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 //+------------------------------------------------------------------+
 void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
                           CopyConfig &configs[],
-                          int zmq_trade_socket)
+                          HANDLE_TYPE zmq_trade_socket)
 {
    Print("=== Processing Configuration Message ===");
 
@@ -236,12 +239,162 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 }
 
 //+------------------------------------------------------------------+
+//| Normalize lot size based on symbol properties                    |
+//+------------------------------------------------------------------+
+double NormalizeLotSize(double lots, string symbol)
+{
+   double step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double min = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   
+   if(step <= 0) return lots;
+   
+   // Normalize to step
+   double normalized = MathFloor(lots / step + 0.5) * step;
+   
+   // Clamp to min/max
+   if(normalized < min) normalized = min;
+   if(normalized > max) normalized = max;
+   
+   // Normalize decimals to avoid floating point errors (e.g. 0.100000001)
+   // Use 8 decimals as safe upper bound for volume precision
+   return NormalizeDouble(normalized, 8);
+}
+
+//+------------------------------------------------------------------+
+//| Check if symbol matches prefix/suffix filter                     |
+//+------------------------------------------------------------------+
+bool MatchesSymbolFilter(string symbol, string prefix, string suffix)
+{
+   // If no filter, everything matches
+   if(prefix == "" && suffix == "") return true;
+   
+   // Check prefix
+   if(prefix != "")
+   {
+      if(StringFind(symbol, prefix) != 0) return false;
+   }
+   
+   // Check suffix
+   if(suffix != "")
+   {
+      int suffix_len = StringLen(suffix);
+      int symbol_len = StringLen(symbol);
+      
+      if(symbol_len < suffix_len) return false;
+      
+      string symbol_suffix = StringSubstr(symbol, symbol_len - suffix_len);
+      if(symbol_suffix != suffix) return false;
+   }
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Remove prefix and suffix from symbol                             |
+//+------------------------------------------------------------------+
+string GetCleanSymbol(string symbol, string prefix, string suffix)
+{
+   string clean = symbol;
+   
+   // Remove prefix
+   if(prefix != "" && StringFind(clean, prefix) == 0)
+   {
+      clean = StringSubstr(clean, StringLen(prefix));
+   }
+   
+   // Remove suffix
+   if(suffix != "")
+   {
+      int suffix_len = StringLen(suffix);
+      int clean_len = StringLen(clean);
+      
+      if(clean_len >= suffix_len)
+      {
+         string current_suffix = StringSubstr(clean, clean_len - suffix_len);
+         if(current_suffix == suffix)
+         {
+            clean = StringSubstr(clean, 0, clean_len - suffix_len);
+         }
+      }
+   }
+   
+   return clean;
+}
+
+//+------------------------------------------------------------------+
+//| Add prefix and suffix to symbol                                  |
+//+------------------------------------------------------------------+
+string GetLocalSymbol(string symbol, string prefix, string suffix)
+{
+   string local = symbol;
+   
+   // Add prefix
+   if(prefix != "")
+   {
+      local = prefix + local;
+   }
+   
+   // Add suffix
+   if(suffix != "")
+   {
+      local = local + suffix;
+   }
+   
+   return local;
+}
+
+//+------------------------------------------------------------------+
+//| Parse symbol mapping string (Format: "Source=Target,Src2=Tgt2")  |
+//+------------------------------------------------------------------+
+void ParseSymbolMappingString(string mapping_str, SymbolMapping &mappings[])
+{
+   ArrayResize(mappings, 0);
+   
+   if(mapping_str == "") return;
+   
+   string pairs[];
+   int pair_count = StringSplit(mapping_str, ',', pairs);
+   
+   for(int i = 0; i < pair_count; i++)
+   {
+      string pair = pairs[i];
+      StringTrimLeft(pair);
+      StringTrimRight(pair);
+      
+      if(pair == "") continue;
+      
+      string parts[];
+      int part_count = StringSplit(pair, '=', parts);
+      
+      if(part_count == 2)
+      {
+         string source = parts[0];
+         string target = parts[1];
+         
+         StringTrimLeft(source);
+         StringTrimRight(source);
+         StringTrimLeft(target);
+         StringTrimRight(target);
+         
+         if(source != "" && target != "")
+         {
+            int size = ArraySize(mappings);
+            ArrayResize(mappings, size + 1);
+            mappings[size].source_symbol = source;
+            mappings[size].target_symbol = target;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Transform lot size based on multiplier                           |
 //+------------------------------------------------------------------+
-double TransformLotSize(double lots, double multiplier)
+double TransformLotSize(double lots, double multiplier, string symbol)
 {
    double new_lots = lots * multiplier;
-   return NormalizeDouble(new_lots, 2);
+   return NormalizeLotSize(new_lots, symbol);
 }
 
 //+------------------------------------------------------------------+
@@ -260,3 +413,5 @@ string ReverseOrderType(string type, bool reverse)
    
    return type;
 }
+
+#endif // SANKEY_COPIER_TRADE_MQH

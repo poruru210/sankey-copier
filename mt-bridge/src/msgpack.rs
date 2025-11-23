@@ -46,6 +46,10 @@ pub struct ConfigMessage {
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
+    #[serde(default)]
+    pub symbol_prefix: Option<String>,
+    #[serde(default)]
+    pub symbol_suffix: Option<String>,
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
     pub config_version: u32,
@@ -89,6 +93,13 @@ pub struct HeartbeatMessage {
     pub leverage: i64,
     // Auto-trading state (IsTradeAllowed)
     pub is_trade_allowed: bool,
+    // Symbol configuration
+    #[serde(default)]
+    pub symbol_prefix: Option<String>,
+    #[serde(default)]
+    pub symbol_suffix: Option<String>,
+    #[serde(default)]
+    pub symbol_map: Option<String>,
 }
 
 /// Trade signal message structure
@@ -175,11 +186,16 @@ pub unsafe extern "C" fn config_get_string(
         Err(_) => return std::ptr::null(),
     };
 
+    // Use a static empty string to avoid temporary value dropped error
+    static EMPTY_STRING: LazyLock<String> = LazyLock::new(|| String::new());
+
     let value = match field.as_str() {
         "account_id" => &config.account_id,
         "master_account" => &config.master_account,
         "trade_group_id" => &config.trade_group_id,
         "timestamp" => &config.timestamp,
+        "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
+        "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
         _ => return std::ptr::null(),
     };
 
@@ -394,6 +410,9 @@ pub unsafe extern "C" fn serialize_heartbeat(
     currency: *const u16,
     leverage: i64,
     is_trade_allowed: i32,
+    symbol_prefix: *const u16,
+    symbol_suffix: *const u16,
+    symbol_map: *const u16,
 ) -> i32 {
     let msg = HeartbeatMessage {
         message_type: utf16_to_string(message_type).unwrap_or_default(),
@@ -412,6 +431,9 @@ pub unsafe extern "C" fn serialize_heartbeat(
         currency: utf16_to_string(currency).unwrap_or_default(),
         leverage,
         is_trade_allowed: is_trade_allowed != 0,
+        symbol_prefix: utf16_to_string_opt(symbol_prefix),
+        symbol_suffix: utf16_to_string_opt(symbol_suffix),
+        symbol_map: utf16_to_string_opt(symbol_map),
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -743,6 +765,9 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             is_trade_allowed: true,
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            symbol_map: Some("XAUUSD=GOLD".to_string()),
         };
 
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -764,6 +789,9 @@ mod tests {
         assert_eq!(msg.currency, deserialized.currency);
         assert_eq!(msg.leverage, deserialized.leverage);
         assert_eq!(msg.is_trade_allowed, deserialized.is_trade_allowed);
+        assert_eq!(msg.symbol_prefix, deserialized.symbol_prefix);
+        assert_eq!(msg.symbol_suffix, deserialized.symbol_suffix);
+        assert_eq!(msg.symbol_map, deserialized.symbol_map);
     }
 
     #[test]
@@ -840,6 +868,8 @@ mod tests {
             status: 2, // STATUS_CONNECTED
             lot_multiplier: Some(1.5),
             reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
             symbol_mappings: vec![SymbolMapping {
                 source_symbol: "EURUSD".to_string(),
                 target_symbol: "EURUSD.raw".to_string(),
@@ -939,6 +969,9 @@ mod tests {
                         currency: "USD".to_string(),
                         leverage: 100,
                         is_trade_allowed: true,
+                        symbol_prefix: None,
+                        symbol_suffix: None,
+                        symbol_map: None,
                     };
 
                     // This should not panic

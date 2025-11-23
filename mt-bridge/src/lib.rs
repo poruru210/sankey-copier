@@ -1,5 +1,8 @@
 pub mod msgpack;
 
+#[cfg(test)]
+mod symbol_filter_tests;
+
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};

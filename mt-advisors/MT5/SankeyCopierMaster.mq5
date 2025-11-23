@@ -9,15 +9,18 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
-#include <SankeyCopier/GridPanel.mqh>
+//--- Include common headers
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
 
 //--- Input parameters
-input string   ServerAddress = "tcp://localhost:5555";
+input string   RelayServerAddress = DEFAULT_ADDR_PULL; // Address to send signals/heartbeats (PULL)
 input ulong    MagicFilter = 0;
+input string   SymbolPrefix = "";       // Symbol prefix to filter and strip (e.g. "pro.")
+input string   SymbolSuffix = "";       // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
@@ -30,11 +33,21 @@ struct PositionInfo
    double tp;
 };
 
+//--- Order tracking structure (for Pending Orders)
+struct OrderInfo
+{
+   ulong  ticket;
+   double price;
+   double sl;
+   double tp;
+};
+
 //--- Global variables
 string        AccountID;                  // Auto-generated from broker + account number
 HANDLE_TYPE   g_zmq_context = -1;
 HANDLE_TYPE   g_zmq_socket = -1;
 PositionInfo  g_tracked_positions[];
+OrderInfo     g_tracked_orders[];
 bool          g_initialized = false;
 datetime      g_last_heartbeat = 0;
 bool          g_last_trade_allowed = false; // Track auto-trading state for change detection
@@ -59,14 +72,17 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, ServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
-      CleanupZmqContext(g_zmq_context);
+      zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
+   // Scan existing positions and orders
    ScanExistingPositions();
+   ScanExistingOrders();
+   
    g_initialized = true;
 
    // Set up timer for heartbeat (1 second interval)
@@ -88,13 +104,14 @@ int OnInit()
          g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
       }
       
-      g_config_panel.UpdateCell("account", 1, AccountID);
-      g_config_panel.UpdateServerRow(ServerAddress);
+      g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateMagicFilterRow((int)MagicFilter);
-      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions));
+      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
+      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
    }
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
@@ -104,7 +121,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, ServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -137,7 +154,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, ServerAddress, AccountID, "Master", "MT5");
+      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT5", SymbolPrefix, SymbolSuffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable
@@ -172,15 +189,83 @@ void OnTick()
    static datetime last_scan = 0;
    if(TimeCurrent() - last_scan > ScanInterval / 1000)
    {
+      //--- 1. Scan Positions ---
       CheckForNewPositions();
       CheckForModifiedPositions();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
       
-      // Update tracked orders count on panel
+      //--- 2. Scan Pending Orders ---
+      int total_orders = OrdersTotal();
+      bool order_seen[];
+      ArrayResize(order_seen, ArraySize(g_tracked_orders));
+      ArrayInitialize(order_seen, false);
+      
+      // Check for new or modified orders
+      for(int i = 0; i < total_orders; i++)
+      {
+         ulong ticket = OrderGetTicket(i);
+         if(ticket > 0)
+         {
+            if(MagicFilter > 0 && OrderGetInteger(ORDER_MAGIC) != MagicFilter)
+               continue;
+               
+            ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+            // Only process pending orders (ignore market orders which become positions)
+            if(type == ORDER_TYPE_BUY || type == ORDER_TYPE_SELL)
+               continue;
+               
+            bool is_tracked = false;
+            for(int j = 0; j < ArraySize(g_tracked_orders); j++)
+            {
+               if(g_tracked_orders[j].ticket == ticket)
+               {
+                  is_tracked = true;
+                  order_seen[j] = true;
+                  
+                  // Check for modification
+                  double current_price = OrderGetDouble(ORDER_PRICE_OPEN);
+                  double current_sl = OrderGetDouble(ORDER_SL);
+                  double current_tp = OrderGetDouble(ORDER_TP);
+                  
+                  if(current_price != g_tracked_orders[j].price ||
+                     current_sl != g_tracked_orders[j].sl ||
+                     current_tp != g_tracked_orders[j].tp)
+                  {
+                     SendOrderModifySignal(ticket);
+                     g_tracked_orders[j].price = current_price;
+                     g_tracked_orders[j].sl = current_sl;
+                     g_tracked_orders[j].tp = current_tp;
+                  }
+                  break;
+               }
+            }
+                        if(!is_tracked)
+             {
+                string symbol = OrderGetString(ORDER_SYMBOL);
+                if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+                {
+                   SendOrderOpenSignal(ticket);
+                   AddTrackedOrder(ticket);
+                }
+             }
+         }
+      }
+      
+      // Check for closed/deleted orders
+      for(int i = ArraySize(g_tracked_orders) - 1; i >= 0; i--)
+      {
+         if(!order_seen[i])
+         {
+            SendOrderCloseSignal(g_tracked_orders[i].ticket);
+            RemoveTrackedOrder(g_tracked_orders[i].ticket);
+         }
+      }
+      
+      // Update UI
       if(ShowConfigPanel)
       {
-         g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions));
+         g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions) + ArraySize(g_tracked_orders));
       }
    }
 }
@@ -196,7 +281,15 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    {
       if(PositionSelectByTicket(trans.position))
       {
-         SendPositionOpenSignal(trans.position);
+         if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
+         {
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               SendPositionOpenSignal(trans.position);
+               AddTrackedPosition(trans.position);
+            }
+         }
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
@@ -205,6 +298,70 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
          SendPositionCloseSignal(trans.position);
+         RemoveTrackedPosition(trans.position);
+      }
+   }
+   
+   //--- Order Transactions (Pending Orders) ---
+   if(trans.type == TRADE_TRANSACTION_ORDER_ADD)
+   {
+      ulong ticket = trans.order;
+      if(OrderSelect(ticket))
+      {
+         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+         // Only process pending orders (ignore market orders which become positions)
+         if(type != ORDER_TYPE_BUY && type != ORDER_TYPE_SELL)
+         {
+            if(MagicFilter == 0 || OrderGetInteger(ORDER_MAGIC) == MagicFilter)
+            {
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+               {
+                  SendOrderOpenSignal(ticket);
+                  AddTrackedOrder(ticket);
+               }
+            }
+         }
+      }
+   }
+   else if(trans.type == TRADE_TRANSACTION_ORDER_DELETE)
+   {
+      ulong ticket = trans.order;
+      // If it was tracked, send close signal
+      if(IsOrderTracked(ticket))
+      {
+         SendOrderCloseSignal(ticket);
+         RemoveTrackedOrder(ticket);
+      }
+   }
+   else if(trans.type == TRADE_TRANSACTION_ORDER_UPDATE)
+   {
+      ulong ticket = trans.order;
+      if(IsOrderTracked(ticket) && OrderSelect(ticket))
+      {
+         // Check if modified (compare with tracked values)
+         int size = ArraySize(g_tracked_orders);
+         for(int i = 0; i < size; i++)
+         {
+            if(g_tracked_orders[i].ticket == ticket)
+            {
+               double current_price = OrderGetDouble(ORDER_PRICE_OPEN);
+               double current_sl = OrderGetDouble(ORDER_SL);
+               double current_tp = OrderGetDouble(ORDER_TP);
+               
+               if(current_price != g_tracked_orders[i].price ||
+                  current_sl != g_tracked_orders[i].sl ||
+                  current_tp != g_tracked_orders[i].tp)
+               {
+                  SendOrderModifySignal(ticket);
+                  // Update tracked values
+                  g_tracked_orders[i].price = current_price;
+                  g_tracked_orders[i].sl = current_sl;
+                  g_tracked_orders[i].tp = current_tp;
+               }
+               break;
+            }
+         }
       }
    }
 }
@@ -223,8 +380,12 @@ void ScanExistingPositions()
       {
          if(MagicFilter == 0 || PositionGetInteger(POSITION_MAGIC) == MagicFilter)
          {
-            AddTrackedPosition(ticket);
-            SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
+            string symbol = PositionGetString(POSITION_SYMBOL);
+            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            {
+               AddTrackedPosition(ticket);
+               SendPositionOpenSignal(ticket);  // Send Open signal for existing positions
+            }
          }
       }
    }
@@ -243,11 +404,15 @@ void CheckForNewPositions()
          if(MagicFilter != 0 && PositionGetInteger(POSITION_MAGIC) != MagicFilter)
             continue;
 
-         if(!IsPositionTracked(ticket))
-         {
-            AddTrackedPosition(ticket);
-            SendPositionOpenSignal(ticket);
-         }
+          if(!IsPositionTracked(ticket))
+          {
+             string symbol = PositionGetString(POSITION_SYMBOL);
+             if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+             {
+                AddTrackedPosition(ticket);
+                SendPositionOpenSignal(ticket);
+             }
+          }
       }
    }
 }
@@ -303,7 +468,9 @@ void SendPositionOpenSignal(ulong ticket)
    if(!PositionSelectByTicket(ticket))
       return;
 
-   string symbol = PositionGetString(POSITION_SYMBOL);
+   string raw_symbol = PositionGetString(POSITION_SYMBOL);
+   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   
    long type = PositionGetInteger(POSITION_TYPE);
    double volume = PositionGetDouble(POSITION_VOLUME);
    double price = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -354,12 +521,30 @@ bool IsPositionTracked(ulong ticket)
 void AddTrackedPosition(ulong ticket)
 {
    if(!PositionSelectByTicket(ticket)) return;
+   if(IsPositionTracked(ticket)) return;
 
    int size = ArraySize(g_tracked_positions);
    ArrayResize(g_tracked_positions, size + 1);
    g_tracked_positions[size].ticket = ticket;
    g_tracked_positions[size].sl = PositionGetDouble(POSITION_SL);
    g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
+}
+
+//+------------------------------------------------------------------+
+//| Add order to tracking list                                       |
+//+------------------------------------------------------------------+
+void AddTrackedOrder(ulong ticket)
+{
+   if(!OrderSelect(ticket)) return;
+   if(IsOrderTracked(ticket)) return;
+   
+   int size = ArraySize(g_tracked_orders);
+   ArrayResize(g_tracked_orders, size + 1);
+   
+   g_tracked_orders[size].ticket = ticket;
+   g_tracked_orders[size].price  = OrderGetDouble(ORDER_PRICE_OPEN);
+   g_tracked_orders[size].sl     = OrderGetDouble(ORDER_SL);
+   g_tracked_orders[size].tp     = OrderGetDouble(ORDER_TP);
 }
 
 //+------------------------------------------------------------------+
@@ -377,5 +562,107 @@ void RemoveTrackedPosition(ulong ticket)
          break;
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Check if order is already being tracked                          |
+//+------------------------------------------------------------------+
+bool IsOrderTracked(ulong ticket)
+{
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+      if(g_tracked_orders[i].ticket == ticket) return true;
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Remove order from tracking list                                  |
+//+------------------------------------------------------------------+
+void RemoveTrackedOrder(ulong ticket)
+{
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+   {
+      if(g_tracked_orders[i].ticket == ticket)
+      {
+         for(int j = i; j < ArraySize(g_tracked_orders) - 1; j++)
+            g_tracked_orders[j] = g_tracked_orders[j + 1];
+         ArrayResize(g_tracked_orders, ArraySize(g_tracked_orders) - 1);
+         break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Scan existing pending orders                                      |
+//+------------------------------------------------------------------+
+void ScanExistingOrders()
+{
+   ArrayResize(g_tracked_orders, 0);
+
+   for(int i = 0; i < OrdersTotal(); i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket > 0)
+      {
+         ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+         // Only process pending orders
+         if(type != ORDER_TYPE_BUY && type != ORDER_TYPE_SELL)
+         {
+            if(MagicFilter == 0 || OrderGetInteger(ORDER_MAGIC) == MagicFilter)
+            {
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+               {
+                  AddTrackedOrder(ticket);
+                  SendOrderOpenSignal(ticket);
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Send order open signal                                           |
+//+------------------------------------------------------------------+
+void SendOrderOpenSignal(ulong ticket)
+{
+   if(!OrderSelect(ticket)) return;
+
+   string raw_symbol = OrderGetString(ORDER_SYMBOL);
+   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   
+   long type = OrderGetInteger(ORDER_TYPE);
+   double volume = OrderGetDouble(ORDER_VOLUME_INITIAL);
+   double price = OrderGetDouble(ORDER_PRICE_OPEN);
+   double sl = OrderGetDouble(ORDER_SL);
+   double tp = OrderGetDouble(ORDER_TP);
+   long magic = OrderGetInteger(ORDER_MAGIC);
+   string comment = OrderGetString(ORDER_COMMENT);
+
+   string order_type = GetOrderTypeString((int)type);
+
+   SendOpenSignal(g_zmq_socket, ticket, symbol, order_type,
+                  volume, price, sl, tp, magic, comment, AccountID);
+}
+
+//+------------------------------------------------------------------+
+//| Send order modify signal                                         |
+//+------------------------------------------------------------------+
+void SendOrderModifySignal(ulong ticket)
+{
+    if(!OrderSelect(ticket)) return;
+    
+    double sl = OrderGetDouble(ORDER_SL);
+    double tp = OrderGetDouble(ORDER_TP);
+    
+    SendModifySignal(g_zmq_socket, ticket, sl, tp, AccountID);
+}
+
+//+------------------------------------------------------------------+
+//| Send order close signal (delete)                                 |
+//+------------------------------------------------------------------+
+void SendOrderCloseSignal(ulong ticket)
+{
+   SendCloseSignal(g_zmq_socket, ticket, AccountID);
 }
 
