@@ -1,5 +1,8 @@
-use crate::models::{ConnectionSettings, CopySettings};
-use anyhow::Result;
+use crate::models::{
+    ConnectionSettings, CopySettings, MasterSettings, SlaveConfigWithMaster, SlaveSettings,
+    TradeGroup, TradeGroupMember,
+};
+use anyhow::{anyhow, Result};
 use sqlx::{sqlite::SqlitePool, Row};
 
 pub struct Database {
@@ -70,6 +73,11 @@ impl Database {
         Ok(Self { pool })
     }
 
+    // ============================================================================
+    // Old schema methods (deprecated - will be removed)
+    // These methods are kept temporarily for backward compatibility with existing tests
+    // ============================================================================
+
     pub async fn get_copy_settings(&self, id: i32) -> Result<Option<CopySettings>> {
         let row = sqlx::query(
             "SELECT id, status, master_account, slave_account, settings
@@ -104,80 +112,6 @@ impl Database {
         }
     }
 
-    /// Get enabled copy settings for a specific slave account
-    /// Used in Phase 2 for registration-triggered CONFIG distribution
-    pub async fn get_settings_for_slave(&self, slave_account: &str) -> Result<Vec<CopySettings>> {
-        let rows = sqlx::query(
-            "SELECT id, status, master_account, slave_account, settings
-             FROM connections WHERE slave_account = ? AND status > 0",
-        )
-        .bind(slave_account)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut settings_list = Vec::new();
-
-        for row in rows {
-            let id: i32 = row.get("id");
-            let status: i32 = row.get("status");
-            let master_account: String = row.get("master_account");
-            let slave_account: String = row.get("slave_account");
-            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
-            let settings = settings_json.0;
-
-            settings_list.push(CopySettings {
-                id,
-                status,
-                master_account,
-                slave_account,
-                lot_multiplier: settings.lot_multiplier,
-                reverse_trade: settings.reverse_trade,
-                symbol_prefix: settings.symbol_prefix,
-                symbol_suffix: settings.symbol_suffix,
-                symbol_mappings: settings.symbol_mappings,
-                filters: settings.filters,
-            });
-        }
-
-        Ok(settings_list)
-    }
-
-    /// Get all copy settings for a specific master account
-    /// Used to notify all slaves when master's is_trade_allowed changes
-    pub async fn get_settings_for_master(&self, master_account: &str) -> Result<Vec<CopySettings>> {
-        let rows = sqlx::query(
-            "SELECT id, status, master_account, slave_account, settings
-             FROM connections WHERE master_account = ? ORDER BY id",
-        )
-        .bind(master_account)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut result = Vec::new();
-        for row in rows {
-            let id: i32 = row.get("id");
-            let status: i32 = row.get("status");
-            let master_account: String = row.get("master_account");
-            let slave_account: String = row.get("slave_account");
-            let settings_json: sqlx::types::Json<ConnectionSettings> = row.get("settings");
-            let settings = settings_json.0;
-
-            result.push(CopySettings {
-                id,
-                status,
-                master_account,
-                slave_account,
-                lot_multiplier: settings.lot_multiplier,
-                reverse_trade: settings.reverse_trade,
-                symbol_prefix: settings.symbol_prefix,
-                symbol_suffix: settings.symbol_suffix,
-                symbol_mappings: settings.symbol_mappings,
-                filters: settings.filters,
-            });
-        }
-
-        Ok(result)
-    }
 
     pub async fn list_copy_settings(&self) -> Result<Vec<CopySettings>> {
         let rows = sqlx::query(
@@ -273,31 +207,6 @@ impl Database {
         Ok(())
     }
 
-    /// Update all enabled settings for a master to CONNECTED (2) when master comes online
-    pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
-        let result = sqlx::query(
-            "UPDATE connections
-             SET status = 2, updated_at = CURRENT_TIMESTAMP
-             WHERE master_account = ? AND status > 0",
-        )
-        .bind(master_account)
-        .execute(&self.pool)
-        .await?;
-        Ok(result.rows_affected() as usize)
-    }
-
-    /// Update all connected settings for a master to ENABLED (1) when master goes offline
-    pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
-        let result = sqlx::query(
-            "UPDATE connections
-             SET status = 1, updated_at = CURRENT_TIMESTAMP
-             WHERE master_account = ? AND status = 2",
-        )
-        .bind(master_account)
-        .execute(&self.pool)
-        .await?;
-        Ok(result.rows_affected() as usize)
-    }
 
     pub async fn delete_copy_settings(&self, id: i32) -> Result<()> {
         sqlx::query("DELETE FROM connections WHERE id = ?")
@@ -305,6 +214,318 @@ impl Database {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // ============================================================================
+    // TradeGroup CRUD Operations
+    // ============================================================================
+
+    /// Create a new TradeGroup with default settings
+    pub async fn create_trade_group(&self, master_account: &str) -> Result<TradeGroup> {
+        let master_settings = MasterSettings::default();
+        let settings_json = serde_json::to_string(&master_settings)?;
+
+        sqlx::query(
+            "INSERT INTO trade_groups (id, master_settings) VALUES (?, ?)"
+        )
+        .bind(master_account)
+        .bind(&settings_json)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_trade_group(master_account)
+            .await?
+            .ok_or_else(|| anyhow!("Failed to retrieve created trade_group"))
+    }
+
+    /// Get a TradeGroup by master_account
+    pub async fn get_trade_group(&self, master_account: &str) -> Result<Option<TradeGroup>> {
+        let row = sqlx::query(
+            "SELECT id, master_settings, created_at, updated_at
+             FROM trade_groups WHERE id = ?"
+        )
+        .bind(master_account)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let id: String = row.get("id");
+            let settings_json: String = row.get("master_settings");
+            let master_settings: MasterSettings = serde_json::from_str(&settings_json)?;
+            let created_at: String = row.get("created_at");
+            let updated_at: String = row.get("updated_at");
+
+            Ok(Some(TradeGroup {
+                id,
+                master_settings,
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Update Master settings for a TradeGroup
+    pub async fn update_master_settings(
+        &self,
+        master_account: &str,
+        settings: MasterSettings,
+    ) -> Result<()> {
+        let settings_json = serde_json::to_string(&settings)?;
+
+        sqlx::query(
+            "UPDATE trade_groups
+             SET master_settings = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?"
+        )
+        .bind(&settings_json)
+        .bind(master_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete a TradeGroup (CASCADE deletes all members)
+    pub async fn delete_trade_group(&self, master_account: &str) -> Result<()> {
+        sqlx::query("DELETE FROM trade_groups WHERE id = ?")
+            .bind(master_account)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // ============================================================================
+    // TradeGroupMember CRUD Operations
+    // ============================================================================
+
+    /// Add a member (Slave) to a TradeGroup
+    pub async fn add_member(
+        &self,
+        trade_group_id: &str,
+        slave_account: &str,
+        settings: SlaveSettings,
+    ) -> Result<()> {
+        let settings_json = serde_json::to_string(&settings)?;
+
+        sqlx::query(
+            "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
+             VALUES (?, ?, ?, 1)" // default status = ENABLED
+        )
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .bind(&settings_json)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get all members for a TradeGroup
+    pub async fn get_members(&self, trade_group_id: &str) -> Result<Vec<TradeGroupMember>> {
+        let rows = sqlx::query(
+            "SELECT trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+             FROM trade_group_members
+             WHERE trade_group_id = ?
+             ORDER BY slave_account"
+        )
+        .bind(trade_group_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut members = Vec::new();
+        for row in rows {
+            let trade_group_id: String = row.get("trade_group_id");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: String = row.get("slave_settings");
+            let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
+            let status: i32 = row.get("status");
+            let created_at: String = row.get("created_at");
+            let updated_at: String = row.get("updated_at");
+
+            members.push(TradeGroupMember {
+                trade_group_id,
+                slave_account,
+                slave_settings,
+                status,
+                created_at,
+                updated_at,
+            });
+        }
+
+        Ok(members)
+    }
+
+    /// Get a specific member
+    pub async fn get_member(
+        &self,
+        trade_group_id: &str,
+        slave_account: &str,
+    ) -> Result<Option<TradeGroupMember>> {
+        let row = sqlx::query(
+            "SELECT trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+             FROM trade_group_members
+             WHERE trade_group_id = ? AND slave_account = ?"
+        )
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let trade_group_id: String = row.get("trade_group_id");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: String = row.get("slave_settings");
+            let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
+            let status: i32 = row.get("status");
+            let created_at: String = row.get("created_at");
+            let updated_at: String = row.get("updated_at");
+
+            Ok(Some(TradeGroupMember {
+                trade_group_id,
+                slave_account,
+                slave_settings,
+                status,
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Update member settings
+    pub async fn update_member_settings(
+        &self,
+        trade_group_id: &str,
+        slave_account: &str,
+        settings: SlaveSettings,
+    ) -> Result<()> {
+        let settings_json = serde_json::to_string(&settings)?;
+
+        sqlx::query(
+            "UPDATE trade_group_members
+             SET slave_settings = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE trade_group_id = ? AND slave_account = ?"
+        )
+        .bind(&settings_json)
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update member status
+    pub async fn update_member_status(
+        &self,
+        trade_group_id: &str,
+        slave_account: &str,
+        status: i32,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE trade_group_members
+             SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE trade_group_id = ? AND slave_account = ?"
+        )
+        .bind(status)
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete a member
+    pub async fn delete_member(&self, trade_group_id: &str, slave_account: &str) -> Result<()> {
+        sqlx::query(
+            "DELETE FROM trade_group_members
+             WHERE trade_group_id = ? AND slave_account = ?"
+        )
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    // ============================================================================
+    // Config Distribution Methods
+    // ============================================================================
+
+    /// Get Master settings for config distribution to Master EA
+    pub async fn get_settings_for_master(&self, master_account: &str) -> Result<MasterSettings> {
+        let trade_group = self.get_trade_group(master_account).await?
+            .ok_or_else(|| anyhow!("TradeGroup not found for master: {}", master_account))?;
+
+        Ok(trade_group.master_settings)
+    }
+
+    /// Get Slave settings for config distribution to Slave EA
+    /// Returns all enabled settings for the given slave_account
+    pub async fn get_settings_for_slave(
+        &self,
+        slave_account: &str,
+    ) -> Result<Vec<SlaveConfigWithMaster>> {
+        let rows = sqlx::query(
+            "SELECT trade_group_id, slave_account, slave_settings, status
+             FROM trade_group_members
+             WHERE slave_account = ? AND status > 0
+             ORDER BY trade_group_id"
+        )
+        .bind(slave_account)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut configs = Vec::new();
+        for row in rows {
+            let master_account: String = row.get("trade_group_id");
+            let slave_account: String = row.get("slave_account");
+            let settings_json: String = row.get("slave_settings");
+            let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
+            let status: i32 = row.get("status");
+
+            configs.push(SlaveConfigWithMaster {
+                master_account,
+                slave_account,
+                status,
+                slave_settings,
+            });
+        }
+
+        Ok(configs)
+    }
+
+    /// Update all enabled members for a master to CONNECTED (2) when master comes online
+    pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
+        let result = sqlx::query(
+            "UPDATE trade_group_members
+             SET status = 2, updated_at = CURRENT_TIMESTAMP
+             WHERE trade_group_id = ? AND status > 0"
+        )
+        .bind(master_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as usize)
+    }
+
+    /// Update all connected members for a master to ENABLED (1) when master goes offline
+    pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
+        let result = sqlx::query(
+            "UPDATE trade_group_members
+             SET status = 1, updated_at = CURRENT_TIMESTAMP
+             WHERE trade_group_id = ? AND status = 2"
+        )
+        .bind(master_account)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as usize)
     }
 }
 

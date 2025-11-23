@@ -6,8 +6,8 @@ use crate::{
     db::Database,
     engine::CopyEngine,
     models::{
-        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage, SymbolConverter,
-        TradeSignal, UnregisterMessage,
+        ConfigMessage, CopySettings, HeartbeatMessage, RequestConfigMessage,
+        SlaveConfigWithMaster, SymbolConverter, TradeSignal, UnregisterMessage,
     },
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
 };
@@ -90,7 +90,7 @@ impl MessageHandler {
                         account_id,
                         settings.master_account,
                         settings.status,
-                        settings.lot_multiplier
+                        settings.slave_settings.lot_multiplier
                     );
 
                     // Calculate effective status based on Master's is_trade_allowed
@@ -126,13 +126,13 @@ impl MessageHandler {
                         trade_group_id: settings.master_account.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
                         status: effective_status,
-                        lot_multiplier: settings.lot_multiplier,
-                        reverse_trade: settings.reverse_trade,
-                        symbol_mappings: settings.symbol_mappings.clone(),
-                        filters: settings.filters.clone(),
-                        config_version: 1,
-                        symbol_prefix: settings.symbol_prefix.clone(),
-                        symbol_suffix: settings.symbol_suffix.clone(),
+                        lot_multiplier: settings.slave_settings.lot_multiplier,
+                        reverse_trade: settings.slave_settings.reverse_trade,
+                        symbol_mappings: settings.slave_settings.symbol_mappings.clone(),
+                        filters: settings.slave_settings.filters.clone(),
+                        config_version: settings.slave_settings.config_version,
+                        symbol_prefix: settings.slave_settings.symbol_prefix.clone(),
+                        symbol_suffix: settings.slave_settings.symbol_suffix.clone(),
                     };
 
                     // Send CONFIG via MessagePack
@@ -197,39 +197,39 @@ impl MessageHandler {
                 );
 
                 // Resend Config to all Slave accounts connected to this Master
-                match self.db.get_settings_for_master(&account_id).await {
-                    Ok(settings_list) => {
-                        for settings in settings_list {
+                match self.db.get_members(&account_id).await {
+                    Ok(members) => {
+                        for member in members {
                             // Only send to enabled Slaves (status > 0)
-                            if settings.status > 0 {
+                            if member.status > 0 {
                                 // Build Config with calculated effective status
                                 let effective_status = if new_is_trade_allowed { 2 } else { 1 };
 
                                 let config = ConfigMessage {
-                                    account_id: settings.slave_account.clone(),
-                                    master_account: settings.master_account.clone(),
-                                    trade_group_id: settings.master_account.clone(),
+                                    account_id: member.slave_account.clone(),
+                                    master_account: account_id.clone(),
+                                    trade_group_id: account_id.clone(),
                                     timestamp: chrono::Utc::now().to_rfc3339(),
                                     status: effective_status,
-                                    lot_multiplier: settings.lot_multiplier,
-                                    reverse_trade: settings.reverse_trade,
-                                    symbol_mappings: settings.symbol_mappings.clone(),
-                                    filters: settings.filters.clone(),
-                                    config_version: 1,
-                                    symbol_prefix: settings.symbol_prefix.clone(),
-                                    symbol_suffix: settings.symbol_suffix.clone(),
+                                    lot_multiplier: member.slave_settings.lot_multiplier,
+                                    reverse_trade: member.slave_settings.reverse_trade,
+                                    symbol_mappings: member.slave_settings.symbol_mappings.clone(),
+                                    filters: member.slave_settings.filters.clone(),
+                                    config_version: member.slave_settings.config_version,
+                                    symbol_prefix: member.slave_settings.symbol_prefix.clone(),
+                                    symbol_suffix: member.slave_settings.symbol_suffix.clone(),
                                 };
 
                                 if let Err(e) = self.config_sender.send_config(&config).await {
                                     tracing::error!(
                                         "Failed to send config to {} due to Master is_trade_allowed change: {}",
-                                        settings.slave_account,
+                                        member.slave_account,
                                         e
                                     );
                                 } else {
                                     tracing::info!(
                                         "Sent config to {} (effective_status: {}) due to Master {} is_trade_allowed change: {}",
-                                        settings.slave_account,
+                                        member.slave_account,
                                         effective_status,
                                         account_id,
                                         new_is_trade_allowed
@@ -239,7 +239,7 @@ impl MessageHandler {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("Failed to get settings for Master {}: {}", account_id, e);
+                        tracing::error!("Failed to get members for Master {}: {}", account_id, e);
                     }
                 }
             }
@@ -259,9 +259,15 @@ impl MessageHandler {
                     }
                     // Notify WebSocket clients
                     // We need to broadcast the updated settings for all affected slaves
-                    if let Ok(settings_list) = self.db.get_settings_for_master(&account_id).await {
-                        for settings in settings_list {
-                            if let Ok(json) = serde_json::to_string(&settings) {
+                    if let Ok(members) = self.db.get_members(&account_id).await {
+                        for member in members {
+                            let settings_with_master = SlaveConfigWithMaster {
+                                master_account: account_id.clone(),
+                                slave_account: member.slave_account.clone(),
+                                status: member.status,
+                                slave_settings: member.slave_settings.clone(),
+                            };
+                            if let Ok(json) = serde_json::to_string(&settings_with_master) {
                                 let _ =
                                     self.broadcast_tx.send(format!("settings_updated:{}", json));
                             }

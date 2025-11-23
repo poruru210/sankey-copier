@@ -14,6 +14,16 @@ pub use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Slave configuration with associated Master account information.
+/// Used for config distribution to Slave EAs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlaveConfigWithMaster {
+    pub master_account: String,
+    pub slave_account: String,
+    pub status: i32,
+    pub slave_settings: SlaveSettings,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OrderType {
     Buy,
