@@ -498,6 +498,9 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
    if((int)order_type == -1) return;
 
    lots = NormalizeDouble(lots, 2);
+   price = NormalizeDouble(price, _Digits);
+   sl = (sl > 0) ? NormalizeDouble(sl, _Digits) : 0;
+   tp = (tp > 0) ? NormalizeDouble(tp, _Digits) : 0;
 
    // Extract account number and build traceable comment: "M12345#98765"
    string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
