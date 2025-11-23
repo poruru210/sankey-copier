@@ -2,6 +2,7 @@ import type { EaConnection, CopySettings } from '@/types';
 import { AccountInfoSection } from './AccountInfoSection';
 import { BalanceSection } from './BalanceSection';
 import { ConnectionStatusSection } from './ConnectionStatusSection';
+import { MasterConfigSection } from './MasterConfigSection';
 
 interface AccountCardExpandedProps {
   connection?: EaConnection;
@@ -64,6 +65,9 @@ export function AccountCardExpanded({
               currency: content.currency,
             }}
           />
+
+          {/* Master Config Section (only for Master accounts) */}
+          <MasterConfigSection connection={connection} />
 
           {/* Connection Status Section */}
           <ConnectionStatusSection

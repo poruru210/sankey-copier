@@ -107,3 +107,17 @@ export interface MtInstallationsResponse {
   data: MtInstallation[];
   detection_summary: DetectionSummary;
 }
+
+// Master EA Configuration types
+export interface MasterConfig {
+  account_id: string;
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  config_version: number;
+  timestamp: string;
+}
+
+export interface UpdateMasterConfigRequest {
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+}
