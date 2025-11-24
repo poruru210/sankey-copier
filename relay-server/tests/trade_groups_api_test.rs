@@ -414,3 +414,67 @@ async fn test_delete_trade_group_cascade_deletes_members() {
     let members_after = db.get_members("MASTER_CASCADE_TEST").await.unwrap();
     assert_eq!(members_after.len(), 0);
 }
+
+#[tokio::test]
+async fn test_add_member_creates_trade_group_if_not_exists() {
+    let (app, db) = create_test_app().await;
+
+    // Verify TradeGroup does NOT exist initially
+    let trade_group = db.get_trade_group("MASTER_AUTO_CREATE").await.unwrap();
+    assert!(
+        trade_group.is_none(),
+        "TradeGroup should not exist initially"
+    );
+
+    // Add a member via API (without creating TradeGroup first)
+    use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
+    let slave_settings = SlaveSettings {
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: TradeFilters::default(),
+        config_version: 0,
+    };
+
+    let request_body = serde_json::json!({
+        "slave_account": "SLAVE_AUTO",
+        "slave_settings": slave_settings
+    });
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/trade-groups/MASTER_AUTO_CREATE/members")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&request_body).unwrap()))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Should return 201 Created (TradeGroup should be auto-created)
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify member was created
+    assert_eq!(json["slave_account"], "SLAVE_AUTO");
+    assert_eq!(json["trade_group_id"], "MASTER_AUTO_CREATE");
+
+    // Verify TradeGroup was auto-created
+    let trade_group = db.get_trade_group("MASTER_AUTO_CREATE").await.unwrap();
+    assert!(
+        trade_group.is_some(),
+        "TradeGroup should have been auto-created"
+    );
+
+    let trade_group = trade_group.unwrap();
+    assert_eq!(trade_group.id, "MASTER_AUTO_CREATE");
+    // Should have default master settings
+    assert_eq!(trade_group.master_settings.config_version, 0);
+    assert_eq!(trade_group.master_settings.symbol_prefix, None);
+    assert_eq!(trade_group.master_settings.symbol_suffix, None);
+}

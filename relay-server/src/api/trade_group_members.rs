@@ -76,18 +76,35 @@ pub async fn add_member(
     );
     let _enter = span.enter();
 
-    // Verify TradeGroup exists
+    // Verify TradeGroup exists, create if it doesn't
     match state.db.get_trade_group(&trade_group_id).await {
         Ok(None) => {
-            tracing::warn!(
+            // TradeGroup doesn't exist - create it with default Master settings
+            tracing::info!(
                 trade_group_id = %trade_group_id,
-                "TradeGroup not found when adding member"
+                "TradeGroup not found, creating with default settings"
             );
-            return Err(ProblemDetails::not_found(format!(
-                "TradeGroup '{}' not found",
-                trade_group_id
-            ))
-            .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)));
+
+            match state.db.create_trade_group(&trade_group_id).await {
+                Ok(_) => {
+                    tracing::info!(
+                        trade_group_id = %trade_group_id,
+                        "Successfully created TradeGroup with default settings"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        trade_group_id = %trade_group_id,
+                        error = %e,
+                        "Failed to create TradeGroup automatically"
+                    );
+                    return Err(ProblemDetails::internal_error(format!(
+                        "Failed to create TradeGroup automatically: {}",
+                        e
+                    ))
+                    .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)));
+                }
+            }
         }
         Err(e) => {
             tracing::error!(
