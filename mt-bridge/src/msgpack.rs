@@ -1237,12 +1237,18 @@ mod tests {
         // Call FFI function
         unsafe {
             let handle = parse_master_config(serialized.as_ptr(), serialized.len() as i32);
-            assert!(!handle.is_null(), "parse_master_config should return valid handle");
+            assert!(
+                !handle.is_null(),
+                "parse_master_config should return valid handle"
+            );
 
             // Test master_config_get_string
             let account_id_utf16: Vec<u16> = "account_id".encode_utf16().chain(Some(0)).collect();
             let account_id_ptr = master_config_get_string(handle, account_id_utf16.as_ptr());
-            assert!(!account_id_ptr.is_null(), "account_id should be retrievable");
+            assert!(
+                !account_id_ptr.is_null(),
+                "account_id should be retrievable"
+            );
 
             let prefix_utf16: Vec<u16> = "symbol_prefix".encode_utf16().chain(Some(0)).collect();
             let prefix_ptr = master_config_get_string(handle, prefix_utf16.as_ptr());
@@ -1277,7 +1283,10 @@ mod tests {
 
         unsafe {
             let handle = parse_master_config(serialized.as_ptr(), serialized.len() as i32);
-            assert!(!handle.is_null(), "parse_master_config should return valid handle");
+            assert!(
+                !handle.is_null(),
+                "parse_master_config should return valid handle"
+            );
 
             // Get version (should be 0)
             let version_utf16: Vec<u16> = "config_version".encode_utf16().chain(Some(0)).collect();
@@ -1287,7 +1296,10 @@ mod tests {
             // Get prefix (should return empty string for None)
             let prefix_utf16: Vec<u16> = "symbol_prefix".encode_utf16().chain(Some(0)).collect();
             let prefix_ptr = master_config_get_string(handle, prefix_utf16.as_ptr());
-            assert!(!prefix_ptr.is_null(), "symbol_prefix should return valid pointer");
+            assert!(
+                !prefix_ptr.is_null(),
+                "symbol_prefix should return valid pointer"
+            );
 
             // Free the handle
             master_config_free(handle);
@@ -1301,7 +1313,10 @@ mod tests {
 
         unsafe {
             let handle = parse_master_config(invalid_data.as_ptr(), invalid_data.len() as i32);
-            assert!(handle.is_null(), "parse_master_config should return null for invalid data");
+            assert!(
+                handle.is_null(),
+                "parse_master_config should return null for invalid data"
+            );
         }
     }
 }
