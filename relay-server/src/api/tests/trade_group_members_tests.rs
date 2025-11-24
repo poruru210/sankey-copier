@@ -612,8 +612,7 @@ async fn test_delete_member_not_found() {
 
     // Should handle gracefully (either 404 or 204)
     assert!(
-        response.status() == StatusCode::NOT_FOUND
-            || response.status() == StatusCode::NO_CONTENT
+        response.status() == StatusCode::NOT_FOUND || response.status() == StatusCode::NO_CONTENT
     );
 }
 

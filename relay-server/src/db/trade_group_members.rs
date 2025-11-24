@@ -134,7 +134,11 @@ impl Database {
         .await?;
 
         if result.rows_affected() == 0 {
-            anyhow::bail!("Member not found: trade_group_id={}, slave_account={}", trade_group_id, slave_account);
+            anyhow::bail!(
+                "Member not found: trade_group_id={}, slave_account={}",
+                trade_group_id,
+                slave_account
+            );
         }
 
         Ok(())
@@ -159,7 +163,11 @@ impl Database {
         .await?;
 
         if result.rows_affected() == 0 {
-            anyhow::bail!("Member not found: trade_group_id={}, slave_account={}", trade_group_id, slave_account);
+            anyhow::bail!(
+                "Member not found: trade_group_id={}, slave_account={}",
+                trade_group_id,
+                slave_account
+            );
         }
 
         Ok(())

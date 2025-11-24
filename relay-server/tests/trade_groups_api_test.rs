@@ -384,21 +384,13 @@ async fn test_delete_trade_group_cascade_deletes_members() {
         config_version: 0,
     };
 
-    db.add_member(
-        "MASTER_CASCADE_TEST",
-        "SLAVE_001",
-        slave_settings.clone(),
-    )
-    .await
-    .unwrap();
+    db.add_member("MASTER_CASCADE_TEST", "SLAVE_001", slave_settings.clone())
+        .await
+        .unwrap();
 
-    db.add_member(
-        "MASTER_CASCADE_TEST",
-        "SLAVE_002",
-        slave_settings,
-    )
-    .await
-    .unwrap();
+    db.add_member("MASTER_CASCADE_TEST", "SLAVE_002", slave_settings)
+        .await
+        .unwrap();
 
     // Verify members exist
     let members_before = db.get_members("MASTER_CASCADE_TEST").await.unwrap();

@@ -137,11 +137,10 @@ pub async fn update_trade_group_settings(
                     master_account = %id,
                     "TradeGroup not found for update"
                 );
-                return Err(ProblemDetails::not_found(format!(
-                    "TradeGroup not found: {}",
-                    id
-                ))
-                .with_instance(format!("/api/trade-groups/{}", id)));
+                return Err(
+                    ProblemDetails::not_found(format!("TradeGroup not found: {}", id))
+                        .with_instance(format!("/api/trade-groups/{}", id)),
+                );
             }
 
             tracing::error!(

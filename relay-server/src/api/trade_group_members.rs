@@ -170,7 +170,9 @@ pub async fn add_member(
             let error_msg = e.to_string();
 
             // Check if this is a unique constraint violation (duplicate member)
-            if error_msg.contains("UNIQUE constraint failed") || error_msg.contains("unique constraint") {
+            if error_msg.contains("UNIQUE constraint failed")
+                || error_msg.contains("unique constraint")
+            {
                 tracing::warn!(
                     trade_group_id = %trade_group_id,
                     slave_account = %request.slave_account,
