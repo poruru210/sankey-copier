@@ -102,7 +102,11 @@ pub async fn update_trade_group_settings(
     let mut updated_settings = settings;
     updated_settings.config_version += 1;
 
-    match state.db.update_master_settings(&id, updated_settings.clone()).await {
+    match state
+        .db
+        .update_master_settings(&id, updated_settings.clone())
+        .await
+    {
         Ok(_) => {
             tracing::info!(
                 master_account = %id,
@@ -132,11 +136,10 @@ pub async fn update_trade_group_settings(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to update Master settings"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to update Master settings: {}",
-                e
-            ))
-            .with_instance(format!("/api/trade-groups/{}", id)))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to update Master settings: {}", e))
+                    .with_instance(format!("/api/trade-groups/{}", id)),
+            )
         }
     }
 }

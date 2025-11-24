@@ -186,7 +186,9 @@ async fn test_update_trade_group_settings_success() {
         .method("PUT")
         .uri("/api/trade-groups/MASTER_456")
         .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&updated_settings).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&updated_settings).unwrap(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -255,10 +257,7 @@ async fn test_update_trade_group_settings_increments_version() {
     let tg2 = db.get_trade_group("MASTER_789").await.unwrap().unwrap();
     assert_eq!(tg2.master_settings.config_version, 2);
     assert_eq!(tg2.master_settings.symbol_prefix, Some("v2.".to_string()));
-    assert_eq!(
-        tg2.master_settings.symbol_suffix,
-        Some(".v2".to_string())
-    );
+    assert_eq!(tg2.master_settings.symbol_suffix, Some(".v2".to_string()));
 }
 
 #[tokio::test]
@@ -266,9 +265,7 @@ async fn test_trade_group_response_structure() {
     let (app, db) = create_test_app().await;
 
     // Create test data
-    db.create_trade_group("MASTER_STRUCT_TEST")
-        .await
-        .unwrap();
+    db.create_trade_group("MASTER_STRUCT_TEST").await.unwrap();
 
     let request = Request::builder()
         .uri("/api/trade-groups")

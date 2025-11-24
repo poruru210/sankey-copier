@@ -137,11 +137,7 @@ struct SlaveEaSimulator {
 
 impl SlaveEaSimulator {
     /// Create a new Slave EA simulator using mt-bridge FFI
-    fn new(
-        push_address: &str,
-        config_address: &str,
-        account_id: &str,
-    ) -> anyhow::Result<Self> {
+    fn new(push_address: &str, config_address: &str, account_id: &str) -> anyhow::Result<Self> {
         let context_handle = zmq_context_create();
         if context_handle < 0 {
             anyhow::bail!("Failed to create ZMQ context");
@@ -232,11 +228,8 @@ impl SlaveEaSimulator {
         let bytes = rmp_serde::to_vec_named(&msg)?;
 
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.push_socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 anyhow::bail!("Failed to send Heartbeat");
             }
@@ -431,7 +424,10 @@ async fn test_toggle_connection_via_rest_api() {
     let toggle_req = ToggleRequest { status: 0 };
 
     let response = client
-        .post(format!("{}/api/settings/{}/toggle", http_base_url, settings_id))
+        .post(format!(
+            "{}/api/settings/{}/toggle",
+            http_base_url, settings_id
+        ))
         .json(&toggle_req)
         .send()
         .await
@@ -454,7 +450,10 @@ async fn test_toggle_connection_via_rest_api() {
     let toggle_req = ToggleRequest { status: 1 };
 
     let response = client
-        .post(format!("{}/api/settings/{}/toggle", http_base_url, settings_id))
+        .post(format!(
+            "{}/api/settings/{}/toggle",
+            http_base_url, settings_id
+        ))
         .json(&toggle_req)
         .send()
         .await
@@ -550,7 +549,10 @@ async fn test_delete_connection_via_rest_api() {
     assert_eq!(config.status, 0); // DISABLED
     assert_eq!(config.account_id, "SLAVE_DELETE_TEST");
 
-    println!("✅ After deletion: Slave received status = {} (DISABLED)", config.status);
+    println!(
+        "✅ After deletion: Slave received status = {} (DISABLED)",
+        config.status
+    );
 
     server.shutdown().await;
 }
@@ -567,14 +569,14 @@ async fn test_list_and_get_settings_via_rest_api() {
     let http_base_url = format!("http://localhost:{}", server.http_port);
 
     // Create 2 Master EAs
-    let master1 = MasterEaSimulator::new(&push_address, "MASTER_LIST_1")
-        .expect("Failed to create Master 1");
+    let master1 =
+        MasterEaSimulator::new(&push_address, "MASTER_LIST_1").expect("Failed to create Master 1");
     master1
         .send_heartbeat()
         .expect("Failed to send Master 1 heartbeat");
 
-    let master2 = MasterEaSimulator::new(&push_address, "MASTER_LIST_2")
-        .expect("Failed to create Master 2");
+    let master2 =
+        MasterEaSimulator::new(&push_address, "MASTER_LIST_2").expect("Failed to create Master 2");
     master2
         .send_heartbeat()
         .expect("Failed to send Master 2 heartbeat");
@@ -629,11 +631,17 @@ async fn test_list_and_get_settings_via_rest_api() {
 
     assert_eq!(response.status(), 200);
 
-    let settings_list: Vec<CopySettings> = response.json().await.expect("Failed to parse settings list");
+    let settings_list: Vec<CopySettings> = response
+        .json()
+        .await
+        .expect("Failed to parse settings list");
 
     assert!(settings_list.len() >= 2, "Expected at least 2 settings");
 
-    println!("✅ GET /api/settings returned {} settings", settings_list.len());
+    println!(
+        "✅ GET /api/settings returned {} settings",
+        settings_list.len()
+    );
 
     // Test GET /api/settings/:id (get specific)
     let response = client
@@ -778,14 +786,14 @@ async fn test_list_ea_connections_via_rest_api() {
     let http_base_url = format!("http://localhost:{}", server.http_port);
 
     // Create 2 Master EAs with different balances
-    let master1 = MasterEaSimulator::new(&push_address, "MASTER_CONN_1")
-        .expect("Failed to create Master 1");
+    let master1 =
+        MasterEaSimulator::new(&push_address, "MASTER_CONN_1").expect("Failed to create Master 1");
     master1
         .send_heartbeat()
         .expect("Failed to send Master 1 heartbeat");
 
-    let master2 = MasterEaSimulator::new(&push_address, "MASTER_CONN_2")
-        .expect("Failed to create Master 2");
+    let master2 =
+        MasterEaSimulator::new(&push_address, "MASTER_CONN_2").expect("Failed to create Master 2");
     master2
         .send_heartbeat()
         .expect("Failed to send Master 2 heartbeat");
@@ -802,7 +810,8 @@ async fn test_list_ea_connections_via_rest_api() {
 
     assert_eq!(response.status(), 200);
 
-    let connections: Vec<serde_json::Value> = response.json().await.expect("Failed to parse connections");
+    let connections: Vec<serde_json::Value> =
+        response.json().await.expect("Failed to parse connections");
 
     assert!(connections.len() >= 2, "Expected at least 2 connections");
 
@@ -820,7 +829,9 @@ async fn test_list_ea_connections_via_rest_api() {
     println!("✅ GET /api/connections returned {} EAs", connections.len());
 
     // Verify specific EA is in the list
-    let master1_found = connections.iter().any(|c| c["account_id"] == "MASTER_CONN_1");
+    let master1_found = connections
+        .iter()
+        .any(|c| c["account_id"] == "MASTER_CONN_1");
     assert!(master1_found, "MASTER_CONN_1 should be in connections list");
 
     server.shutdown().await;
@@ -876,7 +887,10 @@ async fn test_create_duplicate_connection_returns_conflict() {
 
     assert_eq!(response2.status(), 409, "Expected 409 Conflict");
 
-    let error: serde_json::Value = response2.json().await.expect("Failed to parse error response");
+    let error: serde_json::Value = response2
+        .json()
+        .await
+        .expect("Failed to parse error response");
 
     // Verify RFC 9457 Problem Details structure
     assert_eq!(error["status"], 409);
@@ -940,21 +954,29 @@ async fn test_multiple_connections_independent_operation() {
     let http_base_url = format!("http://localhost:{}", server.http_port);
 
     // Create 2 Master-Slave pairs
-    let master1 = MasterEaSimulator::new(&push_address, "MASTER_MULTI_1")
-        .expect("Failed to create Master 1");
-    master1.send_heartbeat().expect("Failed to send Master 1 heartbeat");
+    let master1 =
+        MasterEaSimulator::new(&push_address, "MASTER_MULTI_1").expect("Failed to create Master 1");
+    master1
+        .send_heartbeat()
+        .expect("Failed to send Master 1 heartbeat");
 
     let slave1 = SlaveEaSimulator::new(&push_address, &config_address, "SLAVE_MULTI_1")
         .expect("Failed to create Slave 1");
-    slave1.send_heartbeat().expect("Failed to send Slave 1 heartbeat");
+    slave1
+        .send_heartbeat()
+        .expect("Failed to send Slave 1 heartbeat");
 
-    let master2 = MasterEaSimulator::new(&push_address, "MASTER_MULTI_2")
-        .expect("Failed to create Master 2");
-    master2.send_heartbeat().expect("Failed to send Master 2 heartbeat");
+    let master2 =
+        MasterEaSimulator::new(&push_address, "MASTER_MULTI_2").expect("Failed to create Master 2");
+    master2
+        .send_heartbeat()
+        .expect("Failed to send Master 2 heartbeat");
 
     let slave2 = SlaveEaSimulator::new(&push_address, &config_address, "SLAVE_MULTI_2")
         .expect("Failed to create Slave 2");
-    slave2.send_heartbeat().expect("Failed to send Slave 2 heartbeat");
+    slave2
+        .send_heartbeat()
+        .expect("Failed to send Slave 2 heartbeat");
 
     sleep(Duration::from_millis(100)).await;
 
@@ -1017,8 +1039,14 @@ async fn test_multiple_connections_independent_operation() {
     assert_eq!(config2.reverse_trade, true);
 
     println!("✅ Multiple connections operate independently:");
-    println!("   Connection 1: lot={:?}, reverse={}", config1.lot_multiplier, config1.reverse_trade);
-    println!("   Connection 2: lot={:?}, reverse={}", config2.lot_multiplier, config2.reverse_trade);
+    println!(
+        "   Connection 1: lot={:?}, reverse={}",
+        config1.lot_multiplier, config1.reverse_trade
+    );
+    println!(
+        "   Connection 2: lot={:?}, reverse={}",
+        config2.lot_multiplier, config2.reverse_trade
+    );
 
     // Toggle only connection 1
     let toggle_req = ToggleRequest { status: 0 };

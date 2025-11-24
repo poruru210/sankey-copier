@@ -201,10 +201,7 @@ impl TestServer {
         }
         if let Some(handle) = self.zmq_receiver_handle.take() {
             // Wait for ZMQ receiver to finish (should be quick after shutdown signal)
-            let _ = tokio::time::timeout(
-                tokio::time::Duration::from_millis(500),
-                handle
-            ).await;
+            let _ = tokio::time::timeout(tokio::time::Duration::from_millis(500), handle).await;
         }
         if let Some(handle) = self.zmq_handler_handle.take() {
             handle.abort();

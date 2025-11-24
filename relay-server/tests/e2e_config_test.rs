@@ -76,7 +76,8 @@ impl MasterEaSimulator {
                 anyhow::bail!("Failed to connect PUSH socket to {}", push_address);
             }
 
-            let config_result = zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
+            let config_result =
+                zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
             if config_result != 1 {
                 zmq_socket_destroy(config_socket_handle);
                 zmq_socket_destroy(push_socket_handle);
@@ -130,11 +131,8 @@ impl MasterEaSimulator {
 
         // Send via mt-bridge FFI
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.push_socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 anyhow::bail!("Failed to send Heartbeat via mt-bridge FFI");
             }
@@ -156,11 +154,8 @@ impl MasterEaSimulator {
 
         // Send via mt-bridge FFI
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.push_socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 anyhow::bail!("Failed to send RequestConfig via mt-bridge FFI");
             }
@@ -317,7 +312,8 @@ impl SlaveEaSimulator {
                 anyhow::bail!("Failed to connect PUSH socket to {}", push_address);
             }
 
-            let config_result = zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
+            let config_result =
+                zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
             if config_result != 1 {
                 zmq_socket_destroy(trade_socket_handle);
                 zmq_socket_destroy(config_socket_handle);
@@ -336,7 +332,8 @@ impl SlaveEaSimulator {
             }
 
             // Subscribe to config messages for this account_id (topic-based filtering)
-            let sub_result = zmq_socket_subscribe(config_socket_handle, account_topic_utf16.as_ptr());
+            let sub_result =
+                zmq_socket_subscribe(config_socket_handle, account_topic_utf16.as_ptr());
             if sub_result != 1 {
                 zmq_socket_destroy(trade_socket_handle);
                 zmq_socket_destroy(config_socket_handle);
@@ -397,11 +394,8 @@ impl SlaveEaSimulator {
 
         // Send via mt-bridge FFI
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.push_socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 anyhow::bail!("Failed to send Heartbeat via mt-bridge FFI");
             }
@@ -423,11 +417,8 @@ impl SlaveEaSimulator {
 
         // Send via mt-bridge FFI
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.push_socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 anyhow::bail!("Failed to send RequestConfig via mt-bridge FFI");
             }

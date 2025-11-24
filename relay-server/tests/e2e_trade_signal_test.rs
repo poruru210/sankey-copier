@@ -78,11 +78,8 @@ impl MasterEaSimulator {
 
         // Send via mt-bridge FFI (same as MQL EA would call)
         unsafe {
-            let result = zmq_socket_send_binary(
-                self.socket_handle,
-                bytes.as_ptr(),
-                bytes.len() as i32,
-            );
+            let result =
+                zmq_socket_send_binary(self.socket_handle, bytes.as_ptr(), bytes.len() as i32);
             if result != 1 {
                 return Err(anyhow::anyhow!("Failed to send signal"));
             }
@@ -92,13 +89,7 @@ impl MasterEaSimulator {
     }
 
     /// Helper to create a Buy signal
-    fn create_buy_signal(
-        &self,
-        ticket: i64,
-        symbol: &str,
-        lots: f64,
-        price: f64,
-    ) -> TradeSignal {
+    fn create_buy_signal(&self, ticket: i64, symbol: &str, lots: f64, price: f64) -> TradeSignal {
         TradeSignal {
             action: TradeAction::Open,
             ticket,
@@ -116,13 +107,7 @@ impl MasterEaSimulator {
     }
 
     /// Helper to create a Sell signal
-    fn create_sell_signal(
-        &self,
-        ticket: i64,
-        symbol: &str,
-        lots: f64,
-        price: f64,
-    ) -> TradeSignal {
+    fn create_sell_signal(&self, ticket: i64, symbol: &str, lots: f64, price: f64) -> TradeSignal {
         TradeSignal {
             action: TradeAction::Open,
             ticket,
@@ -164,11 +149,7 @@ impl SlaveEaSimulator {
     /// - trade_address: Address for SUB socket (e.g., "tcp://localhost:5556")
     /// - account_id: Slave account ID
     /// - master_account: Master account ID to subscribe to
-    fn new(
-        trade_address: &str,
-        account_id: &str,
-        master_account: &str,
-    ) -> anyhow::Result<Self> {
+    fn new(trade_address: &str, account_id: &str, master_account: &str) -> anyhow::Result<Self> {
         // Create ZMQ context via mt-bridge FFI
         let context_handle = zmq_context_create();
         if context_handle < 0 {
@@ -244,12 +225,9 @@ impl SlaveEaSimulator {
                     // Message format: topic + space + MessagePack payload
                     let bytes = &buffer[..received_bytes as usize];
 
-                    let space_pos = bytes
-                        .iter()
-                        .position(|&b| b == b' ')
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("Invalid message format: no space separator")
-                        })?;
+                    let space_pos = bytes.iter().position(|&b| b == b' ').ok_or_else(|| {
+                        anyhow::anyhow!("Invalid message format: no space separator")
+                    })?;
 
                     // Extract payload (skip topic)
                     let payload = &bytes[space_pos + 1..];
@@ -316,9 +294,8 @@ async fn test_basic_signal_distribution() {
     server.set_all_members_connected().await;
 
     // Create Master EA simulator
-    let master_sim =
-        MasterEaSimulator::new(&server.zmq_pull_address(), master_account)
-            .expect("Failed to create Master EA simulator");
+    let master_sim = MasterEaSimulator::new(&server.zmq_pull_address(), master_account)
+        .expect("Failed to create Master EA simulator");
 
     // Create Slave EA simulator
     let slave_sim = SlaveEaSimulator::new(

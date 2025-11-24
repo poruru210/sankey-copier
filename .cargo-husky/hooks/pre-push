@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Pre-push hook for Rust projects (relay-server and mt-bridge)
+# Runs cargo fmt --check and cargo clippy before allowing push
+
+set -e
+
+echo "=== Checking relay-server ==="
+echo "Running cargo fmt --check..."
+cargo fmt --manifest-path relay-server/Cargo.toml --check
+
+echo "Running cargo clippy..."
+cargo clippy --manifest-path relay-server/Cargo.toml --all-targets --all-features -- -D warnings
+
+echo ""
+echo "=== Checking mt-bridge ==="
+echo "Running cargo fmt --check..."
+cargo fmt --manifest-path mt-bridge/Cargo.toml --check
+
+echo "Running cargo clippy..."
+cargo clippy --manifest-path mt-bridge/Cargo.toml --all-targets --all-features -- -D warnings
+
+echo ""
+echo "=== All checks passed! ==="
