@@ -23,11 +23,11 @@ import {
   type Step as StepType,
 } from '@/components/ui/stepper';
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from '@/components/ui/tabs';
 
 interface CreateConnectionDialogProps {
   open: boolean;
@@ -146,9 +146,9 @@ function CreateConnectionForm({
     symbol_mappings: '',
   });
 
-  // Track accordion expansion state for Step 1 (Master) and Step 2 (Slave)
-  const [openMasterAccordion, setOpenMasterAccordion] = useState<string>('master-symbols');
-  const [openSlaveAccordion, setOpenSlaveAccordion] = useState<string>('basic');
+  // Track tab selection state for Step 1 (Master) and Step 2 (Slave)
+  const [masterTab, setMasterTab] = useState<string>('master-symbols');
+  const [slaveTab, setSlaveTab] = useState<string>('basic');
 
   // Initialize form data on mount
   useEffect(() => {
@@ -386,67 +386,58 @@ function CreateConnectionForm({
                 </div>
               )}
 
-              {/* Accordion Layout for Master Settings */}
-              <Accordion
-                type="single"
-                value={openMasterAccordion}
-                onValueChange={setOpenMasterAccordion}
-                collapsible
-                className="w-full"
-              >
-                {/* Master Symbol Filters */}
-                <AccordionItem value="master-symbols">
-                  <AccordionTrigger>
+              {/* Tabs Layout for Master Settings */}
+              <Tabs value={masterTab} onValueChange={setMasterTab} className="w-full">
+                <TabsList className="w-full">
+                  <TabsTrigger value="master-symbols" className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🔍</span>
-                      <span>Symbol Filters (Optional)</span>
+                      <span>Symbol Filters</span>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 pt-2">
-                      <p className="text-xs text-muted-foreground">
-                        Configure symbol name transformations that the Master EA will apply before broadcasting.
-                      </p>
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="master-symbols" className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Configure symbol name transformations that the Master EA will apply before broadcasting.
+                  </p>
 
-                      {/* Symbol Prefix */}
-                      <div>
-                        <Label htmlFor="master_symbol_prefix">
-                          Symbol Prefix
-                        </Label>
-                        <Input
-                          id="master_symbol_prefix"
-                          type="text"
-                          placeholder="e.g. 'pro.' or 'FX.'"
-                          value={masterSettings.symbol_prefix}
-                          onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
-                          disabled={loadingMembers}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
-                        </p>
-                      </div>
+                  {/* Symbol Prefix */}
+                  <div>
+                    <Label htmlFor="master_symbol_prefix">
+                      Symbol Prefix
+                    </Label>
+                    <Input
+                      id="master_symbol_prefix"
+                      type="text"
+                      placeholder="e.g. 'pro.' or 'FX.'"
+                      value={masterSettings.symbol_prefix}
+                      onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
+                      disabled={loadingMembers}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
+                    </p>
+                  </div>
 
-                      {/* Symbol Suffix */}
-                      <div>
-                        <Label htmlFor="master_symbol_suffix">
-                          Symbol Suffix
-                        </Label>
-                        <Input
-                          id="master_symbol_suffix"
-                          type="text"
-                          placeholder="e.g. '.m' or '-ECN'"
-                          value={masterSettings.symbol_suffix}
-                          onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
-                          disabled={loadingMembers}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
-                        </p>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+                  {/* Symbol Suffix */}
+                  <div>
+                    <Label htmlFor="master_symbol_suffix">
+                      Symbol Suffix
+                    </Label>
+                    <Input
+                      id="master_symbol_suffix"
+                      type="text"
+                      placeholder="e.g. '.m' or '-ECN'"
+                      value={masterSettings.symbol_suffix}
+                      onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
+                      disabled={loadingMembers}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </Step>
 
@@ -463,129 +454,118 @@ function CreateConnectionForm({
                 </p>
               </div>
 
-              {/* Accordion Layout */}
-              <Accordion
-                type="single"
-                value={openSlaveAccordion}
-                onValueChange={setOpenSlaveAccordion}
-                collapsible
-                className="w-full"
-              >
-                {/* Basic Copy Settings */}
-                <AccordionItem value="basic">
-                  <AccordionTrigger>
+              {/* Tabs Layout */}
+              <Tabs value={slaveTab} onValueChange={setSlaveTab} className="w-full">
+                <TabsList className="w-full grid grid-cols-2">
+                  <TabsTrigger value="basic">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">📊</span>
-                      <span>Basic Copy Settings</span>
+                      <span>Basic Settings</span>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 pt-2">
-                      {/* Lot Multiplier */}
-                      <div>
-                        <Label htmlFor="lot_multiplier">
-                          {content.lotMultiplier?.value || "Lot Multiplier"}
-                        </Label>
-                        <Input
-                          id="lot_multiplier"
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          max="100"
-                          value={formData.lot_multiplier}
-                          onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
-                        </p>
-                      </div>
-
-                      {/* Reverse Trade */}
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="reverse_trade"
-                          checked={formData.reverse_trade}
-                          onCheckedChange={(checked) =>
-                            setFormData({ ...formData, reverse_trade: checked as boolean })
-                          }
-                        />
-                        <Label htmlFor="reverse_trade" className="cursor-pointer">
-                          {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
-                        </Label>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* Symbol Filters */}
-                <AccordionItem value="filters">
-                  <AccordionTrigger>
+                  </TabsTrigger>
+                  <TabsTrigger value="filters">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🔍</span>
-                      <span>Symbol Filters (Optional)</span>
+                      <span>Symbol Filters</span>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 pt-2">
-                      <p className="text-xs text-muted-foreground">
-                        Configure symbol name transformations for this connection.
-                      </p>
+                  </TabsTrigger>
+                </TabsList>
 
-                      {/* Symbol Prefix */}
-                      <div>
-                        <Label htmlFor="symbol_prefix">
-                          Symbol Prefix
-                        </Label>
-                        <Input
-                          id="symbol_prefix"
-                          type="text"
-                          placeholder="e.g. 'pro.' or 'FX.'"
-                          value={formData.symbol_prefix}
-                          onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
-                        </p>
-                      </div>
+                {/* Basic Copy Settings Tab */}
+                <TabsContent value="basic" className="space-y-4">
+                  {/* Lot Multiplier */}
+                  <div>
+                    <Label htmlFor="lot_multiplier">
+                      {content.lotMultiplier?.value || "Lot Multiplier"}
+                    </Label>
+                    <Input
+                      id="lot_multiplier"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="100"
+                      value={formData.lot_multiplier}
+                      onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
+                    </p>
+                  </div>
 
-                      {/* Symbol Suffix */}
-                      <div>
-                        <Label htmlFor="symbol_suffix">
-                          Symbol Suffix
-                        </Label>
-                        <Input
-                          id="symbol_suffix"
-                          type="text"
-                          placeholder="e.g. '.m' or '-ECN'"
-                          value={formData.symbol_suffix}
-                          onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
-                        </p>
-                      </div>
+                  {/* Reverse Trade */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="reverse_trade"
+                      checked={formData.reverse_trade}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, reverse_trade: checked as boolean })
+                      }
+                    />
+                    <Label htmlFor="reverse_trade" className="cursor-pointer">
+                      {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
+                    </Label>
+                  </div>
+                </TabsContent>
 
-                      {/* Symbol Mappings */}
-                      <div>
-                        <Label htmlFor="symbol_mappings">
-                          Symbol Mappings
-                        </Label>
-                        <Input
-                          id="symbol_mappings"
-                          type="text"
-                          placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
-                          value={formData.symbol_mappings}
-                          onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
-                        </p>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+                {/* Symbol Filters Tab */}
+                <TabsContent value="filters" className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Configure symbol name transformations for this connection.
+                  </p>
+
+                  {/* Symbol Prefix */}
+                  <div>
+                    <Label htmlFor="symbol_prefix">
+                      Symbol Prefix
+                    </Label>
+                    <Input
+                      id="symbol_prefix"
+                      type="text"
+                      placeholder="e.g. 'pro.' or 'FX.'"
+                      value={formData.symbol_prefix}
+                      onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
+                    </p>
+                  </div>
+
+                  {/* Symbol Suffix */}
+                  <div>
+                    <Label htmlFor="symbol_suffix">
+                      Symbol Suffix
+                    </Label>
+                    <Input
+                      id="symbol_suffix"
+                      type="text"
+                      placeholder="e.g. '.m' or '-ECN'"
+                      value={formData.symbol_suffix}
+                      onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
+                    </p>
+                  </div>
+
+                  {/* Symbol Mappings */}
+                  <div>
+                    <Label htmlFor="symbol_mappings">
+                      Symbol Mappings
+                    </Label>
+                    <Input
+                      id="symbol_mappings"
+                      type="text"
+                      placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
+                      value={formData.symbol_mappings}
+                      onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </Step>
 
