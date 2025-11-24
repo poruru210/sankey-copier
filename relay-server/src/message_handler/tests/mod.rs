@@ -3,9 +3,7 @@
 //! Provides helper functions to create test instances and test data.
 
 use super::*;
-use crate::models::{
-    CopySettings, HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal,
-};
+use crate::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
 use chrono::Utc;
 use std::sync::atomic::{AtomicU16, Ordering};
 
@@ -62,26 +60,5 @@ pub(crate) fn create_test_trade_signal() -> TradeSignal {
         comment: "Test trade".to_string(),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
-    }
-}
-
-/// Create a test CopySettings
-pub(crate) fn create_test_copy_settings() -> CopySettings {
-    CopySettings {
-        id: 1,
-        status: 2, // STATUS_CONNECTED
-        master_account: "MASTER_001".to_string(),
-        slave_account: "SLAVE_001".to_string(),
-        lot_multiplier: Some(1.0),
-        reverse_trade: false,
-        symbol_prefix: None,
-        symbol_suffix: None,
-        symbol_mappings: vec![],
-        filters: TradeFilters {
-            allowed_symbols: None,
-            blocked_symbols: None,
-            allowed_magic_numbers: None,
-            blocked_magic_numbers: None,
-        },
     }
 }
