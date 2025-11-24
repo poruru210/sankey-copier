@@ -119,9 +119,9 @@ async fn test_add_member_success() {
 }
 
 #[tokio::test]
-async fn test_add_member_trade_group_not_found() {
+async fn test_add_member_auto_creates_trade_group() {
     let state = create_test_app_state().await;
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_001".to_string(),
@@ -140,7 +140,20 @@ async fn test_add_member_trade_group_not_found() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // Should auto-create TradeGroup and return CREATED
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Verify TradeGroup was created
+    let trade_group = state.db.get_trade_group("NONEXISTENT").await.unwrap();
+    assert!(trade_group.is_some());
+
+    // Verify member was added
+    let member = state
+        .db
+        .get_member("NONEXISTENT", "SLAVE_001")
+        .await
+        .unwrap();
+    assert!(member.is_some());
 }
 
 #[tokio::test]

@@ -69,7 +69,7 @@ export function CreateConnectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[1100px] h-[750px] max-w-[95vw] max-h-[95vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{content.createTitle.value}</DialogTitle>
         </DialogHeader>
@@ -427,100 +427,109 @@ function CreateConnectionForm({
                 </p>
               </div>
 
-              {/* Lot Multiplier */}
-              <div>
-                <Label htmlFor="lot_multiplier">
-                  {content.lotMultiplier?.value || "Lot Multiplier"}
-                </Label>
-                <Input
-                  id="lot_multiplier"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="100"
-                  value={formData.lot_multiplier}
-                  onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
-                </p>
-              </div>
+              {/* 2-Column Layout for PC */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Basic Copy Settings */}
+                <div className="space-y-4">
+                  {/* Lot Multiplier */}
+                  <div>
+                    <Label htmlFor="lot_multiplier">
+                      {content.lotMultiplier?.value || "Lot Multiplier"}
+                    </Label>
+                    <Input
+                      id="lot_multiplier"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="100"
+                      value={formData.lot_multiplier}
+                      onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
+                    </p>
+                  </div>
 
-              {/* Reverse Trade */}
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="reverse_trade"
-                  checked={formData.reverse_trade}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, reverse_trade: checked as boolean })
-                  }
-                />
-                <Label htmlFor="reverse_trade" className="cursor-pointer">
-                  {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
-                </Label>
-              </div>
+                  {/* Reverse Trade */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="reverse_trade"
+                      checked={formData.reverse_trade}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, reverse_trade: checked as boolean })
+                      }
+                    />
+                    <Label htmlFor="reverse_trade" className="cursor-pointer">
+                      {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
+                    </Label>
+                  </div>
+                </div>
 
-              {/* Symbol Filters Section */}
-              <div className="space-y-1 mt-6">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">🔍</span>
-                  Symbol Filters (Optional)
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Configure symbol name transformations for this connection.
-                </p>
-              </div>
+                {/* Right Column: Symbol Filters */}
+                <div className="space-y-4">
+                  {/* Symbol Filters Section */}
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-lg">🔍</span>
+                      Symbol Filters (Optional)
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Configure symbol name transformations for this connection.
+                    </p>
+                  </div>
 
-              {/* Symbol Prefix */}
-              <div>
-                <Label htmlFor="symbol_prefix">
-                  Symbol Prefix
-                </Label>
-                <Input
-                  id="symbol_prefix"
-                  type="text"
-                  placeholder="e.g. 'pro.' or 'FX.'"
-                  value={formData.symbol_prefix}
-                  onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
-                </p>
-              </div>
+                  {/* Symbol Prefix */}
+                  <div>
+                    <Label htmlFor="symbol_prefix">
+                      Symbol Prefix
+                    </Label>
+                    <Input
+                      id="symbol_prefix"
+                      type="text"
+                      placeholder="e.g. 'pro.' or 'FX.'"
+                      value={formData.symbol_prefix}
+                      onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
+                    </p>
+                  </div>
 
-              {/* Symbol Suffix */}
-              <div>
-                <Label htmlFor="symbol_suffix">
-                  Symbol Suffix
-                </Label>
-                <Input
-                  id="symbol_suffix"
-                  type="text"
-                  placeholder="e.g. '.m' or '-ECN'"
-                  value={formData.symbol_suffix}
-                  onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
-                </p>
-              </div>
+                  {/* Symbol Suffix */}
+                  <div>
+                    <Label htmlFor="symbol_suffix">
+                      Symbol Suffix
+                    </Label>
+                    <Input
+                      id="symbol_suffix"
+                      type="text"
+                      placeholder="e.g. '.m' or '-ECN'"
+                      value={formData.symbol_suffix}
+                      onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
+                    </p>
+                  </div>
 
-              {/* Symbol Mappings */}
-              <div>
-                <Label htmlFor="symbol_mappings">
-                  Symbol Mappings
-                </Label>
-                <Input
-                  id="symbol_mappings"
-                  type="text"
-                  placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
-                  value={formData.symbol_mappings}
-                  onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
-                </p>
+                  {/* Symbol Mappings */}
+                  <div>
+                    <Label htmlFor="symbol_mappings">
+                      Symbol Mappings
+                    </Label>
+                    <Input
+                      id="symbol_mappings"
+                      type="text"
+                      placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
+                      value={formData.symbol_mappings}
+                      onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </Step>
