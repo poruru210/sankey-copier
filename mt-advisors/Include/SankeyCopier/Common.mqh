@@ -88,14 +88,6 @@
    int         master_config_get_int(HANDLE_TYPE handle, string field_name);
    void        master_config_free(HANDLE_TYPE handle);
 
-   // Deprecated: Use slave_config_* functions instead
-   HANDLE_TYPE parse_message(uchar &data[], int data_len);
-   string      config_get_string(HANDLE_TYPE handle, string field_name);
-   double      config_get_double(HANDLE_TYPE handle, string field_name);
-   int         config_get_bool(HANDLE_TYPE handle, string field_name);
-   int         config_get_int(HANDLE_TYPE handle, string field_name);
-   void        config_free(HANDLE_TYPE handle);
-
    // Trade signal parsing
    HANDLE_TYPE parse_trade_signal(uchar &data[], int data_len);
    string      trade_signal_get_string(HANDLE_TYPE handle, string field_name);

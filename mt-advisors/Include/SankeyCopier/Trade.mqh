@@ -233,7 +233,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    }
 
    // Free the config handle
-   config_free(config_handle);
+   slave_config_free(config_handle);
 
    Print("=== Configuration Updated ===");
 }

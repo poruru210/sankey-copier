@@ -170,26 +170,6 @@ pub unsafe extern "C" fn slave_config_free(handle: *mut ConfigMessage) {
     }
 }
 
-/// Deprecated: Use parse_slave_config() instead
-///
-/// # Safety
-/// Same safety requirements as parse_slave_config()
-#[deprecated(note = "Use parse_slave_config() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn parse_message(data: *const u8, data_len: i32) -> *mut ConfigMessage {
-    parse_slave_config(data, data_len)
-}
-
-/// Deprecated: Use slave_config_free() instead
-///
-/// # Safety
-/// Same safety requirements as slave_config_free()
-#[deprecated(note = "Use slave_config_free() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn config_free(handle: *mut ConfigMessage) {
-    slave_config_free(handle)
-}
-
 /// Parse MessagePack data as MasterConfigMessage and return an opaque handle
 ///
 /// # Safety
@@ -394,58 +374,6 @@ pub unsafe extern "C" fn slave_config_get_int(
         "status" => config.status,
         _ => 0,
     }
-}
-
-/// Deprecated: Use slave_config_get_string() instead
-///
-/// # Safety
-/// Same safety requirements as slave_config_get_string()
-#[deprecated(note = "Use slave_config_get_string() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn config_get_string(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> *const u16 {
-    slave_config_get_string(handle, field_name)
-}
-
-/// Deprecated: Use slave_config_get_double() instead
-///
-/// # Safety
-/// Same safety requirements as slave_config_get_double()
-#[deprecated(note = "Use slave_config_get_double() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn config_get_double(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> f64 {
-    slave_config_get_double(handle, field_name)
-}
-
-/// Deprecated: Use slave_config_get_bool() instead
-///
-/// # Safety
-/// Same safety requirements as slave_config_get_bool()
-#[deprecated(note = "Use slave_config_get_bool() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn config_get_bool(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> i32 {
-    slave_config_get_bool(handle, field_name)
-}
-
-/// Deprecated: Use slave_config_get_int() instead
-///
-/// # Safety
-/// Same safety requirements as slave_config_get_int()
-#[deprecated(note = "Use slave_config_get_int() for clarity")]
-#[no_mangle]
-pub unsafe extern "C" fn config_get_int(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> i32 {
-    slave_config_get_int(handle, field_name)
 }
 
 /// Get a string field from MasterConfigMessage handle
