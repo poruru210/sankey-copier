@@ -96,7 +96,10 @@ impl Database {
     ///
     /// Converts TradeGroupMembers + MasterSettings → CopySettings for use with copy_engine.
     /// This is used by trade signal handler to process trades for a specific master.
-    pub async fn get_copy_settings_for_master(&self, master_account: &str) -> Result<Vec<CopySettings>> {
+    pub async fn get_copy_settings_for_master(
+        &self,
+        master_account: &str,
+    ) -> Result<Vec<CopySettings>> {
         // Get Master settings for symbol_prefix/suffix
         let master_settings = match self.get_trade_group(master_account).await? {
             Some(tg) => tg.master_settings,

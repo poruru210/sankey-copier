@@ -7,13 +7,13 @@
 // Existing submodules (not modified)
 mod error;
 mod mt_installations;
-mod trade_groups;
 mod trade_group_members;
+mod trade_groups;
 
 // New submodules for modular structure
-mod middleware;
 mod connections;
 mod logs;
+mod middleware;
 mod websocket;
 
 #[cfg(test)]
@@ -35,10 +35,7 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
 
 use crate::{
-    config::Config,
-    connection_manager::ConnectionManager,
-    db::Database,
-    log_buffer::LogBuffer,
+    config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
     zeromq::ZmqConfigPublisher,
 };
 

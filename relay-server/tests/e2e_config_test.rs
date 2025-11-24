@@ -17,7 +17,8 @@ use sankey_copier_relay_server::models::SlaveSettings;
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    SlaveConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, ZMQ_PUSH, ZMQ_SUB,
+    HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SlaveConfigMessage, ZMQ_PUSH,
+    ZMQ_SUB,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -692,7 +693,10 @@ async fn test_slave_config_distribution() {
         .expect("Failed to receive config");
 
     // Verify config was received
-    assert!(config.is_some(), "Slave EA should receive SlaveConfigMessage");
+    assert!(
+        config.is_some(),
+        "Slave EA should receive SlaveConfigMessage"
+    );
 
     let config = config.unwrap();
 

@@ -11,7 +11,7 @@ use axum::{
 use sankey_copier_zmq::SlaveConfigMessage;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SlaveSettings, TradeGroupMember, MasterSettings};
+use crate::models::{MasterSettings, SlaveSettings, TradeGroupMember};
 
 use super::{AppState, ProblemDetails};
 
@@ -109,7 +109,11 @@ pub async fn add_member(
     // Add member to database
     match state
         .db
-        .add_member(&trade_group_id, &request.slave_account, request.slave_settings.clone())
+        .add_member(
+            &trade_group_id,
+            &request.slave_account,
+            request.slave_settings.clone(),
+        )
         .await
     {
         Ok(_) => {
@@ -120,7 +124,11 @@ pub async fn add_member(
             );
 
             // Retrieve the newly created member
-            match state.db.get_member(&trade_group_id, &request.slave_account).await {
+            match state
+                .db
+                .get_member(&trade_group_id, &request.slave_account)
+                .await
+            {
                 Ok(Some(member)) => {
                     // Send config to Slave EA via ZMQ
                     send_config_to_slave(&state, &trade_group_id, &member).await;
@@ -167,11 +175,10 @@ pub async fn add_member(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to add member to database"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to add member to database: {}",
-                e
-            ))
-            .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to add member to database: {}", e))
+                    .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)),
+            )
         }
     }
 }
@@ -288,14 +295,13 @@ pub async fn update_member(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to update member settings"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to update member settings: {}",
-                e
-            ))
-            .with_instance(format!(
-                "/api/trade-groups/{}/members/{}",
-                trade_group_id, slave_account
-            )))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to update member settings: {}", e))
+                    .with_instance(format!(
+                        "/api/trade-groups/{}/members/{}",
+                        trade_group_id, slave_account
+                    )),
+            )
         }
     }
 }
@@ -352,14 +358,13 @@ pub async fn toggle_member_status(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to toggle member status"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to toggle member status: {}",
-                e
-            ))
-            .with_instance(format!(
-                "/api/trade-groups/{}/members/{}/toggle",
-                trade_group_id, slave_account
-            )))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to toggle member status: {}", e))
+                    .with_instance(format!(
+                        "/api/trade-groups/{}/members/{}/toggle",
+                        trade_group_id, slave_account
+                    )),
+            )
         }
     }
 }
@@ -376,7 +381,11 @@ pub async fn delete_member(
     );
     let _enter = span.enter();
 
-    match state.db.delete_member(&trade_group_id, &slave_account).await {
+    match state
+        .db
+        .delete_member(&trade_group_id, &slave_account)
+        .await
+    {
         Ok(_) => {
             tracing::info!(
                 trade_group_id = %trade_group_id,
@@ -404,24 +413,19 @@ pub async fn delete_member(
                 backtrace = ?std::backtrace::Backtrace::capture(),
                 "Failed to delete member"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to delete member: {}",
-                e
-            ))
-            .with_instance(format!(
-                "/api/trade-groups/{}/members/{}",
-                trade_group_id, slave_account
-            )))
+            Err(
+                ProblemDetails::internal_error(format!("Failed to delete member: {}", e))
+                    .with_instance(format!(
+                        "/api/trade-groups/{}/members/{}",
+                        trade_group_id, slave_account
+                    )),
+            )
         }
     }
 }
 
 /// Send Slave config to Slave EA via ZMQ
-async fn send_config_to_slave(
-    state: &AppState,
-    master_account: &str,
-    member: &TradeGroupMember,
-) {
+async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
     // Fetch Master settings to include symbol_prefix/suffix
     let master_settings = match state.db.get_trade_group(master_account).await {
         Ok(Some(tg)) => tg.master_settings,

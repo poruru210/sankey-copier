@@ -3,7 +3,12 @@
 //! Provides middleware for adding Private Network Access (PNA) headers
 //! to enable HTTPS pages to access local network resources.
 
-use axum::{body::Body, http::{header::HeaderValue, Request}, middleware, response::Response};
+use axum::{
+    body::Body,
+    http::{header::HeaderValue, Request},
+    middleware,
+    response::Response,
+};
 
 /// Middleware to add PNA (Private Network Access) headers
 ///

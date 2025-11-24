@@ -1,6 +1,6 @@
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{
-    SlaveConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+    CopySettings, SlaveConfigMessage, SymbolMapping, TradeFilters,
 };
 
 /// Integration test for CONFIG message distribution workflow
@@ -118,8 +118,8 @@ async fn test_config_message_distribution_flow() {
     );
 
     // Step 6: Serialize to JSON (simulating ZMQ serialization)
-    let json_string =
-        serde_json::to_string(&config_message).expect("Failed to serialize SlaveConfigMessage to JSON");
+    let json_string = serde_json::to_string(&config_message)
+        .expect("Failed to serialize SlaveConfigMessage to JSON");
 
     println!(
         "Serialized SlaveConfigMessage ({} bytes):\n{}",
@@ -297,7 +297,8 @@ async fn test_config_message_with_null_values() {
     assert!(json.contains("\"symbol_mappings\":[]"));
 
     // Deserialize and verify
-    let deserialized: SlaveConfigMessage = serde_json::from_str(&json).expect("Failed to deserialize");
+    let deserialized: SlaveConfigMessage =
+        serde_json::from_str(&json).expect("Failed to deserialize");
     assert_eq!(deserialized.lot_multiplier, None);
     assert_eq!(deserialized.symbol_mappings.len(), 0);
     assert!(deserialized.filters.allowed_symbols.is_none());

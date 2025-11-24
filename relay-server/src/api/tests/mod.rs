@@ -5,20 +5,22 @@
 
 mod trade_group_members_tests;
 
+use chrono::Utc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use chrono::Utc;
 
+use crate::api::AppState;
 use crate::{
     config::Config,
     connection_manager::ConnectionManager,
     db::Database,
     log_buffer::LogBuffer,
-    models::{ConnectionStatus, CopySettings, EaConnection, EaType, Platform, SymbolMapping, TradeFilters},
+    models::{
+        ConnectionStatus, CopySettings, EaConnection, EaType, Platform, SymbolMapping, TradeFilters,
+    },
     zeromq::ZmqConfigPublisher,
 };
-use crate::api::AppState;
 
 /// Create a test EA connection
 pub(crate) fn create_test_connection(is_trade_allowed: bool) -> EaConnection {

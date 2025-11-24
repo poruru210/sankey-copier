@@ -26,7 +26,11 @@ async fn test_handle_trade_signal_with_matching_setting() {
                 blocked_magic_numbers: None,
             },
         };
-        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
+        handler
+            .db
+            .add_member("MASTER_001", "SLAVE_001", slave_settings)
+            .await
+            .unwrap();
     }
 
     // Process trade signal (should not panic)
@@ -57,7 +61,11 @@ async fn test_handle_trade_signal_no_matching_master() {
                 blocked_magic_numbers: None,
             },
         };
-        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
+        handler
+            .db
+            .add_member("MASTER_001", "SLAVE_001", slave_settings)
+            .await
+            .unwrap();
     }
 
     // Process trade signal (should be filtered out, no panic)
@@ -88,8 +96,16 @@ async fn test_handle_trade_signal_disabled_setting() {
             },
         };
         // Add member and then disable it
-        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
-        handler.db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // STATUS_DISABLED = 0
+        handler
+            .db
+            .add_member("MASTER_001", "SLAVE_001", slave_settings)
+            .await
+            .unwrap();
+        handler
+            .db
+            .update_member_status("MASTER_001", "SLAVE_001", 0)
+            .await
+            .unwrap(); // STATUS_DISABLED = 0
     }
 
     // Process trade signal (should be filtered out, no panic)

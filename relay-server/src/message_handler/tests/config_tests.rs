@@ -59,7 +59,11 @@ async fn test_handle_request_config_slave() {
     let slave_account = "SLAVE456".to_string();
 
     // Create TradeGroup and add member
-    handler.db.create_trade_group(&master_account).await.unwrap();
+    handler
+        .db
+        .create_trade_group(&master_account)
+        .await
+        .unwrap();
 
     let slave_settings = SlaveSettings {
         config_version: 1,
@@ -70,7 +74,11 @@ async fn test_handle_request_config_slave() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
     };
-    handler.db.add_member(&master_account, &slave_account, slave_settings).await.unwrap();
+    handler
+        .db
+        .add_member(&master_account, &slave_account, slave_settings)
+        .await
+        .unwrap();
 
     // Create RequestConfig message for Slave
     let request_msg = RequestConfigMessage {

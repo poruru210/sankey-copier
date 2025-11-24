@@ -45,11 +45,7 @@ impl ZmqConfigPublisher {
                 zmq_message.extend_from_slice(&msg.payload);
 
                 if let Err(e) = socket.send(&zmq_message, 0) {
-                    tracing::error!(
-                        "Failed to send ZMQ message to topic '{}': {}",
-                        msg.topic,
-                        e
-                    );
+                    tracing::error!("Failed to send ZMQ message to topic '{}': {}", msg.topic, e);
                 } else {
                     tracing::debug!(
                         "Sent MessagePack message to topic '{}': {} bytes",
@@ -78,8 +74,8 @@ impl ZmqConfigPublisher {
         T: ConfigMessage,
     {
         // Serialize to MessagePack
-        let payload = rmp_serde::to_vec(message)
-            .context("Failed to serialize message to MessagePack")?;
+        let payload =
+            rmp_serde::to_vec(message).context("Failed to serialize message to MessagePack")?;
 
         let serialized = SerializedMessage {
             topic: message.zmq_topic().to_string(),

@@ -18,7 +18,11 @@ impl MessageHandler {
         ));
 
         // Get copy settings for this master account from database
-        let settings = match self.db.get_copy_settings_for_master(&signal.source_account).await {
+        let settings = match self
+            .db
+            .get_copy_settings_for_master(&signal.source_account)
+            .await
+        {
             Ok(settings) => settings,
             Err(e) => {
                 tracing::error!(

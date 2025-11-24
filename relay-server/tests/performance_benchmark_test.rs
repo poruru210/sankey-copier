@@ -1,5 +1,5 @@
 use sankey_copier_relay_server::models::{
-    SlaveConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+    CopySettings, SlaveConfigMessage, SymbolMapping, TradeFilters,
 };
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension

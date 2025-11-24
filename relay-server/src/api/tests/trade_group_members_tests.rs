@@ -21,11 +21,7 @@ use super::create_test_app_state;
 /// Helper function to create a test TradeGroup (Master)
 async fn setup_test_trade_group(state: &crate::api::AppState, master_account: &str) {
     // First create the TradeGroup
-    state
-        .db
-        .create_trade_group(master_account)
-        .await
-        .unwrap();
+    state.db.create_trade_group(master_account).await.unwrap();
 
     // Then update its settings
     let settings = MasterSettings {
@@ -63,8 +59,7 @@ async fn test_list_members_empty() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let members: Vec<crate::models::TradeGroupMember> =
-        serde_json::from_slice(&body).unwrap();
+    let members: Vec<crate::models::TradeGroupMember> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(members.len(), 0);
 }
@@ -243,7 +238,9 @@ async fn test_update_member_success() {
                 .method("PUT")
                 .uri("/api/trade-groups/MASTER_001/members/SLAVE_001")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&updated_settings).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&updated_settings).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -427,8 +424,7 @@ async fn test_list_members_with_multiple_members() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let members: Vec<crate::models::TradeGroupMember> =
-        serde_json::from_slice(&body).unwrap();
+    let members: Vec<crate::models::TradeGroupMember> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(members.len(), 3);
     assert_eq!(members[0].slave_account, "SLAVE_001");
@@ -492,17 +488,26 @@ async fn test_member_with_complex_settings() {
     assert_eq!(member.slave_account, "SLAVE_COMPLEX");
     assert_eq!(member.slave_settings.lot_multiplier, Some(2.5));
     assert!(member.slave_settings.reverse_trade);
-    assert_eq!(
-        member.slave_settings.symbol_prefix,
-        Some("FX_".to_string())
-    );
+    assert_eq!(member.slave_settings.symbol_prefix, Some("FX_".to_string()));
     assert_eq!(member.slave_settings.symbol_mappings.len(), 2);
     assert_eq!(
-        member.slave_settings.filters.allowed_symbols.as_ref().unwrap().len(),
+        member
+            .slave_settings
+            .filters
+            .allowed_symbols
+            .as_ref()
+            .unwrap()
+            .len(),
         2
     );
     assert_eq!(
-        member.slave_settings.filters.blocked_symbols.as_ref().unwrap().len(),
+        member
+            .slave_settings
+            .filters
+            .blocked_symbols
+            .as_ref()
+            .unwrap()
+            .len(),
         1
     );
 }

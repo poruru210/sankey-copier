@@ -3,7 +3,6 @@
 //! Tests for Master/Slave status updates during connection lifecycle
 
 use super::*;
-use crate::models::SlaveSettings;
 
 #[tokio::test]
 async fn test_update_master_statuses_connected() {
@@ -15,16 +14,28 @@ async fn test_update_master_statuses_connected() {
     let slave_settings = create_test_slave_settings();
 
     // Member 1: DISABLED
-    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone()).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // DISABLED
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone())
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+        .await
+        .unwrap(); // DISABLED
 
     // Member 2: ENABLED
-    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone()).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap(); // ENABLED
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone())
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+        .await
+        .unwrap(); // ENABLED
 
     // Member 3: ENABLED
-    db.add_member("MASTER_001", "SLAVE_003", slave_settings).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 1).await.unwrap(); // ENABLED
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 1)
+        .await
+        .unwrap(); // ENABLED
 
     // Update master statuses to CONNECTED
     let count = db
@@ -36,13 +47,25 @@ async fn test_update_master_statuses_connected() {
     assert_eq!(count, 2);
 
     // Verify statuses
-    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    let member1 = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member1.status, 0); // Still DISABLED
 
-    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
+    let member2 = db
+        .get_member("MASTER_001", "SLAVE_002")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member2.status, 2); // Now CONNECTED
 
-    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    let member3 = db
+        .get_member("MASTER_001", "SLAVE_003")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member3.status, 2); // Now CONNECTED
 }
 
@@ -56,16 +79,28 @@ async fn test_update_master_statuses_disconnected() {
     let slave_settings = create_test_slave_settings();
 
     // Member 1: DISABLED
-    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone()).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // DISABLED
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone())
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+        .await
+        .unwrap(); // DISABLED
 
     // Member 2: ENABLED
-    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone()).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap(); // ENABLED
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone())
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+        .await
+        .unwrap(); // ENABLED
 
     // Member 3: CONNECTED
-    db.add_member("MASTER_001", "SLAVE_003", slave_settings).await.unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 2).await.unwrap(); // CONNECTED
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings)
+        .await
+        .unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 2)
+        .await
+        .unwrap(); // CONNECTED
 
     // Update master statuses to ENABLED (disconnected)
     let count = db
@@ -77,13 +112,25 @@ async fn test_update_master_statuses_disconnected() {
     assert_eq!(count, 1);
 
     // Verify statuses
-    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    let member1 = db
+        .get_member("MASTER_001", "SLAVE_001")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member1.status, 0); // Still DISABLED
 
-    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
+    let member2 = db
+        .get_member("MASTER_001", "SLAVE_002")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member2.status, 1); // Still ENABLED
 
-    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    let member3 = db
+        .get_member("MASTER_001", "SLAVE_003")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(member3.status, 1); // Now ENABLED (was CONNECTED)
 }
 

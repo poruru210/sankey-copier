@@ -7,14 +7,11 @@ use anyhow::Result;
 use sqlx::sqlite::SqlitePool;
 
 // Submodule declarations
-mod trade_groups;
-mod trade_group_members;
 mod config_distribution;
+mod trade_group_members;
+mod trade_groups;
 
 // Re-export all public items
-pub use trade_groups::*;
-pub use trade_group_members::*;
-pub use config_distribution::*;
 
 // Test module
 #[cfg(test)]

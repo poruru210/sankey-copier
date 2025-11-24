@@ -17,7 +17,7 @@ use sankey_copier_relay_server::models::CopySettings;
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    SlaveConfigMessage, HeartbeatMessage, ZMQ_PUSH, ZMQ_SUB,
+    HeartbeatMessage, SlaveConfigMessage, ZMQ_PUSH, ZMQ_SUB,
 };
 use serde::Serialize;
 use std::ffi::c_char;
