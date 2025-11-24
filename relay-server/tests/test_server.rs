@@ -37,8 +37,10 @@ pub struct TestServer {
 impl TestServer {
     /// Start a new test server with dynamic port allocation
     pub async fn start() -> Result<Self> {
-        // Find available ports
-        let http_port = find_available_port()?;
+        // Bind to port 0 to get available ports immediately (avoiding TOCTOU race)
+        let http_listener = TcpListener::bind("127.0.0.1:0")?;
+        let http_port = http_listener.local_addr()?.port();
+
         let zmq_pull_port = find_available_port()?;
         let zmq_pub_trade_port = find_available_port()?;
         let zmq_pub_config_port = find_available_port()?;
@@ -121,11 +123,14 @@ impl TestServer {
         // Create router
         let app = create_router(state);
 
-        // Spawn HTTP server
+        // Spawn HTTP server using the pre-bound listener
         let server_handle = tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", http_port))
-                .await
-                .expect("Failed to bind HTTP server");
+            // Convert std::net::TcpListener to tokio::net::TcpListener
+            http_listener
+                .set_nonblocking(true)
+                .expect("Failed to set non-blocking");
+            let listener = tokio::net::TcpListener::from_std(http_listener)
+                .expect("Failed to convert listener");
 
             axum::serve(listener, app)
                 .await
