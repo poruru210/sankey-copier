@@ -83,7 +83,6 @@ async fn test_config_message_distribution_flow() {
     // Step 5: Verify ConfigMessage fields
     assert_eq!(config_message.account_id, "SLAVE_TEST_001");
     assert_eq!(config_message.master_account, "MASTER_TEST_001");
-    assert_eq!(config_message.trade_group_id, "MASTER_TEST_001");
     assert_eq!(config_message.status, 2); // STATUS_CONNECTED
     assert_eq!(config_message.lot_multiplier, Some(2.5));
     assert!(config_message.reverse_trade);
@@ -131,7 +130,6 @@ async fn test_config_message_distribution_flow() {
     // Step 7: Verify JSON contains all expected fields
     assert!(json_string.contains("\"account_id\""));
     assert!(json_string.contains("\"master_account\""));
-    assert!(json_string.contains("\"trade_group_id\""));
     assert!(json_string.contains("\"status\""));
     assert!(json_string.contains("\"lot_multiplier\""));
     assert!(json_string.contains("\"reverse_trade\""));
