@@ -182,4 +182,25 @@ export class ApiClient {
   ): Promise<void> {
     return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}`, settings);
   }
+
+  // ============================================================================
+  // TradeGroupMembers API (Slave settings)
+  // ============================================================================
+
+  /**
+   * List all members for a TradeGroup
+   */
+  async listTradeGroupMembers(masterAccount: string): Promise<import('@/types').TradeGroupMember[]> {
+    return this.get(`/trade-groups/${encodeURIComponent(masterAccount)}/members`);
+  }
+
+  /**
+   * Add a new member to a TradeGroup
+   */
+  async addTradeGroupMember(
+    masterAccount: string,
+    data: { slave_account: string; slave_settings: import('@/types').SlaveSettings; status: number }
+  ): Promise<import('@/types').TradeGroupMember> {
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members`, data);
+  }
 }

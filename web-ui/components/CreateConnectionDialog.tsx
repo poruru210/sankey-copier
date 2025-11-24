@@ -2,15 +2,17 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
+import { useAtomValue } from 'jotai';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
-import type { CreateSettingsRequest, EaConnection, CopySettings } from '@/types';
+import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
+import { apiClientAtom } from '@/lib/atoms/site';
 
 interface CreateConnectionDialogProps {
   open: boolean;
@@ -28,7 +30,17 @@ export function CreateConnectionDialog({
   existingSettings
 }: CreateConnectionDialogProps) {
   const content = useIntlayer('settings-dialog');
+  const apiClient = useAtomValue(apiClientAtom);
   const [step, setStep] = useState(1);
+
+  // Track master settings and existing members
+  const [masterSettings, setMasterSettings] = useState({
+    symbol_prefix: '',
+    symbol_suffix: '',
+  });
+  const [existingMembers, setExistingMembers] = useState<TradeGroupMember[]>([]);
+  const [existingTradeGroup, setExistingTradeGroup] = useState<TradeGroup | null>(null);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Convert all validation messages to plain strings
   const validationMessages = useMemo(() => ({
@@ -68,9 +80,56 @@ export function CreateConnectionDialog({
         symbol_suffix: '',
         symbol_mappings: '',
       });
+      setMasterSettings({
+        symbol_prefix: '',
+        symbol_suffix: '',
+      });
+      setExistingMembers([]);
+      setExistingTradeGroup(null);
       setStep(1);
     }
   }, [open]);
+
+  // Fetch existing TradeGroup and members when master account is selected
+  useEffect(() => {
+    const fetchMasterData = async () => {
+      if (!apiClient || !formData.master_account) {
+        setExistingMembers([]);
+        setExistingTradeGroup(null);
+        return;
+      }
+
+      setLoadingMembers(true);
+      try {
+        // Fetch TradeGroup (Master settings)
+        const tradeGroup = await apiClient.getTradeGroup(formData.master_account);
+        setExistingTradeGroup(tradeGroup);
+
+        // Pre-fill master settings from existing TradeGroup
+        setMasterSettings({
+          symbol_prefix: tradeGroup.master_settings.symbol_prefix || '',
+          symbol_suffix: tradeGroup.master_settings.symbol_suffix || '',
+        });
+
+        // Fetch existing members
+        const members = await apiClient.listTradeGroupMembers(formData.master_account);
+        setExistingMembers(members || []);
+      } catch (err) {
+        // If TradeGroup doesn't exist yet, it's OK (will be created on first member)
+        console.log('No existing TradeGroup for', formData.master_account);
+        setExistingMembers([]);
+        setExistingTradeGroup(null);
+        setMasterSettings({
+          symbol_prefix: '',
+          symbol_suffix: '',
+        });
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    fetchMasterData();
+  }, [apiClient, formData.master_account]);
 
   // Validate form data
   const validation = useSettingsValidation({
@@ -91,10 +150,10 @@ export function CreateConnectionDialog({
     setFormData({ ...formData, slave_account: value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // If we are in step 1, just move to step 2
+    // Step 1: Account Selection → Go to Step 2 (Master Settings)
     if (step === 1) {
       if (isStep1Valid) {
         setStep(2);
@@ -102,6 +161,27 @@ export function CreateConnectionDialog({
       return;
     }
 
+    // Step 2: Master Settings → Save and go to Step 3 (Slave Settings)
+    if (step === 2) {
+      try {
+        // Only update master settings if they exist or have values
+        if (apiClient && formData.master_account && (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
+          await apiClient.updateTradeGroupSettings(formData.master_account, {
+            symbol_prefix: masterSettings.symbol_prefix || null,
+            symbol_suffix: masterSettings.symbol_suffix || null,
+            config_version: existingTradeGroup?.master_settings.config_version || 0,
+          });
+        }
+        setStep(3);
+      } catch (err) {
+        console.error('Failed to update master settings:', err);
+        // Still proceed to step 3 even if master settings update fails
+        setStep(3);
+      }
+      return;
+    }
+
+    // Step 3: Slave Settings → Create member
     // Don't submit if validation fails
     if (!validation.isValid) {
       return;
@@ -140,7 +220,7 @@ export function CreateConnectionDialog({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {content.createTitle.value} {step > 1 && `(${step}/2)`}
+            {content.createTitle.value} {step > 1 && `(${step}/3)`}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
@@ -193,6 +273,75 @@ export function CreateConnectionDialog({
             )}
 
             {step === 2 && (
+              /* Master Settings Section */
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <span className="text-lg">📊</span>
+                    Master Settings (Global)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    These settings apply to all slaves connected to this master.
+                  </p>
+                </div>
+
+                {/* Warning if other slaves exist */}
+                {existingMembers.length > 0 && (
+                  <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-3 border border-yellow-200 dark:border-yellow-800">
+                    <div className="flex">
+                      <AlertTriangle className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                          Existing Connections
+                        </h3>
+                        <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+                          This master has {existingMembers.length} existing slave{existingMembers.length > 1 ? 's' : ''}.
+                          Changing these settings will affect all slaves connected to this master.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Symbol Prefix */}
+                <div>
+                  <Label htmlFor="master_symbol_prefix">
+                    Symbol Prefix
+                  </Label>
+                  <Input
+                    id="master_symbol_prefix"
+                    type="text"
+                    placeholder="e.g. 'pro.' or 'FX.'"
+                    value={masterSettings.symbol_prefix}
+                    onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
+                    disabled={loadingMembers}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
+                  </p>
+                </div>
+
+                {/* Symbol Suffix */}
+                <div>
+                  <Label htmlFor="master_symbol_suffix">
+                    Symbol Suffix
+                  </Label>
+                  <Input
+                    id="master_symbol_suffix"
+                    type="text"
+                    placeholder="e.g. '.m' or '-ECN'"
+                    value={masterSettings.symbol_suffix}
+                    onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
+                    disabled={loadingMembers}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
               /* Copy Settings Section */
               <div className="space-y-4">
                 <div className="space-y-1">
@@ -348,13 +497,15 @@ export function CreateConnectionDialog({
               </Button>
 
               <div className="flex gap-2">
-                {step === 2 && (
-                  <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                {/* Back button for steps 2 and 3 */}
+                {step > 1 && (
+                  <Button type="button" variant="outline" onClick={() => setStep(step - 1)}>
                     Back
                   </Button>
                 )}
 
-                {step === 1 ? (
+                {/* Next/Submit button based on step */}
+                {step === 1 && (
                   <Button
                     type="button"
                     onClick={(e) => {
@@ -365,7 +516,15 @@ export function CreateConnectionDialog({
                   >
                     Next
                   </Button>
-                ) : (
+                )}
+
+                {step === 2 && (
+                  <Button type="submit" disabled={loadingMembers}>
+                    {loadingMembers ? 'Loading...' : 'Next'}
+                  </Button>
+                )}
+
+                {step === 3 && (
                   <Button type="submit" disabled={!validation.isValid}>
                     {content.saveAndEnable.value}
                   </Button>
