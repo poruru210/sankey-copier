@@ -311,6 +311,34 @@ impl Database {
         Ok(())
     }
 
+    /// List all TradeGroups
+    pub async fn list_trade_groups(&self) -> Result<Vec<TradeGroup>> {
+        let rows = sqlx::query(
+            "SELECT id, master_settings, created_at, updated_at
+             FROM trade_groups ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            let id: String = row.get("id");
+            let settings_json: String = row.get("master_settings");
+            let master_settings: MasterSettings = serde_json::from_str(&settings_json)?;
+            let created_at: String = row.get("created_at");
+            let updated_at: String = row.get("updated_at");
+
+            result.push(TradeGroup {
+                id,
+                master_settings,
+                created_at,
+                updated_at,
+            });
+        }
+
+        Ok(result)
+    }
+
     // ============================================================================
     // TradeGroupMember CRUD Operations
     // ============================================================================
