@@ -300,3 +300,125 @@ async fn test_trade_group_response_structure() {
     assert!(tg["created_at"].is_string());
     assert!(tg["updated_at"].is_string());
 }
+
+#[tokio::test]
+async fn test_update_trade_group_settings_not_found() {
+    let (app, _db) = create_test_app().await;
+
+    // Try to update a non-existent trade group
+    let settings = MasterSettings {
+        symbol_prefix: Some("test.".to_string()),
+        symbol_suffix: None,
+        config_version: 0,
+    };
+
+    let request = Request::builder()
+        .method("PUT")
+        .uri("/api/trade-groups/NONEXISTENT_MASTER")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&settings).unwrap()))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Should return 404 Not Found with ProblemDetails
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Check RFC 9457 Problem Details structure
+    assert!(json["type"].is_string());
+    assert_eq!(json["status"], 404);
+    assert!(json["detail"].is_string());
+    let detail = json["detail"].as_str().unwrap();
+    assert!(detail.contains("not found") || detail.contains("does not exist"));
+}
+
+#[tokio::test]
+async fn test_delete_trade_group_success() {
+    let (app, db) = create_test_app().await;
+
+    // Create a test trade group
+    db.create_trade_group("MASTER_DELETE_TEST").await.unwrap();
+
+    // Verify it exists
+    let exists = db.get_trade_group("MASTER_DELETE_TEST").await.unwrap();
+    assert!(exists.is_some());
+
+    // Delete via API
+    let request = Request::builder()
+        .method("DELETE")
+        .uri("/api/trade-groups/MASTER_DELETE_TEST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Should return 204 No Content
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // Verify it no longer exists in database
+    let deleted = db.get_trade_group("MASTER_DELETE_TEST").await.unwrap();
+    assert!(deleted.is_none());
+}
+
+#[tokio::test]
+async fn test_delete_trade_group_cascade_deletes_members() {
+    let (app, db) = create_test_app().await;
+
+    // Create a trade group with members
+    db.create_trade_group("MASTER_CASCADE_TEST").await.unwrap();
+
+    // Add members to this trade group
+    use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
+    let slave_settings = SlaveSettings {
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: TradeFilters::default(),
+        config_version: 0,
+    };
+
+    db.add_member(
+        "MASTER_CASCADE_TEST",
+        "SLAVE_001",
+        slave_settings.clone(),
+    )
+    .await
+    .unwrap();
+
+    db.add_member(
+        "MASTER_CASCADE_TEST",
+        "SLAVE_002",
+        slave_settings,
+    )
+    .await
+    .unwrap();
+
+    // Verify members exist
+    let members_before = db.get_members("MASTER_CASCADE_TEST").await.unwrap();
+    assert_eq!(members_before.len(), 2);
+
+    // Delete the trade group
+    let request = Request::builder()
+        .method("DELETE")
+        .uri("/api/trade-groups/MASTER_CASCADE_TEST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // Verify trade group is deleted
+    let deleted_tg = db.get_trade_group("MASTER_CASCADE_TEST").await.unwrap();
+    assert!(deleted_tg.is_none());
+
+    // Verify members are also deleted (CASCADE DELETE)
+    let members_after = db.get_members("MASTER_CASCADE_TEST").await.unwrap();
+    assert_eq!(members_after.len(), 0);
+}

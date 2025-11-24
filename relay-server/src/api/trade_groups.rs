@@ -129,6 +129,21 @@ pub async fn update_trade_group_settings(
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
+            let error_msg = e.to_string();
+
+            // Check if this is a "not found" error from the database layer
+            if error_msg.contains("TradeGroup not found") {
+                tracing::warn!(
+                    master_account = %id,
+                    "TradeGroup not found for update"
+                );
+                return Err(ProblemDetails::not_found(format!(
+                    "TradeGroup not found: {}",
+                    id
+                ))
+                .with_instance(format!("/api/trade-groups/{}", id)));
+            }
+
             tracing::error!(
                 master_account = %id,
                 error = %e,
@@ -138,6 +153,45 @@ pub async fn update_trade_group_settings(
             );
             Err(
                 ProblemDetails::internal_error(format!("Failed to update Master settings: {}", e))
+                    .with_instance(format!("/api/trade-groups/{}", id)),
+            )
+        }
+    }
+}
+
+/// Delete a TradeGroup (CASCADE deletes all members)
+pub async fn delete_trade_group(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ProblemDetails> {
+    let span = tracing::info_span!(
+        "delete_trade_group",
+        master_account = %id
+    );
+    let _enter = span.enter();
+
+    match state.db.delete_trade_group(&id).await {
+        Ok(_) => {
+            tracing::info!(
+                master_account = %id,
+                "Successfully deleted TradeGroup and all its members (CASCADE)"
+            );
+
+            // Notify via WebSocket
+            let _ = state.tx.send(format!("trade_group_deleted:{}", id));
+
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            tracing::error!(
+                master_account = %id,
+                error = %e,
+                error_type = std::any::type_name_of_val(&e),
+                backtrace = ?std::backtrace::Backtrace::capture(),
+                "Failed to delete TradeGroup"
+            );
+            Err(
+                ProblemDetails::internal_error(format!("Failed to delete TradeGroup: {}", e))
                     .with_instance(format!("/api/trade-groups/{}", id)),
             )
         }

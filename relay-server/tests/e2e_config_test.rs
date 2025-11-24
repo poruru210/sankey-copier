@@ -822,3 +822,362 @@ async fn test_master_slave_config_distribution() {
     // Explicitly shutdown server and wait for all tasks to complete
     server.shutdown().await;
 }
+
+/// Test one Master with multiple Slaves (1:N relationship)
+#[tokio::test]
+async fn test_multiple_slaves_same_master() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MULTI_SLAVE";
+    let slave_accounts = ["SLAVE_A", "SLAVE_B", "SLAVE_C"];
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add 3 Slaves to the same Master with different lot multipliers
+    for (i, slave_account) in slave_accounts.iter().enumerate() {
+        let settings = SlaveSettings {
+            lot_multiplier: Some((i + 1) as f64 * 0.5), // 0.5, 1.0, 1.5
+            reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_mappings: vec![],
+            filters: Default::default(),
+            config_version: 0,
+        };
+
+        server
+            .db
+            .add_member(master_account, slave_account, settings)
+            .await
+            .expect("Failed to add member");
+    }
+
+    // Create 3 Slave EA simulators
+    let mut slave_simulators = Vec::new();
+    for slave_account in &slave_accounts {
+        let simulator = SlaveEaSimulator::new(
+            &server.zmq_pull_address(),
+            &server.zmq_pub_config_address(),
+            &server.zmq_pub_trade_address(),
+            slave_account,
+        )
+        .expect("Failed to create Slave EA simulator");
+        slave_simulators.push(simulator);
+    }
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // All Slaves send Heartbeat
+    for simulator in &slave_simulators {
+        simulator
+            .send_heartbeat()
+            .expect("Failed to send Slave heartbeat");
+    }
+    sleep(Duration::from_millis(100)).await;
+
+    // All Slaves request config
+    for simulator in &slave_simulators {
+        simulator
+            .send_request_config()
+            .expect("Failed to send Slave RequestConfig");
+    }
+    sleep(Duration::from_millis(300)).await;
+
+    // Verify all Slaves receive their respective configs
+    for (i, simulator) in slave_simulators.iter().enumerate() {
+        let config = simulator
+            .try_receive_config(2000)
+            .expect("Failed to receive Slave config");
+
+        assert!(
+            config.is_some(),
+            "Slave {} should receive SlaveConfigMessage",
+            slave_accounts[i]
+        );
+
+        let config = config.unwrap();
+        assert_eq!(config.account_id, slave_accounts[i]);
+        assert_eq!(config.master_account, master_account);
+        assert_eq!(
+            config.lot_multiplier,
+            Some((i + 1) as f64 * 0.5),
+            "Slave {} should have correct lot_multiplier",
+            slave_accounts[i]
+        );
+
+        println!(
+            "  ✅ Slave {} received config with lot_multiplier: {:?}",
+            slave_accounts[i], config.lot_multiplier
+        );
+    }
+
+    println!(
+        "✅ Multiple Slaves E2E test passed: {} slaves under Master {}",
+        slave_accounts.len(),
+        master_account
+    );
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
+}
+
+/// Test multiple Masters with multiple Slaves (N:M isolation)
+#[tokio::test]
+async fn test_multiple_masters_multiple_slaves() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master1 = "MASTER_GROUP_1";
+    let master2 = "MASTER_GROUP_2";
+    let slave1 = "SLAVE_G1_A";
+    let slave2 = "SLAVE_G1_B";
+    let slave3 = "SLAVE_G2_A";
+
+    // Create 2 TradeGroups (Masters)
+    server
+        .db
+        .create_trade_group(master1)
+        .await
+        .expect("Failed to create trade group 1");
+    server
+        .db
+        .create_trade_group(master2)
+        .await
+        .expect("Failed to create trade group 2");
+
+    // Master1 has Slave1 and Slave2
+    server
+        .db
+        .add_member(
+            master1,
+            slave1,
+            SlaveSettings {
+                lot_multiplier: Some(1.0),
+                reverse_trade: false,
+                symbol_prefix: Some("M1_".to_string()),
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+            },
+        )
+        .await
+        .expect("Failed to add slave1 to master1");
+
+    server
+        .db
+        .add_member(
+            master1,
+            slave2,
+            SlaveSettings {
+                lot_multiplier: Some(2.0),
+                reverse_trade: false,
+                symbol_prefix: Some("M1_".to_string()),
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+            },
+        )
+        .await
+        .expect("Failed to add slave2 to master1");
+
+    // Master2 has Slave3
+    server
+        .db
+        .add_member(
+            master2,
+            slave3,
+            SlaveSettings {
+                lot_multiplier: Some(0.5),
+                reverse_trade: true,
+                symbol_prefix: Some("M2_".to_string()),
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+            },
+        )
+        .await
+        .expect("Failed to add slave3 to master2");
+
+    // Create Master EA simulators
+    let master1_sim = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master1,
+    )
+    .expect("Failed to create Master1 simulator");
+
+    let master2_sim = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master2,
+    )
+    .expect("Failed to create Master2 simulator");
+
+    // Create Slave EA simulators
+    let slave1_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave1,
+    )
+    .expect("Failed to create Slave1 simulator");
+
+    let slave2_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave2,
+    )
+    .expect("Failed to create Slave2 simulator");
+
+    let slave3_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave3,
+    )
+    .expect("Failed to create Slave3 simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // All EAs send Heartbeat
+    master1_sim
+        .send_heartbeat()
+        .expect("Failed to send Master1 heartbeat");
+    master2_sim
+        .send_heartbeat()
+        .expect("Failed to send Master2 heartbeat");
+    slave1_sim
+        .send_heartbeat()
+        .expect("Failed to send Slave1 heartbeat");
+    slave2_sim
+        .send_heartbeat()
+        .expect("Failed to send Slave2 heartbeat");
+    slave3_sim
+        .send_heartbeat()
+        .expect("Failed to send Slave3 heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    // All EAs request config
+    master1_sim
+        .send_request_config()
+        .expect("Failed to send Master1 RequestConfig");
+    master2_sim
+        .send_request_config()
+        .expect("Failed to send Master2 RequestConfig");
+    slave1_sim
+        .send_request_config()
+        .expect("Failed to send Slave1 RequestConfig");
+    slave2_sim
+        .send_request_config()
+        .expect("Failed to send Slave2 RequestConfig");
+    slave3_sim
+        .send_request_config()
+        .expect("Failed to send Slave3 RequestConfig");
+    sleep(Duration::from_millis(300)).await;
+
+    // Verify Master1 receives config
+    let master1_config = master1_sim
+        .try_receive_config(2000)
+        .expect("Failed to receive Master1 config");
+    assert!(master1_config.is_some(), "Master1 should receive config");
+    assert_eq!(master1_config.unwrap().account_id, master1);
+
+    // Verify Master2 receives config
+    let master2_config = master2_sim
+        .try_receive_config(2000)
+        .expect("Failed to receive Master2 config");
+    assert!(master2_config.is_some(), "Master2 should receive config");
+    assert_eq!(master2_config.unwrap().account_id, master2);
+
+    // Verify Slave1 receives config from Master1
+    let slave1_config = slave1_sim
+        .try_receive_config(2000)
+        .expect("Failed to receive Slave1 config");
+    assert!(slave1_config.is_some(), "Slave1 should receive config");
+    let slave1_config = slave1_config.unwrap();
+    assert_eq!(slave1_config.account_id, slave1);
+    assert_eq!(
+        slave1_config.master_account, master1,
+        "Slave1 should belong to Master1"
+    );
+    assert_eq!(
+        slave1_config.lot_multiplier,
+        Some(1.0),
+        "Slave1 should have lot_multiplier 1.0"
+    );
+    assert_eq!(
+        slave1_config.symbol_prefix,
+        Some("M1_".to_string()),
+        "Slave1 should have M1_ prefix"
+    );
+
+    // Verify Slave2 receives config from Master1
+    let slave2_config = slave2_sim
+        .try_receive_config(2000)
+        .expect("Failed to receive Slave2 config");
+    assert!(slave2_config.is_some(), "Slave2 should receive config");
+    let slave2_config = slave2_config.unwrap();
+    assert_eq!(slave2_config.account_id, slave2);
+    assert_eq!(
+        slave2_config.master_account, master1,
+        "Slave2 should belong to Master1"
+    );
+    assert_eq!(
+        slave2_config.lot_multiplier,
+        Some(2.0),
+        "Slave2 should have lot_multiplier 2.0"
+    );
+
+    // Verify Slave3 receives config from Master2
+    let slave3_config = slave3_sim
+        .try_receive_config(2000)
+        .expect("Failed to receive Slave3 config");
+    assert!(slave3_config.is_some(), "Slave3 should receive config");
+    let slave3_config = slave3_config.unwrap();
+    assert_eq!(slave3_config.account_id, slave3);
+    assert_eq!(
+        slave3_config.master_account, master2,
+        "Slave3 should belong to Master2"
+    );
+    assert_eq!(
+        slave3_config.lot_multiplier,
+        Some(0.5),
+        "Slave3 should have lot_multiplier 0.5"
+    );
+    assert_eq!(
+        slave3_config.reverse_trade, true,
+        "Slave3 should have reverse_trade enabled"
+    );
+    assert_eq!(
+        slave3_config.symbol_prefix,
+        Some("M2_".to_string()),
+        "Slave3 should have M2_ prefix"
+    );
+
+    println!("✅ Multiple Masters/Slaves E2E test passed:");
+    println!(
+        "   Master1 ({}) → Slave1 ({}) + Slave2 ({})",
+        master1, slave1, slave2
+    );
+    println!("   Master2 ({}) → Slave3 ({})", master2, slave3);
+    println!("   All configs correctly isolated and distributed");
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
+}

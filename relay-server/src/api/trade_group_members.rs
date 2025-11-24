@@ -167,6 +167,22 @@ pub async fn add_member(
             }
         }
         Err(e) => {
+            let error_msg = e.to_string();
+
+            // Check if this is a unique constraint violation (duplicate member)
+            if error_msg.contains("UNIQUE constraint failed") || error_msg.contains("unique constraint") {
+                tracing::warn!(
+                    trade_group_id = %trade_group_id,
+                    slave_account = %request.slave_account,
+                    "Duplicate member - already exists"
+                );
+                return Err(ProblemDetails::validation_error(format!(
+                    "Member already exists: {}",
+                    request.slave_account
+                ))
+                .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)));
+            }
+
             tracing::error!(
                 trade_group_id = %trade_group_id,
                 slave_account = %request.slave_account,
@@ -287,6 +303,25 @@ pub async fn update_member(
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
+            let error_msg = e.to_string();
+
+            // Check if this is a "not found" error from the database layer
+            if error_msg.contains("Member not found") {
+                tracing::warn!(
+                    trade_group_id = %trade_group_id,
+                    slave_account = %slave_account,
+                    "Member not found for update"
+                );
+                return Err(ProblemDetails::not_found(format!(
+                    "Member not found: {}",
+                    slave_account
+                ))
+                .with_instance(format!(
+                    "/api/trade-groups/{}/members/{}",
+                    trade_group_id, slave_account
+                )));
+            }
+
             tracing::error!(
                 trade_group_id = %trade_group_id,
                 slave_account = %slave_account,
@@ -350,6 +385,25 @@ pub async fn toggle_member_status(
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
+            let error_msg = e.to_string();
+
+            // Check if this is a "not found" error from the database layer
+            if error_msg.contains("Member not found") {
+                tracing::warn!(
+                    trade_group_id = %trade_group_id,
+                    slave_account = %slave_account,
+                    "Member not found for status toggle"
+                );
+                return Err(ProblemDetails::not_found(format!(
+                    "Member not found: {}",
+                    slave_account
+                ))
+                .with_instance(format!(
+                    "/api/trade-groups/{}/members/{}/toggle",
+                    trade_group_id, slave_account
+                )));
+            }
+
             tracing::error!(
                 trade_group_id = %trade_group_id,
                 slave_account = %slave_account,

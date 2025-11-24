@@ -122,7 +122,7 @@ impl Database {
     ) -> Result<()> {
         let settings_json = serde_json::to_string(&settings)?;
 
-        sqlx::query(
+        let result = sqlx::query(
             "UPDATE trade_group_members
              SET slave_settings = ?, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND slave_account = ?",
@@ -132,6 +132,10 @@ impl Database {
         .bind(slave_account)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("Member not found: trade_group_id={}, slave_account={}", trade_group_id, slave_account);
+        }
 
         Ok(())
     }
@@ -143,7 +147,7 @@ impl Database {
         slave_account: &str,
         status: i32,
     ) -> Result<()> {
-        sqlx::query(
+        let result = sqlx::query(
             "UPDATE trade_group_members
              SET status = ?, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND slave_account = ?",
@@ -153,6 +157,10 @@ impl Database {
         .bind(slave_account)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("Member not found: trade_group_id={}, slave_account={}", trade_group_id, slave_account);
+        }
 
         Ok(())
     }

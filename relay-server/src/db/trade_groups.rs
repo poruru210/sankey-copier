@@ -66,7 +66,7 @@ impl Database {
     ) -> Result<()> {
         let settings_json = serde_json::to_string(&settings)?;
 
-        sqlx::query(
+        let result = sqlx::query(
             "UPDATE trade_groups
              SET master_settings = ?, updated_at = CURRENT_TIMESTAMP
              WHERE id = ?",
@@ -75,6 +75,10 @@ impl Database {
         .bind(master_account)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("TradeGroup not found: id={}", master_account);
+        }
 
         Ok(())
     }

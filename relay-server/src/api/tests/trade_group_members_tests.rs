@@ -511,3 +511,133 @@ async fn test_member_with_complex_settings() {
         1
     );
 }
+
+#[tokio::test]
+async fn test_add_member_duplicate_conflict() {
+    let state = create_test_app_state().await;
+    setup_test_trade_group(&state, "MASTER_001").await;
+
+    let slave_settings = SlaveSettings {
+        lot_multiplier: Some(1.0),
+        ..Default::default()
+    };
+
+    // Add the first member
+    state
+        .db
+        .add_member("MASTER_001", "SLAVE_DUP", slave_settings.clone())
+        .await
+        .unwrap();
+
+    let app = create_router(state);
+
+    // Try to add the same member again
+    let request_body = AddMemberRequest {
+        slave_account: "SLAVE_DUP".to_string(),
+        slave_settings,
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/trade-groups/MASTER_001/members")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 409 Conflict or similar error
+    assert!(response.status().is_client_error());
+}
+
+#[tokio::test]
+async fn test_update_member_not_found() {
+    let state = create_test_app_state().await;
+    setup_test_trade_group(&state, "MASTER_001").await;
+
+    let app = create_router(state);
+
+    let update_body = serde_json::json!({
+        "slave_settings": {
+            "lot_multiplier": 2.0,
+            "reverse_trade": false,
+            "symbol_mappings": [],
+            "filters": {
+                "allowed_symbols": null,
+                "blocked_symbols": null,
+                "allowed_magic_numbers": null,
+                "blocked_magic_numbers": null
+            },
+            "config_version": 0
+        },
+        "status": 1
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/trade-groups/MASTER_001/members/NONEXISTENT_SLAVE")
+                .header("content-type", "application/json")
+                .body(Body::from(update_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 404 Not Found
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_member_not_found() {
+    let state = create_test_app_state().await;
+    setup_test_trade_group(&state, "MASTER_001").await;
+
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/trade-groups/MASTER_001/members/NONEXISTENT_SLAVE")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should handle gracefully (either 404 or 204)
+    assert!(
+        response.status() == StatusCode::NOT_FOUND
+            || response.status() == StatusCode::NO_CONTENT
+    );
+}
+
+#[tokio::test]
+async fn test_toggle_member_status_not_found() {
+    let state = create_test_app_state().await;
+    setup_test_trade_group(&state, "MASTER_001").await;
+
+    let app = create_router(state);
+
+    let toggle_body = ToggleStatusRequest { enabled: true };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/trade-groups/MASTER_001/members/NONEXISTENT_SLAVE/toggle")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&toggle_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 404 Not Found
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
