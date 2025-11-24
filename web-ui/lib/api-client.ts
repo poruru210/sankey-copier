@@ -154,4 +154,32 @@ export class ApiClient {
 
     return this.handleResponse<T>(response);
   }
+
+  // ============================================================================
+  // TradeGroups API (Master settings)
+  // ============================================================================
+
+  /**
+   * List all TradeGroups (Master accounts with settings)
+   */
+  async listTradeGroups(): Promise<import('@/types').TradeGroup[]> {
+    return this.get('/trade-groups');
+  }
+
+  /**
+   * Get a specific TradeGroup by master account ID
+   */
+  async getTradeGroup(masterAccount: string): Promise<import('@/types').TradeGroup> {
+    return this.get(`/trade-groups/${encodeURIComponent(masterAccount)}`);
+  }
+
+  /**
+   * Update Master settings for a TradeGroup
+   */
+  async updateTradeGroupSettings(
+    masterAccount: string,
+    settings: import('@/types').MasterSettings
+  ): Promise<void> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}`, settings);
+  }
 }

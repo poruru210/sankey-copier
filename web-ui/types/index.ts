@@ -121,3 +121,17 @@ export interface UpdateMasterConfigRequest {
   symbol_prefix?: string | null;
   symbol_suffix?: string | null;
 }
+
+// TradeGroup (Master settings) types
+export interface MasterSettings {
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  config_version: number;
+}
+
+export interface TradeGroup {
+  id: string; // Master account ID
+  master_settings: MasterSettings;
+  created_at: string;
+  updated_at: string;
+}
