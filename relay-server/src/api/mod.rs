@@ -236,7 +236,7 @@ mod tests {
         use std::sync::atomic::{AtomicU16, Ordering};
         static PORT_COUNTER: AtomicU16 = AtomicU16::new(15557);
 
-        let db = Arc::new(Database::new(":memory:").await.unwrap());
+        let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
         let (tx, _) = broadcast::channel(100);
         let settings_cache = Arc::new(RwLock::new(vec![]));
         let connection_manager = Arc::new(ConnectionManager::new(60)); // 60 second timeout
