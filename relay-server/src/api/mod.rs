@@ -8,6 +8,7 @@
 mod error;
 mod mt_installations;
 mod trade_groups;
+mod trade_group_members;
 
 // New submodules for modular structure
 mod middleware;
@@ -145,6 +146,21 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/trade-groups/:id",
             get(trade_groups::get_trade_group).put(trade_groups::update_trade_group_settings),
+        )
+        // TradeGroupMembers API (Slave settings)
+        .route(
+            "/api/trade-groups/:id/members",
+            get(trade_group_members::list_members).post(trade_group_members::add_member),
+        )
+        .route(
+            "/api/trade-groups/:id/members/:slave_id",
+            get(trade_group_members::get_member)
+                .put(trade_group_members::update_member)
+                .delete(trade_group_members::delete_member),
+        )
+        .route(
+            "/api/trade-groups/:id/members/:slave_id/toggle",
+            post(trade_group_members::toggle_member_status),
         )
         .layer(trace_layer)
         .layer(cors)
