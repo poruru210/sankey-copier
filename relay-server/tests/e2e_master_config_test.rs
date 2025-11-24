@@ -368,6 +368,9 @@ async fn test_master_config_distribution() {
         "✅ Master EA E2E test passed: Received config for {} (version: {})",
         config.account_id, config.config_version
     );
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
 }
 
 /// Test Master EA config distribution with non-existent account
@@ -415,6 +418,9 @@ async fn test_master_config_not_found() {
     );
 
     println!("✅ Master EA E2E test passed: No config for non-existent account");
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
 }
 
 /// Test Slave EA config distribution flow
@@ -494,6 +500,9 @@ async fn test_slave_config_distribution() {
         "✅ Slave EA E2E test passed: Received config for {} from master {}",
         config.account_id, config.master_account
     );
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
 }
 
 /// Test Master-Slave config distribution flow (both EAs)
@@ -591,4 +600,7 @@ async fn test_master_slave_config_distribution() {
         slave_config.account_id,
         slave_config.master_account
     );
+
+    // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
 }

@@ -27,9 +27,9 @@ pub struct TestServer {
     pub zmq_pub_config_port: u16,
     pub db: Arc<Database>,
     zmq_server: Arc<ZmqServer>,
-    _server_handle: JoinHandle<()>,
-    _zmq_receiver_handle: JoinHandle<()>,
-    _zmq_handler_handle: JoinHandle<()>,
+    server_handle: Option<JoinHandle<()>>,
+    zmq_receiver_handle: Option<JoinHandle<()>>,
+    zmq_handler_handle: Option<JoinHandle<()>>,
 }
 
 impl TestServer {
@@ -140,9 +140,9 @@ impl TestServer {
             zmq_pub_config_port,
             db,
             zmq_server,
-            _server_handle: server_handle,
-            _zmq_receiver_handle: zmq_receiver_handle,
-            _zmq_handler_handle: zmq_handler_handle,
+            server_handle: Some(server_handle),
+            zmq_receiver_handle: Some(zmq_receiver_handle),
+            zmq_handler_handle: Some(zmq_handler_handle),
         })
     }
 
@@ -164,6 +164,37 @@ impl TestServer {
     /// Get the HTTP API base URL
     pub fn http_base_url(&self) -> String {
         format!("http://localhost:{}", self.http_port)
+    }
+
+    /// Explicitly shutdown the test server and wait for all tasks to complete
+    ///
+    /// This method should be called at the end of each test to ensure clean shutdown.
+    /// Without calling this, background tasks may continue running and cause tests to hang.
+    pub async fn shutdown(mut self) {
+        tracing::info!("TestServer shutting down...");
+
+        // Signal ZMQ receiver to shutdown
+        self.zmq_server.shutdown();
+
+        // Abort all background tasks
+        if let Some(handle) = self.server_handle.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.zmq_receiver_handle.take() {
+            // Wait for ZMQ receiver to finish (should be quick after shutdown signal)
+            let _ = tokio::time::timeout(
+                tokio::time::Duration::from_millis(500),
+                handle
+            ).await;
+        }
+        if let Some(handle) = self.zmq_handler_handle.take() {
+            handle.abort();
+        }
+
+        // Give a bit of time for cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        tracing::info!("TestServer shutdown complete");
     }
 }
 
