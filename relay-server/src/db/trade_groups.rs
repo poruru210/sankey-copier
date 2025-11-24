@@ -15,6 +15,7 @@ impl Database {
     // ============================================================================
 
     /// Create a new TradeGroup with default settings
+    #[allow(dead_code)]
     pub async fn create_trade_group(&self, master_account: &str) -> Result<TradeGroup> {
         let master_settings = MasterSettings::default();
         let settings_json = serde_json::to_string(&master_settings)?;
