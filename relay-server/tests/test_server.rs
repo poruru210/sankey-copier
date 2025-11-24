@@ -26,6 +26,7 @@ pub struct TestServer {
     pub zmq_pub_trade_port: u16,
     pub zmq_pub_config_port: u16,
     pub db: Arc<Database>,
+    settings_cache: Arc<RwLock<Vec<sankey_copier_relay_server::models::CopySettings>>>,
     zmq_server: Arc<ZmqServer>,
     server_handle: Option<JoinHandle<()>>,
     zmq_receiver_handle: Option<JoinHandle<()>>,
@@ -139,11 +140,29 @@ impl TestServer {
             zmq_pub_trade_port,
             zmq_pub_config_port,
             db,
+            settings_cache,
             zmq_server,
             server_handle: Some(server_handle),
             zmq_receiver_handle: Some(zmq_receiver_handle),
             zmq_handler_handle: Some(zmq_handler_handle),
         })
+    }
+
+    /// Reload settings cache from database
+    /// This should be called after modifying trade groups or members in tests
+    pub async fn reload_settings_cache(&self) -> Result<()> {
+        let settings = self.db.list_copy_settings().await?;
+        *self.settings_cache.write().await = settings;
+        Ok(())
+    }
+
+    /// Set all members in settings cache to CONNECTED status (status=2)
+    /// This is needed for E2E trade signal tests because should_copy_trade requires status=2
+    pub async fn set_all_members_connected(&self) {
+        let mut cache = self.settings_cache.write().await;
+        for setting in cache.iter_mut() {
+            setting.status = 2; // STATUS_CONNECTED
+        }
     }
 
     /// Get the ZMQ PULL address (for EA to connect)
