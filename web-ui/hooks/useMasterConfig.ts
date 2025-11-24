@@ -36,9 +36,11 @@ export function useMasterConfig() {
         );
         // Convert TradeGroup.master_settings to MasterConfig format
         return {
+          account_id: accountId,
           symbol_prefix: tradeGroup.master_settings.symbol_prefix,
           symbol_suffix: tradeGroup.master_settings.symbol_suffix,
           config_version: tradeGroup.master_settings.config_version,
+          timestamp: tradeGroup.updated_at,
         };
       } catch (err) {
         // 404 is expected when config doesn't exist yet
@@ -73,10 +75,14 @@ export function useMasterConfig() {
 
       try {
         // Use TradeGroups API to update master_settings
+        // First fetch current config to get the config_version
+        const currentConfig = await getMasterConfig(accountId);
+        const currentVersion = currentConfig?.config_version || 0;
+
         await apiClient.updateTradeGroupSettings(accountId, {
           symbol_prefix: configData.symbol_prefix,
           symbol_suffix: configData.symbol_suffix,
-          config_version: configData.config_version,
+          config_version: currentVersion,
         });
       } catch (err) {
         const errorMsg =
