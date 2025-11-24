@@ -1,9 +1,12 @@
-// relay-server/tests/e2e_master_config_test.rs
+// relay-server/tests/e2e_config_test.rs
 //
 // E2E integration test for Master/Slave EA configuration distribution.
-// This test uses EA simulators to verify the complete flow:
+// This test uses EA simulators via mt-bridge FFI to verify the complete flow:
 // - Master EA: Heartbeat -> RequestConfig -> MasterConfigMessage
 // - Slave EA: Heartbeat -> RequestConfig -> ConfigMessage
+//
+// IMPORTANT: Uses mt-bridge FFI functions to match actual EA behavior.
+// EA (MQL) -> mt-bridge DLL -> ZMQ -> Relay Server
 //
 // These tests automatically spawn a relay-server instance with dynamic ports,
 // making them suitable for CI/CD environments.
@@ -12,52 +15,94 @@ mod test_server;
 
 use sankey_copier_relay_server::models::SlaveSettings;
 use sankey_copier_zmq::{
-    ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage,
+    zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
+    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
+    ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, ZMQ_PUSH, ZMQ_SUB,
 };
+use std::ffi::c_char;
 use test_server::TestServer;
 use tokio::time::{sleep, Duration};
-use zmq::{Context, Socket};
 
 /// Master EA Simulator for integration testing
-/// Simulates a Master EA connecting to the relay server via ZMQ
+/// Simulates a Master EA connecting to the relay server via mt-bridge FFI
 struct MasterEaSimulator {
-    _context: Context, // Owned context (not Arc) for proper cleanup
-    push_socket: Socket,
-    config_socket: Socket,
+    context_handle: i32,
+    push_socket_handle: i32,
+    config_socket_handle: i32,
     account_id: String,
 }
 
 impl MasterEaSimulator {
-    /// Create a new Master EA simulator
+    /// Create a new Master EA simulator using mt-bridge FFI
     ///
     /// # Parameters
     /// - push_address: Address for PUSH socket (e.g., "tcp://localhost:5555")
     /// - config_address: Address for SUB socket (e.g., "tcp://localhost:5557")
     /// - account_id: Master account ID for topic subscription
     fn new(push_address: &str, config_address: &str, account_id: &str) -> anyhow::Result<Self> {
-        let context = Context::new();
+        // Create ZMQ context via mt-bridge FFI
+        let context_handle = zmq_context_create();
+        if context_handle < 0 {
+            anyhow::bail!("Failed to create ZMQ context via mt-bridge FFI");
+        }
 
-        // PUSH socket for sending Heartbeat and RequestConfig
-        let push_socket = context.socket(zmq::PUSH)?;
-        push_socket.set_linger(0)?; // Don't wait for unsent messages on close
-        push_socket.connect(push_address)?;
+        // Create PUSH socket for sending Heartbeat and RequestConfig
+        let push_socket_handle = zmq_socket_create(context_handle, ZMQ_PUSH);
+        if push_socket_handle < 0 {
+            zmq_context_destroy(context_handle);
+            anyhow::bail!("Failed to create PUSH socket via mt-bridge FFI");
+        }
 
-        // SUB socket for receiving MasterConfigMessage
-        let config_socket = context.socket(zmq::SUB)?;
-        config_socket.set_linger(0)?;
-        config_socket.connect(config_address)?;
-        // Subscribe to messages for this specific account_id (topic-based filtering)
-        config_socket.set_subscribe(account_id.as_bytes())?;
+        // Create SUB socket for receiving MasterConfigMessage
+        let config_socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
+        if config_socket_handle < 0 {
+            zmq_socket_destroy(push_socket_handle);
+            zmq_context_destroy(context_handle);
+            anyhow::bail!("Failed to create SUB socket via mt-bridge FFI");
+        }
+
+        // Convert addresses to UTF-16 (MQL string format)
+        let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
+        let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
+        let topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+
+        // Connect sockets and subscribe to topic
+        unsafe {
+            let push_result = zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr());
+            if push_result != 1 {
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to connect PUSH socket to {}", push_address);
+            }
+
+            let config_result = zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
+            if config_result != 1 {
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to connect SUB socket to {}", config_address);
+            }
+
+            // Subscribe to config messages for this account_id (topic-based filtering)
+            let sub_result = zmq_socket_subscribe(config_socket_handle, topic_utf16.as_ptr());
+            if sub_result != 1 {
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to subscribe to topic: {}", account_id);
+            }
+        }
 
         Ok(Self {
-            _context: context,
-            push_socket,
-            config_socket,
+            context_handle,
+            push_socket_handle,
+            config_socket_handle,
             account_id: account_id.to_string(),
         })
     }
 
-    /// Send a Heartbeat message as Master EA
+    /// Send a Heartbeat message as Master EA using mt-bridge FFI
     fn send_heartbeat(&self) -> anyhow::Result<()> {
         let msg = HeartbeatMessage {
             message_type: "Heartbeat".to_string(),
@@ -82,11 +127,23 @@ impl MasterEaSimulator {
         };
 
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.push_socket.send(&bytes, 0)?;
+
+        // Send via mt-bridge FFI
+        unsafe {
+            let result = zmq_socket_send_binary(
+                self.push_socket_handle,
+                bytes.as_ptr(),
+                bytes.len() as i32,
+            );
+            if result != 1 {
+                anyhow::bail!("Failed to send Heartbeat via mt-bridge FFI");
+            }
+        }
+
         Ok(())
     }
 
-    /// Send a RequestConfig message as Master EA
+    /// Send a RequestConfig message as Master EA using mt-bridge FFI
     fn send_request_config(&self) -> anyhow::Result<()> {
         let msg = RequestConfigMessage {
             message_type: "RequestConfig".to_string(),
@@ -96,11 +153,23 @@ impl MasterEaSimulator {
         };
 
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.push_socket.send(&bytes, 0)?;
+
+        // Send via mt-bridge FFI
+        unsafe {
+            let result = zmq_socket_send_binary(
+                self.push_socket_handle,
+                bytes.as_ptr(),
+                bytes.len() as i32,
+            );
+            if result != 1 {
+                anyhow::bail!("Failed to send RequestConfig via mt-bridge FFI");
+            }
+        }
+
         Ok(())
     }
 
-    /// Try to receive a MasterConfigMessage (with timeout)
+    /// Try to receive a MasterConfigMessage (with timeout) using mt-bridge FFI
     ///
     /// # Parameters
     /// - timeout_ms: Timeout in milliseconds
@@ -110,12 +179,27 @@ impl MasterEaSimulator {
     /// - Ok(None): Timeout (no message received)
     /// - Err: Error during receive or parsing
     fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<MasterConfigMessage>> {
-        self.config_socket.set_rcvtimeo(timeout_ms)?;
+        const BUFFER_SIZE: usize = 65536; // 64KB buffer for large config messages
+        let mut buffer = vec![0u8; BUFFER_SIZE];
 
-        match self.config_socket.recv_bytes(0) {
-            Ok(bytes) => {
+        // Poll for messages with timeout
+        let start = std::time::Instant::now();
+        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
+
+        loop {
+            // Receive via mt-bridge FFI
+            let received_bytes = unsafe {
+                zmq_socket_receive(
+                    self.config_socket_handle,
+                    buffer.as_mut_ptr() as *mut c_char,
+                    BUFFER_SIZE as i32,
+                )
+            };
+
+            if received_bytes > 0 {
+                let bytes = &buffer[..received_bytes as usize];
+
                 // Message format: topic + space + MessagePack payload
-                // Find the space separator
                 let space_pos = bytes
                     .iter()
                     .position(|&b| b == b' ')
@@ -137,26 +221,43 @@ impl MasterEaSimulator {
 
                 // Deserialize MessagePack payload
                 let config: MasterConfigMessage = rmp_serde::from_slice(payload)?;
-                Ok(Some(config))
+                return Ok(Some(config));
+            } else if received_bytes == 0 {
+                // EAGAIN - no message available, check timeout
+                if start.elapsed() >= timeout_duration {
+                    return Ok(None); // Timeout
+                }
+                // Sleep briefly before retrying
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            } else {
+                // Error
+                return Err(anyhow::anyhow!("Failed to receive MasterConfigMessage"));
             }
-            Err(zmq::Error::EAGAIN) => Ok(None), // Timeout
-            Err(e) => Err(e.into()),
         }
     }
 }
 
+impl Drop for MasterEaSimulator {
+    fn drop(&mut self) {
+        // Clean up ZMQ resources via mt-bridge FFI
+        zmq_socket_destroy(self.config_socket_handle);
+        zmq_socket_destroy(self.push_socket_handle);
+        zmq_context_destroy(self.context_handle);
+    }
+}
+
 /// Slave EA Simulator for integration testing
-/// Simulates a Slave EA connecting to the relay server via ZMQ
+/// Simulates a Slave EA connecting to the relay server via mt-bridge FFI
 struct SlaveEaSimulator {
-    _context: Context, // Owned context (not Arc) for proper cleanup
-    push_socket: Socket,
-    config_socket: Socket,
-    _trade_socket: Socket,
+    context_handle: i32,
+    push_socket_handle: i32,
+    config_socket_handle: i32,
+    trade_socket_handle: i32,
     account_id: String,
 }
 
 impl SlaveEaSimulator {
-    /// Create a new Slave EA simulator
+    /// Create a new Slave EA simulator using mt-bridge FFI
     ///
     /// # Parameters
     /// - push_address: Address for PUSH socket (e.g., "tcp://localhost:5555")
@@ -169,43 +270,106 @@ impl SlaveEaSimulator {
         trade_address: &str,
         account_id: &str,
     ) -> anyhow::Result<Self> {
-        let context = Context::new();
+        // Create ZMQ context via mt-bridge FFI
+        let context_handle = zmq_context_create();
+        if context_handle < 0 {
+            anyhow::bail!("Failed to create ZMQ context via mt-bridge FFI");
+        }
 
-        // PUSH socket for sending Heartbeat and RequestConfig
-        let push_socket = context.socket(zmq::PUSH)?;
-        push_socket.set_linger(0)?;
-        push_socket.connect(push_address)?;
+        // Create PUSH socket for sending Heartbeat and RequestConfig
+        let push_socket_handle = zmq_socket_create(context_handle, ZMQ_PUSH);
+        if push_socket_handle < 0 {
+            zmq_context_destroy(context_handle);
+            anyhow::bail!("Failed to create PUSH socket via mt-bridge FFI");
+        }
 
-        // SUB socket for receiving ConfigMessage
-        let config_socket = context.socket(zmq::SUB)?;
-        config_socket.set_linger(0)?;
-        config_socket.connect(config_address)?;
-        // Subscribe to config messages for this account_id
-        config_socket.set_subscribe(account_id.as_bytes())?;
+        // Create SUB socket for receiving ConfigMessage
+        let config_socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
+        if config_socket_handle < 0 {
+            zmq_socket_destroy(push_socket_handle);
+            zmq_context_destroy(context_handle);
+            anyhow::bail!("Failed to create Config SUB socket via mt-bridge FFI");
+        }
 
-        // SUB socket for receiving TradeSignals
-        let trade_socket = context.socket(zmq::SUB)?;
-        trade_socket.set_linger(0)?;
-        trade_socket.connect(trade_address)?;
-        // Trade socket subscription will be set based on master_account
+        // Create SUB socket for receiving TradeSignals
+        let trade_socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
+        if trade_socket_handle < 0 {
+            zmq_socket_destroy(config_socket_handle);
+            zmq_socket_destroy(push_socket_handle);
+            zmq_context_destroy(context_handle);
+            anyhow::bail!("Failed to create Trade SUB socket via mt-bridge FFI");
+        }
+
+        // Convert addresses to UTF-16 (MQL string format)
+        let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
+        let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
+        let trade_addr_utf16: Vec<u16> = trade_address.encode_utf16().chain(Some(0)).collect();
+        let account_topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+
+        // Connect sockets and subscribe to config topic
+        unsafe {
+            let push_result = zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr());
+            if push_result != 1 {
+                zmq_socket_destroy(trade_socket_handle);
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to connect PUSH socket to {}", push_address);
+            }
+
+            let config_result = zmq_socket_connect(config_socket_handle, config_addr_utf16.as_ptr());
+            if config_result != 1 {
+                zmq_socket_destroy(trade_socket_handle);
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to connect Config SUB socket to {}", config_address);
+            }
+
+            let trade_result = zmq_socket_connect(trade_socket_handle, trade_addr_utf16.as_ptr());
+            if trade_result != 1 {
+                zmq_socket_destroy(trade_socket_handle);
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to connect Trade SUB socket to {}", trade_address);
+            }
+
+            // Subscribe to config messages for this account_id (topic-based filtering)
+            let sub_result = zmq_socket_subscribe(config_socket_handle, account_topic_utf16.as_ptr());
+            if sub_result != 1 {
+                zmq_socket_destroy(trade_socket_handle);
+                zmq_socket_destroy(config_socket_handle);
+                zmq_socket_destroy(push_socket_handle);
+                zmq_context_destroy(context_handle);
+                anyhow::bail!("Failed to subscribe to config topic: {}", account_id);
+            }
+        }
 
         Ok(Self {
-            _context: context,
-            push_socket,
-            config_socket,
-            _trade_socket: trade_socket,
+            context_handle,
+            push_socket_handle,
+            config_socket_handle,
+            trade_socket_handle,
             account_id: account_id.to_string(),
         })
     }
 
-    /// Subscribe to trade signals from a specific Master account
+    /// Subscribe to trade signals from a specific Master account using mt-bridge FFI
     fn subscribe_to_master(&self, master_account: &str) -> anyhow::Result<()> {
-        self._trade_socket
-            .set_subscribe(master_account.as_bytes())?;
+        let topic_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
+
+        unsafe {
+            let result = zmq_socket_subscribe(self.trade_socket_handle, topic_utf16.as_ptr());
+            if result != 1 {
+                anyhow::bail!("Failed to subscribe to master account: {}", master_account);
+            }
+        }
+
         Ok(())
     }
 
-    /// Send a Heartbeat message as Slave EA
+    /// Send a Heartbeat message as Slave EA using mt-bridge FFI
     fn send_heartbeat(&self) -> anyhow::Result<()> {
         let msg = HeartbeatMessage {
             message_type: "Heartbeat".to_string(),
@@ -230,11 +394,23 @@ impl SlaveEaSimulator {
         };
 
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.push_socket.send(&bytes, 0)?;
+
+        // Send via mt-bridge FFI
+        unsafe {
+            let result = zmq_socket_send_binary(
+                self.push_socket_handle,
+                bytes.as_ptr(),
+                bytes.len() as i32,
+            );
+            if result != 1 {
+                anyhow::bail!("Failed to send Heartbeat via mt-bridge FFI");
+            }
+        }
+
         Ok(())
     }
 
-    /// Send a RequestConfig message as Slave EA
+    /// Send a RequestConfig message as Slave EA using mt-bridge FFI
     fn send_request_config(&self) -> anyhow::Result<()> {
         let msg = RequestConfigMessage {
             message_type: "RequestConfig".to_string(),
@@ -244,11 +420,23 @@ impl SlaveEaSimulator {
         };
 
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.push_socket.send(&bytes, 0)?;
+
+        // Send via mt-bridge FFI
+        unsafe {
+            let result = zmq_socket_send_binary(
+                self.push_socket_handle,
+                bytes.as_ptr(),
+                bytes.len() as i32,
+            );
+            if result != 1 {
+                anyhow::bail!("Failed to send RequestConfig via mt-bridge FFI");
+            }
+        }
+
         Ok(())
     }
 
-    /// Try to receive a ConfigMessage (with timeout)
+    /// Try to receive a ConfigMessage (with timeout) using mt-bridge FFI
     ///
     /// # Parameters
     /// - timeout_ms: Timeout in milliseconds
@@ -258,10 +446,26 @@ impl SlaveEaSimulator {
     /// - Ok(None): Timeout (no message received)
     /// - Err: Error during receive or parsing
     fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<ConfigMessage>> {
-        self.config_socket.set_rcvtimeo(timeout_ms)?;
+        const BUFFER_SIZE: usize = 65536; // 64KB buffer for large config messages
+        let mut buffer = vec![0u8; BUFFER_SIZE];
 
-        match self.config_socket.recv_bytes(0) {
-            Ok(bytes) => {
+        // Poll for messages with timeout
+        let start = std::time::Instant::now();
+        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
+
+        loop {
+            // Receive via mt-bridge FFI
+            let received_bytes = unsafe {
+                zmq_socket_receive(
+                    self.config_socket_handle,
+                    buffer.as_mut_ptr() as *mut c_char,
+                    BUFFER_SIZE as i32,
+                )
+            };
+
+            if received_bytes > 0 {
+                let bytes = &buffer[..received_bytes as usize];
+
                 // Message format: topic + space + MessagePack payload
                 let space_pos = bytes
                     .iter()
@@ -284,11 +488,29 @@ impl SlaveEaSimulator {
 
                 // Deserialize MessagePack payload
                 let config: ConfigMessage = rmp_serde::from_slice(payload)?;
-                Ok(Some(config))
+                return Ok(Some(config));
+            } else if received_bytes == 0 {
+                // EAGAIN - no message available, check timeout
+                if start.elapsed() >= timeout_duration {
+                    return Ok(None); // Timeout
+                }
+                // Sleep briefly before retrying
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            } else {
+                // Error
+                return Err(anyhow::anyhow!("Failed to receive ConfigMessage"));
             }
-            Err(zmq::Error::EAGAIN) => Ok(None), // Timeout
-            Err(e) => Err(e.into()),
         }
+    }
+}
+
+impl Drop for SlaveEaSimulator {
+    fn drop(&mut self) {
+        // Clean up ZMQ resources via mt-bridge FFI
+        zmq_socket_destroy(self.trade_socket_handle);
+        zmq_socket_destroy(self.config_socket_handle);
+        zmq_socket_destroy(self.push_socket_handle);
+        zmq_context_destroy(self.context_handle);
     }
 }
 
