@@ -33,7 +33,7 @@ function DialogContent({ className, children, ref, ...props }: DialogContentProp
     <div
       ref={ref}
       className={cn(
-        'relative z-50 w-full max-w-lg bg-background p-6 shadow-lg rounded-lg border pointer-events-auto',
+        'relative z-50 w-full bg-background p-6 shadow-lg rounded-lg border pointer-events-auto',
         className
       )}
       onClick={(e) => e.stopPropagation()}
