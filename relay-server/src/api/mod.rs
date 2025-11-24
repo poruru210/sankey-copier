@@ -32,7 +32,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
@@ -42,7 +42,6 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     log_buffer::LogBuffer,
-    models::CopySettings,
     zeromq::ZmqConfigPublisher,
 };
 
@@ -56,7 +55,6 @@ use websocket::websocket_handler;
 pub struct AppState {
     pub db: Arc<Database>,
     pub tx: broadcast::Sender<String>,
-    pub settings_cache: Arc<RwLock<Vec<CopySettings>>>,
     pub connection_manager: Arc<ConnectionManager>,
     pub config_sender: Arc<ZmqConfigPublisher>,
     pub log_buffer: LogBuffer,

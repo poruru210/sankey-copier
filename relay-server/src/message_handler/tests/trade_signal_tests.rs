@@ -1,17 +1,32 @@
 //! Tests for trade signal message handling
 
 use super::*;
+use crate::models::{SlaveSettings, TradeFilters};
 
 #[tokio::test]
 async fn test_handle_trade_signal_with_matching_setting() {
     let handler = create_test_handler().await;
     let signal = create_test_trade_signal();
-    let settings = create_test_copy_settings();
 
-    // Add settings to cache
+    // Create TradeGroup for master and add member to database
     {
-        let mut cache = handler.settings_cache.write().await;
-        cache.push(settings);
+        handler.db.create_trade_group("MASTER_001").await.unwrap();
+
+        let slave_settings = SlaveSettings {
+            config_version: 1,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            lot_multiplier: Some(1.0),
+            reverse_trade: false,
+            symbol_mappings: vec![],
+            filters: TradeFilters {
+                allowed_symbols: None,
+                blocked_symbols: None,
+                allowed_magic_numbers: None,
+                blocked_magic_numbers: None,
+            },
+        };
+        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
     }
 
     // Process trade signal (should not panic)
@@ -23,12 +38,26 @@ async fn test_handle_trade_signal_no_matching_master() {
     let handler = create_test_handler().await;
     let mut signal = create_test_trade_signal();
     signal.source_account = "OTHER_MASTER".to_string();
-    let settings = create_test_copy_settings();
 
-    // Add settings to cache
+    // Create TradeGroup for MASTER_001 (but signal is from OTHER_MASTER)
     {
-        let mut cache = handler.settings_cache.write().await;
-        cache.push(settings);
+        handler.db.create_trade_group("MASTER_001").await.unwrap();
+
+        let slave_settings = SlaveSettings {
+            config_version: 1,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            lot_multiplier: Some(1.0),
+            reverse_trade: false,
+            symbol_mappings: vec![],
+            filters: TradeFilters {
+                allowed_symbols: None,
+                blocked_symbols: None,
+                allowed_magic_numbers: None,
+                blocked_magic_numbers: None,
+            },
+        };
+        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
     }
 
     // Process trade signal (should be filtered out, no panic)
@@ -39,13 +68,28 @@ async fn test_handle_trade_signal_no_matching_master() {
 async fn test_handle_trade_signal_disabled_setting() {
     let handler = create_test_handler().await;
     let signal = create_test_trade_signal();
-    let mut settings = create_test_copy_settings();
-    settings.status = 0; // STATUS_DISABLED
 
-    // Add settings to cache
+    // Create TradeGroup and add member with DISABLED status
     {
-        let mut cache = handler.settings_cache.write().await;
-        cache.push(settings);
+        handler.db.create_trade_group("MASTER_001").await.unwrap();
+
+        let slave_settings = SlaveSettings {
+            config_version: 1,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            lot_multiplier: Some(1.0),
+            reverse_trade: false,
+            symbol_mappings: vec![],
+            filters: TradeFilters {
+                allowed_symbols: None,
+                blocked_symbols: None,
+                allowed_magic_numbers: None,
+                blocked_magic_numbers: None,
+            },
+        };
+        // Add member and then disable it
+        handler.db.add_member("MASTER_001", "SLAVE_001", slave_settings).await.unwrap();
+        handler.db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // STATUS_DISABLED = 0
     }
 
     // Process trade signal (should be filtered out, no panic)

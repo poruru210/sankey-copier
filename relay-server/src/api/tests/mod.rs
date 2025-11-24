@@ -8,7 +8,7 @@ mod trade_group_members_tests;
 
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use chrono::Utc;
 
 use crate::{
@@ -48,7 +48,6 @@ pub(crate) async fn create_test_app_state() -> AppState {
 
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
     let (tx, _) = broadcast::channel(100);
-    let settings_cache = Arc::new(RwLock::new(vec![]));
     let connection_manager = Arc::new(ConnectionManager::new(60)); // 60 second timeout
 
     // Use unique port for each test to avoid "Address in use" errors
@@ -63,7 +62,6 @@ pub(crate) async fn create_test_app_state() -> AppState {
     AppState {
         db,
         tx,
-        settings_cache,
         connection_manager,
         config_sender,
         log_buffer,

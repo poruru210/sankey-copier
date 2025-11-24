@@ -8,13 +8,6 @@ use crate::{
     models::{CopySettings, EaConnection, SlaveConfigMessage},
 };
 
-/// Refresh the settings cache from the database
-pub async fn refresh_settings_cache(state: &AppState) {
-    if let Ok(all_settings) = state.db.list_copy_settings().await {
-        *state.settings_cache.write().await = all_settings;
-    }
-}
-
 /// Calculate effective status based on settings status and master connection state
 ///
 /// Logic:

@@ -111,41 +111,6 @@ async fn test_build_config_message_slave_disabled() {
 }
 
 #[tokio::test]
-async fn test_refresh_settings_cache_success() {
-    // Test successful cache refresh
-    let state = create_test_app_state().await;
-    let mut settings = create_test_copy_settings();
-    settings.id = 0; // Use 0 for new record creation
-
-    // Save settings to DB
-    state.db.save_copy_settings(&settings).await.unwrap();
-
-    // Initial cache should be empty
-    assert_eq!(state.settings_cache.read().await.len(), 0);
-
-    // Refresh cache
-    refresh_settings_cache(&state).await;
-
-    // Cache should now contain the setting
-    let cache = state.settings_cache.read().await;
-    assert_eq!(cache.len(), 1);
-    assert_eq!(cache[0].master_account, "MASTER123");
-    assert_eq!(cache[0].slave_account, "SLAVE456");
-}
-
-#[tokio::test]
-async fn test_refresh_settings_cache_empty_db() {
-    // Test cache refresh with empty database
-    let state = create_test_app_state().await;
-
-    // Refresh cache with empty DB
-    refresh_settings_cache(&state).await;
-
-    // Cache should remain empty
-    assert_eq!(state.settings_cache.read().await.len(), 0);
-}
-
-#[tokio::test]
 async fn test_build_config_message_with_null_values() {
     // Test ConfigMessage building with null optional fields
     let state = create_test_app_state().await;

@@ -4,13 +4,12 @@
 //! them to appropriate handlers.
 
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 
 use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
-    models::CopySettings,
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
 };
 
@@ -28,7 +27,6 @@ pub struct MessageHandler {
     connection_manager: Arc<ConnectionManager>,
     copy_engine: Arc<CopyEngine>,
     zmq_sender: Arc<ZmqSender>,
-    settings_cache: Arc<RwLock<Vec<CopySettings>>>,
     broadcast_tx: broadcast::Sender<String>,
     db: Arc<Database>,
     config_sender: Arc<ZmqConfigPublisher>,
@@ -39,7 +37,6 @@ impl MessageHandler {
         connection_manager: Arc<ConnectionManager>,
         copy_engine: Arc<CopyEngine>,
         zmq_sender: Arc<ZmqSender>,
-        settings_cache: Arc<RwLock<Vec<CopySettings>>>,
         broadcast_tx: broadcast::Sender<String>,
         db: Arc<Database>,
         config_sender: Arc<ZmqConfigPublisher>,
@@ -48,7 +45,6 @@ impl MessageHandler {
             connection_manager,
             copy_engine,
             zmq_sender,
-            settings_cache,
             broadcast_tx,
             db,
             config_sender,

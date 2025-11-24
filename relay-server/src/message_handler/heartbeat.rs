@@ -93,11 +93,6 @@ impl MessageHandler {
                         account_id,
                         count
                     );
-                    // Refresh settings cache to reflect the status change
-                    if let Ok(settings) = self.db.list_copy_settings().await {
-                        let mut cache = self.settings_cache.write().await;
-                        *cache = settings;
-                    }
                     // Notify WebSocket clients
                     // We need to broadcast the updated settings for all affected slaves
                     if let Ok(members) = self.db.get_members(&account_id).await {

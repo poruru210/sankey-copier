@@ -27,7 +27,6 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
     let port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
     let zmq_sender = Arc::new(ZmqSender::new(&format!("tcp://127.0.0.1:{}", port)).unwrap());
 
-    let settings_cache = Arc::new(RwLock::new(Vec::new()));
     let (broadcast_tx, _) = broadcast::channel::<String>(100);
 
     // Create test database (in-memory)
@@ -42,7 +41,6 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
         connection_manager,
         copy_engine,
         zmq_sender,
-        settings_cache,
         broadcast_tx,
         db,
         config_sender,

@@ -50,7 +50,6 @@ pub async fn list_settings(
                 count = settings.len(),
                 "Successfully retrieved copy settings"
             );
-            refresh_settings_cache(&state).await;
             Ok(Json(settings))
         }
         Err(e) => {
@@ -148,7 +147,6 @@ pub async fn create_settings(
                 "Successfully created copy settings"
             );
 
-            refresh_settings_cache(&state).await;
             send_config_to_ea(&state, &settings).await;
 
             // Update settings object with the generated ID
@@ -220,7 +218,6 @@ pub async fn update_settings(
                 "Successfully updated copy settings"
             );
 
-            refresh_settings_cache(&state).await;
             send_config_to_ea(&state, &updated).await;
 
             // Notify via WebSocket
@@ -281,7 +278,6 @@ pub async fn toggle_settings(
                 "Successfully toggled copy settings"
             );
 
-            refresh_settings_cache(&state).await;
 
             // Send updated config to Slave EA for real-time reflection
             if let Ok(Some(settings)) = state.db.get_copy_settings(id).await {
@@ -387,7 +383,6 @@ pub async fn delete_settings(
         Ok(_) => {
             tracing::info!(settings_id = id, "Successfully deleted copy settings");
 
-            refresh_settings_cache(&state).await;
 
             // Notify via WebSocket
             let _ = state.tx.send(format!("settings_deleted:{}", id));

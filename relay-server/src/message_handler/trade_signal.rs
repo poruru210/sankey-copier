@@ -17,14 +17,20 @@ impl MessageHandler {
             signal.source_account, signal.symbol, signal.lots
         ));
 
-        let settings = self.settings_cache.read().await;
-
-        for setting in settings.iter() {
-            // Check if this signal is from the master account for this setting
-            if signal.source_account != setting.master_account {
-                continue;
+        // Get copy settings for this master account from database
+        let settings = match self.db.get_copy_settings_for_master(&signal.source_account).await {
+            Ok(settings) => settings,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to get copy settings for master {}: {}",
+                    signal.source_account,
+                    e
+                );
+                return;
             }
+        };
 
+        for setting in &settings {
             // Apply filters
             if !self.copy_engine.should_copy_trade(&signal, setting) {
                 tracing::debug!(
