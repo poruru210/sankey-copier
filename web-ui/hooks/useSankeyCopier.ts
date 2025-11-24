@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { debounce } from 'lodash-es';
-import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
+import type {
+  CopySettings,
+  EaConnection,
+  CreateSettingsRequest,
+  TradeGroup,
+  TradeGroupMember,
+} from '@/types';
 import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
 import { settingsAtom } from '@/lib/atoms/settings';
 import { connectionsAtom } from '@/lib/atoms/connections';
+import { convertMembersToCopySettings } from '@/utils/tradeGroupAdapter';
 
 export function useSankeyCopier() {
   const apiClient = useAtomValue(apiClientAtom);
@@ -35,16 +42,41 @@ export function useSankeyCopier() {
     }
   }, [apiClient, setConnections]);
 
-  // Fetch settings
+  // Fetch settings (using new TradeGroups API)
   const fetchSettings = useCallback(async () => {
     if (!apiClient) return;
     try {
       setLoading(true);
-      // Rust API returns Vec<CopySettings> directly (not wrapped)
-      const data = await apiClient.get<CopySettings[]>('/settings');
-      if (data) {
-        setSettings(data);
+
+      // Fetch all TradeGroups (Masters)
+      const tradeGroups = await apiClient.get<TradeGroup[]>('/trade-groups');
+      if (!tradeGroups) {
+        setSettings([]);
+        setError(null);
+        return;
       }
+
+      // Fetch members for each TradeGroup
+      const membersMap = new Map<string, TradeGroupMember[]>();
+      await Promise.all(
+        tradeGroups.map(async (tradeGroup) => {
+          try {
+            const members = await apiClient.get<TradeGroupMember[]>(
+              `/trade-groups/${encodeURIComponent(tradeGroup.id)}/members`
+            );
+            if (members) {
+              membersMap.set(tradeGroup.id, members);
+            }
+          } catch (err) {
+            console.error(`Failed to fetch members for ${tradeGroup.id}:`, err);
+            membersMap.set(tradeGroup.id, []);
+          }
+        })
+      );
+
+      // Convert to legacy CopySettings format
+      const copySettings = convertMembersToCopySettings(tradeGroups, membersMap);
+      setSettings(copySettings);
       setError(null);
     } catch (err) {
       if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('Failed to fetch'))) {
@@ -95,34 +127,10 @@ export function useSankeyCopier() {
       console.log('WS message:', message);
       setWsMessages((prev) => [message, ...prev].slice(0, 20));
 
-      if (message.startsWith('settings_created:')) {
-        try {
-          const jsonStr = message.substring('settings_created:'.length);
-          const newSetting = JSON.parse(jsonStr) as CopySettings;
-          setSettings((prev) => [...prev, newSetting]);
-        } catch (e) {
-          console.error('Failed to parse settings_created message:', e);
-          fetchSettings(); // Fallback
-        }
-      } else if (message.startsWith('settings_updated:')) {
-        try {
-          const jsonStr = message.substring('settings_updated:'.length);
-          const updatedSetting = JSON.parse(jsonStr) as CopySettings;
-          setSettings((prev) =>
-            prev.map((s) => (s.id === updatedSetting.id ? updatedSetting : s))
-          );
-        } catch (e) {
-          console.error('Failed to parse settings_updated message:', e);
-          fetchSettings(); // Fallback
-        }
-      } else if (message.startsWith('settings_deleted:')) {
-        const idStr = message.substring('settings_deleted:'.length);
-        const id = parseInt(idStr, 10);
-        if (!isNaN(id)) {
-          setSettings((prev) => prev.filter((s) => s.id !== id));
-        } else {
-          fetchSettings(); // Fallback
-        }
+      // Refresh data when changes are detected
+      // Note: With new API, we refresh all settings instead of parsing individual messages
+      if (message.startsWith('trade_') || message.startsWith('member_') || message.startsWith('settings_')) {
+        fetchSettings();
       }
     };
 
@@ -184,6 +192,13 @@ export function useSankeyCopier() {
   const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
     if (!apiClient) return;
 
+    // Find the setting to get master_account for API call
+    const setting = settings.find(s => s.id === id);
+    if (!setting) {
+      console.error(`Setting ${id} not found`);
+      return;
+    }
+
     // Optimistically update UI
     setSettings((prev) =>
       prev.map(s => s.id === id ? { ...s, status: s.status === 0 ? 1 : 0 } : s)
@@ -198,11 +213,14 @@ export function useSankeyCopier() {
     // Note: We don't need to worry about stale apiClient here because we clear the map
     // when apiClient changes (in the useEffect above), forcing recreation.
     if (!debouncedFn) {
-      debouncedFn = debounce(async (status: number) => {
+      debouncedFn = debounce(async (masterAccount: string, slaveId: number) => {
         try {
-          await apiClient.post<void>(`/settings/${id}/toggle`, { status });
+          await apiClient.post<void>(
+            `/trade-groups/${encodeURIComponent(masterAccount)}/members/${slaveId}/toggle`,
+            {}
+          );
         } catch (err) {
-          console.error(`Failed to toggle setting ${id}`, err);
+          console.error(`Failed to toggle setting ${slaveId}`, err);
           fetchSettings(); // Refresh on error
         }
       }, 300);
@@ -210,17 +228,26 @@ export function useSankeyCopier() {
     }
 
     // Call the debounced function for this ID
-    debouncedFn(newStatus);
-  }, [apiClient, fetchSettings, setSettings]);
+    debouncedFn(setting.master_account, id);
+  }, [apiClient, fetchSettings, setSettings, settings]);
 
   // Create new setting
   const createSetting = async (formData: CreateSettingsRequest) => {
     if (!apiClient) return;
 
     try {
-      // Send to server - WebSocket will handle adding to UI
-      await apiClient.post<number>('/settings', formData);
-      // No optimistic update - WebSocket message 'settings_created:{json}' will add it
+      // Import converter function
+      const { convertCreateRequestToMemberData } = await import('@/utils/tradeGroupAdapter');
+      const memberData = convertCreateRequestToMemberData(formData);
+
+      // Send to new API endpoint
+      await apiClient.post<number>(
+        `/trade-groups/${encodeURIComponent(formData.master_account)}/members`,
+        memberData
+      );
+
+      // Refresh settings to get updated data
+      await fetchSettings();
     } catch (err) {
       throw err; // Re-throw for caller to handle
     }
@@ -229,6 +256,13 @@ export function useSankeyCopier() {
   // Update setting
   const updateSetting = async (id: number, updatedData: CopySettings) => {
     if (!apiClient) return;
+
+    // Find the setting to get master_account
+    const originalSetting = settings.find(s => s.id === id);
+    if (!originalSetting) {
+      throw new Error(`Setting ${id} not found`);
+    }
+
     // Optimistically update UI
     const previousSettings = settings;
     setSettings((prev) =>
@@ -236,9 +270,18 @@ export function useSankeyCopier() {
     );
 
     try {
-      // Rust API returns StatusCode::NO_CONTENT (204) on success
-      await apiClient.put<void>(`/settings/${id}`, updatedData);
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
+      // Import converter function
+      const { convertCopySettingsToSlaveSettings } = await import('@/utils/tradeGroupAdapter');
+      const slaveSettings = convertCopySettingsToSlaveSettings(updatedData);
+
+      // Send to new API endpoint
+      await apiClient.put<void>(
+        `/trade-groups/${encodeURIComponent(originalSetting.master_account)}/members/${id}`,
+        { slave_settings: slaveSettings, status: updatedData.status }
+      );
+
+      // Refresh to ensure consistency
+      await fetchSettings();
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle
@@ -248,14 +291,25 @@ export function useSankeyCopier() {
   // Delete setting
   const deleteSetting = async (id: number) => {
     if (!apiClient) return;
+
+    // Find the setting to get master_account
+    const setting = settings.find(s => s.id === id);
+    if (!setting) {
+      throw new Error(`Setting ${id} not found`);
+    }
+
     // Optimistically remove from UI
     const previousSettings = settings;
     setSettings((prev) => prev.filter(s => s.id !== id));
 
     try {
-      // Rust API returns StatusCode::NO_CONTENT (204) on success
-      await apiClient.delete<void>(`/settings/${id}`);
-      // fetchSettings(); // Removed to avoid duplicate fetch (handled by WS)
+      // Send to new API endpoint
+      await apiClient.delete<void>(
+        `/trade-groups/${encodeURIComponent(setting.master_account)}/members/${id}`
+      );
+
+      // Refresh to ensure consistency
+      await fetchSettings();
     } catch (err) {
       setSettings(previousSettings); // Revert on error
       throw err; // Re-throw for caller to handle

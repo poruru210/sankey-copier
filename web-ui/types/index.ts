@@ -135,3 +135,24 @@ export interface TradeGroup {
   created_at: string;
   updated_at: string;
 }
+
+// TradeGroupMember (Slave settings) types
+export interface SlaveSettings {
+  lot_multiplier: number | null;
+  reverse_trade: boolean;
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  symbol_mappings: SymbolMapping[];
+  filters: TradeFilters;
+  config_version: number;
+}
+
+export interface TradeGroupMember {
+  id: number;
+  trade_group_id: string; // Master account ID
+  slave_account: string;
+  slave_settings: SlaveSettings;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
+  created_at: string;
+  updated_at: string;
+}

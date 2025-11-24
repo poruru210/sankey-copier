@@ -1,0 +1,111 @@
+// Trade Group Adapter
+//
+// Converts between new TradeGroups API format and legacy CopySettings format
+// to minimize UI layer changes during migration.
+
+import type {
+  TradeGroup,
+  TradeGroupMember,
+  CopySettings,
+  CreateSettingsRequest,
+  SlaveSettings,
+  MasterSettings,
+} from '@/types';
+
+/**
+ * Convert TradeGroup + TradeGroupMembers → CopySettings[]
+ *
+ * Flattens the hierarchical TradeGroup structure into a flat CopySettings array
+ * for backwards compatibility with existing UI components.
+ */
+export function convertMembersToCopySettings(
+  tradeGroups: TradeGroup[],
+  allMembers: Map<string, TradeGroupMember[]>
+): CopySettings[] {
+  const copySettings: CopySettings[] = [];
+
+  for (const tradeGroup of tradeGroups) {
+    const members = allMembers.get(tradeGroup.id) || [];
+
+    for (const member of members) {
+      copySettings.push({
+        id: member.id,
+        status: member.status,
+        master_account: member.trade_group_id,
+        slave_account: member.slave_account,
+        lot_multiplier: member.slave_settings.lot_multiplier,
+        reverse_trade: member.slave_settings.reverse_trade,
+        symbol_mappings: member.slave_settings.symbol_mappings,
+        filters: member.slave_settings.filters,
+        symbol_prefix: member.slave_settings.symbol_prefix ?? tradeGroup.master_settings.symbol_prefix ?? undefined,
+        symbol_suffix: member.slave_settings.symbol_suffix ?? tradeGroup.master_settings.symbol_suffix ?? undefined,
+      });
+    }
+  }
+
+  return copySettings;
+}
+
+/**
+ * Convert CopySettings → SlaveSettings (for updates)
+ *
+ * Extracts slave-specific settings from a CopySettings object.
+ */
+export function convertCopySettingsToSlaveSettings(settings: CopySettings): SlaveSettings {
+  return {
+    lot_multiplier: settings.lot_multiplier,
+    reverse_trade: settings.reverse_trade,
+    symbol_prefix: settings.symbol_prefix || null,
+    symbol_suffix: settings.symbol_suffix || null,
+    symbol_mappings: settings.symbol_mappings,
+    filters: settings.filters,
+    config_version: 0, // Will be set by server
+  };
+}
+
+/**
+ * Convert CreateSettingsRequest → TradeGroupMember creation data
+ *
+ * Prepares data for creating a new TradeGroupMember via the API.
+ */
+export function convertCreateRequestToMemberData(request: CreateSettingsRequest) {
+  // Parse symbol_mappings from comma-separated format if provided
+  const symbolMappings = request.symbol_mappings
+    ? request.symbol_mappings.split(',').map(pair => {
+        const [source, target] = pair.split('=');
+        return { source_symbol: source.trim(), target_symbol: target.trim() };
+      })
+    : [];
+
+  return {
+    slave_account: request.slave_account,
+    slave_settings: {
+      lot_multiplier: request.lot_multiplier,
+      reverse_trade: request.reverse_trade,
+      symbol_prefix: request.symbol_prefix || null,
+      symbol_suffix: request.symbol_suffix || null,
+      symbol_mappings: symbolMappings,
+      filters: {
+        allowed_symbols: null,
+        blocked_symbols: null,
+        allowed_magic_numbers: null,
+        blocked_magic_numbers: null,
+      },
+      config_version: 0,
+    },
+    status: request.status,
+  };
+}
+
+/**
+ * Extract master settings from CopySettings (for master config updates)
+ *
+ * Note: This is a best-effort extraction. In the new schema, master settings
+ * are stored per TradeGroup, not per CopySettings.
+ */
+export function extractMasterSettings(settings: CopySettings): Partial<MasterSettings> {
+  return {
+    symbol_prefix: settings.symbol_prefix || null,
+    symbol_suffix: settings.symbol_suffix || null,
+  };
+}
