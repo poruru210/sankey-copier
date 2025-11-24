@@ -122,7 +122,7 @@ impl MtInstaller {
                 "Expected full path: {}",
                 dll_source
                     .canonicalize()
-                    .unwrap_or(dll_source.clone())
+                    .unwrap_or_else(|_| dll_source.clone())
                     .display()
             );
             anyhow::bail!(
