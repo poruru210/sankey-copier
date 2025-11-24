@@ -119,12 +119,10 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
-      g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Initial state
+      // Show NO_CONFIGURATION status initially (no config received yet)
+      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
       g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
-      
-      // Show "Waiting" message initially
-      g_config_panel.ShowMessage("Waiting for Web UI configuration...", clrYellow);
    }
 
    ChartRedraw();
@@ -291,8 +289,6 @@ void OnTimer()
          // Update configuration panel
          if(ShowConfigPanel)
          {
-            g_config_panel.HideMessage(); // Switch to grid view
-            
             // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
             bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
             if(!local_trade_allowed)

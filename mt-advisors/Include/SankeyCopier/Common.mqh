@@ -39,10 +39,11 @@
 #define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
 #define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
 
-//--- Connection status constants (3 states)
-#define STATUS_DISABLED 0      // Slave is disabled
-#define STATUS_ENABLED 1       // Slave is enabled, Master disconnected
-#define STATUS_CONNECTED 2     // Slave is enabled, Master connected
+//--- Connection status constants (4 states)
+#define STATUS_DISABLED 0         // Slave is disabled
+#define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
+#define STATUS_CONNECTED 2        // Slave is enabled, Master connected
+#define STATUS_NO_CONFIGURATION 3 // No configuration received yet
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"

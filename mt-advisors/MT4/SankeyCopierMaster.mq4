@@ -82,18 +82,10 @@ int OnInit()
    if(ShowConfigPanel)
    {
       g_config_panel.InitializeMasterPanel("SankeyCopierPanel_", PanelWidth);
-      
-      // Update panel immediately
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
-      {
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-      }
-      else
-      {
-         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-      }
-      
+
+      // Show NO_CONFIGURATION status initially (no config received yet)
+      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+
       g_config_panel.UpdateServerRow(RelayServerAddress);
       g_config_panel.UpdateMagicFilterRow(MagicFilter);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
