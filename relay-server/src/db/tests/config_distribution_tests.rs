@@ -3,29 +3,28 @@
 //! Tests for Master/Slave status updates during connection lifecycle
 
 use super::*;
+use crate::models::SlaveSettings;
 
 #[tokio::test]
 async fn test_update_master_statuses_connected() {
     let db = create_test_db().await;
 
-    // Create three settings for the same master: one disabled, two enabled
-    let mut settings1 = create_test_settings();
-    settings1.master_account = "MASTER_001".to_string();
-    settings1.slave_account = "SLAVE_001".to_string();
-    settings1.status = 0; // DISABLED
-    let id1 = db.save_copy_settings(&settings1).await.unwrap();
+    // Create TradeGroup and three members for the same master: one disabled, two enabled
+    db.create_trade_group("MASTER_001").await.unwrap();
 
-    let mut settings2 = create_test_settings();
-    settings2.master_account = "MASTER_001".to_string();
-    settings2.slave_account = "SLAVE_002".to_string();
-    settings2.status = 1; // ENABLED
-    let id2 = db.save_copy_settings(&settings2).await.unwrap();
+    let slave_settings = create_test_slave_settings();
 
-    let mut settings3 = create_test_settings();
-    settings3.master_account = "MASTER_001".to_string();
-    settings3.slave_account = "SLAVE_003".to_string();
-    settings3.status = 1; // ENABLED
-    let id3 = db.save_copy_settings(&settings3).await.unwrap();
+    // Member 1: DISABLED
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone()).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // DISABLED
+
+    // Member 2: ENABLED
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone()).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap(); // ENABLED
+
+    // Member 3: ENABLED
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 1).await.unwrap(); // ENABLED
 
     // Update master statuses to CONNECTED
     let count = db
@@ -37,38 +36,36 @@ async fn test_update_master_statuses_connected() {
     assert_eq!(count, 2);
 
     // Verify statuses
-    let retrieved1 = db.get_copy_settings(id1).await.unwrap().unwrap();
-    assert_eq!(retrieved1.status, 0); // Still DISABLED
+    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    assert_eq!(member1.status, 0); // Still DISABLED
 
-    let retrieved2 = db.get_copy_settings(id2).await.unwrap().unwrap();
-    assert_eq!(retrieved2.status, 2); // Now CONNECTED
+    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
+    assert_eq!(member2.status, 2); // Now CONNECTED
 
-    let retrieved3 = db.get_copy_settings(id3).await.unwrap().unwrap();
-    assert_eq!(retrieved3.status, 2); // Now CONNECTED
+    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    assert_eq!(member3.status, 2); // Now CONNECTED
 }
 
 #[tokio::test]
 async fn test_update_master_statuses_disconnected() {
     let db = create_test_db().await;
 
-    // Create three settings for the same master with different statuses
-    let mut settings1 = create_test_settings();
-    settings1.master_account = "MASTER_001".to_string();
-    settings1.slave_account = "SLAVE_001".to_string();
-    settings1.status = 0; // DISABLED
-    let id1 = db.save_copy_settings(&settings1).await.unwrap();
+    // Create TradeGroup and three members with different statuses
+    db.create_trade_group("MASTER_001").await.unwrap();
 
-    let mut settings2 = create_test_settings();
-    settings2.master_account = "MASTER_001".to_string();
-    settings2.slave_account = "SLAVE_002".to_string();
-    settings2.status = 1; // ENABLED
-    let id2 = db.save_copy_settings(&settings2).await.unwrap();
+    let slave_settings = create_test_slave_settings();
 
-    let mut settings3 = create_test_settings();
-    settings3.master_account = "MASTER_001".to_string();
-    settings3.slave_account = "SLAVE_003".to_string();
-    settings3.status = 2; // CONNECTED
-    let id3 = db.save_copy_settings(&settings3).await.unwrap();
+    // Member 1: DISABLED
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone()).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_001", 0).await.unwrap(); // DISABLED
+
+    // Member 2: ENABLED
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone()).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_002", 1).await.unwrap(); // ENABLED
+
+    // Member 3: CONNECTED
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings).await.unwrap();
+    db.update_member_status("MASTER_001", "SLAVE_003", 2).await.unwrap(); // CONNECTED
 
     // Update master statuses to ENABLED (disconnected)
     let count = db
@@ -80,14 +77,14 @@ async fn test_update_master_statuses_disconnected() {
     assert_eq!(count, 1);
 
     // Verify statuses
-    let retrieved1 = db.get_copy_settings(id1).await.unwrap().unwrap();
-    assert_eq!(retrieved1.status, 0); // Still DISABLED
+    let member1 = db.get_member("MASTER_001", "SLAVE_001").await.unwrap().unwrap();
+    assert_eq!(member1.status, 0); // Still DISABLED
 
-    let retrieved2 = db.get_copy_settings(id2).await.unwrap().unwrap();
-    assert_eq!(retrieved2.status, 1); // Still ENABLED
+    let member2 = db.get_member("MASTER_001", "SLAVE_002").await.unwrap().unwrap();
+    assert_eq!(member2.status, 1); // Still ENABLED
 
-    let retrieved3 = db.get_copy_settings(id3).await.unwrap().unwrap();
-    assert_eq!(retrieved3.status, 1); // Now ENABLED (was CONNECTED)
+    let member3 = db.get_member("MASTER_001", "SLAVE_003").await.unwrap().unwrap();
+    assert_eq!(member3.status, 1); // Now ENABLED (was CONNECTED)
 }
 
 #[tokio::test]

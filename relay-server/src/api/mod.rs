@@ -12,8 +12,6 @@ mod trade_group_members;
 
 // New submodules for modular structure
 mod middleware;
-mod helpers;
-mod settings;
 mod connections;
 mod logs;
 mod websocket;
@@ -23,7 +21,6 @@ mod tests;
 
 // Public re-exports
 pub use error::ProblemDetails;
-pub use helpers::*;
 pub use middleware::*;
 
 use axum::{
@@ -48,7 +45,6 @@ use crate::{
 // Import handlers from submodules
 use connections::{get_connection, list_connections};
 use logs::get_logs;
-use settings::{create_settings, delete_settings, get_settings, list_settings, toggle_settings, update_settings};
 use websocket::websocket_handler;
 
 #[derive(Clone)]
@@ -118,14 +114,6 @@ pub fn create_router(state: AppState) -> Router {
         );
 
     Router::new()
-        .route("/api/settings", get(list_settings).post(create_settings))
-        .route(
-            "/api/settings/:id",
-            get(get_settings)
-                .put(update_settings)
-                .delete(delete_settings),
-        )
-        .route("/api/settings/:id/toggle", post(toggle_settings))
         .route("/api/connections", get(list_connections))
         .route("/api/connections/:id", get(get_connection))
         .route("/api/logs", get(get_logs))

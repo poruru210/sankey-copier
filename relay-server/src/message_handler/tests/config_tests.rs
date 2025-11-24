@@ -1,7 +1,7 @@
 //! Tests for configuration request handling
 
 use super::*;
-use crate::models::RequestConfigMessage;
+use crate::models::{RequestConfigMessage, SlaveSettings};
 
 #[tokio::test]
 async fn test_handle_request_config_master() {
@@ -58,20 +58,19 @@ async fn test_handle_request_config_slave() {
     let master_account = "MASTER123".to_string();
     let slave_account = "SLAVE456".to_string();
 
-    // Create and save a copy setting for the slave
-    let settings = CopySettings {
-        id: 0, // New record
-        master_account: master_account.clone(),
-        slave_account: slave_account.clone(),
-        status: 1,
-        lot_multiplier: Some(2.0),
-        reverse_trade: false,
+    // Create TradeGroup and add member
+    handler.db.create_trade_group(&master_account).await.unwrap();
+
+    let slave_settings = SlaveSettings {
+        config_version: 1,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
+        lot_multiplier: Some(2.0),
+        reverse_trade: false,
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
     };
-    handler.db.save_copy_settings(&settings).await.unwrap();
+    handler.db.add_member(&master_account, &slave_account, slave_settings).await.unwrap();
 
     // Create RequestConfig message for Slave
     let request_msg = RequestConfigMessage {

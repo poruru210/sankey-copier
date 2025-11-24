@@ -3,7 +3,6 @@
 //! Provides shared test utilities for creating test objects
 //! like connections, app state, heartbeats, and settings.
 
-mod helpers_tests;
 mod trade_group_members_tests;
 
 use std::sync::atomic::{AtomicU16, Ordering};
