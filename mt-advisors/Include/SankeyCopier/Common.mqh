@@ -74,7 +74,21 @@
    // Use copy_serialized_buffer() instead
    int    copy_serialized_buffer(uchar &dest[], int max_len);
 
-   // Config message parsing
+   // Slave config message parsing
+   HANDLE_TYPE parse_slave_config(uchar &data[], int data_len);
+   string      slave_config_get_string(HANDLE_TYPE handle, string field_name);
+   double      slave_config_get_double(HANDLE_TYPE handle, string field_name);
+   int         slave_config_get_bool(HANDLE_TYPE handle, string field_name);
+   int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        slave_config_free(HANDLE_TYPE handle);
+
+   // Master config message parsing
+   HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
+   string      master_config_get_string(HANDLE_TYPE handle, string field_name);
+   int         master_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        master_config_free(HANDLE_TYPE handle);
+
+   // Deprecated: Use slave_config_* functions instead
    HANDLE_TYPE parse_message(uchar &data[], int data_len);
    string      config_get_string(HANDLE_TYPE handle, string field_name);
    double      config_get_double(HANDLE_TYPE handle, string field_name);

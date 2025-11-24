@@ -138,13 +138,13 @@ pub struct TradeSignalMessage {
     pub source_account: String,
 }
 
-/// Parse MessagePack data and return an opaque handle to ConfigMessage
+/// Parse MessagePack data as Slave ConfigMessage and return an opaque handle
 ///
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers.
-/// The returned handle must be freed with `config_free()`.
+/// The returned handle must be freed with `slave_config_free()`.
 #[no_mangle]
-pub unsafe extern "C" fn parse_message(data: *const u8, data_len: i32) -> *mut ConfigMessage {
+pub unsafe extern "C" fn parse_slave_config(data: *const u8, data_len: i32) -> *mut ConfigMessage {
     if data.is_null() || data_len <= 0 {
         return std::ptr::null_mut();
     }
@@ -156,18 +156,38 @@ pub unsafe extern "C" fn parse_message(data: *const u8, data_len: i32) -> *mut C
     }
 }
 
-/// Free a ConfigMessage handle
+/// Free a Slave ConfigMessage handle
 ///
 /// # Safety
 /// This function is unsafe because it takes ownership of a raw pointer.
 /// The caller must ensure:
-/// - `handle` was returned by `msgpack_parse()`
+/// - `handle` was returned by `parse_slave_config()`
 /// - `handle` is only freed once
 #[no_mangle]
-pub unsafe extern "C" fn config_free(handle: *mut ConfigMessage) {
+pub unsafe extern "C" fn slave_config_free(handle: *mut ConfigMessage) {
     if !handle.is_null() {
         drop(Box::from_raw(handle));
     }
+}
+
+/// Deprecated: Use parse_slave_config() instead
+///
+/// # Safety
+/// Same safety requirements as parse_slave_config()
+#[deprecated(note = "Use parse_slave_config() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn parse_message(data: *const u8, data_len: i32) -> *mut ConfigMessage {
+    parse_slave_config(data, data_len)
+}
+
+/// Deprecated: Use slave_config_free() instead
+///
+/// # Safety
+/// Same safety requirements as slave_config_free()
+#[deprecated(note = "Use slave_config_free() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn config_free(handle: *mut ConfigMessage) {
+    slave_config_free(handle)
 }
 
 /// Parse MessagePack data as MasterConfigMessage and return an opaque handle
@@ -203,6 +223,229 @@ pub unsafe extern "C" fn master_config_free(handle: *mut MasterConfigMessage) {
     if !handle.is_null() {
         drop(Box::from_raw(handle));
     }
+}
+
+/// Get a string field from Slave ConfigMessage handle
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+/// Returns a pointer to a static UTF-16 buffer (valid until next 4 calls).
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_string(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let config = &*handle;
+
+    // Parse field name from UTF-16
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null(),
+    };
+
+    // Use a static empty string to avoid temporary value dropped error
+    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
+
+    let value = match field.as_str() {
+        "account_id" => &config.account_id,
+        "master_account" => &config.master_account,
+        "timestamp" => &config.timestamp,
+        "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
+        "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
+        _ => return std::ptr::null(),
+    };
+
+    // Get next buffer in round-robin fashion
+    let mut index = BUFFER_INDEX.lock().unwrap();
+    let current_index = *index;
+    *index = (*index + 1) % 4;
+    drop(index);
+
+    // Select buffer based on index
+    let buffer_mutex = match current_index {
+        0 => &STRING_BUFFER_1,
+        1 => &STRING_BUFFER_2,
+        2 => &STRING_BUFFER_3,
+        _ => &STRING_BUFFER_4,
+    };
+
+    let mut buffer = buffer_mutex.lock().unwrap();
+
+    // Convert to UTF-16 and copy to buffer
+    let utf16: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let copy_len = utf16.len().min(MAX_STRING_LEN - 1);
+    buffer[..copy_len].copy_from_slice(&utf16[..copy_len]);
+    buffer[copy_len] = 0; // Ensure null termination
+
+    buffer.as_ptr()
+}
+
+/// Get a double field from Slave ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_double(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> f64 {
+    if handle.is_null() || field_name.is_null() {
+        return 0.0;
+    }
+
+    let config = &*handle;
+
+    // Parse field name
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return 0.0,
+    };
+
+    if field == "lot_multiplier" {
+        config.lot_multiplier.unwrap_or(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Get a boolean field from Slave ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_bool(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    if handle.is_null() || field_name.is_null() {
+        return 0;
+    }
+
+    let config = &*handle;
+
+    // Parse field name
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    let result = match field.as_str() {
+        "reverse_trade" => config.reverse_trade,
+        _ => false,
+    };
+
+    if result {
+        1
+    } else {
+        0
+    }
+}
+
+/// Get an integer field from Slave ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_int(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    if handle.is_null() || field_name.is_null() {
+        return 0;
+    }
+
+    let config = &*handle;
+
+    // Parse field name
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    match field.as_str() {
+        "config_version" => config.config_version as i32,
+        "status" => config.status,
+        _ => 0,
+    }
+}
+
+/// Deprecated: Use slave_config_get_string() instead
+///
+/// # Safety
+/// Same safety requirements as slave_config_get_string()
+#[deprecated(note = "Use slave_config_get_string() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn config_get_string(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    slave_config_get_string(handle, field_name)
+}
+
+/// Deprecated: Use slave_config_get_double() instead
+///
+/// # Safety
+/// Same safety requirements as slave_config_get_double()
+#[deprecated(note = "Use slave_config_get_double() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn config_get_double(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> f64 {
+    slave_config_get_double(handle, field_name)
+}
+
+/// Deprecated: Use slave_config_get_bool() instead
+///
+/// # Safety
+/// Same safety requirements as slave_config_get_bool()
+#[deprecated(note = "Use slave_config_get_bool() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn config_get_bool(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    slave_config_get_bool(handle, field_name)
+}
+
+/// Deprecated: Use slave_config_get_int() instead
+///
+/// # Safety
+/// Same safety requirements as slave_config_get_int()
+#[deprecated(note = "Use slave_config_get_int() for clarity")]
+#[no_mangle]
+pub unsafe extern "C" fn config_get_int(
+    handle: *const ConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    slave_config_get_int(handle, field_name)
 }
 
 /// Get a string field from MasterConfigMessage handle
@@ -297,177 +540,6 @@ pub unsafe extern "C" fn master_config_get_int(
 
     match field.as_str() {
         "config_version" => config.config_version as i32,
-        _ => 0,
-    }
-}
-
-/// Get a string field from ConfigMessage handle
-///
-/// # Safety
-/// This function is unsafe because it dereferences raw pointers.
-/// Returns a pointer to a static UTF-16 buffer (valid until next 4 calls).
-#[no_mangle]
-pub unsafe extern "C" fn config_get_string(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || field_name.is_null() {
-        return std::ptr::null();
-    }
-
-    let config = &*handle;
-
-    // Parse field name from UTF-16
-    let mut len = 0;
-    while *field_name.add(len) != 0 {
-        len += 1;
-    }
-    let field_slice = std::slice::from_raw_parts(field_name, len);
-    let field = match String::from_utf16(field_slice) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null(),
-    };
-
-    // Use a static empty string to avoid temporary value dropped error
-    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
-
-    let value = match field.as_str() {
-        "account_id" => &config.account_id,
-        "master_account" => &config.master_account,
-        "timestamp" => &config.timestamp,
-        "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
-        "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
-        _ => return std::ptr::null(),
-    };
-
-    // Get next buffer in round-robin fashion
-    let mut index = BUFFER_INDEX.lock().unwrap();
-    let current_index = *index;
-    *index = (*index + 1) % 4;
-    drop(index);
-
-    // Select buffer based on index
-    let buffer_mutex = match current_index {
-        0 => &STRING_BUFFER_1,
-        1 => &STRING_BUFFER_2,
-        2 => &STRING_BUFFER_3,
-        _ => &STRING_BUFFER_4,
-    };
-
-    let mut buffer = buffer_mutex.lock().unwrap();
-
-    // Convert to UTF-16 and copy to buffer
-    let utf16: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
-    let copy_len = utf16.len().min(MAX_STRING_LEN - 1);
-    buffer[..copy_len].copy_from_slice(&utf16[..copy_len]);
-    buffer[copy_len] = 0; // Ensure null termination
-
-    buffer.as_ptr()
-}
-
-/// Get a double field from ConfigMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to ConfigMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn config_get_double(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> f64 {
-    if handle.is_null() || field_name.is_null() {
-        return 0.0;
-    }
-
-    let config = &*handle;
-
-    // Parse field name
-    let mut len = 0;
-    while *field_name.add(len) != 0 {
-        len += 1;
-    }
-    let field_slice = std::slice::from_raw_parts(field_name, len);
-    let field = match String::from_utf16(field_slice) {
-        Ok(s) => s,
-        Err(_) => return 0.0,
-    };
-
-    if field == "lot_multiplier" {
-        config.lot_multiplier.unwrap_or(1.0)
-    } else {
-        0.0
-    }
-}
-
-/// Get a boolean field from ConfigMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to ConfigMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn config_get_bool(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> i32 {
-    if handle.is_null() || field_name.is_null() {
-        return 0;
-    }
-
-    let config = &*handle;
-
-    // Parse field name
-    let mut len = 0;
-    while *field_name.add(len) != 0 {
-        len += 1;
-    }
-    let field_slice = std::slice::from_raw_parts(field_name, len);
-    let field = match String::from_utf16(field_slice) {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
-
-    let result = match field.as_str() {
-        "reverse_trade" => config.reverse_trade,
-        _ => false,
-    };
-
-    if result {
-        1
-    } else {
-        0
-    }
-}
-
-/// Get an integer field from ConfigMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to ConfigMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn config_get_int(
-    handle: *const ConfigMessage,
-    field_name: *const u16,
-) -> i32 {
-    if handle.is_null() || field_name.is_null() {
-        return 0;
-    }
-
-    let config = &*handle;
-
-    // Parse field name
-    let mut len = 0;
-    while *field_name.add(len) != 0 {
-        len += 1;
-    }
-    let field_slice = std::slice::from_raw_parts(field_name, len);
-    let field = match String::from_utf16(field_slice) {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
-
-    match field.as_str() {
-        "config_version" => config.config_version as i32,
-        "status" => config.status,
         _ => 0,
     }
 }

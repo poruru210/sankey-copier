@@ -105,30 +105,30 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 {
    Print("=== Processing Configuration Message ===");
 
-   // Parse MessagePack once and get a handle to the config structure
-   HANDLE_TYPE config_handle = parse_message(msgpack_data, data_len);
+   // Parse MessagePack once and get a handle to the Slave config structure
+   HANDLE_TYPE config_handle = parse_slave_config(msgpack_data, data_len);
    if(config_handle == 0)
    {
-      Print("ERROR: Failed to parse MessagePack config");
+      Print("ERROR: Failed to parse MessagePack Slave config");
       return;
    }
 
    // Extract fields from the parsed config using the handle
-   string new_master = config_get_string(config_handle, "master_account");
-   string new_group = config_get_string(config_handle, "trade_group_id");
+   string new_master = slave_config_get_string(config_handle, "master_account");
+   string new_group = slave_config_get_string(config_handle, "trade_group_id");
 
    if(new_master == "" || new_group == "")
    {
       Print("ERROR: Invalid config message received");
-      config_free(config_handle);
+      slave_config_free(config_handle);
       return;
    }
 
    // Extract extended configuration fields
-   int new_status = config_get_int(config_handle, "status");
-   double new_lot_mult = config_get_double(config_handle, "lot_multiplier");
-   bool new_reverse = (config_get_bool(config_handle, "reverse_trade") == 1);
-   int new_version = config_get_int(config_handle, "config_version");
+   int new_status = slave_config_get_int(config_handle, "status");
+   double new_lot_mult = slave_config_get_double(config_handle, "lot_multiplier");
+   bool new_reverse = (slave_config_get_bool(config_handle, "reverse_trade") == 1);
+   int new_version = slave_config_get_int(config_handle, "config_version");
 
    // Log configuration values
    Print("Master Account: ", new_master);
@@ -175,7 +175,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       }
       
       // Free the config handle before returning
-      config_free(config_handle);
+      slave_config_free(config_handle);
       return;
    }
    else
