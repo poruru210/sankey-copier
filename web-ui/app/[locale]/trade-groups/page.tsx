@@ -8,9 +8,11 @@
 import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useRouter } from 'next/navigation';
+import { useAtomValue } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useTradeGroups } from '@/hooks/useTradeGroups';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,7 +21,8 @@ import { cn } from '@/lib/utils';
 
 export default function TradeGroupsPage() {
   const content = useIntlayer('trade-groups-page');
-  const { tradeGroups, loading, error, fetchTradeGroups } = useTradeGroups();
+  const apiClient = useAtomValue(apiClientAtom);
+  const { tradeGroups, loading, error, fetchTradeGroups } = useTradeGroups(apiClient);
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
   const router = useRouter();
 

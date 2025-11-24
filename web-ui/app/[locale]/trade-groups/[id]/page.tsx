@@ -8,9 +8,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
+import { useAtomValue } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
-import { apiClient } from '@/lib/api-client';
+import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ export default function TradeGroupDetailPage() {
   const params = useParams();
   const router = useRouter();
   const content = useIntlayer('trade-group-detail-page');
+  const apiClient = useAtomValue(apiClientAtom);
   const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
 
   const masterAccount = decodeURIComponent(params.id as string);
@@ -60,7 +62,7 @@ export default function TradeGroupDetailPage() {
     };
 
     fetchTradeGroup();
-  }, [masterAccount, content.loadFailed]);
+  }, [apiClient, masterAccount, content.loadFailed]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

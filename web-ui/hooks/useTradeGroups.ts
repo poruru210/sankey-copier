@@ -4,10 +4,10 @@
 // Provides loading states, error handling, and data fetching for TradeGroups list.
 
 import { useState, useCallback } from 'react';
-import { apiClient } from '@/lib/api-client';
+import type { ApiClient } from '@/lib/api-client';
 import type { TradeGroup } from '@/types';
 
-export function useTradeGroups() {
+export function useTradeGroups(apiClient: ApiClient) {
   const [tradeGroups, setTradeGroups] = useState<TradeGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function useTradeGroups() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiClient]);
 
   return {
     tradeGroups,
