@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Label } from '@/components/ui/label';
 import { formatRelativeTime } from '@/lib/time-utils';
+import { extractBrokerName } from '@/lib/brokerIcons';
 import type { EaConnection } from '@/types';
 
 interface SimpleAccountSelectorProps {
@@ -51,16 +52,13 @@ export function SimpleAccountSelector({
     ? connections.filter((conn) => conn.ea_type === filterType)
     : connections;
 
-  // Group connections by status
-  const onlineConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Online'
-  );
-  const timeoutConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Timeout'
-  );
-  const offlineConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Offline'
-  );
+  // Sort connections: Online first, then Timeout, then Offline
+  const sortedConnections = useMemo(() => {
+    return [...filteredConnections].sort((a, b) => {
+      const statusOrder = { 'Online': 0, 'Timeout': 1, 'Offline': 2 };
+      return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
+    });
+  }, [filteredConnections]);
 
   // Get status emoji
   const getStatusEmoji = (status: string) => {
@@ -76,55 +74,18 @@ export function SimpleAccountSelector({
     }
   };
 
-  // Format account display
+  // Format account display with broker info
   const formatAccountDisplay = (conn: EaConnection) => {
     const emoji = getStatusEmoji(conn.status);
-    const balance = conn.balance.toLocaleString('en-US', {
-      style: 'currency',
-      currency: conn.currency,
-      maximumFractionDigits: 0,
-    });
+    const brokerName = extractBrokerName(conn.account_name);
 
-    if (conn.status === 'Offline') {
-      // Offline: Show warning icon and last connection time
-      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
-        secondsAgo: strings.timeAgoSeconds,
-        minutesAgo: strings.timeAgoMinutes,
-        hoursAgo: strings.timeAgoHours,
-        daysAgo: strings.timeAgoDays,
-      });
-      return `${emoji} ${conn.account_id} ⚠️ - ${strings.lastConnectionLabel}: ${relativeTime}`;
-    } else {
-      // Online or Timeout: Show balance, positions, and last update
-      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
-        secondsAgo: strings.timeAgoSeconds,
-        minutesAgo: strings.timeAgoMinutes,
-        hoursAgo: strings.timeAgoHours,
-        daysAgo: strings.timeAgoDays,
-      });
-
-      const parts = [`${emoji} ${conn.account_id} - ${balance}`];
-
-      // Add positions if available
-      if (conn.open_positions !== undefined) {
-        parts.push(`${strings.positionsLabel}: ${conn.open_positions}`);
-      }
-
-      // Add last update time
-      parts.push(relativeTime);
-
-      return parts.join(' | ');
-    }
+    // Format: Status emoji | Broker name | Account ID
+    return `${emoji} ${brokerName} - ${conn.account_id}`;
   };
 
   // Get default placeholder based on filter type
   const defaultPlaceholder = placeholder ||
     (filterType === 'Master' ? strings.selectMasterAccount : strings.selectSlaveAccount);
-
-  // Get label for connected accounts
-  const connectedLabel = filterType === 'Master'
-    ? strings.connectedMasterAccounts
-    : strings.connectedSlaveAccounts;
 
   // Get no accounts message
   const noAccountsMessage = filterType === 'Master'
@@ -147,35 +108,11 @@ export function SimpleAccountSelector({
       >
         <option value="">{defaultPlaceholder}</option>
 
-        {onlineConnections.length > 0 && (
-          <optgroup label={`${connectedLabel} (${onlineConnections.length})`}>
-            {onlineConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-
-        {timeoutConnections.length > 0 && (
-          <optgroup label={`${strings.timeoutAccounts} (${timeoutConnections.length})`}>
-            {timeoutConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-
-        {offlineConnections.length > 0 && (
-          <optgroup label={`${strings.offlineAccounts} (${offlineConnections.length})`}>
-            {offlineConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
+        {sortedConnections.map((conn) => (
+          <option key={conn.account_id} value={conn.account_id}>
+            {formatAccountDisplay(conn)}
+          </option>
+        ))}
       </select>
 
       {filteredConnections.length === 0 && (
