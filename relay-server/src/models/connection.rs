@@ -82,11 +82,11 @@ pub enum ConnectionStatus {
     Timeout,
 }
 
-// Re-export ConfigMessage from DLL
-pub use sankey_copier_zmq::ConfigMessage;
+// Re-export SlaveConfigMessage from DLL
+pub use sankey_copier_zmq::SlaveConfigMessage;
 
-/// Convert CopySettings to ConfigMessage
-impl From<crate::models::CopySettings> for ConfigMessage {
+/// Convert CopySettings to SlaveConfigMessage
+impl From<crate::models::CopySettings> for SlaveConfigMessage {
     fn from(settings: crate::models::CopySettings) -> Self {
         Self {
             account_id: settings.slave_account.clone(),
@@ -130,7 +130,7 @@ mod tests {
             },
         };
 
-        let config: ConfigMessage = settings.into();
+        let config: SlaveConfigMessage = settings.into();
 
         assert_eq!(config.account_id, "SLAVE_001");
         assert_eq!(config.master_account, "MASTER_001");
@@ -164,7 +164,7 @@ mod tests {
             },
         };
 
-        let config: ConfigMessage = settings.into();
+        let config: SlaveConfigMessage = settings.into();
 
         assert_eq!(config.status, 0);
         assert_eq!(config.lot_multiplier, None);
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_config_message_serialization() {
-        let config = ConfigMessage {
+        let config = SlaveConfigMessage {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -204,7 +204,7 @@ mod tests {
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();
 
         // Verify deserialization works
-        let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
+        let deserialized: SlaveConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.account_id, "TEST_001");
         assert_eq!(deserialized.status, 2);
         assert_eq!(deserialized.config_version, 1);
@@ -230,14 +230,14 @@ mod tests {
             },
         };
 
-        let config: ConfigMessage = settings.into();
+        let config: SlaveConfigMessage = settings.into();
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();
 
         // Verify null handling
         assert_eq!(config.lot_multiplier, None);
 
         // Verify deserialization handles nulls
-        let deserialized: ConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
+        let deserialized: SlaveConfigMessage = rmp_serde::from_slice(&msgpack).unwrap();
         assert_eq!(deserialized.lot_multiplier, None);
     }
 }

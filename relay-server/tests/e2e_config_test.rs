@@ -3,7 +3,7 @@
 // E2E integration test for Master/Slave EA configuration distribution.
 // This test uses EA simulators via mt-bridge FFI to verify the complete flow:
 // - Master EA: Heartbeat -> RequestConfig -> MasterConfigMessage
-// - Slave EA: Heartbeat -> RequestConfig -> ConfigMessage
+// - Slave EA: Heartbeat -> RequestConfig -> SlaveConfigMessage
 //
 // IMPORTANT: Uses mt-bridge FFI functions to match actual EA behavior.
 // EA (MQL) -> mt-bridge DLL -> ZMQ -> Relay Server
@@ -17,7 +17,7 @@ use sankey_copier_relay_server::models::SlaveSettings;
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, ZMQ_PUSH, ZMQ_SUB,
+    SlaveConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, ZMQ_PUSH, ZMQ_SUB,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -278,7 +278,7 @@ impl SlaveEaSimulator {
             anyhow::bail!("Failed to create PUSH socket via mt-bridge FFI");
         }
 
-        // Create SUB socket for receiving ConfigMessage
+        // Create SUB socket for receiving SlaveConfigMessage
         let config_socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
         if config_socket_handle < 0 {
             zmq_socket_destroy(push_socket_handle);
@@ -428,7 +428,7 @@ impl SlaveEaSimulator {
         Ok(())
     }
 
-    /// Try to receive a ConfigMessage (with timeout) using mt-bridge FFI
+    /// Try to receive a SlaveConfigMessage (with timeout) using mt-bridge FFI
     ///
     /// # Parameters
     /// - timeout_ms: Timeout in milliseconds
@@ -437,7 +437,7 @@ impl SlaveEaSimulator {
     /// - Ok(Some(config)): Successfully received and parsed config
     /// - Ok(None): Timeout (no message received)
     /// - Err: Error during receive or parsing
-    fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<ConfigMessage>> {
+    fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<SlaveConfigMessage>> {
         const BUFFER_SIZE: usize = 65536; // 64KB buffer for large config messages
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
@@ -479,7 +479,7 @@ impl SlaveEaSimulator {
                 }
 
                 // Deserialize MessagePack payload
-                let config: ConfigMessage = rmp_serde::from_slice(payload)?;
+                let config: SlaveConfigMessage = rmp_serde::from_slice(payload)?;
                 return Ok(Some(config));
             } else if received_bytes == 0 {
                 // EAGAIN - no message available, check timeout
@@ -490,7 +490,7 @@ impl SlaveEaSimulator {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             } else {
                 // Error
-                return Err(anyhow::anyhow!("Failed to receive ConfigMessage"));
+                return Err(anyhow::anyhow!("Failed to receive SlaveConfigMessage"));
             }
         }
     }
@@ -686,13 +686,13 @@ async fn test_slave_config_distribution() {
         .expect("Failed to send RequestConfig");
     sleep(Duration::from_millis(200)).await;
 
-    // Step 3: Try to receive ConfigMessage
+    // Step 3: Try to receive SlaveConfigMessage
     let config = simulator
         .try_receive_config(2000)
         .expect("Failed to receive config");
 
     // Verify config was received
-    assert!(config.is_some(), "Slave EA should receive ConfigMessage");
+    assert!(config.is_some(), "Slave EA should receive SlaveConfigMessage");
 
     let config = config.unwrap();
 
@@ -794,14 +794,14 @@ async fn test_master_slave_config_distribution() {
     let master_config = master_config.unwrap();
     assert_eq!(master_config.account_id, master_account);
 
-    // Step 4: Slave EA receives ConfigMessage
+    // Step 4: Slave EA receives SlaveConfigMessage
     let slave_config = slave_sim
         .try_receive_config(2000)
         .expect("Failed to receive Slave config");
 
     assert!(
         slave_config.is_some(),
-        "Slave EA should receive ConfigMessage"
+        "Slave EA should receive SlaveConfigMessage"
     );
     let slave_config = slave_config.unwrap();
     assert_eq!(slave_config.account_id, slave_account);

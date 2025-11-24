@@ -17,7 +17,7 @@ use sankey_copier_relay_server::models::CopySettings;
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    ConfigMessage, HeartbeatMessage, ZMQ_PUSH, ZMQ_SUB,
+    SlaveConfigMessage, HeartbeatMessage, ZMQ_PUSH, ZMQ_SUB,
 };
 use serde::Serialize;
 use std::ffi::c_char;
@@ -127,7 +127,7 @@ impl Drop for MasterEaSimulator {
 }
 
 /// Slave EA Simulator for REST API testing
-/// Receives ConfigMessage from relay server via ZMQ
+/// Receives SlaveConfigMessage from relay server via ZMQ
 struct SlaveEaSimulator {
     context_handle: i32,
     push_socket_handle: i32,
@@ -150,7 +150,7 @@ impl SlaveEaSimulator {
             anyhow::bail!("Failed to create PUSH socket");
         }
 
-        // Create SUB socket for ConfigMessage
+        // Create SUB socket for SlaveConfigMessage
         let config_socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
         if config_socket_handle < 0 {
             zmq_socket_destroy(push_socket_handle);
@@ -238,8 +238,8 @@ impl SlaveEaSimulator {
         Ok(())
     }
 
-    /// Try to receive a ConfigMessage (with timeout)
-    fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<ConfigMessage>> {
+    /// Try to receive a SlaveConfigMessage (with timeout)
+    fn try_receive_config(&self, timeout_ms: i32) -> anyhow::Result<Option<SlaveConfigMessage>> {
         const BUFFER_SIZE: usize = 65536;
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
@@ -265,7 +265,7 @@ impl SlaveEaSimulator {
                     .ok_or_else(|| anyhow::anyhow!("Invalid message format: no space separator"))?;
 
                 let payload = &bytes[space_pos + 1..];
-                let config: ConfigMessage = rmp_serde::from_slice(payload)?;
+                let config: SlaveConfigMessage = rmp_serde::from_slice(payload)?;
                 return Ok(Some(config));
             } else if received_bytes == 0 {
                 if start.elapsed() >= timeout_duration {
@@ -273,7 +273,7 @@ impl SlaveEaSimulator {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             } else {
-                return Err(anyhow::anyhow!("Failed to receive ConfigMessage"));
+                return Err(anyhow::anyhow!("Failed to receive SlaveConfigMessage"));
             }
         }
     }

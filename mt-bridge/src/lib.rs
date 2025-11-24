@@ -7,10 +7,13 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};
 
-// Re-export message types for use in relay-server
+// Re-export message types and traits for use in relay-server
 pub use msgpack::{
-    ConfigMessage, HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SymbolMapping,
-    TradeFilters, TradeSignalMessage, UnregisterMessage,
+    // Message types
+    HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SlaveConfigMessage,
+    SymbolMapping, TradeFilters, TradeSignalMessage, UnregisterMessage,
+    // Traits
+    ConfigMessage, MasterConfig, SlaveConfig,
 };
 
 // ZeroMQ socket types

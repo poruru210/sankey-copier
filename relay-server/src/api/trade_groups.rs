@@ -154,7 +154,7 @@ async fn send_config_to_master(state: &AppState, master_account: &str, settings:
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
 
-    if let Err(e) = state.config_sender.send_master_config(&config).await {
+    if let Err(e) = state.config_sender.send(&config).await {
         tracing::error!(
             master_account = %master_account,
             config_version = settings.config_version,

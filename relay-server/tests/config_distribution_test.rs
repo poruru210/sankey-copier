@@ -1,6 +1,6 @@
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{
-    ConfigMessage, CopySettings, SymbolMapping, TradeFilters,
+    SlaveConfigMessage, CopySettings, SymbolMapping, TradeFilters,
 };
 
 /// Integration test for CONFIG message distribution workflow
@@ -8,7 +8,7 @@ use sankey_copier_relay_server::models::{
 /// This test verifies the end-to-end flow:
 /// 1. Create a CopySettings record in the database
 /// 2. Retrieve it from the database
-/// 3. Convert to ConfigMessage (using From trait)
+/// 3. Convert to SlaveConfigMessage (using From trait)
 /// 4. Serialize to JSON
 /// 5. Verify all fields are correctly serialized
 #[tokio::test]
@@ -77,10 +77,10 @@ async fn test_config_message_distribution_flow() {
         2
     );
 
-    // Step 4: Convert to ConfigMessage (simulating send_config_to_ea())
-    let config_message: ConfigMessage = retrieved_settings.into();
+    // Step 4: Convert to SlaveConfigMessage (simulating send_config_to_ea())
+    let config_message: SlaveConfigMessage = retrieved_settings.into();
 
-    // Step 5: Verify ConfigMessage fields
+    // Step 5: Verify SlaveConfigMessage fields
     assert_eq!(config_message.account_id, "SLAVE_TEST_001");
     assert_eq!(config_message.master_account, "MASTER_TEST_001");
     assert_eq!(config_message.status, 2); // STATUS_CONNECTED
@@ -119,10 +119,10 @@ async fn test_config_message_distribution_flow() {
 
     // Step 6: Serialize to JSON (simulating ZMQ serialization)
     let json_string =
-        serde_json::to_string(&config_message).expect("Failed to serialize ConfigMessage to JSON");
+        serde_json::to_string(&config_message).expect("Failed to serialize SlaveConfigMessage to JSON");
 
     println!(
-        "Serialized ConfigMessage ({} bytes):\n{}",
+        "Serialized SlaveConfigMessage ({} bytes):\n{}",
         json_string.len(),
         json_string
     );
@@ -146,8 +146,8 @@ async fn test_config_message_distribution_flow() {
     assert!(json_string.contains("\"EURUSDm\""));
 
     // Step 8: Deserialize back to verify round-trip works
-    let deserialized: ConfigMessage = serde_json::from_str(&json_string)
-        .expect("Failed to deserialize JSON back to ConfigMessage");
+    let deserialized: SlaveConfigMessage = serde_json::from_str(&json_string)
+        .expect("Failed to deserialize JSON back to SlaveConfigMessage");
 
     assert_eq!(deserialized.account_id, config_message.account_id);
     assert_eq!(deserialized.master_account, config_message.master_account);
@@ -280,8 +280,8 @@ async fn test_config_message_with_null_values() {
         .expect("Failed to retrieve")
         .expect("Should exist");
 
-    // Convert to ConfigMessage
-    let config: ConfigMessage = retrieved.into();
+    // Convert to SlaveConfigMessage
+    let config: SlaveConfigMessage = retrieved.into();
 
     // Serialize
     let json = serde_json::to_string(&config).expect("Failed to serialize");
@@ -297,7 +297,7 @@ async fn test_config_message_with_null_values() {
     assert!(json.contains("\"symbol_mappings\":[]"));
 
     // Deserialize and verify
-    let deserialized: ConfigMessage = serde_json::from_str(&json).expect("Failed to deserialize");
+    let deserialized: SlaveConfigMessage = serde_json::from_str(&json).expect("Failed to deserialize");
     assert_eq!(deserialized.lot_multiplier, None);
     assert_eq!(deserialized.symbol_mappings.len(), 0);
     assert!(deserialized.filters.allowed_symbols.is_none());

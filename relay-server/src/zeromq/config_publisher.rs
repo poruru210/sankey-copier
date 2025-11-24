@@ -1,17 +1,20 @@
-use crate::models::ConfigMessage;
+// relay-server/src/zeromq/config_publisher.rs
+//
+// ZeroMQ configuration publisher using trait-based unified sending
+
 use anyhow::{Context, Result};
-use sankey_copier_zmq::MasterConfigMessage;
+use sankey_copier_zmq::ConfigMessage; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-/// Enum to support both Slave and Master config messages
-enum ConfigPayload {
-    Slave(ConfigMessage),
-    Master(MasterConfigMessage),
+/// Pre-serialized message ready for ZMQ transmission
+struct SerializedMessage {
+    topic: String,
+    payload: Vec<u8>, // MessagePack bytes
 }
 
 pub struct ZmqConfigPublisher {
-    tx: mpsc::UnboundedSender<ConfigPayload>,
+    tx: mpsc::UnboundedSender<SerializedMessage>,
     _handle: JoinHandle<()>,
 }
 
@@ -27,80 +30,36 @@ impl ZmqConfigPublisher {
             .context(format!("Failed to bind to {}", bind_address))?;
 
         tracing::info!(
-            "ZeroMQ ConfigMessage publisher (MessagePack) bound to {}",
+            "ZeroMQ config publisher (MessagePack) bound to {}",
             bind_address
         );
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<ConfigPayload>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<SerializedMessage>();
 
-        // Spawn dedicated task for ZMQ sending with MessagePack
+        // Spawn dedicated task for ZMQ sending
         let handle = tokio::task::spawn_blocking(move || {
-            while let Some(payload) = rx.blocking_recv() {
-                match payload {
-                    ConfigPayload::Slave(config) => {
-                        // Serialize Slave ConfigMessage to MessagePack
-                        match rmp_serde::to_vec(&config) {
-                            Ok(msgpack_bytes) => {
-                                // トピック + スペース + MessagePack bytes
-                                let mut message = config.account_id.as_bytes().to_vec();
-                                message.push(b' '); // スペースで区切る
-                                message.extend_from_slice(&msgpack_bytes);
+            while let Some(msg) = rx.blocking_recv() {
+                // Build ZMQ message: topic + space + MessagePack
+                let mut zmq_message = msg.topic.as_bytes().to_vec();
+                zmq_message.push(b' ');
+                zmq_message.extend_from_slice(&msg.payload);
 
-                                if let Err(e) = socket.send(&message, 0) {
-                                    tracing::error!(
-                                        "Failed to send ZMQ ConfigMessage (Slave): {}",
-                                        e
-                                    );
-                                } else {
-                                    tracing::debug!(
-                                        "Sent MessagePack config (Slave) to topic '{}': {} bytes",
-                                        config.account_id,
-                                        message.len()
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Failed to serialize ConfigMessage (Slave) to MessagePack: {}",
-                                    e
-                                );
-                            }
-                        }
-                    }
-                    ConfigPayload::Master(config) => {
-                        // Serialize Master MasterConfigMessage to MessagePack
-                        match rmp_serde::to_vec(&config) {
-                            Ok(msgpack_bytes) => {
-                                // トピック + スペース + MessagePack bytes
-                                let mut message = config.account_id.as_bytes().to_vec();
-                                message.push(b' '); // スペースで区切る
-                                message.extend_from_slice(&msgpack_bytes);
-
-                                if let Err(e) = socket.send(&message, 0) {
-                                    tracing::error!(
-                                        "Failed to send ZMQ MasterConfigMessage: {}",
-                                        e
-                                    );
-                                } else {
-                                    tracing::debug!(
-                                        "Sent MessagePack config (Master) to topic '{}': {} bytes",
-                                        config.account_id,
-                                        message.len()
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Failed to serialize MasterConfigMessage to MessagePack: {}",
-                                    e
-                                );
-                            }
-                        }
-                    }
+                if let Err(e) = socket.send(&zmq_message, 0) {
+                    tracing::error!(
+                        "Failed to send ZMQ message to topic '{}': {}",
+                        msg.topic,
+                        e
+                    );
+                } else {
+                    tracing::debug!(
+                        "Sent MessagePack message to topic '{}': {} bytes",
+                        msg.topic,
+                        zmq_message.len()
+                    );
                 }
             }
 
-            // Explicitly drop socket before context is destroyed (per ZeroMQ guide)
+            // Explicitly drop socket before context is destroyed
             drop(socket);
             drop(context);
             tracing::info!("ZMQ config publisher shut down cleanly");
@@ -112,24 +71,25 @@ impl ZmqConfigPublisher {
         })
     }
 
-    pub async fn send_config(&self, config: &ConfigMessage) -> Result<()> {
-        self.tx
-            .send(ConfigPayload::Slave(config.clone()))
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to send ConfigMessage to publisher task: {}", e)
-            })?;
-        Ok(())
-    }
+    /// Unified send method for all ConfigMessage types
+    /// Uses trait-based interface for type safety and extensibility
+    pub async fn send<T>(&self, message: &T) -> Result<()>
+    where
+        T: ConfigMessage,
+    {
+        // Serialize to MessagePack
+        let payload = rmp_serde::to_vec(message)
+            .context("Failed to serialize message to MessagePack")?;
 
-    pub async fn send_master_config(&self, config: &MasterConfigMessage) -> Result<()> {
+        let serialized = SerializedMessage {
+            topic: message.zmq_topic().to_string(),
+            payload,
+        };
+
         self.tx
-            .send(ConfigPayload::Master(config.clone()))
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to send MasterConfigMessage to publisher task: {}",
-                    e
-                )
-            })?;
+            .send(serialized)
+            .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
+
         Ok(())
     }
 }
@@ -137,12 +97,12 @@ impl ZmqConfigPublisher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
     use std::sync::Arc;
 
     #[tokio::test]
     async fn test_create_publisher() {
         // Test publisher creation with valid bind address
-        // Use random port to avoid conflicts
         use std::sync::atomic::{AtomicU16, Ordering};
         static PORT: AtomicU16 = AtomicU16::new(25557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
@@ -160,14 +120,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_slave_config() {
-        // Test sending slave config message
+        // Test sending slave config message using unified send()
         use std::sync::atomic::{AtomicU16, Ordering};
         static PORT: AtomicU16 = AtomicU16::new(26557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
 
         let publisher = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
-        let config = ConfigMessage {
+        let config = SlaveConfigMessage {
             account_id: "TEST123".to_string(),
             master_account: "MASTER456".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -177,18 +137,18 @@ mod tests {
             symbol_prefix: None,
             symbol_suffix: None,
             symbol_mappings: vec![],
-            filters: crate::models::TradeFilters::default(),
+            filters: sankey_copier_zmq::TradeFilters::default(),
             config_version: 1,
         };
 
         // This should succeed (message is queued for sending)
-        let result = publisher.send_config(&config).await;
+        let result = publisher.send(&config).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_send_master_config() {
-        // Test sending master config message
+        // Test sending master config message using unified send()
         use std::sync::atomic::{AtomicU16, Ordering};
         static PORT: AtomicU16 = AtomicU16::new(27557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
@@ -204,7 +164,7 @@ mod tests {
         };
 
         // This should succeed (message is queued for sending)
-        let result = publisher.send_master_config(&config).await;
+        let result = publisher.send(&config).await;
         assert!(result.is_ok());
     }
 
@@ -220,11 +180,11 @@ mod tests {
 
         let mut handles = vec![];
 
-        // Send 10 slave configs concurrently
+        // Send 10 slave configs concurrently using unified send()
         for i in 0..10 {
             let pub_clone = Arc::clone(&publisher);
             let handle = tokio::spawn(async move {
-                let config = ConfigMessage {
+                let config = SlaveConfigMessage {
                     account_id: format!("SLAVE{}", i),
                     master_account: "MASTER".to_string(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
@@ -234,10 +194,10 @@ mod tests {
                     symbol_prefix: None,
                     symbol_suffix: None,
                     symbol_mappings: vec![],
-                    filters: crate::models::TradeFilters::default(),
+                    filters: sankey_copier_zmq::TradeFilters::default(),
                     config_version: 1,
                 };
-                pub_clone.send_config(&config).await
+                pub_clone.send(&config).await
             });
             handles.push(handle);
         }
