@@ -2,12 +2,15 @@
 //
 // E2E integration test for Trade Signal copying between Master and Slave EAs.
 // This test verifies the complete flow of trade signal distribution:
-// - Master EA sends trade signals
+// - Master EA sends trade signals via mt-bridge FFI (simulating real EA behavior)
 // - Relay server processes and distributes signals
 // - Slave EA receives and applies configured transformations (lot multiplier, reverse trade, symbol mapping)
 //
 // These tests automatically spawn a relay-server instance with dynamic ports,
 // making them suitable for CI/CD environments.
+//
+// IMPORTANT: This test uses mt-bridge FFI functions to match the actual EA code path:
+// EA (MQL) → mt-bridge DLL → ZMQ → Relay Server
 
 mod test_server;
 
@@ -15,43 +18,76 @@ use chrono::Utc;
 use sankey_copier_relay_server::models::{
     OrderType, SlaveSettings, SymbolMapping, TradeAction, TradeSignal,
 };
+use sankey_copier_zmq::*; // mt-bridge FFI functions
 use test_server::TestServer;
 use tokio::time::{sleep, Duration};
-use zmq::{Context, Socket};
 
 /// Master EA Simulator for trade signal testing
-/// Simulates a Master EA sending trade signals to the relay server via ZMQ
+/// Simulates a Master EA sending trade signals to the relay server via mt-bridge FFI
+/// This matches the actual EA behavior: EA (MQL) → mt-bridge DLL → ZMQ
 struct MasterEaSimulator {
-    _context: Context,
-    push_socket: Socket,
+    context_handle: i32,
+    socket_handle: i32,
     account_id: String,
 }
 
 impl MasterEaSimulator {
-    /// Create a new Master EA simulator
+    /// Create a new Master EA simulator using mt-bridge FFI functions
     ///
     /// # Parameters
     /// - push_address: Address for PUSH socket (e.g., "tcp://localhost:5555")
     /// - account_id: Master account ID
     fn new(push_address: &str, account_id: &str) -> anyhow::Result<Self> {
-        let context = Context::new();
+        // Create ZMQ context via mt-bridge FFI (same as MQL EA would call)
+        let context_handle = zmq_context_create();
+        if context_handle < 0 {
+            return Err(anyhow::anyhow!("Failed to create ZMQ context"));
+        }
 
-        // PUSH socket for sending TradeSignals
-        let push_socket = context.socket(zmq::PUSH)?;
-        push_socket.set_linger(0)?;
-        push_socket.connect(push_address)?;
+        // Create PUSH socket via mt-bridge FFI
+        let socket_handle = zmq_socket_create(context_handle, ZMQ_PUSH);
+        if socket_handle < 0 {
+            zmq_context_destroy(context_handle);
+            return Err(anyhow::anyhow!("Failed to create ZMQ PUSH socket"));
+        }
+
+        // Convert UTF-8 address to UTF-16 (as MQL would provide)
+        let addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
+
+        // Connect socket via mt-bridge FFI
+        unsafe {
+            let result = zmq_socket_connect(socket_handle, addr_utf16.as_ptr());
+            if result != 1 {
+                zmq_socket_destroy(socket_handle);
+                zmq_context_destroy(context_handle);
+                return Err(anyhow::anyhow!("Failed to connect to {}", push_address));
+            }
+        }
 
         Ok(Self {
-            _context: context,
-            push_socket,
+            context_handle,
+            socket_handle,
             account_id: account_id.to_string(),
         })
     }
 
-    /// Send a trade signal
+    /// Send a trade signal via mt-bridge FFI (binary MessagePack)
     fn send_signal(&self, signal: &TradeSignal) -> anyhow::Result<()> {
+        // Serialize to MessagePack
         let bytes = rmp_serde::to_vec_named(signal)?;
-        self.push_socket.send(&bytes, 0)?;
+
+        // Send via mt-bridge FFI (same as MQL EA would call)
+        unsafe {
+            let result = zmq_socket_send_binary(
+                self.socket_handle,
+                bytes.as_ptr(),
+                bytes.len() as i32,
+            );
+            if result != 1 {
+                return Err(anyhow::anyhow!("Failed to send signal"));
+            }
+        }
+
         Ok(())
     }
 
@@ -104,16 +140,25 @@ impl MasterEaSimulator {
     }
 }
 
+// Clean up ZMQ resources via mt-bridge FFI
+impl Drop for MasterEaSimulator {
+    fn drop(&mut self) {
+        zmq_socket_destroy(self.socket_handle);
+        zmq_context_destroy(self.context_handle);
+    }
+}
+
 /// Slave EA Simulator for trade signal testing
-/// Simulates a Slave EA receiving trade signals from the relay server via ZMQ
+/// Simulates a Slave EA receiving trade signals from the relay server via mt-bridge FFI
+/// This matches the actual EA behavior: Relay Server → ZMQ → mt-bridge DLL → EA (MQL)
 struct SlaveEaSimulator {
-    _context: Context,
-    trade_socket: Socket,
+    context_handle: i32,
+    socket_handle: i32,
     account_id: String,
 }
 
 impl SlaveEaSimulator {
-    /// Create a new Slave EA simulator
+    /// Create a new Slave EA simulator using mt-bridge FFI functions
     ///
     /// # Parameters
     /// - trade_address: Address for SUB socket (e.g., "tcp://localhost:5556")
@@ -124,23 +169,52 @@ impl SlaveEaSimulator {
         account_id: &str,
         master_account: &str,
     ) -> anyhow::Result<Self> {
-        let context = Context::new();
+        // Create ZMQ context via mt-bridge FFI
+        let context_handle = zmq_context_create();
+        if context_handle < 0 {
+            return Err(anyhow::anyhow!("Failed to create ZMQ context"));
+        }
 
-        // SUB socket for receiving TradeSignals
-        let trade_socket = context.socket(zmq::SUB)?;
-        trade_socket.set_linger(0)?;
-        trade_socket.connect(trade_address)?;
-        // Subscribe to signals from the specific master account (topic-based filtering)
-        trade_socket.set_subscribe(master_account.as_bytes())?;
+        // Create SUB socket via mt-bridge FFI
+        let socket_handle = zmq_socket_create(context_handle, ZMQ_SUB);
+        if socket_handle < 0 {
+            zmq_context_destroy(context_handle);
+            return Err(anyhow::anyhow!("Failed to create ZMQ SUB socket"));
+        }
+
+        // Convert addresses to UTF-16 (as MQL would provide)
+        let addr_utf16: Vec<u16> = trade_address.encode_utf16().chain(Some(0)).collect();
+        let topic_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
+
+        unsafe {
+            // Connect socket via mt-bridge FFI
+            let result = zmq_socket_connect(socket_handle, addr_utf16.as_ptr());
+            if result != 1 {
+                zmq_socket_destroy(socket_handle);
+                zmq_context_destroy(context_handle);
+                return Err(anyhow::anyhow!("Failed to connect to {}", trade_address));
+            }
+
+            // Subscribe to signals from the specific master account via mt-bridge FFI
+            let result = zmq_socket_subscribe(socket_handle, topic_utf16.as_ptr());
+            if result != 1 {
+                zmq_socket_destroy(socket_handle);
+                zmq_context_destroy(context_handle);
+                return Err(anyhow::anyhow!(
+                    "Failed to subscribe to topic {}",
+                    master_account
+                ));
+            }
+        }
 
         Ok(Self {
-            _context: context,
-            trade_socket,
+            context_handle,
+            socket_handle,
             account_id: account_id.to_string(),
         })
     }
 
-    /// Try to receive a trade signal (with timeout)
+    /// Try to receive a trade signal via mt-bridge FFI (with timeout)
     ///
     /// # Parameters
     /// - timeout_ms: Timeout in milliseconds
@@ -150,26 +224,60 @@ impl SlaveEaSimulator {
     /// - Ok(None): Timeout (no signal received)
     /// - Err: Error during receive or parsing
     fn try_receive_signal(&self, timeout_ms: i32) -> anyhow::Result<Option<TradeSignal>> {
-        self.trade_socket.set_rcvtimeo(timeout_ms)?;
+        // Buffer for receiving messages
+        const BUFFER_SIZE: usize = 65536;
+        let mut buffer: Vec<u8> = vec![0; BUFFER_SIZE];
 
-        match self.trade_socket.recv_bytes(0) {
-            Ok(bytes) => {
-                // Message format: topic + space + MessagePack payload
-                let space_pos = bytes
-                    .iter()
-                    .position(|&b| b == b' ')
-                    .ok_or_else(|| anyhow::anyhow!("Invalid message format: no space separator"))?;
+        // Poll for messages with timeout
+        let start = std::time::Instant::now();
+        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
 
-                // Extract payload (skip topic)
-                let payload = &bytes[space_pos + 1..];
+        loop {
+            unsafe {
+                let received_bytes = zmq_socket_receive(
+                    self.socket_handle,
+                    buffer.as_mut_ptr() as *mut i8,
+                    BUFFER_SIZE as i32,
+                );
 
-                // Deserialize MessagePack payload
-                let signal: TradeSignal = rmp_serde::from_slice(payload)?;
-                Ok(Some(signal))
+                if received_bytes > 0 {
+                    // Message format: topic + space + MessagePack payload
+                    let bytes = &buffer[..received_bytes as usize];
+
+                    let space_pos = bytes
+                        .iter()
+                        .position(|&b| b == b' ')
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Invalid message format: no space separator")
+                        })?;
+
+                    // Extract payload (skip topic)
+                    let payload = &bytes[space_pos + 1..];
+
+                    // Deserialize MessagePack payload
+                    let signal: TradeSignal = rmp_serde::from_slice(payload)?;
+                    return Ok(Some(signal));
+                } else if received_bytes == 0 {
+                    // EAGAIN - no message available, check timeout
+                    if start.elapsed() >= timeout_duration {
+                        return Ok(None); // Timeout
+                    }
+                    // Sleep briefly before retrying
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                } else {
+                    // Error
+                    return Err(anyhow::anyhow!("Failed to receive message"));
+                }
             }
-            Err(zmq::Error::EAGAIN) => Ok(None), // Timeout
-            Err(e) => Err(e.into()),
         }
+    }
+}
+
+// Clean up ZMQ resources via mt-bridge FFI
+impl Drop for SlaveEaSimulator {
+    fn drop(&mut self) {
+        zmq_socket_destroy(self.socket_handle);
+        zmq_context_destroy(self.context_handle);
     }
 }
 
