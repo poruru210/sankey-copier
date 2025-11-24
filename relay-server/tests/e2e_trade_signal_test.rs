@@ -352,8 +352,10 @@ async fn test_lot_multiplier() {
         .expect("Failed to create trade group");
 
     // Add Slave with lot_multiplier = 2.0
-    let mut settings = SlaveSettings::default();
-    settings.lot_multiplier = Some(2.0);
+    let settings = SlaveSettings {
+        lot_multiplier: Some(2.0),
+        ..Default::default()
+    };
 
     server
         .db
@@ -428,8 +430,10 @@ async fn test_reverse_trade() {
         .expect("Failed to create trade group");
 
     // Add Slave with reverse_trade = true
-    let mut settings = SlaveSettings::default();
-    settings.reverse_trade = true;
+    let settings = SlaveSettings {
+        reverse_trade: true,
+        ..Default::default()
+    };
 
     server
         .db
@@ -504,11 +508,13 @@ async fn test_symbol_mapping() {
         .expect("Failed to create trade group");
 
     // Add Slave with symbol mapping: EURUSD → EURUSD.pro
-    let mut settings = SlaveSettings::default();
-    settings.symbol_mappings = vec![SymbolMapping {
-        source_symbol: "EURUSD".to_string(),
-        target_symbol: "EURUSD.pro".to_string(),
-    }];
+    let settings = SlaveSettings {
+        symbol_mappings: vec![SymbolMapping {
+            source_symbol: "EURUSD".to_string(),
+            target_symbol: "EURUSD.pro".to_string(),
+        }],
+        ..Default::default()
+    };
 
     server
         .db

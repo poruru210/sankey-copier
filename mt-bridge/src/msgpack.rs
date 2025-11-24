@@ -198,7 +198,7 @@ pub unsafe extern "C" fn config_get_string(
     };
 
     // Use a static empty string to avoid temporary value dropped error
-    static EMPTY_STRING: LazyLock<String> = LazyLock::new(|| String::new());
+    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
 
     let value = match field.as_str() {
         "account_id" => &config.account_id,
@@ -235,6 +235,10 @@ pub unsafe extern "C" fn config_get_string(
 }
 
 /// Get a double field from ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn config_get_double(
     handle: *const ConfigMessage,
@@ -265,6 +269,10 @@ pub unsafe extern "C" fn config_get_double(
 }
 
 /// Get a boolean field from ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn config_get_bool(
     handle: *const ConfigMessage,
@@ -300,6 +308,10 @@ pub unsafe extern "C" fn config_get_bool(
 }
 
 /// Get an integer field from ConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to ConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn config_get_int(
     handle: *const ConfigMessage,
@@ -355,6 +367,9 @@ static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> =
 ///
 /// Returns the length of serialized data (or 0 on error).
 /// The serialized data is stored in an internal buffer accessible via copy_serialized_buffer().
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
 #[no_mangle]
 pub unsafe extern "C" fn serialize_request_config(
     message_type: *const u16,
@@ -380,6 +395,9 @@ pub unsafe extern "C" fn serialize_request_config(
 }
 
 /// Serialize an UnregisterMessage to MessagePack
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
 #[no_mangle]
 pub unsafe extern "C" fn serialize_unregister(
     message_type: *const u16,
@@ -403,6 +421,9 @@ pub unsafe extern "C" fn serialize_unregister(
 }
 
 /// Serialize a HeartbeatMessage to MessagePack
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
 #[no_mangle]
 pub unsafe extern "C" fn serialize_heartbeat(
     message_type: *const u16,
@@ -457,6 +478,9 @@ pub unsafe extern "C" fn serialize_heartbeat(
 }
 
 /// Serialize a TradeSignalMessage to MessagePack
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
 #[no_mangle]
 pub unsafe extern "C" fn serialize_trade_signal(
     action: *const u16,
@@ -552,6 +576,10 @@ pub unsafe extern "C" fn copy_serialized_buffer(dest: *mut u8, max_len: i32) -> 
 }
 
 /// Parse a TradeSignalMessage from MessagePack data
+///
+/// # Safety
+/// - data must be a valid pointer to a buffer of at least data_len bytes
+/// - data_len must accurately represent the buffer size
 #[no_mangle]
 pub unsafe extern "C" fn parse_trade_signal(
     data: *const u8,
@@ -569,6 +597,10 @@ pub unsafe extern "C" fn parse_trade_signal(
 }
 
 /// Free a TradeSignalMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer created by parse_trade_signal or null
+/// - handle must not be used after calling this function
 #[no_mangle]
 pub unsafe extern "C" fn trade_signal_free(handle: *mut TradeSignalMessage) {
     if !handle.is_null() {
@@ -577,6 +609,10 @@ pub unsafe extern "C" fn trade_signal_free(handle: *mut TradeSignalMessage) {
 }
 
 /// Get a string field from TradeSignalMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to TradeSignalMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn trade_signal_get_string(
     handle: *const TradeSignalMessage,
@@ -609,6 +645,10 @@ pub unsafe extern "C" fn trade_signal_get_string(
 }
 
 /// Get a numeric field from TradeSignalMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to TradeSignalMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn trade_signal_get_double(
     handle: *const TradeSignalMessage,
@@ -634,6 +674,10 @@ pub unsafe extern "C" fn trade_signal_get_double(
 }
 
 /// Get an integer field from TradeSignalMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to TradeSignalMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn trade_signal_get_int(
     handle: *const TradeSignalMessage,
@@ -726,7 +770,10 @@ mod tests {
 
         // Serialize
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        assert!(serialized.len() > 0, "Serialized data should not be empty");
+        assert!(
+            !serialized.is_empty(),
+            "Serialized data should not be empty"
+        );
 
         // Deserialize
         let deserialized: RequestConfigMessage =
@@ -966,7 +1013,7 @@ mod tests {
                         account_id: format!("account_{}", i),
                         balance: 10000.0 + i as f64,
                         equity: 10000.0 + i as f64,
-                        open_positions: i as i32,
+                        open_positions: i,
                         timestamp: "2025-01-01T00:00:00Z".to_string(),
                         version: "test".to_string(),
                         ea_type: "Master".to_string(),
@@ -1006,7 +1053,10 @@ mod tests {
 
         // Serialize
         let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-        assert!(serialized.len() > 0, "Serialized data should not be empty");
+        assert!(
+            !serialized.is_empty(),
+            "Serialized data should not be empty"
+        );
 
         // Deserialize
         let deserialized: MasterConfigMessage =

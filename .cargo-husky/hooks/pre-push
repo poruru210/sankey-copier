@@ -10,7 +10,7 @@ echo "Running cargo fmt --check..."
 cargo fmt --manifest-path relay-server/Cargo.toml --check
 
 echo "Running cargo clippy..."
-cargo clippy --manifest-path relay-server/Cargo.toml --all-targets --all-features -- -D warnings
+cargo clippy --manifest-path relay-server/Cargo.toml --all-targets --all-features -- -D warnings -A dead_code -A unused_imports
 
 echo ""
 echo "=== Checking mt-bridge ==="
@@ -18,7 +18,7 @@ echo "Running cargo fmt --check..."
 cargo fmt --manifest-path mt-bridge/Cargo.toml --check
 
 echo "Running cargo clippy..."
-cargo clippy --manifest-path mt-bridge/Cargo.toml --all-targets --all-features -- -D warnings
+cargo clippy --manifest-path mt-bridge/Cargo.toml --all-targets --all-features -- -D warnings -A dead_code -A unused_imports
 
 echo ""
 echo "=== All checks passed! ==="

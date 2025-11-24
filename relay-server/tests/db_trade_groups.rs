@@ -4,9 +4,7 @@
 // Following TDD principles: write tests first, then implement.
 
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{
-    MasterSettings, SlaveSettings, TradeGroup, TradeGroupMember,
-};
+use sankey_copier_relay_server::models::{MasterSettings, SlaveSettings};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 /// Helper to create an in-memory test database

@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(config.master_account, "MASTER123");
         assert_eq!(config.status, 2); // CONNECTED (slave enabled + master trade allowed)
         assert_eq!(config.lot_multiplier, Some(2.0));
-        assert_eq!(config.reverse_trade, false);
+        assert!(!config.reverse_trade);
         assert_eq!(config.symbol_mappings.len(), 1);
         assert_eq!(config.symbol_prefix, Some("pro.".to_string()));
         assert_eq!(config.symbol_suffix, Some(".m".to_string()));
