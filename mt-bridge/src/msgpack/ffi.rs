@@ -2,11 +2,14 @@
 // Purpose: FFI functions for MQL4/MQL5 integration
 // Why: Provides C-compatible interface for parsing and accessing MessagePack messages from EA
 
+use super::helpers::{
+    string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX, MAX_STRING_LEN, STRING_BUFFER_1,
+    STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
+};
+use super::types::{MasterConfigMessage, SlaveConfigMessage, TradeSignalMessage};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::LazyLock;
-use super::types::{SlaveConfigMessage, MasterConfigMessage, TradeSignalMessage};
-use super::helpers::{utf16_to_string, string_to_utf16_buffer, BUFFER_INDEX, MAX_STRING_LEN, STRING_BUFFER_1, STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4};
 
 /// Parse MessagePack data as Slave ConfigMessage and return an opaque handle
 ///
@@ -14,7 +17,10 @@ use super::helpers::{utf16_to_string, string_to_utf16_buffer, BUFFER_INDEX, MAX_
 /// This function is unsafe because it dereferences raw pointers.
 /// The returned handle must be freed with `slave_config_free()`.
 #[no_mangle]
-pub unsafe extern "C" fn parse_slave_config(data: *const u8, data_len: i32) -> *mut SlaveConfigMessage {
+pub unsafe extern "C" fn parse_slave_config(
+    data: *const u8,
+    data_len: i32,
+) -> *mut SlaveConfigMessage {
     if data.is_null() || data_len <= 0 {
         return std::ptr::null_mut();
     }

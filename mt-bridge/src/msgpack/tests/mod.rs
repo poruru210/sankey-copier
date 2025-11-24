@@ -2,6 +2,6 @@
 // Purpose: Test module setup for MessagePack functionality
 // Why: Organizes tests into logical groups by functionality
 
-mod types_tests;
 mod ffi_tests;
 mod serialization_tests;
+mod types_tests;

@@ -2,9 +2,9 @@
 // Purpose: MessagePack serialization/deserialization functions for FFI
 // Why: Provides binary serialization for efficient message passing between EA and relay-server
 
-use std::sync::{LazyLock, Mutex};
 use super::helpers::{utf16_to_string, utf16_to_string_opt};
-use super::types::{RequestConfigMessage, UnregisterMessage, HeartbeatMessage, TradeSignalMessage};
+use super::types::{HeartbeatMessage, RequestConfigMessage, TradeSignalMessage, UnregisterMessage};
+use std::sync::{LazyLock, Mutex};
 
 // Static buffer for serialized data
 static SERIALIZE_BUFFER: LazyLock<Mutex<Vec<u8>>> =

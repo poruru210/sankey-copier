@@ -2,8 +2,8 @@
 // Purpose: Trait hierarchy for configuration messages
 // Why: Provides polymorphic interface for Master and Slave config messages
 
-use serde::Serialize;
 use super::types::{MasterConfigMessage, SlaveConfigMessage, SymbolMapping, TradeFilters};
+use serde::Serialize;
 
 // ============================================================================
 // Trait Hierarchy for Config Messages

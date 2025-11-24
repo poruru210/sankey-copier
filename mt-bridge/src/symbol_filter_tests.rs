@@ -1,4 +1,4 @@
-use crate::msgpack::{SlaveConfigMessage, HeartbeatMessage, TradeFilters};
+use crate::msgpack::{HeartbeatMessage, SlaveConfigMessage, TradeFilters};
 
 /// Test that new symbol filter fields are correctly serialized and deserialized
 #[test]
