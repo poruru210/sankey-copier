@@ -170,6 +170,137 @@ pub unsafe extern "C" fn config_free(handle: *mut ConfigMessage) {
     }
 }
 
+/// Parse MessagePack data as MasterConfigMessage and return an opaque handle
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+/// The returned handle must be freed with `master_config_free()`.
+#[no_mangle]
+pub unsafe extern "C" fn parse_master_config(
+    data: *const u8,
+    data_len: i32,
+) -> *mut MasterConfigMessage {
+    if data.is_null() || data_len <= 0 {
+        return std::ptr::null_mut();
+    }
+
+    let slice = std::slice::from_raw_parts(data, data_len as usize);
+    match rmp_serde::from_slice::<MasterConfigMessage>(slice) {
+        Ok(config) => Box::into_raw(Box::new(config)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Free a MasterConfigMessage handle
+///
+/// # Safety
+/// This function is unsafe because it takes ownership of a raw pointer.
+/// The caller must ensure:
+/// - `handle` was returned by `parse_master_config()`
+/// - `handle` is only freed once
+#[no_mangle]
+pub unsafe extern "C" fn master_config_free(handle: *mut MasterConfigMessage) {
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
+}
+
+/// Get a string field from MasterConfigMessage handle
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+/// Returns a pointer to a static UTF-16 buffer (valid until next 4 calls).
+#[no_mangle]
+pub unsafe extern "C" fn master_config_get_string(
+    handle: *const MasterConfigMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let config = &*handle;
+
+    // Parse field name from UTF-16
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null(),
+    };
+
+    // Use a static empty string to avoid temporary value dropped error
+    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
+
+    let value = match field.as_str() {
+        "account_id" => &config.account_id,
+        "timestamp" => &config.timestamp,
+        "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
+        "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
+        _ => return std::ptr::null(),
+    };
+
+    // Get next buffer in round-robin fashion
+    let mut index = BUFFER_INDEX.lock().unwrap();
+    let current_index = *index;
+    *index = (*index + 1) % 4;
+    drop(index);
+
+    // Select buffer based on index
+    let buffer_mutex = match current_index {
+        0 => &STRING_BUFFER_1,
+        1 => &STRING_BUFFER_2,
+        2 => &STRING_BUFFER_3,
+        _ => &STRING_BUFFER_4,
+    };
+
+    let mut buffer = buffer_mutex.lock().unwrap();
+
+    // Convert to UTF-16 and copy to buffer
+    let utf16: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let copy_len = utf16.len().min(MAX_STRING_LEN - 1);
+    buffer[..copy_len].copy_from_slice(&utf16[..copy_len]);
+    buffer[copy_len] = 0; // Ensure null termination
+
+    buffer.as_ptr()
+}
+
+/// Get an integer field from MasterConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to MasterConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn master_config_get_int(
+    handle: *const MasterConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    if handle.is_null() || field_name.is_null() {
+        return 0;
+    }
+
+    let config = &*handle;
+
+    // Parse field name
+    let mut len = 0;
+    while *field_name.add(len) != 0 {
+        len += 1;
+    }
+    let field_slice = std::slice::from_raw_parts(field_name, len);
+    let field = match String::from_utf16(field_slice) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    match field.as_str() {
+        "config_version" => config.config_version as i32,
+        _ => 0,
+    }
+}
+
 /// Get a string field from ConfigMessage handle
 ///
 /// # Safety
@@ -1088,5 +1219,89 @@ mod tests {
         assert!(deserialized.symbol_prefix.is_none());
         assert!(deserialized.symbol_suffix.is_none());
         assert_eq!(msg.config_version, deserialized.config_version);
+    }
+
+    #[test]
+    fn test_parse_master_config_ffi() {
+        // Test the FFI function parse_master_config()
+        let msg = MasterConfigMessage {
+            account_id: "test_master_123".to_string(),
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            config_version: 5,
+            timestamp: "2025-01-15T10:30:00Z".to_string(),
+        };
+
+        let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
+
+        // Call FFI function
+        unsafe {
+            let handle = parse_master_config(serialized.as_ptr(), serialized.len() as i32);
+            assert!(!handle.is_null(), "parse_master_config should return valid handle");
+
+            // Test master_config_get_string
+            let account_id_utf16: Vec<u16> = "account_id".encode_utf16().chain(Some(0)).collect();
+            let account_id_ptr = master_config_get_string(handle, account_id_utf16.as_ptr());
+            assert!(!account_id_ptr.is_null(), "account_id should be retrievable");
+
+            let prefix_utf16: Vec<u16> = "symbol_prefix".encode_utf16().chain(Some(0)).collect();
+            let prefix_ptr = master_config_get_string(handle, prefix_utf16.as_ptr());
+            assert!(!prefix_ptr.is_null(), "symbol_prefix should be retrievable");
+
+            let suffix_utf16: Vec<u16> = "symbol_suffix".encode_utf16().chain(Some(0)).collect();
+            let suffix_ptr = master_config_get_string(handle, suffix_utf16.as_ptr());
+            assert!(!suffix_ptr.is_null(), "symbol_suffix should be retrievable");
+
+            // Test master_config_get_int
+            let version_utf16: Vec<u16> = "config_version".encode_utf16().chain(Some(0)).collect();
+            let version = master_config_get_int(handle, version_utf16.as_ptr());
+            assert_eq!(version, 5, "config_version should be 5");
+
+            // Free the handle
+            master_config_free(handle);
+        }
+    }
+
+    #[test]
+    fn test_parse_master_config_ffi_with_none_values() {
+        // Test parsing with None values
+        let msg = MasterConfigMessage {
+            account_id: "test_master_789".to_string(),
+            symbol_prefix: None,
+            symbol_suffix: None,
+            config_version: 0,
+            timestamp: "2025-01-15T11:00:00Z".to_string(),
+        };
+
+        let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
+
+        unsafe {
+            let handle = parse_master_config(serialized.as_ptr(), serialized.len() as i32);
+            assert!(!handle.is_null(), "parse_master_config should return valid handle");
+
+            // Get version (should be 0)
+            let version_utf16: Vec<u16> = "config_version".encode_utf16().chain(Some(0)).collect();
+            let version = master_config_get_int(handle, version_utf16.as_ptr());
+            assert_eq!(version, 0, "config_version should be 0");
+
+            // Get prefix (should return empty string for None)
+            let prefix_utf16: Vec<u16> = "symbol_prefix".encode_utf16().chain(Some(0)).collect();
+            let prefix_ptr = master_config_get_string(handle, prefix_utf16.as_ptr());
+            assert!(!prefix_ptr.is_null(), "symbol_prefix should return valid pointer");
+
+            // Free the handle
+            master_config_free(handle);
+        }
+    }
+
+    #[test]
+    fn test_parse_master_config_ffi_invalid_data() {
+        // Test with invalid MessagePack data
+        let invalid_data: Vec<u8> = vec![0xFF, 0xFF, 0xFF, 0xFF];
+
+        unsafe {
+            let handle = parse_master_config(invalid_data.as_ptr(), invalid_data.len() as i32);
+            assert!(handle.is_null(), "parse_master_config should return null for invalid data");
+        }
     }
 }

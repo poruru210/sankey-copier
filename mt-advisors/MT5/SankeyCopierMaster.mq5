@@ -737,24 +737,24 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 {
    Print("=== Processing Master Configuration Message ===");
 
-   // Parse MessagePack once and get a handle to the config structure
-   HANDLE_TYPE config_handle = parse_message(msgpack_data, data_len);
+   // Parse MessagePack once and get a handle to the Master config structure
+   HANDLE_TYPE config_handle = parse_master_config(msgpack_data, data_len);
    if(config_handle == 0)
    {
-      Print("ERROR: Failed to parse MessagePack config");
+      Print("ERROR: Failed to parse MessagePack Master config");
       return;
    }
 
    // Extract fields from the parsed config using the handle
-   string config_account_id = config_get_string(config_handle, "account_id");
-   string prefix = config_get_string(config_handle, "symbol_prefix");
-   string suffix = config_get_string(config_handle, "symbol_suffix");
-   int version = config_get_int(config_handle, "config_version");
+   string config_account_id = master_config_get_string(config_handle, "account_id");
+   string prefix = master_config_get_string(config_handle, "symbol_prefix");
+   string suffix = master_config_get_string(config_handle, "symbol_suffix");
+   int version = master_config_get_int(config_handle, "config_version");
 
    if(config_account_id == "")
    {
       Print("ERROR: Invalid config message received - missing account_id");
-      config_free(config_handle);
+      master_config_free(config_handle);
       return;
    }
 
@@ -762,7 +762,7 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    if(config_account_id != AccountID)
    {
       Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
-      config_free(config_handle);
+      master_config_free(config_handle);
       return;
    }
 
@@ -784,7 +784,7 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    }
 
    // Free the config handle
-   config_free(config_handle);
+   master_config_free(config_handle);
 
    Print("=== Master Configuration Updated ===");
 }
