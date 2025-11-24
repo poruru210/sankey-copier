@@ -161,7 +161,7 @@ export function useSankeyCopier() {
         }
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [selectedSite?.siteUrl, fetchSettings]);
 
   // Initial load and periodic connection refresh

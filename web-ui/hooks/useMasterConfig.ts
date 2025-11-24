@@ -93,7 +93,7 @@ export function useMasterConfig() {
         setLoading(false);
       }
     },
-    [apiClient]
+    [apiClient, getMasterConfig]
   );
 
   /**
@@ -131,7 +131,7 @@ export function useMasterConfig() {
         setLoading(false);
       }
     },
-    [apiClient]
+    [apiClient, getMasterConfig]
   );
 
   return {
