@@ -26,8 +26,10 @@ pub struct TestServer {
     pub zmq_pub_trade_port: u16,
     pub zmq_pub_config_port: u16,
     pub db: Arc<Database>,
+    zmq_server: Arc<ZmqServer>,
     _server_handle: JoinHandle<()>,
-    _zmq_handle: JoinHandle<()>,
+    _zmq_receiver_handle: JoinHandle<()>,
+    _zmq_handler_handle: JoinHandle<()>,
 }
 
 impl TestServer {
@@ -50,8 +52,8 @@ impl TestServer {
         let (broadcast_tx, _) = broadcast::channel::<String>(100);
 
         // Initialize ZeroMQ server
-        let zmq_server = ZmqServer::new(zmq_tx)?;
-        zmq_server
+        let zmq_server = Arc::new(ZmqServer::new(zmq_tx)?);
+        let zmq_receiver_handle = zmq_server
             .start_receiver(&format!("tcp://127.0.0.1:{}", zmq_pull_port))
             .await?;
 
@@ -92,7 +94,7 @@ impl TestServer {
 
         // Spawn ZMQ message processing task
         let handler_clone = handler.clone();
-        let zmq_handle = tokio::spawn(async move {
+        let zmq_handler_handle = tokio::spawn(async move {
             while let Some(msg) = zmq_rx.recv().await {
                 handler_clone.handle_message(msg).await;
             }
@@ -137,8 +139,10 @@ impl TestServer {
             zmq_pub_trade_port,
             zmq_pub_config_port,
             db,
+            zmq_server,
             _server_handle: server_handle,
-            _zmq_handle: zmq_handle,
+            _zmq_receiver_handle: zmq_receiver_handle,
+            _zmq_handler_handle: zmq_handler_handle,
         })
     }
 
@@ -163,9 +167,13 @@ impl TestServer {
     }
 }
 
-// Drop implementation removed - let Rust's natural cleanup handle resources
-// rust-zmq uses Arc references to manage Context/Socket lifecycle automatically
-// Explicit abort() prevents proper Socket cleanup, causing Context termination to block
+impl Drop for TestServer {
+    fn drop(&mut self) {
+        // Signal ZMQ receiver to shutdown
+        self.zmq_server.shutdown();
+        tracing::info!("TestServer dropping - ZMQ shutdown signaled");
+    }
+}
 
 /// Find an available TCP port by binding to port 0 and letting OS choose
 fn find_available_port() -> Result<u16> {

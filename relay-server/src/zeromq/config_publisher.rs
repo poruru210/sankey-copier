@@ -2,6 +2,7 @@ use crate::models::ConfigMessage;
 use anyhow::{Context, Result};
 use sankey_copier_zmq::MasterConfigMessage;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 /// Enum to support both Slave and Master config messages
 enum ConfigPayload {
@@ -11,6 +12,7 @@ enum ConfigPayload {
 
 pub struct ZmqConfigPublisher {
     tx: mpsc::UnboundedSender<ConfigPayload>,
+    _handle: JoinHandle<()>,
 }
 
 impl ZmqConfigPublisher {
@@ -32,7 +34,7 @@ impl ZmqConfigPublisher {
         let (tx, mut rx) = mpsc::unbounded_channel::<ConfigPayload>();
 
         // Spawn dedicated task for ZMQ sending with MessagePack
-        tokio::task::spawn_blocking(move || {
+        let handle = tokio::task::spawn_blocking(move || {
             while let Some(payload) = rx.blocking_recv() {
                 match payload {
                     ConfigPayload::Slave(config) => {
@@ -97,9 +99,17 @@ impl ZmqConfigPublisher {
                     }
                 }
             }
+
+            // Explicitly drop socket before context is destroyed (per ZeroMQ guide)
+            drop(socket);
+            drop(context);
+            tracing::info!("ZMQ config publisher shut down cleanly");
         });
 
-        Ok(Self { tx })
+        Ok(Self {
+            tx,
+            _handle: handle,
+        })
     }
 
     pub async fn send_config(&self, config: &ConfigMessage) -> Result<()> {
