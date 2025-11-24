@@ -1,6 +1,4 @@
-use sankey_copier_relay_server::models::{
-    CopySettings, SlaveConfigMessage, SymbolMapping, TradeFilters,
-};
+use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
 ///
@@ -196,15 +194,13 @@ async fn test_config_message_size_benchmark() {
 async fn test_estimate_parsing_performance() {
     println!("\n=== Estimated MQL5 Parsing Performance ===\n");
 
-    let settings = CopySettings {
-        id: 1,
-        status: 2, // STATUS_CONNECTED
+    let config = SlaveConfigMessage {
+        account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        slave_account: "SLAVE_001".to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.5),
         reverse_trade: false,
-        symbol_prefix: None,
-        symbol_suffix: None,
         symbol_mappings: vec![
             SymbolMapping {
                 source_symbol: "EURUSD".to_string(),
@@ -221,9 +217,11 @@ async fn test_estimate_parsing_performance() {
             allowed_magic_numbers: Some(vec![123, 456]),
             blocked_magic_numbers: None,
         },
+        config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     };
 
-    let config: SlaveConfigMessage = settings.into();
     let json = serde_json::to_string(&config).unwrap();
 
     println!("JSON Structure Analysis:");

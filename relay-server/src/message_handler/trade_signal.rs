@@ -4,7 +4,7 @@
 //! transforms signals, and distributes them to Slave EAs.
 
 use super::MessageHandler;
-use crate::models::{CopySettings, SymbolConverter, TradeSignal};
+use crate::models::{MasterSettings, SymbolConverter, TradeGroupMember, TradeSignal};
 
 impl MessageHandler {
     /// Handle trade signals and process copying
@@ -17,16 +17,19 @@ impl MessageHandler {
             signal.source_account, signal.symbol, signal.lots
         ));
 
-        // Get copy settings for this master account from database
-        let settings = match self
-            .db
-            .get_copy_settings_for_master(&signal.source_account)
-            .await
-        {
-            Ok(settings) => settings,
+        // Get master settings for symbol prefix/suffix
+        let master_settings = match self.db.get_trade_group(&signal.source_account).await {
+            Ok(Some(tg)) => tg.master_settings,
+            Ok(None) => {
+                tracing::warn!(
+                    "TradeGroup not found for master {}, using defaults",
+                    signal.source_account
+                );
+                MasterSettings::default()
+            }
             Err(e) => {
                 tracing::error!(
-                    "Failed to get copy settings for master {}: {}",
+                    "Failed to get TradeGroup for master {}: {}",
                     signal.source_account,
                     e
                 );
@@ -34,23 +37,42 @@ impl MessageHandler {
             }
         };
 
-        for setting in &settings {
+        // Get all members (slaves) for this master account
+        let members = match self.db.get_members(&signal.source_account).await {
+            Ok(members) => members,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to get members for master {}: {}",
+                    signal.source_account,
+                    e
+                );
+                return;
+            }
+        };
+
+        for member in &members {
             // Apply filters
-            if !self.copy_engine.should_copy_trade(&signal, setting) {
+            if !self.copy_engine.should_copy_trade(&signal, member) {
                 tracing::debug!(
                     "Trade filtered out for slave account: {}",
-                    setting.slave_account
+                    member.slave_account
                 );
                 continue;
             }
 
             // Process the trade copy
-            self.process_trade_copy(&signal, setting).await;
+            self.process_trade_copy(&signal, member, &master_settings)
+                .await;
         }
     }
 
-    /// Process a single trade copy for a specific setting
-    async fn process_trade_copy(&self, signal: &TradeSignal, setting: &CopySettings) {
+    /// Process a single trade copy for a specific member
+    async fn process_trade_copy(
+        &self,
+        signal: &TradeSignal,
+        member: &TradeGroupMember,
+        master_settings: &MasterSettings,
+    ) {
         // Transform signal
         let converter = SymbolConverter {
             prefix_remove: None,
@@ -61,12 +83,12 @@ impl MessageHandler {
 
         match self
             .copy_engine
-            .transform_signal(signal.clone(), setting, &converter)
+            .transform_signal(signal.clone(), member, master_settings, &converter)
         {
             Ok(transformed) => {
                 tracing::info!(
                     "Copying trade to {}: {} {} lots",
-                    setting.slave_account,
+                    member.slave_account,
                     transformed.symbol,
                     transformed.lots
                 );
@@ -75,21 +97,21 @@ impl MessageHandler {
                 // This allows multiple slaves to subscribe to the same master's trades
                 if let Err(e) = self
                     .zmq_sender
-                    .send_signal(&setting.master_account, &transformed)
+                    .send_signal(&member.trade_group_id, &transformed)
                     .await
                 {
                     tracing::error!("Failed to send signal to trade group: {}", e);
                 } else {
                     tracing::debug!(
                         "Sent signal to trade group '{}' for slave '{}'",
-                        setting.master_account,
-                        setting.slave_account
+                        member.trade_group_id,
+                        member.slave_account
                     );
 
                     // Notify WebSocket clients
                     let _ = self.broadcast_tx.send(format!(
                         "trade_copied:{}:{}:{}:{}",
-                        setting.slave_account, transformed.symbol, transformed.lots, setting.id
+                        member.slave_account, transformed.symbol, transformed.lots, member.id
                     ));
                 }
             }

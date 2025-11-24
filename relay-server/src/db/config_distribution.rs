@@ -3,7 +3,7 @@
 //! Implementation of Database methods for distributing configuration
 //! to Master and Slave EAs, including connection status management.
 
-use crate::models::{CopySettings, MasterSettings, SlaveConfigWithMaster, SlaveSettings};
+use crate::models::{MasterSettings, SlaveConfigWithMaster, SlaveSettings};
 use anyhow::{anyhow, Result};
 use sqlx::Row;
 
@@ -85,46 +85,5 @@ impl Database {
         .await?;
 
         Ok(result.rows_affected() as usize)
-    }
-
-    // ============================================================================
-    // Legacy Compatibility Layer (CopySettings conversion)
-    // TODO: Remove when copy_engine is migrated to use TradeGroupMembers directly
-    // ============================================================================
-
-    /// Get CopySettings for a specific master (compatibility layer)
-    ///
-    /// Converts TradeGroupMembers + MasterSettings → CopySettings for use with copy_engine.
-    /// This is used by trade signal handler to process trades for a specific master.
-    pub async fn get_copy_settings_for_master(
-        &self,
-        master_account: &str,
-    ) -> Result<Vec<CopySettings>> {
-        // Get Master settings for symbol_prefix/suffix
-        let master_settings = match self.get_trade_group(master_account).await? {
-            Some(tg) => tg.master_settings,
-            None => MasterSettings::default(), // Use defaults if master not found
-        };
-
-        // Get all members for this master
-        let members = self.get_members(master_account).await?;
-
-        let mut settings = Vec::new();
-        for member in members {
-            settings.push(CopySettings {
-                id: member.id,
-                status: member.status,
-                master_account: member.trade_group_id.clone(),
-                slave_account: member.slave_account.clone(),
-                lot_multiplier: member.slave_settings.lot_multiplier,
-                reverse_trade: member.slave_settings.reverse_trade,
-                symbol_prefix: master_settings.symbol_prefix.clone(),
-                symbol_suffix: master_settings.symbol_suffix.clone(),
-                symbol_mappings: member.slave_settings.symbol_mappings.clone(),
-                filters: member.slave_settings.filters.clone(),
-            });
-        }
-
-        Ok(settings)
     }
 }
