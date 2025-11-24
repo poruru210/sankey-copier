@@ -1160,8 +1160,8 @@ async fn test_multiple_masters_multiple_slaves() {
         Some(0.5),
         "Slave3 should have lot_multiplier 0.5"
     );
-    assert_eq!(
-        slave3_config.reverse_trade, true,
+    assert!(
+        slave3_config.reverse_trade,
         "Slave3 should have reverse_trade enabled"
     );
     assert_eq!(
