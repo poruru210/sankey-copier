@@ -3,11 +3,13 @@
  *
  * Provides methods to fetch, update, and delete Master EA configuration
  * for symbol prefix/suffix settings.
+ *
+ * Note: This hook uses the TradeGroups API (/api/trade-groups/:id)
  */
 
 import { useState, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
-import type { MasterConfig, UpdateMasterConfigRequest } from '@/types';
+import type { MasterConfig, UpdateMasterConfigRequest, TradeGroup } from '@/types';
 import { apiClientAtom } from '@/lib/atoms/site';
 
 export function useMasterConfig() {
@@ -17,6 +19,7 @@ export function useMasterConfig() {
 
   /**
    * Fetch Master configuration for a specific account
+   * Uses the TradeGroups API to get master_settings
    */
   const getMasterConfig = useCallback(
     async (accountId: string): Promise<MasterConfig | null> => {
@@ -28,10 +31,15 @@ export function useMasterConfig() {
       setError(null);
 
       try {
-        const config = await apiClient.get<MasterConfig>(
-          `/masters/${accountId}/config`
+        const tradeGroup = await apiClient.get<TradeGroup>(
+          `/trade-groups/${encodeURIComponent(accountId)}`
         );
-        return config;
+        // Convert TradeGroup.master_settings to MasterConfig format
+        return {
+          symbol_prefix: tradeGroup.master_settings.symbol_prefix,
+          symbol_suffix: tradeGroup.master_settings.symbol_suffix,
+          config_version: tradeGroup.master_settings.config_version,
+        };
       } catch (err) {
         // 404 is expected when config doesn't exist yet
         if (err instanceof Error && err.message.includes('404')) {
@@ -64,7 +72,12 @@ export function useMasterConfig() {
       setError(null);
 
       try {
-        await apiClient.put<void>(`/masters/${accountId}/config`, configData);
+        // Use TradeGroups API to update master_settings
+        await apiClient.updateTradeGroupSettings(accountId, {
+          symbol_prefix: configData.symbol_prefix,
+          symbol_suffix: configData.symbol_suffix,
+          config_version: configData.config_version,
+        });
       } catch (err) {
         const errorMsg =
           err instanceof Error ? err.message : 'Failed to update Master config';
@@ -90,7 +103,19 @@ export function useMasterConfig() {
       setError(null);
 
       try {
-        await apiClient.delete<void>(`/masters/${accountId}/config`);
+        // TradeGroups API doesn't have a DELETE endpoint for settings
+        // Instead, we update with null values to reset the configuration
+        // First fetch current config to get the version
+        const currentConfig = await getMasterConfig(accountId);
+        if (!currentConfig) {
+          throw new Error('Configuration not found');
+        }
+
+        await apiClient.updateTradeGroupSettings(accountId, {
+          symbol_prefix: null,
+          symbol_suffix: null,
+          config_version: currentConfig.config_version,
+        });
       } catch (err) {
         const errorMsg =
           err instanceof Error ? err.message : 'Failed to delete Master config';
