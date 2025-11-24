@@ -7,8 +7,11 @@ use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 use serde::{Deserialize, Serialize};
 
 /// Status constants for TradeGroupMember
+#[allow(dead_code)]
 pub const STATUS_DISABLED: i32 = 0;
+#[allow(dead_code)]
 pub const STATUS_ENABLED: i32 = 1;
+#[allow(dead_code)]
 pub const STATUS_CONNECTED: i32 = 2;
 
 /// TradeGroupMember represents a Slave account connected to a TradeGroup (Master)
@@ -68,6 +71,7 @@ pub struct SlaveSettings {
     pub config_version: u32,
 }
 
+#[allow(dead_code)]
 impl TradeGroupMember {
     /// Create a new TradeGroupMember with default settings
     pub fn new(id: i32, trade_group_id: String, slave_account: String) -> Self {

@@ -353,7 +353,7 @@ async fn test_create_connection_via_rest_api() {
     assert_eq!(config.master_account, "MASTER_API_TEST");
     assert_eq!(config.status, 2); // CONNECTED (Master trade allowed + Slave enabled)
     assert_eq!(config.lot_multiplier, Some(2.0));
-    assert_eq!(config.reverse_trade, false);
+    assert!(!config.reverse_trade);
 
     println!("✅ Slave EA received configuration:");
     println!("   Master: {}", config.master_account);
@@ -658,7 +658,7 @@ async fn test_list_and_get_settings_via_rest_api() {
     assert_eq!(settings1.master_account, "MASTER_LIST_1");
     assert_eq!(settings1.slave_account, "SLAVE_LIST_1");
     assert_eq!(settings1.lot_multiplier, Some(1.0));
-    assert_eq!(settings1.reverse_trade, false);
+    assert!(!settings1.reverse_trade);
     assert_eq!(settings1.status, 0); // DISABLED
 
     println!("✅ GET /api/settings/{} returned correct settings", id1);
@@ -721,7 +721,7 @@ async fn test_update_connection_settings_via_rest_api() {
         .expect("Timeout: No initial config");
 
     assert_eq!(initial_config.lot_multiplier, Some(2.0));
-    assert_eq!(initial_config.reverse_trade, false);
+    assert!(!initial_config.reverse_trade);
     println!("✅ Initial config: lot_multiplier = 2.0, reverse_trade = false");
 
     // Update settings via PUT
@@ -761,7 +761,7 @@ async fn test_update_connection_settings_via_rest_api() {
         .expect("Timeout: No updated config");
 
     assert_eq!(updated_config.lot_multiplier, Some(3.5));
-    assert_eq!(updated_config.reverse_trade, true);
+    assert!(updated_config.reverse_trade);
     assert_eq!(updated_config.symbol_prefix, Some("pro.".to_string()));
     assert_eq!(updated_config.symbol_suffix, Some(".m".to_string()));
 
@@ -1032,11 +1032,11 @@ async fn test_multiple_connections_independent_operation() {
 
     assert_eq!(config1.master_account, "MASTER_MULTI_1");
     assert_eq!(config1.lot_multiplier, Some(1.5));
-    assert_eq!(config1.reverse_trade, false);
+    assert!(!config1.reverse_trade);
 
     assert_eq!(config2.master_account, "MASTER_MULTI_2");
     assert_eq!(config2.lot_multiplier, Some(2.5));
-    assert_eq!(config2.reverse_trade, true);
+    assert!(config2.reverse_trade);
 
     println!("✅ Multiple connections operate independently:");
     println!(

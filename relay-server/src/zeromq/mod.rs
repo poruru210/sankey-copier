@@ -229,6 +229,7 @@ impl ZmqServer {
     }
 
     /// Shutdown the ZMQ receiver gracefully
+    #[allow(dead_code)]
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
     }

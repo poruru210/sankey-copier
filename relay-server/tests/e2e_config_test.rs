@@ -353,6 +353,7 @@ impl SlaveEaSimulator {
     }
 
     /// Subscribe to trade signals from a specific Master account using mt-bridge FFI
+    #[allow(dead_code)]
     fn subscribe_to_master(&self, master_account: &str) -> anyhow::Result<()> {
         let topic_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
 

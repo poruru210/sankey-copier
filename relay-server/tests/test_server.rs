@@ -20,6 +20,7 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task::JoinHandle;
 
 /// Test server instance with dynamically allocated ports
+#[allow(dead_code)]
 pub struct TestServer {
     pub http_port: u16,
     pub zmq_pull_port: u16,
@@ -150,6 +151,7 @@ impl TestServer {
 
     /// Reload settings cache from database
     /// This should be called after modifying trade groups or members in tests
+    #[allow(dead_code)]
     pub async fn reload_settings_cache(&self) -> Result<()> {
         let settings = self.db.list_copy_settings().await?;
         *self.settings_cache.write().await = settings;
@@ -158,6 +160,7 @@ impl TestServer {
 
     /// Set all members in settings cache to CONNECTED status (status=2)
     /// This is needed for E2E trade signal tests because should_copy_trade requires status=2
+    #[allow(dead_code)]
     pub async fn set_all_members_connected(&self) {
         let mut cache = self.settings_cache.write().await;
         for setting in cache.iter_mut() {
@@ -166,21 +169,25 @@ impl TestServer {
     }
 
     /// Get the ZMQ PULL address (for EA to connect)
+    #[allow(dead_code)]
     pub fn zmq_pull_address(&self) -> String {
         format!("tcp://localhost:{}", self.zmq_pull_port)
     }
 
     /// Get the ZMQ PUB address for trades
+    #[allow(dead_code)]
     pub fn zmq_pub_trade_address(&self) -> String {
         format!("tcp://localhost:{}", self.zmq_pub_trade_port)
     }
 
     /// Get the ZMQ PUB address for configs
+    #[allow(dead_code)]
     pub fn zmq_pub_config_address(&self) -> String {
         format!("tcp://localhost:{}", self.zmq_pub_config_port)
     }
 
     /// Get the HTTP API base URL
+    #[allow(dead_code)]
     pub fn http_base_url(&self) -> String {
         format!("http://localhost:{}", self.http_port)
     }

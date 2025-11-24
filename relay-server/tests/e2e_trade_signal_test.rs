@@ -136,6 +136,7 @@ impl Drop for MasterEaSimulator {
 /// Slave EA Simulator for trade signal testing
 /// Simulates a Slave EA receiving trade signals from the relay server via mt-bridge FFI
 /// This matches the actual EA behavior: Relay Server → ZMQ → mt-bridge DLL → EA (MQL)
+#[allow(dead_code)]
 struct SlaveEaSimulator {
     context_handle: i32,
     socket_handle: i32,
@@ -590,12 +591,16 @@ async fn test_multiple_slaves() {
         .expect("Failed to create trade group");
 
     // Add two Slaves with different settings
-    let mut settings1 = SlaveSettings::default();
-    settings1.lot_multiplier = Some(1.5);
+    let settings1 = SlaveSettings {
+        lot_multiplier: Some(1.5),
+        ..Default::default()
+    };
 
-    let mut settings2 = SlaveSettings::default();
-    settings2.lot_multiplier = Some(2.0);
-    settings2.reverse_trade = true;
+    let settings2 = SlaveSettings {
+        lot_multiplier: Some(2.0),
+        reverse_trade: true,
+        ..Default::default()
+    };
 
     server
         .db

@@ -74,6 +74,7 @@ pub struct CopySettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ConnectionSettings {
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,

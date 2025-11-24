@@ -39,6 +39,7 @@ pub struct MasterSettings {
     pub config_version: u32,
 }
 
+#[allow(dead_code)]
 impl TradeGroup {
     /// Create a new TradeGroup with default settings
     pub fn new(master_account: String) -> Self {
