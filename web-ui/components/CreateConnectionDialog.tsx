@@ -75,7 +75,7 @@ export function CreateConnectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[90vh] flex flex-col">
+      <DialogContent className="!max-w-7xl !max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{content.createTitle.value}</DialogTitle>
         </DialogHeader>
@@ -146,8 +146,9 @@ function CreateConnectionForm({
     symbol_mappings: '',
   });
 
-  // Track accordion expansion state for Step 2
-  const [openAccordion, setOpenAccordion] = useState<string>('basic');
+  // Track accordion expansion state for Step 1 (Master) and Step 2 (Slave)
+  const [openMasterAccordion, setOpenMasterAccordion] = useState<string>('master-symbols');
+  const [openSlaveAccordion, setOpenSlaveAccordion] = useState<string>('basic');
 
   // Initialize form data on mount
   useEffect(() => {
@@ -385,41 +386,67 @@ function CreateConnectionForm({
                 </div>
               )}
 
-              {/* Symbol Prefix */}
-              <div>
-                <Label htmlFor="master_symbol_prefix">
-                  Symbol Prefix
-                </Label>
-                <Input
-                  id="master_symbol_prefix"
-                  type="text"
-                  placeholder="e.g. 'pro.' or 'FX.'"
-                  value={masterSettings.symbol_prefix}
-                  onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
-                  disabled={loadingMembers}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
-                </p>
-              </div>
+              {/* Accordion Layout for Master Settings */}
+              <Accordion
+                type="single"
+                value={openMasterAccordion}
+                onValueChange={setOpenMasterAccordion}
+                collapsible
+                className="w-full"
+              >
+                {/* Master Symbol Filters */}
+                <AccordionItem value="master-symbols">
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔍</span>
+                      <span>Symbol Filters (Optional)</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4 pt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Configure symbol name transformations that the Master EA will apply before broadcasting.
+                      </p>
 
-              {/* Symbol Suffix */}
-              <div>
-                <Label htmlFor="master_symbol_suffix">
-                  Symbol Suffix
-                </Label>
-                <Input
-                  id="master_symbol_suffix"
-                  type="text"
-                  placeholder="e.g. '.m' or '-ECN'"
-                  value={masterSettings.symbol_suffix}
-                  onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
-                  disabled={loadingMembers}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
-                </p>
-              </div>
+                      {/* Symbol Prefix */}
+                      <div>
+                        <Label htmlFor="master_symbol_prefix">
+                          Symbol Prefix
+                        </Label>
+                        <Input
+                          id="master_symbol_prefix"
+                          type="text"
+                          placeholder="e.g. 'pro.' or 'FX.'"
+                          value={masterSettings.symbol_prefix}
+                          onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
+                          disabled={loadingMembers}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
+                        </p>
+                      </div>
+
+                      {/* Symbol Suffix */}
+                      <div>
+                        <Label htmlFor="master_symbol_suffix">
+                          Symbol Suffix
+                        </Label>
+                        <Input
+                          id="master_symbol_suffix"
+                          type="text"
+                          placeholder="e.g. '.m' or '-ECN'"
+                          value={masterSettings.symbol_suffix}
+                          onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
+                          disabled={loadingMembers}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           </Step>
 
@@ -439,8 +466,8 @@ function CreateConnectionForm({
               {/* Accordion Layout */}
               <Accordion
                 type="single"
-                value={openAccordion}
-                onValueChange={setOpenAccordion}
+                value={openSlaveAccordion}
+                onValueChange={setOpenSlaveAccordion}
                 collapsible
                 className="w-full"
               >
