@@ -108,12 +108,24 @@ impl MessageHandler {
                         }
                     };
 
+                    // Fetch Master's equity for margin_ratio mode
+                    let master_equity = self
+                        .connection_manager
+                        .get_ea(&settings.master_account)
+                        .await
+                        .map(|conn| conn.equity);
+
                     // Build SlaveConfigMessage with calculated effective status
                     let config = SlaveConfigMessage {
                         account_id: settings.slave_account.clone(),
                         master_account: settings.master_account.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
                         status: effective_status,
+                        lot_calculation_mode: settings
+                            .slave_settings
+                            .lot_calculation_mode
+                            .clone()
+                            .into(),
                         lot_multiplier: settings.slave_settings.lot_multiplier,
                         reverse_trade: settings.slave_settings.reverse_trade,
                         symbol_mappings: settings.slave_settings.symbol_mappings.clone(),
@@ -121,6 +133,9 @@ impl MessageHandler {
                         config_version: settings.slave_settings.config_version,
                         symbol_prefix: settings.slave_settings.symbol_prefix.clone(),
                         symbol_suffix: settings.slave_settings.symbol_suffix.clone(),
+                        source_lot_min: settings.slave_settings.source_lot_min,
+                        source_lot_max: settings.slave_settings.source_lot_max,
+                        master_equity,
                     };
 
                     // Send CONFIG via MessagePack

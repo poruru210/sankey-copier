@@ -53,6 +53,7 @@ export function convertMembersToCopySettings(
  */
 export function convertCopySettingsToSlaveSettings(settings: CopySettings): SlaveSettings {
   return {
+    lot_calculation_mode: settings.lot_calculation_mode || 'multiplier',
     lot_multiplier: settings.lot_multiplier,
     reverse_trade: settings.reverse_trade,
     symbol_prefix: settings.symbol_prefix || null,
@@ -60,6 +61,8 @@ export function convertCopySettingsToSlaveSettings(settings: CopySettings): Slav
     symbol_mappings: settings.symbol_mappings,
     filters: settings.filters,
     config_version: 0, // Will be set by server
+    source_lot_min: settings.source_lot_min ?? null,
+    source_lot_max: settings.source_lot_max ?? null,
   };
 }
 
@@ -80,6 +83,7 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
   return {
     slave_account: request.slave_account,
     slave_settings: {
+      lot_calculation_mode: request.lot_calculation_mode || 'multiplier',
       lot_multiplier: request.lot_multiplier,
       reverse_trade: request.reverse_trade,
       symbol_prefix: request.symbol_prefix || null,
@@ -92,6 +96,8 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
         blocked_magic_numbers: null,
       },
       config_version: 0,
+      source_lot_min: request.source_lot_min ?? null,
+      source_lot_max: request.source_lot_max ?? null,
     },
     status: request.status,
   };

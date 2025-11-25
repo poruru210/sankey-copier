@@ -1,7 +1,7 @@
 //! Tests for configuration request handling
 
 use super::*;
-use crate::models::{RequestConfigMessage, SlaveSettings};
+use crate::models::{LotCalculationMode, RequestConfigMessage, SlaveSettings};
 
 #[tokio::test]
 async fn test_handle_request_config_master() {
@@ -66,6 +66,7 @@ async fn test_handle_request_config_slave() {
         .unwrap();
 
     let slave_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         config_version: 1,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
@@ -73,6 +74,8 @@ async fn test_handle_request_config_slave() {
         reverse_trade: false,
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
+        source_lot_min: None,
+        source_lot_max: None,
     };
     handler
         .db

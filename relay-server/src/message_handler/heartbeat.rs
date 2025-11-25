@@ -47,11 +47,23 @@ impl MessageHandler {
                                 // Build SlaveConfig with calculated effective status
                                 let effective_status = if new_is_trade_allowed { 2 } else { 1 };
 
+                                // Fetch Master's equity for margin_ratio mode from heartbeat
+                                let master_equity = self
+                                    .connection_manager
+                                    .get_ea(&account_id)
+                                    .await
+                                    .map(|conn| conn.equity);
+
                                 let config = SlaveConfigMessage {
                                     account_id: member.slave_account.clone(),
                                     master_account: account_id.clone(),
                                     timestamp: chrono::Utc::now().to_rfc3339(),
                                     status: effective_status,
+                                    lot_calculation_mode: member
+                                        .slave_settings
+                                        .lot_calculation_mode
+                                        .clone()
+                                        .into(),
                                     lot_multiplier: member.slave_settings.lot_multiplier,
                                     reverse_trade: member.slave_settings.reverse_trade,
                                     symbol_mappings: member.slave_settings.symbol_mappings.clone(),
@@ -59,6 +71,9 @@ impl MessageHandler {
                                     config_version: member.slave_settings.config_version,
                                     symbol_prefix: member.slave_settings.symbol_prefix.clone(),
                                     symbol_suffix: member.slave_settings.symbol_suffix.clone(),
+                                    source_lot_min: member.slave_settings.source_lot_min,
+                                    source_lot_max: member.slave_settings.source_lot_max,
+                                    master_equity,
                                 };
 
                                 if let Err(e) = self.config_sender.send(&config).await {

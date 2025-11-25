@@ -519,10 +519,18 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         }
     };
 
+    // Fetch Master's equity for margin_ratio mode
+    let master_equity = state
+        .connection_manager
+        .get_ea(master_account)
+        .await
+        .map(|conn| conn.equity);
+
     let config = SlaveConfigMessage {
         account_id: member.slave_account.clone(),
         master_account: master_account.to_string(),
         status: member.status,
+        lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
         lot_multiplier: member.slave_settings.lot_multiplier,
         reverse_trade: member.slave_settings.reverse_trade,
         symbol_prefix: master_settings.symbol_prefix,
@@ -530,6 +538,9 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         symbol_mappings: member.slave_settings.symbol_mappings.clone(),
         filters: member.slave_settings.filters.clone(),
         config_version: member.slave_settings.config_version,
+        source_lot_min: member.slave_settings.source_lot_min,
+        source_lot_max: member.slave_settings.source_lot_max,
+        master_equity,
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
 

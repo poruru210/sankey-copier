@@ -15,7 +15,7 @@ use sankey_copier_relay_server::api::AppState;
 use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
-use sankey_copier_relay_server::models::MasterSettings;
+use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings};
 use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
@@ -375,6 +375,7 @@ async fn test_delete_trade_group_cascade_deletes_members() {
     // Add members to this trade group
     use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
     let slave_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_prefix: None,
@@ -382,6 +383,8 @@ async fn test_delete_trade_group_cascade_deletes_members() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     db.add_member("MASTER_CASCADE_TEST", "SLAVE_001", slave_settings.clone())
@@ -429,6 +432,7 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
     // Add a member via API (without creating TradeGroup first)
     use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
     let slave_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_prefix: None,
@@ -436,6 +440,8 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     let request_body = serde_json::json!({

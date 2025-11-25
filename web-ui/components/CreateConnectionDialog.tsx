@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
-import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember } from '@/types';
+import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode } from '@/types';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
@@ -150,14 +150,28 @@ function CreateConnectionForm({
     circularReference: String(content.validationCircularReference?.value ?? content.validationCircularReference),
   }), [content]);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    master_account: string;
+    slave_account: string;
+    lot_calculation_mode: LotCalculationMode;
+    lot_multiplier: number;
+    reverse_trade: boolean;
+    symbol_prefix: string;
+    symbol_suffix: string;
+    symbol_mappings: string;
+    source_lot_min: number | null;
+    source_lot_max: number | null;
+  }>({
     master_account: '',
     slave_account: '',
+    lot_calculation_mode: 'multiplier',
     lot_multiplier: 1.0,
     reverse_trade: false,
     symbol_prefix: '',
     symbol_suffix: '',
     symbol_mappings: '',
+    source_lot_min: null,
+    source_lot_max: null,
   });
 
 
@@ -166,11 +180,14 @@ function CreateConnectionForm({
     setFormData({
       master_account: '',
       slave_account: '',
+      lot_calculation_mode: 'multiplier',
       lot_multiplier: 1.0,
       reverse_trade: false,
       symbol_prefix: '',
       symbol_suffix: '',
       symbol_mappings: '',
+      source_lot_min: null,
+      source_lot_max: null,
     });
     setMasterSettings({
       symbol_prefix: '',
@@ -295,12 +312,15 @@ function CreateConnectionForm({
       onCreate({
         master_account: formData.master_account,
         slave_account: formData.slave_account,
+        lot_calculation_mode: formData.lot_calculation_mode,
         lot_multiplier: formData.lot_multiplier,
         reverse_trade: formData.reverse_trade,
         status: 0, // STATUS_DISABLED (default OFF)
         symbol_prefix: formData.symbol_prefix || undefined,
         symbol_suffix: formData.symbol_suffix || undefined,
         symbol_mappings: formData.symbol_mappings || undefined,
+        source_lot_min: formData.source_lot_min,
+        source_lot_max: formData.source_lot_max,
       });
       setStepComplete(2, true);
       onClose();
@@ -440,11 +460,14 @@ function CreateConnectionForm({
           <Step stepIndex={2}>
             <SlaveSettingsForm
               formData={{
+                lot_calculation_mode: formData.lot_calculation_mode,
                 lot_multiplier: formData.lot_multiplier,
                 reverse_trade: formData.reverse_trade,
                 symbol_prefix: formData.symbol_prefix,
                 symbol_suffix: formData.symbol_suffix,
                 symbol_mappings: formData.symbol_mappings,
+                source_lot_min: formData.source_lot_min,
+                source_lot_max: formData.source_lot_max,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
             />

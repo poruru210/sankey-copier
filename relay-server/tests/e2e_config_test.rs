@@ -13,7 +13,7 @@
 
 mod test_server;
 
-use sankey_copier_relay_server::models::SlaveSettings;
+use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings};
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
@@ -844,6 +844,7 @@ async fn test_multiple_slaves_same_master() {
     // Add 3 Slaves to the same Master with different lot multipliers
     for (i, slave_account) in slave_accounts.iter().enumerate() {
         let settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some((i + 1) as f64 * 0.5), // 0.5, 1.0, 1.5
             reverse_trade: false,
             symbol_prefix: None,
@@ -851,6 +852,8 @@ async fn test_multiple_slaves_same_master() {
             symbol_mappings: vec![],
             filters: Default::default(),
             config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
         };
 
         server
@@ -963,6 +966,7 @@ async fn test_multiple_masters_multiple_slaves() {
             master1,
             slave1,
             SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
                 lot_multiplier: Some(1.0),
                 reverse_trade: false,
                 symbol_prefix: Some("M1_".to_string()),
@@ -970,6 +974,8 @@ async fn test_multiple_masters_multiple_slaves() {
                 symbol_mappings: vec![],
                 filters: Default::default(),
                 config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
             },
         )
         .await
@@ -981,6 +987,7 @@ async fn test_multiple_masters_multiple_slaves() {
             master1,
             slave2,
             SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
                 lot_multiplier: Some(2.0),
                 reverse_trade: false,
                 symbol_prefix: Some("M1_".to_string()),
@@ -988,6 +995,8 @@ async fn test_multiple_masters_multiple_slaves() {
                 symbol_mappings: vec![],
                 filters: Default::default(),
                 config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
             },
         )
         .await
@@ -1000,6 +1009,7 @@ async fn test_multiple_masters_multiple_slaves() {
             master2,
             slave3,
             SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
                 lot_multiplier: Some(0.5),
                 reverse_trade: true,
                 symbol_prefix: Some("M2_".to_string()),
@@ -1007,6 +1017,8 @@ async fn test_multiple_masters_multiple_slaves() {
                 symbol_mappings: vec![],
                 filters: Default::default(),
                 config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
             },
         )
         .await

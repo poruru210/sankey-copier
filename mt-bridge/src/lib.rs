@@ -13,6 +13,7 @@ pub use msgpack::{
     ConfigMessage,
     // Message types
     HeartbeatMessage,
+    LotCalculationMode,
     MasterConfig,
     MasterConfigMessage,
     RequestConfigMessage,

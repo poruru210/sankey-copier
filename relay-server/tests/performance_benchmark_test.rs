@@ -1,4 +1,5 @@
 use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
+use sankey_copier_zmq::LotCalculationMode;
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
 ///
@@ -14,6 +15,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_mappings: vec![],
@@ -26,6 +28,9 @@ async fn test_config_message_size_benchmark() {
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -41,6 +46,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_MODERATE_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_mappings: vec![
@@ -70,6 +76,9 @@ async fn test_config_message_size_benchmark() {
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -85,6 +94,7 @@ async fn test_config_message_size_benchmark() {
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(2.5),
         reverse_trade: true,
         symbol_mappings: vec![
@@ -153,6 +163,9 @@ async fn test_config_message_size_benchmark() {
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();
@@ -199,6 +212,7 @@ async fn test_estimate_parsing_performance() {
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_mappings: vec![
@@ -220,6 +234,9 @@ async fn test_estimate_parsing_performance() {
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
     };
 
     let json = serde_json::to_string(&config).unwrap();

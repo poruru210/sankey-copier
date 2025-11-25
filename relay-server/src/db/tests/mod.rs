@@ -12,6 +12,7 @@ pub(crate) async fn create_test_db() -> Database {
 
 pub(crate) fn create_test_slave_settings() -> SlaveSettings {
     SlaveSettings {
+        lot_calculation_mode: crate::models::LotCalculationMode::default(),
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
@@ -24,6 +25,8 @@ pub(crate) fn create_test_slave_settings() -> SlaveSettings {
             allowed_magic_numbers: None,
             blocked_magic_numbers: None,
         },
+        source_lot_min: None,
+        source_lot_max: None,
     }
 }
 

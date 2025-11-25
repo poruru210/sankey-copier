@@ -13,7 +13,7 @@ use crate::{
         create_router,
         trade_group_members::{AddMemberRequest, ToggleStatusRequest},
     },
-    models::{MasterSettings, SlaveSettings, SymbolMapping, TradeFilters},
+    models::{LotCalculationMode, MasterSettings, SlaveSettings, SymbolMapping, TradeFilters},
 };
 
 use super::create_test_app_state;
@@ -74,6 +74,7 @@ async fn test_add_member_success() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some(1.5),
             reverse_trade: false,
             symbol_prefix: None,
@@ -89,6 +90,8 @@ async fn test_add_member_success() {
                 blocked_magic_numbers: None,
             },
             config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
         },
     };
 
@@ -455,6 +458,7 @@ async fn test_member_with_complex_settings() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_COMPLEX".to_string(),
         slave_settings: SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some(2.5),
             reverse_trade: true,
             symbol_prefix: Some("FX_".to_string()),
@@ -476,6 +480,8 @@ async fn test_member_with_complex_settings() {
                 blocked_magic_numbers: Some(vec![99999]),
             },
             config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
         },
     };
 

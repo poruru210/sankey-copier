@@ -46,11 +46,14 @@ export function SlaveSettingsDrawer({
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState<SlaveSettingsFormData>({
+    lot_calculation_mode: 'multiplier',
     lot_multiplier: 1.0,
     reverse_trade: false,
     symbol_prefix: '',
     symbol_suffix: '',
     symbol_mappings: '',
+    source_lot_min: null,
+    source_lot_max: null,
   });
 
   // Initialize form data when member changes
@@ -63,11 +66,14 @@ export function SlaveSettingsDrawer({
         .join(',') || '';
 
       setFormData({
+        lot_calculation_mode: settings.lot_calculation_mode || 'multiplier',
         lot_multiplier: settings.lot_multiplier || 1.0,
         reverse_trade: settings.reverse_trade,
         symbol_prefix: settings.symbol_prefix || '',
         symbol_suffix: settings.symbol_suffix || '',
         symbol_mappings: mappingsStr,
+        source_lot_min: settings.source_lot_min ?? null,
+        source_lot_max: settings.source_lot_max ?? null,
       });
       setMessage(null);
     }
@@ -90,6 +96,7 @@ export function SlaveSettingsDrawer({
         : [];
 
       const settings: SlaveSettings = {
+        lot_calculation_mode: formData.lot_calculation_mode,
         lot_multiplier: formData.lot_multiplier,
         reverse_trade: formData.reverse_trade,
         symbol_prefix: formData.symbol_prefix || null,
@@ -97,6 +104,8 @@ export function SlaveSettingsDrawer({
         symbol_mappings: symbolMappings,
         filters: member.slave_settings.filters,
         config_version: member.slave_settings.config_version,
+        source_lot_min: formData.source_lot_min,
+        source_lot_max: formData.source_lot_max,
       };
 
       await apiClient.updateTradeGroupMember(masterAccount, member.id, settings);
