@@ -17,7 +17,7 @@ const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) => {
         className="fixed inset-0 bg-black/50 pointer-events-auto"
         onClick={() => onOpenChange(false)}
       />
-      <div className="relative pointer-events-auto w-full">
+      <div className="relative pointer-events-auto max-w-[95vw]">
         {children}
       </div>
     </div>
