@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MtInstallation } from '@/types';
@@ -142,7 +143,7 @@ export default function InstallationsPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <div className="text-xl">{content.loadingInstallations}</div>
+          <Typography variant="large">{content.loadingInstallations}</Typography>
         </div>
       </div>
     );
@@ -168,10 +169,8 @@ export default function InstallationsPage() {
           <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
           <div className="mb-4">
-            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              {content.description}
-            </p>
+            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+            <Muted>{content.description}</Muted>
           </div>
 
           {/* Action Buttons */}
@@ -236,12 +235,12 @@ export default function InstallationsPage() {
           {optimisticInstallations.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-lg text-muted-foreground">
+                <Typography variant="large" className="text-muted-foreground">
                   {content.noInstallationsDetected}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
+                </Typography>
+                <Muted className="mt-2">
                   {content.clickRefreshToScan}
-                </p>
+                </Muted>
               </CardContent>
             </Card>
           ) : (
