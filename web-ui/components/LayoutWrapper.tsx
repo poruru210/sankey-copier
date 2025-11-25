@@ -1,24 +1,38 @@
 'use client';
 
-import { Header } from './Header';
-import { Sidebar } from './Sidebar';
+// Layout wrapper component with shadcn Sidebar and ServerLog
+// Uses SidebarProvider for sidebar state and SidebarInset for main content area
+// Header includes SidebarTrigger and dynamic breadcrumb navigation
+// ServerLog is rendered outside SidebarInset to span full width at the bottom
+
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
+import { AppSidebar } from './AppSidebar';
+import { AppBreadcrumb } from './AppBreadcrumb';
 import { ServerLog } from './ServerLog';
+import { ServerLogProvider } from '@/lib/contexts/sidebar-context';
+import { Separator } from '@/components/ui/separator';
 
 interface LayoutWrapperProps {
   children: React.ReactNode;
 }
 
-// Layout wrapper component with Header, Sidebar and ServerLog
-// These components are rendered once at layout level to prevent remounting on page navigation
-// Sidebar is fixed, so main content needs proper spacing
-// ServerLog is available globally across all pages
 export function LayoutWrapper({ children }: LayoutWrapperProps) {
   return (
-    <>
-      <Header />
-      <Sidebar />
-      {children}
-      <ServerLog />
-    </>
+    <ServerLogProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <AppBreadcrumb />
+          </header>
+          <div className="flex-1 overflow-hidden">
+            {children}
+          </div>
+        </SidebarInset>
+        <ServerLog />
+      </SidebarProvider>
+    </ServerLogProvider>
   );
 }

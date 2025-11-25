@@ -69,6 +69,7 @@ impl ProblemDetails {
     }
 
     /// リソースが既に存在する（409 Conflict）
+    #[allow(dead_code)]
     pub fn conflict(detail: impl Into<String>) -> Self {
         let detail_text = detail.into();
         let status = StatusCode::CONFLICT;

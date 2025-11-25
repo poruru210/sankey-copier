@@ -3,8 +3,10 @@ mod config_publisher;
 use crate::models::{HeartbeatMessage, RequestConfigMessage, TradeSignal, UnregisterMessage};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 pub use config_publisher::ZmqConfigPublisher;
 
@@ -32,15 +34,20 @@ struct FlexibleHeartbeat {
 pub struct ZmqServer {
     context: Arc<zmq::Context>,
     rx_sender: mpsc::UnboundedSender<ZmqMessage>,
+    shutdown: Arc<AtomicBool>,
 }
 
 impl ZmqServer {
     pub fn new(rx_sender: mpsc::UnboundedSender<ZmqMessage>) -> Result<Self> {
         let context = Arc::new(zmq::Context::new());
-        Ok(Self { context, rx_sender })
+        Ok(Self {
+            context,
+            rx_sender,
+            shutdown: Arc::new(AtomicBool::new(false)),
+        })
     }
 
-    pub async fn start_receiver(&self, bind_address: &str) -> Result<()> {
+    pub async fn start_receiver(&self, bind_address: &str) -> Result<JoinHandle<()>> {
         let socket = self
             .context
             .socket(zmq::PULL)
@@ -50,14 +57,24 @@ impl ZmqServer {
             .bind(bind_address)
             .context(format!("Failed to bind to {}", bind_address))?;
 
+        // Set receive timeout to allow periodic shutdown checks
+        socket
+            .set_rcvtimeo(100)
+            .context("Failed to set receive timeout")?;
+
         tracing::info!("ZeroMQ receiver started on {}", bind_address);
 
         let tx = self.rx_sender.clone();
+        let shutdown = self.shutdown.clone();
 
         // Run ZMQ in blocking thread since it's not async
-        tokio::task::spawn_blocking(move || {
-            loop {
+        let handle = tokio::task::spawn_blocking(move || {
+            while !shutdown.load(Ordering::Relaxed) {
                 match socket.recv_bytes(0) {
+                    Err(zmq::Error::EAGAIN) => {
+                        // Timeout - continue checking shutdown flag
+                        continue;
+                    }
                     Ok(bytes) => {
                         // First, peek at the message to determine its type
                         match rmp_serde::from_slice::<MessageTypeDiscriminator>(&bytes) {
@@ -198,12 +215,23 @@ impl ZmqServer {
                     }
                     Err(e) => {
                         tracing::error!("Failed to receive ZMQ message: {}", e);
+                        break;
                     }
                 }
             }
+
+            // Explicitly drop socket before context is destroyed (per ZeroMQ guide)
+            drop(socket);
+            tracing::info!("ZMQ receiver shut down cleanly");
         });
 
-        Ok(())
+        Ok(handle)
+    }
+
+    /// Shutdown the ZMQ receiver gracefully
+    #[allow(dead_code)]
+    pub fn shutdown(&self) {
+        self.shutdown.store(true, Ordering::Relaxed);
     }
 }
 
@@ -216,6 +244,7 @@ struct PublishMessage<T> {
 /// Generic ZeroMQ publisher using PUB/SUB pattern
 pub struct ZmqPublisher<T: Serialize + Clone + Send + 'static> {
     tx: mpsc::UnboundedSender<PublishMessage<T>>,
+    _handle: JoinHandle<()>,
 }
 
 impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
@@ -234,7 +263,7 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
         let (tx, mut rx) = mpsc::unbounded_channel::<PublishMessage<T>>();
 
         // Spawn dedicated task for ZMQ sending
-        tokio::task::spawn_blocking(move || {
+        let handle = tokio::task::spawn_blocking(move || {
             while let Some(msg) = rx.blocking_recv() {
                 // PUB/SUBパターンでは、トピックをメッセージの先頭に付加
                 match rmp_serde::to_vec_named(&msg.payload) {
@@ -261,9 +290,17 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
                     }
                 }
             }
+
+            // Explicitly drop socket before context is destroyed (per ZeroMQ guide)
+            drop(socket);
+            drop(context);
+            tracing::info!("ZMQ publisher shut down cleanly");
         });
 
-        Ok(Self { tx })
+        Ok(Self {
+            tx,
+            _handle: handle,
+        })
     }
 
     /// Publish a message to a specific topic

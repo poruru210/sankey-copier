@@ -1,0 +1,237 @@
+'use client';
+
+// SlaveSettingsDrawer - Nested drawer for viewing/editing slave settings
+// Opens from MasterSettingsDrawer when user clicks on a slave in the list
+// Allows editing of slave-specific copy settings
+
+import { useState, useEffect } from 'react';
+import { useIntlayer } from 'next-intlayer';
+import { useAtomValue } from 'jotai';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '@/components/ui/drawer';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { BrokerIcon } from '@/components/BrokerIcon';
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { apiClientAtom } from '@/lib/atoms/site';
+import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
+import { DrawerInfoCard } from '@/components/ui/drawer-section';
+import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
+import type { TradeGroupMember, SlaveSettings } from '@/types';
+
+interface SlaveSettingsDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  member: TradeGroupMember | null;
+  masterAccount: string;
+  /** Callback when settings are saved successfully */
+  onSaved?: () => void;
+}
+
+export function SlaveSettingsDrawer({
+  open,
+  onOpenChange,
+  member,
+  masterAccount,
+  onSaved,
+}: SlaveSettingsDrawerProps) {
+  const content = useIntlayer('settings-dialog');
+  const apiClient = useAtomValue(apiClientAtom);
+
+  // Responsive: right drawer for desktop, bottom drawer for mobile
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const side = isDesktop ? 'right' : 'bottom';
+
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [formData, setFormData] = useState<SlaveSettingsFormData>({
+    lot_multiplier: 1.0,
+    reverse_trade: false,
+    symbol_prefix: '',
+    symbol_suffix: '',
+    symbol_mappings: '',
+  });
+
+  // Initialize form data when member changes
+  useEffect(() => {
+    if (member) {
+      const settings = member.slave_settings;
+      // Convert symbol_mappings array to comma-separated string
+      const mappingsStr = settings.symbol_mappings
+        ?.map(m => `${m.source_symbol}=${m.target_symbol}`)
+        .join(',') || '';
+
+      setFormData({
+        lot_multiplier: settings.lot_multiplier || 1.0,
+        reverse_trade: settings.reverse_trade,
+        symbol_prefix: settings.symbol_prefix || '',
+        symbol_suffix: settings.symbol_suffix || '',
+        symbol_mappings: mappingsStr,
+      });
+      setMessage(null);
+    }
+  }, [member, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member || !apiClient) return;
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      // Convert comma-separated mappings back to array format
+      const symbolMappings = formData.symbol_mappings
+        ? formData.symbol_mappings.split(',').map(pair => {
+            const [source, target] = pair.split('=').map(s => s.trim());
+            return { source_symbol: source, target_symbol: target };
+          }).filter(m => m.source_symbol && m.target_symbol)
+        : [];
+
+      const settings: SlaveSettings = {
+        lot_multiplier: formData.lot_multiplier,
+        reverse_trade: formData.reverse_trade,
+        symbol_prefix: formData.symbol_prefix || null,
+        symbol_suffix: formData.symbol_suffix || null,
+        symbol_mappings: symbolMappings,
+        filters: member.slave_settings.filters,
+        config_version: member.slave_settings.config_version,
+      };
+
+      await apiClient.updateTradeGroupMember(masterAccount, member.id, settings);
+      setMessage({ type: 'success', text: content.settingsSavedSuccess.value });
+
+      // Notify parent and close after short delay
+      setTimeout(() => {
+        onSaved?.();
+        onOpenChange(false);
+      }, 1000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : content.settingsSaveFailed.value;
+      setMessage({ type: 'error', text: errorMessage });
+      console.error('Error updating slave settings:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Split account name into broker name and account number
+  const splitAccountName = (accountName: string) => {
+    const lastUnderscoreIndex = accountName.lastIndexOf('_');
+    if (lastUnderscoreIndex === -1) {
+      return { brokerName: accountName, accountNumber: '' };
+    }
+    return {
+      brokerName: accountName.substring(0, lastUnderscoreIndex).replace(/_/g, ' '),
+      accountNumber: accountName.substring(lastUnderscoreIndex + 1),
+    };
+  };
+
+  const masterInfo = splitAccountName(masterAccount);
+  const slaveInfo = member ? splitAccountName(member.slave_account) : { brokerName: '', accountNumber: '' };
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} direction={side}>
+      <DrawerContent
+        side={side}
+        className={cn(
+          'overflow-hidden p-6',
+          isDesktop
+            ? `h-full w-full ${DRAWER_SIZE_SETTINGS.desktop}`
+            : DRAWER_SIZE_SETTINGS.mobile
+        )}
+      >
+        <DrawerHeader className={isDesktop ? 'mt-0' : ''}>
+          <DrawerTitle>{content.editTitle.value}</DrawerTitle>
+        </DrawerHeader>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+            {/* Connection Display */}
+            <DrawerInfoCard>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                {/* Master Account */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <BrokerIcon brokerName={masterInfo.brokerName} size="sm" className="flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {masterInfo.brokerName}
+                    </div>
+                    {masterInfo.accountNumber && (
+                      <div className="text-xs text-muted-foreground">
+                        {masterInfo.accountNumber}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <span className="text-muted-foreground text-xl">→</span>
+
+                {/* Slave Account */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <BrokerIcon brokerName={slaveInfo.brokerName} size="sm" className="flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {slaveInfo.brokerName}
+                    </div>
+                    {slaveInfo.accountNumber && (
+                      <div className="text-xs text-muted-foreground">
+                        {slaveInfo.accountNumber}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </DrawerInfoCard>
+
+            {/* Slave Settings Form */}
+            <SlaveSettingsForm
+              formData={formData}
+              onChange={setFormData}
+              disabled={saving}
+            />
+
+            {/* Message Display */}
+            {message && (
+              <div
+                className={cn(
+                  'px-4 py-3 rounded-lg flex items-center gap-2 text-sm',
+                  message.type === 'success'
+                    ? 'bg-green-500/10 border border-green-500 text-green-600 dark:text-green-400'
+                    : 'bg-destructive/10 border border-destructive text-destructive'
+                )}
+              >
+                {message.type === 'success' ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                {message.text}
+              </div>
+            )}
+          </div>
+
+          <DrawerFooter className="flex-shrink-0 pt-4 border-t mt-4">
+            <div className="flex w-full justify-end items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                {content.cancel.value}
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {content.saving.value}
+                  </>
+                ) : (
+                  content.save.value
+                )}
+              </Button>
+            </div>
+          </DrawerFooter>
+        </form>
+      </DrawerContent>
+    </Drawer>
+  );
+}

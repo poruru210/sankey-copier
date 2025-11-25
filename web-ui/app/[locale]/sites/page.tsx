@@ -1,26 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+// Sites management page - allows users to add, edit, and delete SANKEY Copier server connections
+// Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
+
+import { useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useAtom } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, Trash2, Plus, Edit2 } from 'lucide-react';
 import { sitesAtom, selectedSiteIdAtom } from '@/lib/atoms/site';
 import { Site } from '@/lib/types/site';
-import { cn } from '@/lib/utils';
 
-// Sites management page
-// Allows users to add, edit, and delete SANKEY Copier server connections
 export default function SitesPage() {
   const content = useIntlayer('sites-page');
   const [sites, setSites] = useAtom(sitesAtom);
   const [selectedSiteId, setSelectedSiteId] = useAtom(selectedSiteIdAtom);
-
-  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
+  const { serverLogHeight } = useServerLogContext();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', siteUrl: '' });
   const [error, setError] = useState<string>('');
@@ -109,27 +109,22 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
+    <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-full">
-        <div
-          className={cn(
-            'overflow-y-auto transition-all duration-300',
-            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
-          )}
-          style={{
-            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
-            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
-          }}
-        >
-          <div className="w-[95%] mx-auto p-4">
+      <div
+        className="relative z-10 flex flex-col overflow-y-auto"
+        style={{
+          height: `calc(100% - ${serverLogHeight}px)`,
+        }}
+      >
+        <div className="w-[95%] mx-auto p-4">
             {/* Page Title */}
             <div className="mb-4">
-              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-              <p className="text-sm text-muted-foreground">{content.description}</p>
+              <Typography variant="h3" className="mb-1">{content.title}</Typography>
+              <Muted>{content.description}</Muted>
             </div>
 
             {/* Error Message */}
@@ -145,7 +140,7 @@ export default function SitesPage() {
             {/* Site List */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">{content.registeredSites}</h3>
+                <Typography variant="h4" className="text-lg">{content.registeredSites}</Typography>
                 {editingId !== 'new' && (
                   <Button
                     type="button"
@@ -310,7 +305,6 @@ export default function SitesPage() {
                 </p>
               </div>
             </div>
-          </div>
         </div>
       </div>
     </div>

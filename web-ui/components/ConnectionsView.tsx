@@ -11,7 +11,7 @@ import {
   useSVGConnections,
 } from '@/hooks/connections';
 import { useMasterFilter } from '@/hooks/useMasterFilter';
-import { AccountCard } from '@/components/connections';
+import { AccountNodeContent } from '@/components/connections';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { MasterAccountFilter } from '@/components/MasterAccountFilter';
 import { Button } from '@/components/ui/button';
@@ -274,7 +274,7 @@ export function ConnectionsView({
                         ref={registerSourceRef(account.id)}
                         className="animate-in fade-in duration-300"
                       >
-                        <AccountCard
+                        <AccountNodeContent
                           account={account}
                           connection={connection}
                           accountSettings={accountSettings}
@@ -317,7 +317,7 @@ export function ConnectionsView({
                         ref={registerReceiverRef(account.id)}
                         className="animate-in fade-in duration-300"
                       >
-                        <AccountCard
+                        <AccountNodeContent
                           account={account}
                           connection={connection}
                           accountSettings={accountSettings}

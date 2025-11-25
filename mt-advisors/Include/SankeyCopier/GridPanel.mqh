@@ -36,9 +36,10 @@
 #define PANEL_COLOR_TITLE clrWhite
 #define PANEL_COLOR_LABEL clrLightGray
 #define PANEL_COLOR_VALUE clrWhite
-#define PANEL_COLOR_DISABLED clrGray      // Status: DISABLED (0) - matches Web UI gray
-#define PANEL_COLOR_WAITING clrYellow     // Status: ENABLED but Master disconnected (1) - matches Web UI yellow warning
-#define PANEL_COLOR_CONNECTED clrLime     // Status: CONNECTED (2) - matches Web UI green active
+#define PANEL_COLOR_DISABLED clrGray         // Status: DISABLED (0) - matches Web UI gray
+#define PANEL_COLOR_WAITING clrYellow        // Status: ENABLED but Master disconnected (1) - matches Web UI yellow warning
+#define PANEL_COLOR_CONNECTED clrLime        // Status: CONNECTED (2) - matches Web UI green active
+#define PANEL_COLOR_NO_CONFIG clrDarkGray    // Status: NO_CONFIGURATION (3) - no config received yet
 
 // Panel layout constants
 #define TITLE_HEIGHT_EXTRA_PADDING 5       // Extra padding for title row height
@@ -918,8 +919,8 @@ void CGridPanel::HideMessage()
 }
 
 //+------------------------------------------------------------------+
-//| Update status row (3 states)                                     |
-//| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED |
+//| Update status row (4 states)                                     |
+//| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED, 3=NO_CONFIGURATION |
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateStatusRow(int status)
 {
@@ -939,6 +940,10 @@ void CGridPanel::UpdateStatusRow(int status)
    {
       vals[1] = "CONNECTED";
    }
+   else if(status == STATUS_NO_CONFIGURATION)
+   {
+      vals[1] = "NO CONFIG";
+   }
    else
    {
       vals[1] = "UNKNOWN";
@@ -950,19 +955,23 @@ void CGridPanel::UpdateStatusRow(int status)
    // Assign color based on status
    if(status == STATUS_DISABLED)
    {
-      cols[1] = PANEL_COLOR_DISABLED;      // Red
+      cols[1] = PANEL_COLOR_DISABLED;         // Gray
    }
    else if(status == STATUS_ENABLED)
    {
-      cols[1] = PANEL_COLOR_WAITING;       // Yellow (waiting for Master)
+      cols[1] = PANEL_COLOR_WAITING;          // Yellow (waiting for Master)
    }
    else if(status == STATUS_CONNECTED)
    {
-      cols[1] = PANEL_COLOR_CONNECTED;     // Green (connected to Master)
+      cols[1] = PANEL_COLOR_CONNECTED;        // Green (connected to Master)
+   }
+   else if(status == STATUS_NO_CONFIGURATION)
+   {
+      cols[1] = PANEL_COLOR_NO_CONFIG;        // Dark gray (no config received)
    }
    else
    {
-      cols[1] = PANEL_COLOR_DISABLED;      // Red for unknown state
+      cols[1] = PANEL_COLOR_DISABLED;         // Gray for unknown state
    }
 
    UpdateRow("status", vals, cols);

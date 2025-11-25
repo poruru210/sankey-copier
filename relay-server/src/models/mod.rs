@@ -1,14 +1,28 @@
 mod connection;
 mod mt_installation;
+mod trade_group;
+mod trade_group_member;
 
 pub use connection::*;
 pub use mt_installation::*;
+pub use trade_group::*;
+pub use trade_group_member::*;
 
 // Re-export shared types from DLL
 pub use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// Slave configuration with associated Master account information.
+/// Used for config distribution to Slave EAs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlaveConfigWithMaster {
+    pub master_account: String,
+    pub slave_account: String,
+    pub status: i32,
+    pub slave_settings: SlaveSettings,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OrderType {
@@ -44,22 +58,7 @@ pub struct TradeSignal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CopySettings {
-    pub id: i32,
-    pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
-    pub master_account: String,
-    pub slave_account: String,
-    pub lot_multiplier: Option<f64>,
-    pub reverse_trade: bool,
-    #[serde(default)]
-    pub symbol_prefix: Option<String>,
-    #[serde(default)]
-    pub symbol_suffix: Option<String>,
-    pub symbol_mappings: Vec<SymbolMapping>,
-    pub filters: TradeFilters,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ConnectionSettings {
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,

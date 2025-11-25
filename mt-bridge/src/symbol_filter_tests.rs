@@ -1,4 +1,4 @@
-use crate::msgpack::{ConfigMessage, HeartbeatMessage, TradeFilters};
+use crate::msgpack::{HeartbeatMessage, SlaveConfigMessage, TradeFilters};
 
 /// Test that new symbol filter fields are correctly serialized and deserialized
 #[test]
@@ -48,13 +48,12 @@ fn test_symbol_filter_fields_roundtrip() {
     );
 }
 
-/// Test that ConfigMessage with None symbol filters serializes correctly
+/// Test that SlaveConfigMessage with None symbol filters serializes correctly
 #[test]
 fn test_config_message_none_symbol_filters() {
-    let config = ConfigMessage {
+    let config = SlaveConfigMessage {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        trade_group_id: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         status: 2,
         lot_multiplier: Some(1.5),
@@ -72,20 +71,19 @@ fn test_config_message_none_symbol_filters() {
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
-    let deserialized: ConfigMessage =
+    let deserialized: SlaveConfigMessage =
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(config.symbol_prefix, deserialized.symbol_prefix);
     assert_eq!(config.symbol_suffix, deserialized.symbol_suffix);
 }
 
-/// Test that ConfigMessage with Some symbol filters serializes correctly
+/// Test that SlaveConfigMessage with Some symbol filters serializes correctly
 #[test]
 fn test_config_message_some_symbol_filters() {
-    let config = ConfigMessage {
+    let config = SlaveConfigMessage {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        trade_group_id: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         status: 2,
         lot_multiplier: Some(1.5),
@@ -103,7 +101,7 @@ fn test_config_message_some_symbol_filters() {
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
-    let deserialized: ConfigMessage =
+    let deserialized: SlaveConfigMessage =
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(

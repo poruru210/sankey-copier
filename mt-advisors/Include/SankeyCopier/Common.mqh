@@ -39,10 +39,11 @@
 #define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
 #define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
 
-//--- Connection status constants (3 states)
-#define STATUS_DISABLED 0      // Slave is disabled
-#define STATUS_ENABLED 1       // Slave is enabled, Master disconnected
-#define STATUS_CONNECTED 2     // Slave is enabled, Master connected
+//--- Connection status constants (4 states)
+#define STATUS_DISABLED 0         // Slave is disabled
+#define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
+#define STATUS_CONNECTED 2        // Slave is enabled, Master connected
+#define STATUS_NO_CONFIGURATION 3 // No configuration received yet
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
@@ -74,13 +75,19 @@
    // Use copy_serialized_buffer() instead
    int    copy_serialized_buffer(uchar &dest[], int max_len);
 
-   // Config message parsing
-   HANDLE_TYPE parse_message(uchar &data[], int data_len);
-   string      config_get_string(HANDLE_TYPE handle, string field_name);
-   double      config_get_double(HANDLE_TYPE handle, string field_name);
-   int         config_get_bool(HANDLE_TYPE handle, string field_name);
-   int         config_get_int(HANDLE_TYPE handle, string field_name);
-   void        config_free(HANDLE_TYPE handle);
+   // Slave config message parsing
+   HANDLE_TYPE parse_slave_config(uchar &data[], int data_len);
+   string      slave_config_get_string(HANDLE_TYPE handle, string field_name);
+   double      slave_config_get_double(HANDLE_TYPE handle, string field_name);
+   int         slave_config_get_bool(HANDLE_TYPE handle, string field_name);
+   int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        slave_config_free(HANDLE_TYPE handle);
+
+   // Master config message parsing
+   HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
+   string      master_config_get_string(HANDLE_TYPE handle, string field_name);
+   int         master_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        master_config_free(HANDLE_TYPE handle);
 
    // Trade signal parsing
    HANDLE_TYPE parse_trade_signal(uchar &data[], int data_len);

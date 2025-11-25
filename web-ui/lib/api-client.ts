@@ -154,4 +154,66 @@ export class ApiClient {
 
     return this.handleResponse<T>(response);
   }
+
+  // ============================================================================
+  // TradeGroups API (Master settings)
+  // ============================================================================
+
+  /**
+   * List all TradeGroups (Master accounts with settings)
+   */
+  async listTradeGroups(): Promise<import('@/types').TradeGroup[]> {
+    return this.get('/trade-groups');
+  }
+
+  /**
+   * Get a specific TradeGroup by master account ID
+   */
+  async getTradeGroup(masterAccount: string): Promise<import('@/types').TradeGroup> {
+    return this.get(`/trade-groups/${encodeURIComponent(masterAccount)}`);
+  }
+
+  /**
+   * Update Master settings for a TradeGroup
+   */
+  async updateTradeGroupSettings(
+    masterAccount: string,
+    settings: import('@/types').MasterSettings
+  ): Promise<void> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}`, settings);
+  }
+
+  // ============================================================================
+  // TradeGroupMembers API (Slave settings)
+  // ============================================================================
+
+  /**
+   * List all members for a TradeGroup
+   */
+  async listTradeGroupMembers(masterAccount: string): Promise<import('@/types').TradeGroupMember[]> {
+    return this.get(`/trade-groups/${encodeURIComponent(masterAccount)}/members`);
+  }
+
+  /**
+   * Add a new member to a TradeGroup
+   */
+  async addTradeGroupMember(
+    masterAccount: string,
+    data: { slave_account: string; slave_settings: import('@/types').SlaveSettings; status: number }
+  ): Promise<import('@/types').TradeGroupMember> {
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members`, data);
+  }
+
+  /**
+   * Update a TradeGroup member's settings
+   */
+  async updateTradeGroupMember(
+    masterAccount: string,
+    memberId: number,
+    settings: import('@/types').SlaveSettings
+  ): Promise<import('@/types').TradeGroupMember> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${memberId}`, {
+      slave_settings: settings,
+    });
+  }
 }

@@ -14,7 +14,7 @@ mod zeromq;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use api::{create_router, AppState};
@@ -239,16 +239,6 @@ async fn main() -> Result<()> {
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
 
-    // Settings cache
-    let settings_cache = Arc::new(RwLock::new(Vec::new()));
-
-    // Load initial settings
-    {
-        let settings = db.list_copy_settings().await?;
-        *settings_cache.write().await = settings;
-        tracing::info!("Loaded {} copy settings", settings_cache.read().await.len());
-    }
-
     // Spawn ZeroMQ message processing task
     tracing::info!("Creating MessageHandler...");
     {
@@ -256,7 +246,6 @@ async fn main() -> Result<()> {
             connection_manager.clone(),
             copy_engine.clone(),
             zmq_sender.clone(),
-            settings_cache.clone(),
             broadcast_tx.clone(),
             db.clone(),
             zmq_config_sender.clone(),
@@ -321,7 +310,6 @@ async fn main() -> Result<()> {
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
-        settings_cache: settings_cache.clone(),
         connection_manager: connection_manager.clone(),
         config_sender: zmq_config_sender.clone(),
         log_buffer: log_buffer.clone(),

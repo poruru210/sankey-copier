@@ -1,20 +1,17 @@
-use sankey_copier_relay_server::models::{
-    ConfigMessage, CopySettings, SymbolMapping, TradeFilters,
-};
+use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
 
-/// Performance benchmark test for Phase 1: ConfigMessage Extension
+/// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
 ///
-/// This test measures the size of serialized ConfigMessage to ensure
+/// This test measures the size of serialized SlaveConfigMessage to ensure
 /// it meets the performance criteria (< 2KB).
 #[tokio::test]
 async fn test_config_message_size_benchmark() {
     println!("\n=== CONFIG Message Size Benchmark ===\n");
 
     // Test Case 1: Minimal configuration
-    let minimal_config = ConfigMessage {
+    let minimal_config = SlaveConfigMessage {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        trade_group_id: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.0),
@@ -39,10 +36,9 @@ async fn test_config_message_size_benchmark() {
     println!();
 
     // Test Case 2: Moderate configuration (typical use case)
-    let moderate_config = ConfigMessage {
+    let moderate_config = SlaveConfigMessage {
         account_id: "SLAVE_MODERATE_001".to_string(),
         master_account: "MASTER_MODERATE_001".to_string(),
-        trade_group_id: "MASTER_MODERATE_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.5),
@@ -84,10 +80,9 @@ async fn test_config_message_size_benchmark() {
     println!();
 
     // Test Case 3: Maximum realistic configuration
-    let max_config = ConfigMessage {
+    let max_config = SlaveConfigMessage {
         account_id: "SLAVE_MAXIMUM_CONFIGURATION_001".to_string(),
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
-        trade_group_id: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
         status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(2.5),
@@ -199,15 +194,13 @@ async fn test_config_message_size_benchmark() {
 async fn test_estimate_parsing_performance() {
     println!("\n=== Estimated MQL5 Parsing Performance ===\n");
 
-    let settings = CopySettings {
-        id: 1,
-        status: 2, // STATUS_CONNECTED
+    let config = SlaveConfigMessage {
+        account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        slave_account: "SLAVE_001".to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        status: 2, // STATUS_CONNECTED
         lot_multiplier: Some(1.5),
         reverse_trade: false,
-        symbol_prefix: None,
-        symbol_suffix: None,
         symbol_mappings: vec![
             SymbolMapping {
                 source_symbol: "EURUSD".to_string(),
@@ -224,9 +217,11 @@ async fn test_estimate_parsing_performance() {
             allowed_magic_numbers: Some(vec![123, 456]),
             blocked_magic_numbers: None,
         },
+        config_version: 1,
+        symbol_prefix: None,
+        symbol_suffix: None,
     };
 
-    let config: ConfigMessage = settings.into();
     let json = serde_json::to_string(&config).unwrap();
 
     println!("JSON Structure Analysis:");

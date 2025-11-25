@@ -107,3 +107,52 @@ export interface MtInstallationsResponse {
   data: MtInstallation[];
   detection_summary: DetectionSummary;
 }
+
+// Master EA Configuration types
+export interface MasterConfig {
+  account_id: string;
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  config_version: number;
+  timestamp: string;
+}
+
+export interface UpdateMasterConfigRequest {
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+}
+
+// TradeGroup (Master settings) types
+export interface MasterSettings {
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  config_version: number;
+}
+
+export interface TradeGroup {
+  id: string; // Master account ID
+  master_settings: MasterSettings;
+  created_at: string;
+  updated_at: string;
+}
+
+// TradeGroupMember (Slave settings) types
+export interface SlaveSettings {
+  lot_multiplier: number | null;
+  reverse_trade: boolean;
+  symbol_prefix?: string | null;
+  symbol_suffix?: string | null;
+  symbol_mappings: SymbolMapping[];
+  filters: TradeFilters;
+  config_version: number;
+}
+
+export interface TradeGroupMember {
+  id: number;
+  trade_group_id: string; // Master account ID
+  slave_account: string;
+  slave_settings: SlaveSettings;
+  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
+  created_at: string;
+  updated_at: string;
+}

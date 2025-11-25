@@ -1,4 +1,4 @@
-use crate::models::{CopySettings, OrderType, SymbolConverter, TradeSignal};
+use crate::models::{MasterSettings, OrderType, SymbolConverter, TradeGroupMember, TradeSignal};
 use anyhow::Result;
 
 #[cfg(test)]
@@ -12,21 +12,21 @@ impl CopyEngine {
     }
 
     /// Apply filters to determine if a trade should be copied
-    pub fn should_copy_trade(&self, signal: &TradeSignal, settings: &CopySettings) -> bool {
+    pub fn should_copy_trade(&self, signal: &TradeSignal, member: &TradeGroupMember) -> bool {
         // Check if copying is enabled and master is connected (STATUS_CONNECTED = 2)
-        if settings.status != 2 {
+        if !member.is_connected() {
             return false;
         }
 
         // Check symbol filters
-        if let Some(ref allowed) = settings.filters.allowed_symbols {
+        if let Some(ref allowed) = member.slave_settings.filters.allowed_symbols {
             if !allowed.contains(&signal.symbol) {
                 tracing::debug!("Symbol {} not in allowed list", signal.symbol);
                 return false;
             }
         }
 
-        if let Some(ref blocked) = settings.filters.blocked_symbols {
+        if let Some(ref blocked) = member.slave_settings.filters.blocked_symbols {
             if blocked.contains(&signal.symbol) {
                 tracing::debug!("Symbol {} is blocked", signal.symbol);
                 return false;
@@ -34,14 +34,14 @@ impl CopyEngine {
         }
 
         // Check magic number filters
-        if let Some(ref allowed) = settings.filters.allowed_magic_numbers {
+        if let Some(ref allowed) = member.slave_settings.filters.allowed_magic_numbers {
             if !allowed.contains(&signal.magic_number) {
                 tracing::debug!("Magic number {} not in allowed list", signal.magic_number);
                 return false;
             }
         }
 
-        if let Some(ref blocked) = settings.filters.blocked_magic_numbers {
+        if let Some(ref blocked) = member.slave_settings.filters.blocked_magic_numbers {
             if blocked.contains(&signal.magic_number) {
                 tracing::debug!("Magic number {} is blocked", signal.magic_number);
                 return false;
@@ -55,23 +55,25 @@ impl CopyEngine {
     pub fn transform_signal(
         &self,
         signal: TradeSignal,
-        settings: &CopySettings,
+        member: &TradeGroupMember,
+        _master_settings: &MasterSettings,
         converter: &SymbolConverter,
     ) -> Result<TradeSignal> {
         let mut transformed = signal.clone();
 
-        // Convert symbol
-        transformed.symbol = converter.convert(&signal.symbol, &settings.symbol_mappings);
+        // Convert symbol using member's symbol mappings
+        transformed.symbol =
+            converter.convert(&signal.symbol, &member.slave_settings.symbol_mappings);
 
         // Apply lot multiplier
-        if let Some(multiplier) = settings.lot_multiplier {
+        if let Some(multiplier) = member.slave_settings.lot_multiplier {
             transformed.lots = signal.lots * multiplier;
             // Round to 2 decimal places
             transformed.lots = (transformed.lots * 100.0).round() / 100.0;
         }
 
         // Reverse trade if enabled
-        if settings.reverse_trade {
+        if member.slave_settings.reverse_trade {
             transformed.order_type = Self::reverse_order_type(&signal.order_type);
         }
 

@@ -3,7 +3,13 @@
 import React, { useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Label } from '@/components/ui/label';
-import { formatRelativeTime } from '@/lib/time-utils';
+import {
+  Select,
+  SelectContent,
+  SelectTrigger,
+  SelectItemCustom,
+} from '@/components/ui/select';
+import { BrokerIcon } from '@/components/BrokerIcon';
 import type { EaConnection } from '@/types';
 
 interface SimpleAccountSelectorProps {
@@ -51,16 +57,13 @@ export function SimpleAccountSelector({
     ? connections.filter((conn) => conn.ea_type === filterType)
     : connections;
 
-  // Group connections by status
-  const onlineConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Online'
-  );
-  const timeoutConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Timeout'
-  );
-  const offlineConnections = filteredConnections.filter(
-    (conn) => conn.status === 'Offline'
-  );
+  // Sort connections: Online first, then Timeout, then Offline
+  const sortedConnections = useMemo(() => {
+    return [...filteredConnections].sort((a, b) => {
+      const statusOrder = { 'Online': 0, 'Timeout': 1, 'Offline': 2 };
+      return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
+    });
+  }, [filteredConnections]);
 
   // Get status emoji
   const getStatusEmoji = (status: string) => {
@@ -76,107 +79,83 @@ export function SimpleAccountSelector({
     }
   };
 
-  // Format account display
-  const formatAccountDisplay = (conn: EaConnection) => {
-    const emoji = getStatusEmoji(conn.status);
-    const balance = conn.balance.toLocaleString('en-US', {
-      style: 'currency',
-      currency: conn.currency,
-      maximumFractionDigits: 0,
-    });
-
-    if (conn.status === 'Offline') {
-      // Offline: Show warning icon and last connection time
-      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
-        secondsAgo: strings.timeAgoSeconds,
-        minutesAgo: strings.timeAgoMinutes,
-        hoursAgo: strings.timeAgoHours,
-        daysAgo: strings.timeAgoDays,
-      });
-      return `${emoji} ${conn.account_id} ⚠️ - ${strings.lastConnectionLabel}: ${relativeTime}`;
-    } else {
-      // Online or Timeout: Show balance, positions, and last update
-      const relativeTime = formatRelativeTime(conn.last_heartbeat, {
-        secondsAgo: strings.timeAgoSeconds,
-        minutesAgo: strings.timeAgoMinutes,
-        hoursAgo: strings.timeAgoHours,
-        daysAgo: strings.timeAgoDays,
-      });
-
-      const parts = [`${emoji} ${conn.account_id} - ${balance}`];
-
-      // Add positions if available
-      if (conn.open_positions !== undefined) {
-        parts.push(`${strings.positionsLabel}: ${conn.open_positions}`);
-      }
-
-      // Add last update time
-      parts.push(relativeTime);
-
-      return parts.join(' | ');
-    }
-  };
-
   // Get default placeholder based on filter type
   const defaultPlaceholder = placeholder ||
     (filterType === 'Master' ? strings.selectMasterAccount : strings.selectSlaveAccount);
-
-  // Get label for connected accounts
-  const connectedLabel = filterType === 'Master'
-    ? strings.connectedMasterAccounts
-    : strings.connectedSlaveAccounts;
 
   // Get no accounts message
   const noAccountsMessage = filterType === 'Master'
     ? strings.noConnectedMasterAccounts
     : strings.noConnectedSlaveAccounts;
 
+  // Find selected connection for display
+  const selectedConnection = sortedConnections.find((conn) => conn.account_id === value);
+  const selectedDisplay = selectedConnection
+    ? {
+        brokerName: selectedConnection.broker,
+        accountNumber: selectedConnection.account_number.toString(),
+      }
+    : null;
+
   return (
     <div className="space-y-2">
       {label && (
-        <Label htmlFor={label}>
+        <Label>
           {label}
         </Label>
       )}
-      <select
-        id={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <option value="">{defaultPlaceholder}</option>
-
-        {onlineConnections.length > 0 && (
-          <optgroup label={`${connectedLabel} (${onlineConnections.length})`}>
-            {onlineConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-
-        {timeoutConnections.length > 0 && (
-          <optgroup label={`${strings.timeoutAccounts} (${timeoutConnections.length})`}>
-            {timeoutConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-
-        {offlineConnections.length > 0 && (
-          <optgroup label={`${strings.offlineAccounts} (${offlineConnections.length})`}>
-            {offlineConnections.map((conn) => (
-              <option key={conn.account_id} value={conn.account_id}>
-                {formatAccountDisplay(conn)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+      <Select value={value} onValueChange={onChange} required={required}>
+        <SelectTrigger className="h-auto py-2">
+          <div className="flex items-center gap-2 w-full overflow-hidden">
+            {selectedDisplay ? (
+              <>
+                <span className="text-sm flex-shrink-0">{getStatusEmoji(selectedConnection!.status)}</span>
+                <BrokerIcon brokerName={selectedDisplay.brokerName} size="sm" />
+                <div className="flex-1 min-w-0 text-left flex flex-col">
+                  <div className="font-normal text-foreground text-sm truncate leading-tight">
+                    {selectedDisplay.brokerName}
+                  </div>
+                  {selectedDisplay.accountNumber && (
+                    <div className="text-xs text-muted-foreground truncate leading-tight">
+                      {selectedDisplay.accountNumber}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <span className="text-muted-foreground">{defaultPlaceholder}</span>
+            )}
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          {sortedConnections.map((conn) => {
+            const brokerName = conn.broker;
+            const accountNumber = conn.account_number.toString();
+            return (
+              <SelectItemCustom
+                key={conn.account_id}
+                value={conn.account_id}
+                textValue={`${brokerName} ${accountNumber}`}
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-sm">{getStatusEmoji(conn.status)}</span>
+                  <BrokerIcon brokerName={brokerName} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-normal text-foreground text-sm truncate">
+                      {brokerName}
+                    </div>
+                    {accountNumber && (
+                      <div className="text-xs text-muted-foreground truncate">
+                        {accountNumber}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </SelectItemCustom>
+            );
+          })}
+        </SelectContent>
+      </Select>
 
       {filteredConnections.length === 0 && (
         <p className="text-sm text-muted-foreground">

@@ -59,12 +59,32 @@ jobs:
           echo "Building with FILE_VERSION=${{ inputs.file_version }}"
           cargo build --release --target x86_64-pc-windows-msvc
 
+      - name: List built files (debug)
+        run: |
+          Write-Host "=== Listing MT4 (32-bit) build output ===" -ForegroundColor Cyan
+          if (Test-Path "target\i686-pc-windows-msvc\release") {
+            Get-ChildItem "target\i686-pc-windows-msvc\release" -Filter *.dll | ForEach-Object {
+              Write-Host "  Found DLL: $($_.Name) ($([math]::Round($_.Length / 1KB, 2)) KB)"
+            }
+          } else {
+            Write-Host "  Directory does not exist!" -ForegroundColor Red
+          }
+
+          Write-Host "=== Listing MT5 (64-bit) build output ===" -ForegroundColor Cyan
+          if (Test-Path "target\x86_64-pc-windows-msvc\release") {
+            Get-ChildItem "target\x86_64-pc-windows-msvc\release" -Filter *.dll | ForEach-Object {
+              Write-Host "  Found DLL: $($_.Name) ($([math]::Round($_.Length / 1KB, 2)) KB)"
+            }
+          } else {
+            Write-Host "  Directory does not exist!" -ForegroundColor Red
+          }
+
       - name: Prepare DLL artifacts
         run: |
           mkdir -p artifacts/dll/MT4
           mkdir -p artifacts/dll/MT5
-          copy mt-bridge\target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
-          copy mt-bridge\target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
+          copy target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
+          copy target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
 
       - name: Upload DLL artifacts
         uses: actions/upload-artifact@v4
@@ -107,7 +127,7 @@ jobs:
       - name: Prepare server artifacts
         run: |
           mkdir -p artifacts/server
-          copy relay-server\target\release\sankey-copier-relay-server.exe artifacts\server\sankey-copier-server.exe
+          copy target\release\sankey-copier-relay-server.exe artifacts\server\sankey-copier-server.exe
 
       - name: Upload server artifacts
         uses: actions/upload-artifact@v4

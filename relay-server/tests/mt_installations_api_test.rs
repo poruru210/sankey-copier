@@ -13,13 +13,12 @@ use sankey_copier_relay_server::log_buffer::create_log_buffer;
 use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 
 /// Helper function to create a test app
 async fn create_test_app() -> axum::Router {
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let settings_cache = Arc::new(RwLock::new(Vec::new()));
     let (broadcast_tx, _) = broadcast::channel::<String>(100);
     let log_buffer = create_log_buffer();
 
@@ -29,7 +28,6 @@ async fn create_test_app() -> axum::Router {
     let app_state = AppState {
         db,
         tx: broadcast_tx,
-        settings_cache,
         connection_manager,
         config_sender,
         log_buffer,
