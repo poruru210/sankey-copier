@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
-import { AccountCard } from '@/components/connections/AccountCard';
+import { AccountNodeContent } from '@/components/connections/AccountNodeContent';
 
 export interface AccountNodeData {
   account: AccountInfo;
@@ -11,6 +11,8 @@ export interface AccountNodeData {
   onToggleEnabled?: (enabled: boolean) => void;
   onEditSetting?: (setting: CopySettings) => void;
   onDeleteSetting?: (setting: CopySettings) => void;
+  onEditMasterSettings?: () => void;
+  onOpenSettingsDrawer?: () => void;
   type: 'source' | 'receiver';
   isHighlighted?: boolean;
   hoveredSourceId: string | null;
@@ -45,8 +47,8 @@ export interface AccountNodeData {
 export type AccountNodeType = Node<AccountNodeData & Record<string, unknown>, 'accountNode'>;
 
 /**
- * Custom React Flow node for account cards
- * Wraps the existing AccountCard component with React Flow handles
+ * Custom React Flow node for accounts
+ * Wraps the AccountNodeContent component with React Flow handles
  *
  * Drag behavior: The node is draggable by clicking on the header area.
  * Interactive elements (switches, buttons) have the 'noDrag' class to prevent dragging.
@@ -94,8 +96,8 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
         </>
       )}
 
-      {/* Render the existing AccountCard component */}
-      <AccountCard
+      {/* Render the AccountNodeContent component */}
+      <AccountNodeContent
         account={data.account}
         connection={data.connection}
         accountSettings={data.accountSettings}
@@ -103,6 +105,8 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
         onToggleEnabled={data.onToggleEnabled}
         onEditSetting={data.onEditSetting}
         onDeleteSetting={data.onDeleteSetting}
+        onEditMasterSettings={data.onEditMasterSettings}
+        onOpenSettingsDrawer={data.onOpenSettingsDrawer}
         type={data.type}
         isHighlighted={data.isHighlighted}
         hoveredSourceId={data.hoveredSourceId}

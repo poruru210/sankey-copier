@@ -25,7 +25,8 @@ import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
 import { AccountNode } from '@/components/flow-nodes/AccountNode';
 import { CreateConnectionDialog } from '@/components/CreateConnectionDialog';
-import { EditCopySettingsDialog } from '@/components/EditCopySettingsDialog';
+import { EditConnectionDrawer } from '@/components/EditConnectionDrawer';
+import { MasterSettingsDrawer } from '@/components/MasterSettingsDrawer';
 import { MasterAccountFilter } from '@/components/MasterAccountFilter';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -59,6 +60,8 @@ function ConnectionsViewReactFlowInner({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSettings, setEditingSettings] = useState<CopySettings | null>(null);
+  const [masterSettingsOpen, setMasterSettingsOpen] = useState(false);
+  const [editingMasterAccount, setEditingMasterAccount] = useState<string>('');
 
   // Use custom hooks for account data management
   const {
@@ -108,6 +111,11 @@ function ConnectionsViewReactFlowInner({
   const handleEditSetting = useCallback((setting: CopySettings) => {
     setEditingSettings(setting);
     setEditDialogOpen(true);
+  }, []);
+
+  const handleEditMasterSettings = useCallback((masterAccount: string) => {
+    setEditingMasterAccount(masterAccount);
+    setMasterSettingsOpen(true);
   }, []);
 
   const handleDeleteSetting = useCallback(
@@ -197,6 +205,7 @@ function ConnectionsViewReactFlowInner({
     getAccountSettings,
     handleEditSetting,
     handleDeleteSetting,
+    handleEditMasterSettings,
     isAccountHighlighted,
     isMobile,
     content: accountCardContent,
@@ -261,16 +270,6 @@ function ConnectionsViewReactFlowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
 
-  // Handle edge click to edit connection
-  const onEdgeClick = useCallback(
-    (event: React.MouseEvent, edge: Edge) => {
-      if (edge.data?.setting) {
-        handleEditSetting(edge.data.setting as CopySettings);
-      }
-    },
-    [handleEditSetting]
-  );
-
   // Handle node hover for highlighting
   const onNodeMouseEnter = useCallback(
     (event: React.MouseEvent, node: Node) => {
@@ -293,6 +292,22 @@ function ConnectionsViewReactFlowInner({
       setHoveredReceiver(null);
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
+
+  // Handle node double-click to edit Master settings
+  const onNodeDoubleClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      // Only handle source (Master) nodes
+      if (node.id.startsWith('source-')) {
+        const accountId = node.id.replace('source-', '');
+        // Find the corresponding connection to get the full account name
+        const sourceAccount = sourceAccounts.find(acc => acc.id === accountId);
+        if (sourceAccount) {
+          handleEditMasterSettings(sourceAccount.id);
+        }
+      }
+    },
+    [sourceAccounts, handleEditMasterSettings]
+  );
 
   // Get React Flow instance for fitView
   const reactFlowInstance = useReactFlow();
@@ -382,14 +397,14 @@ function ConnectionsViewReactFlowInner({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
-            onEdgeClick={onEdgeClick}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
+            onNodeDoubleClick={onNodeDoubleClick}
             nodesDraggable={true}
             nodeDragThreshold={1}
             nodesConnectable={false}
             nodesFocusable={true}
-            edgesFocusable={true}
+            edgesFocusable={false}
             selectNodesOnDrag={true}
             noDragClassName="noDrag"
             minZoom={0.1}
@@ -410,9 +425,9 @@ function ConnectionsViewReactFlowInner({
           existingSettings={settings}
         />
 
-        {/* Edit Copy Settings Dialog */}
+        {/* Edit Connection Drawer */}
         {editingSettings && (
-          <EditCopySettingsDialog
+          <EditConnectionDrawer
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
             onSave={handleUpdateSettings}
@@ -420,6 +435,14 @@ function ConnectionsViewReactFlowInner({
             setting={editingSettings}
           />
         )}
+
+        {/* Master Settings Drawer */}
+        <MasterSettingsDrawer
+          open={masterSettingsOpen}
+          onOpenChange={setMasterSettingsOpen}
+          masterAccount={editingMasterAccount}
+          connection={connections.find(c => c.account_id === editingMasterAccount)}
+        />
       </div>
     </div>
   );

@@ -234,6 +234,122 @@ const settingsDialogContent = {
       en: '{0} day ago',
       ja: '{0}日前',
     }),
+    // Master Settings Drawer
+    masterSettingsTitle: t({
+      en: 'Master Settings',
+      ja: 'マスター設定',
+    }),
+    symbolFiltersGlobalTitle: t({
+      en: 'Symbol Filters (Global)',
+      ja: 'フィルター（グローバル）',
+    }),
+    symbolFiltersGlobalDescription: t({
+      en: 'These settings apply to all slaves connected to this master.',
+      ja: 'これらの設定はこのマスターに接続するすべてのスレーブに適用されます。',
+    }),
+    masterSymbolPrefixDescription: t({
+      en: 'Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)',
+      ja: 'ブロードキャスト時にこのプレフィックスを削除します（例: pro.EURUSD → EURUSD）',
+    }),
+    masterSymbolSuffixDescription: t({
+      en: 'Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)',
+      ja: 'ブロードキャスト時にこのサフィックスを削除します（例: EURUSD.m → EURUSD）',
+    }),
+    settingsSavedSuccess: t({
+      en: 'Settings saved successfully',
+      ja: '設定を保存しました',
+    }),
+    settingsSaveFailed: t({
+      en: 'Failed to save settings',
+      ja: '設定の保存に失敗しました',
+    }),
+    saving: t({
+      en: 'Saving...',
+      ja: '保存中...',
+    }),
+    // Slave Settings Form / Symbol Filters
+    symbolFiltersTitle: t({
+      en: 'Symbol Filters',
+      ja: 'フィルター',
+    }),
+    symbolFiltersDescription: t({
+      en: 'Configure symbol name transformations for this connection.',
+      ja: 'この接続のシンボル名変換を設定します。',
+    }),
+    symbolPrefix: t({
+      en: 'Prefix',
+      ja: 'プレフィックス',
+    }),
+    symbolPrefixDescription: t({
+      en: 'Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)',
+      ja: 'シンボル名に追加するプレフィックス（例: EURUSD → pro.EURUSD）',
+    }),
+    symbolSuffix: t({
+      en: 'Suffix',
+      ja: 'サフィックス',
+    }),
+    symbolSuffixDescription: t({
+      en: 'Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)',
+      ja: 'シンボル名に追加するサフィックス（例: EURUSD → EURUSD.m）',
+    }),
+    symbolMappings: t({
+      en: 'Mappings',
+      ja: 'マッピング',
+    }),
+    symbolMappingsDescription: t({
+      en: 'Map source symbols to target symbols for this connection.',
+      ja: 'この接続のソースシンボルをターゲットシンボルにマッピングします。',
+    }),
+    copySettingsDescription: t({
+      en: 'Configure how trades are copied.',
+      ja: 'トレードのコピー方法を設定します。',
+    }),
+    // Symbol Mapping Input
+    sourceSymbol: t({
+      en: 'Source',
+      ja: '変換元',
+    }),
+    targetSymbol: t({
+      en: 'Target',
+      ja: '変換先',
+    }),
+    addMapping: t({
+      en: 'Add Mapping',
+      ja: 'マッピングを追加',
+    }),
+    removeMapping: t({
+      en: 'Remove',
+      ja: '削除',
+    }),
+    symbolPrefixPlaceholder: t({
+      en: "e.g. 'pro.' or 'FX.'",
+      ja: "例: 'pro.' または 'FX.'",
+    }),
+    symbolSuffixPlaceholder: t({
+      en: "e.g. '.m' or '-ECN'",
+      ja: "例: '.m' または '-ECN'",
+    }),
+    sourceSymbolPlaceholder: t({
+      en: 'e.g. XAUUSD',
+      ja: '例: XAUUSD',
+    }),
+    targetSymbolPlaceholder: t({
+      en: 'e.g. GOLD',
+      ja: '例: GOLD',
+    }),
+    // Connected Slaves Section
+    connectedSlavesTitle: t({
+      en: 'Connected Slaves',
+      ja: '接続中のスレーブ',
+    }),
+    connectedSlavesDescription: t({
+      en: 'Slaves currently connected to this master.',
+      ja: 'このマスターに現在接続しているスレーブ。',
+    }),
+    noConnectedSlaves: t({
+      en: 'No slaves connected to this master.',
+      ja: 'このマスターに接続しているスレーブはありません。',
+    }),
   },
 } satisfies DeclarationContent;
 

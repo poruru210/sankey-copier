@@ -1,6 +1,6 @@
-export { AccountCard } from './AccountCard';
-export { AccountCardHeader } from './AccountCardHeader';
-export { AccountCardExpanded } from './AccountCardExpanded';
+export { AccountNodeContent } from './AccountNodeContent';
+export { AccountNodeHeader } from './AccountNodeHeader';
+export { AccountNodeExpanded } from './AccountNodeExpanded';
 export { AccountInfoSection } from './AccountInfoSection';
 export { BalanceSection } from './BalanceSection';
 export { ConnectionStatusSection } from './ConnectionStatusSection';

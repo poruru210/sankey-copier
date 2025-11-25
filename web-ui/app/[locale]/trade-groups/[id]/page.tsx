@@ -1,23 +1,22 @@
 'use client';
 
-// web-ui/app/[locale]/trade-groups/[id]/page.tsx
-//
-// TradeGroup detail page - edit Master account configuration settings.
-// Displays a form to update symbol_prefix and symbol_suffix for a specific Master account.
+// TradeGroup detail page - edit Master account configuration settings
+// Displays a form to update symbol_prefix and symbol_suffix for a specific Master account
+// Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Save } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { TradeGroup, MasterSettings } from '@/types';
 
 export default function TradeGroupDetailPage() {
@@ -25,7 +24,7 @@ export default function TradeGroupDetailPage() {
   const router = useRouter();
   const content = useIntlayer('trade-group-detail-page');
   const apiClient = useAtomValue(apiClientAtom);
-  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
+  const { serverLogHeight } = useServerLogContext();
 
   const masterAccount = decodeURIComponent(params.id as string);
 
@@ -113,7 +112,7 @@ export default function TradeGroupDetailPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <div className="text-xl">{content.loadingTradeGroup}</div>
+          <Typography variant="large">{content.loadingTradeGroup}</Typography>
         </div>
       </div>
     );
@@ -144,23 +143,18 @@ export default function TradeGroupDetailPage() {
   }
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
+    <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-full">
-        <div
-          className={cn(
-            'overflow-y-auto transition-all duration-300',
-            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
-          )}
-          style={{
-            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
-            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
-          }}
-        >
-          <div className="w-[95%] max-w-2xl mx-auto p-4">
+      <div
+        className="relative z-10 flex flex-col overflow-y-auto"
+        style={{
+          height: `calc(100% - ${serverLogHeight}px)`,
+        }}
+      >
+        <div className="w-[95%] max-w-2xl mx-auto p-4">
             {/* Back Button */}
             <Button
               onClick={handleCancel}
@@ -173,10 +167,8 @@ export default function TradeGroupDetailPage() {
 
             {/* Page Title */}
             <div className="mb-6">
-              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-              <p className="text-sm text-muted-foreground">
-                {content.description}
-              </p>
+              <Typography variant="h3" className="mb-1">{content.title}</Typography>
+              <Muted>{content.description}</Muted>
             </div>
 
             {/* Message Display */}
@@ -271,7 +263,6 @@ export default function TradeGroupDetailPage() {
                 </form>
               </CardContent>
             </Card>
-          </div>
         </div>
       </div>
     </div>

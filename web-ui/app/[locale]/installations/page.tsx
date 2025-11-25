@@ -1,23 +1,26 @@
 'use client';
 
+// Installations page - displays MT4/MT5 installations and allows component installation
+// Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
+
 import { useEffect, useState, useOptimistic, useTransition } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { MtInstallation } from '@/types';
 
 export default function InstallationsPage() {
   const content = useIntlayer('installations-page');
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
-  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
+  const { serverLogHeight } = useServerLogContext();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -142,36 +145,29 @@ export default function InstallationsPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <div className="text-xl">{content.loadingInstallations}</div>
+          <Typography variant="large">{content.loadingInstallations}</Typography>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
+    <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-full">
-        <div
-          className={cn(
-            'overflow-y-auto transition-all duration-300',
-            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
-          )}
-          style={{
-            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
-            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
-          }}
-        >
-          <div className="w-[95%] mx-auto p-4">
+      <div
+        className="relative z-10 flex flex-col overflow-y-auto"
+        style={{
+          height: `calc(100% - ${serverLogHeight}px)`,
+        }}
+      >
+        <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
           <div className="mb-4">
-            <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              {content.description}
-            </p>
+            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+            <Muted>{content.description}</Muted>
           </div>
 
           {/* Action Buttons */}
@@ -236,12 +232,12 @@ export default function InstallationsPage() {
           {optimisticInstallations.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-lg text-muted-foreground">
+                <Typography variant="large" className="text-muted-foreground">
                   {content.noInstallationsDetected}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
+                </Typography>
+                <Muted className="mt-2">
                   {content.clickRefreshToScan}
-                </p>
+                </Muted>
               </CardContent>
             </Card>
           ) : (
@@ -341,7 +337,6 @@ export default function InstallationsPage() {
               </Table>
             </div>
           )}
-          </div>
         </div>
       </div>
     </div>

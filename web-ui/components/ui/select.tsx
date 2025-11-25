@@ -131,6 +131,39 @@ const SelectItem = React.forwardRef<
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
+// Custom SelectItem for complex content layouts (e.g., icons, multi-line text)
+// Unlike SelectItem, this component renders children directly without wrapping in ItemText
+// Use textValue prop to provide accessible text for screen readers and search
+interface SelectItemCustomProps
+  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
+  hideIndicator?: boolean;
+}
+
+const SelectItemCustom = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  SelectItemCustomProps
+>(({ className, children, hideIndicator = false, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    className={cn(
+      'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      hideIndicator ? 'pl-2 pr-2' : 'pl-2 pr-8',
+      className
+    )}
+    {...props}
+  >
+    {children}
+    {!hideIndicator && (
+      <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <Check className="h-4 w-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+    )}
+  </SelectPrimitive.Item>
+));
+SelectItemCustom.displayName = 'SelectItemCustom';
+
 const SelectSeparator = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>
@@ -151,6 +184,7 @@ export {
   SelectContent,
   SelectLabel,
   SelectItem,
+  SelectItemCustom,
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
