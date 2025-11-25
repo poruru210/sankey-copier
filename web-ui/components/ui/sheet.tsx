@@ -6,10 +6,11 @@ interface SheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
-  side?: 'left' | 'right';
+  side?: 'left' | 'right' | 'bottom';
+  className?: string;
 }
 
-const Sheet: React.FC<SheetProps> = ({ open, onOpenChange, children, side = 'left' }) => {
+const Sheet: React.FC<SheetProps> = ({ open, onOpenChange, children, side = 'right', className }) => {
   // Close on Escape key
   React.useEffect(() => {
     if (!open) return;
@@ -27,7 +28,7 @@ const Sheet: React.FC<SheetProps> = ({ open, onOpenChange, children, side = 'lef
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[100]">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 transition-opacity duration-300 animate-in fade-in pointer-events-auto"
@@ -38,15 +39,23 @@ const Sheet: React.FC<SheetProps> = ({ open, onOpenChange, children, side = 'lef
       {/* Sheet Content */}
       <div
         className={cn(
-          'fixed top-0 bottom-0 bg-background shadow-lg transition-transform duration-300 pointer-events-auto',
-          side === 'left' ? 'left-0' : 'right-0',
+          'fixed bg-background shadow-lg transition-transform duration-300 pointer-events-auto z-[100]',
+          // Position based on side
+          side === 'left' && 'left-0 top-0 bottom-0 w-[80%] max-w-sm',
+          side === 'right' && 'right-0 top-0 bottom-0 w-[80%] max-w-sm',
+          side === 'bottom' && 'left-0 right-0 bottom-0 h-[92vh] rounded-t-lg',
+          // Transform based on open state and side
           open
-            ? 'translate-x-0'
+            ? side === 'bottom'
+              ? 'translate-y-0'
+              : 'translate-x-0'
             : side === 'left'
             ? '-translate-x-full'
-            : 'translate-x-full'
+            : side === 'right'
+            ? 'translate-x-full'
+            : 'translate-y-full',
+          className
         )}
-        style={{ width: '80%', maxWidth: '300px' }}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
