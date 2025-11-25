@@ -433,13 +433,23 @@ void ProcessTradeSignal(uchar &data[], int data_len)
             return; // Do not proceed if filtered
          }
 
+         // Check source lot filter
+         if(!IsLotWithinFilter(lots, g_configs[config_index].source_lot_min, g_configs[config_index].source_lot_max))
+         {
+            Print("Trade filtered out by source lot filter: lots=", lots,
+                  " min=", g_configs[config_index].source_lot_min,
+                  " max=", g_configs[config_index].source_lot_max);
+            trade_signal_free(handle);
+            return;
+         }
+
          // Apply transformations
          string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
          mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
          string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
-         
-         // Transform lot size
-         double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
+
+         // Transform lot size (supports multiplier and margin_ratio modes)
+         double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
          string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
          // Open order with transformed values
