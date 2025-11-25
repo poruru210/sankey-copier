@@ -1,9 +1,8 @@
 'use client';
 
-// web-ui/app/[locale]/trade-groups/page.tsx
-//
-// TradeGroups list page - displays all Master accounts and their configuration settings.
-// Allows navigation to individual TradeGroup detail pages for editing settings.
+// TradeGroups list page - displays all Master accounts and their configuration settings
+// Allows navigation to individual TradeGroup detail pages for editing settings
+// Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
 
 import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
@@ -11,20 +10,19 @@ import { useRouter } from 'next/navigation';
 import { useAtomValue } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useTradeGroups } from '@/hooks/useTradeGroups';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, Edit, Loader2, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 export default function TradeGroupsPage() {
   const content = useIntlayer('trade-groups-page');
   const apiClient = useAtomValue(apiClientAtom);
   const { tradeGroups, loading, error, fetchTradeGroups } = useTradeGroups(apiClient);
-  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
+  const { serverLogHeight } = useServerLogContext();
   const router = useRouter();
 
   useEffect(() => {
@@ -58,23 +56,18 @@ export default function TradeGroupsPage() {
   }
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
+    <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-full">
-        <div
-          className={cn(
-            'overflow-y-auto transition-all duration-300',
-            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
-          )}
-          style={{
-            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
-            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
-          }}
-        >
-          <div className="w-[95%] mx-auto p-4">
+      <div
+        className="relative z-10 flex flex-col overflow-y-auto"
+        style={{
+          height: `calc(100% - ${serverLogHeight}px)`,
+        }}
+      >
+        <div className="w-[95%] mx-auto p-4">
             {/* Page Title */}
             <div className="mb-4">
               <Typography variant="h3" className="mb-1">{content.title}</Typography>
@@ -175,7 +168,6 @@ export default function TradeGroupsPage() {
                 </Table>
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>

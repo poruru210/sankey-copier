@@ -1,9 +1,12 @@
+// Root layout for locale routes
+// ThemeProvider, SiteProvider wrap the entire app
+// LayoutWrapper internally provides ServerLogProvider and shadcn SidebarProvider
+
 import type { Metadata } from 'next';
 import { IntlayerClientProvider } from 'next-intlayer';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SiteProvider } from '@/lib/contexts/site-context';
-import { SidebarProvider } from '@/lib/contexts/sidebar-context';
 import { LayoutWrapper } from '@/components/LayoutWrapper';
 import { Toaster } from '@/components/ui/toaster';
 import '../globals.css';
@@ -59,14 +62,12 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <SiteProvider>
-            <SidebarProvider>
-              <IntlayerClientProvider locale={locale}>
-                <LayoutWrapper>
-                  {children}
-                </LayoutWrapper>
-                <Toaster />
-              </IntlayerClientProvider>
-            </SidebarProvider>
+            <IntlayerClientProvider locale={locale}>
+              <LayoutWrapper>
+                {children}
+              </LayoutWrapper>
+              <Toaster />
+            </IntlayerClientProvider>
           </SiteProvider>
         </ThemeProvider>
       </body>

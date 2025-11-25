@@ -1,5 +1,8 @@
 'use client';
 
+// Connections page - main page showing copy connections using ReactFlow
+// Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
+
 import { useEffect } from 'react';
 import { preconnect } from 'react-dom';
 import { useIntlayer } from 'next-intlayer';
@@ -8,14 +11,13 @@ import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow'
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 import { selectedSiteAtom } from '@/lib/atoms/site';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Typography, Muted } from '@/components/ui/typography';
-import { cn } from '@/lib/utils';
 
 export default function Home() {
   const content = useIntlayer('connections-page');
   const selectedSite = useAtomValue(selectedSiteAtom);
-  const { isOpen: isSidebarOpen, isMobile, serverLogHeight } = useSidebar();
+  const { serverLogHeight } = useServerLogContext();
   const {
     settings,
     connections,
@@ -44,47 +46,41 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden flex flex-col">
+    <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Particles Background */}
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div className="relative z-10 flex flex-col h-full">
-        <div
-          className={cn(
-            'overflow-y-auto transition-all duration-300',
-            !isMobile && (isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16')
+      <div
+        className="relative z-10 flex flex-col overflow-y-auto"
+        style={{
+          height: `calc(100% - ${serverLogHeight}px)`,
+        }}
+      >
+        <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
+          {/* Page Title */}
+          <div className="mb-4">
+            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+            <Muted>{content.description}</Muted>
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
+              {error}
+            </div>
           )}
-          style={{
-            height: `calc(100vh - 56px - ${serverLogHeight}px)`,
-            maxHeight: `calc(100vh - 56px - ${serverLogHeight}px)`
-          }}
-        >
-          <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
-            {/* Page Title */}
-            <div className="mb-4">
-              <Typography variant="h3" className="mb-1">{content.title}</Typography>
-              <Muted>{content.description}</Muted>
-            </div>
 
-            {/* Error Display */}
-            {error && (
-              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
-
-            {/* Copy Connections */}
-            <div className="flex-1 min-h-0">
-              <ConnectionsViewReactFlow
-                connections={connections}
-                settings={settings}
-                onToggle={toggleEnabled}
-                onCreate={createSetting}
-                onUpdate={updateSetting}
-                onDelete={deleteSetting}
-              />
-            </div>
+          {/* Copy Connections */}
+          <div className="flex-1 min-h-0">
+            <ConnectionsViewReactFlow
+              connections={connections}
+              settings={settings}
+              onToggle={toggleEnabled}
+              onCreate={createSetting}
+              onUpdate={updateSetting}
+              onDelete={deleteSetting}
+            />
           </div>
         </div>
       </div>

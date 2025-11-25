@@ -1,73 +1,27 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+// ServerLog context for sharing ServerLog state across components
+// Sidebar UI state is now managed by shadcn SidebarProvider (components/ui/sidebar.tsx)
+// This context only handles ServerLog expand/collapse and height for page layout adjustment
 
-// Context for sharing sidebar and ServerLog state across components
-// Allows Header, ServerLog, and pages to adjust positioning and padding
-interface SidebarContextType {
-  isOpen: boolean;
-  isMobile: boolean;
-  setIsOpen: (open: boolean) => void;
+import { createContext, useContext, useState, ReactNode } from 'react';
+
+interface ServerLogContextType {
   serverLogExpanded: boolean;
   setServerLogExpanded: (expanded: boolean) => void;
   serverLogHeight: number;
   setServerLogHeight: (height: number) => void;
 }
 
-const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
+const ServerLogContext = createContext<ServerLogContextType | undefined>(undefined);
 
-export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+export function ServerLogProvider({ children }: { children: ReactNode }) {
   const [serverLogExpanded, setServerLogExpanded] = useState(false);
   const [serverLogHeight, setServerLogHeight] = useState(40);
 
-  // Hydration fix
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Load sidebar state from localStorage on mount
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const savedState = localStorage.getItem('sidebar-open');
-    if (savedState !== null) {
-      setIsOpen(savedState === 'true');
-    }
-  }, [isMounted]);
-
-  // Save sidebar state to localStorage when changed (PC only)
-  useEffect(() => {
-    if (!isMounted || isMobile) return;
-    localStorage.setItem('sidebar-open', String(isOpen));
-  }, [isOpen, isMobile, isMounted]);
-
-  // Detect mobile viewport
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 1024; // lg breakpoint
-      setIsMobile(mobile);
-      // On mobile, always close sidebar by default
-      if (mobile) {
-        setIsOpen(false);
-      }
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, [isMounted]);
-
   return (
-    <SidebarContext.Provider
+    <ServerLogContext.Provider
       value={{
-        isOpen,
-        isMobile,
-        setIsOpen,
         serverLogExpanded,
         setServerLogExpanded,
         serverLogHeight,
@@ -75,14 +29,14 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-    </SidebarContext.Provider>
+    </ServerLogContext.Provider>
   );
 }
 
-export function useSidebar() {
-  const context = useContext(SidebarContext);
+export function useServerLogContext() {
+  const context = useContext(ServerLogContext);
   if (context === undefined) {
-    throw new Error('useSidebar must be used within a SidebarProvider');
+    throw new Error('useServerLogContext must be used within a ServerLogProvider');
   }
   return context;
 }

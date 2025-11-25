@@ -1,5 +1,8 @@
 'use client';
 
+// ServerLog component - displays server logs in a collapsible panel at the bottom
+// Uses shadcn useSidebar for sidebar state and useServerLogContext for ServerLog-specific state
+
 import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
@@ -8,20 +11,24 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RefreshCw, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
-import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { useServerLogs, useLogViewerResize, useLogViewerLayout } from './ServerLog.hooks';
 import { LOG_LEVEL_COLORS } from './ServerLog.constants';
 import { cn } from '@/lib/utils';
 
 export function ServerLog() {
   const apiClient = useAtomValue(apiClientAtom);
+
+  // Sidebar state from shadcn SidebarProvider
+  const { open: isSidebarOpen, isMobile } = useSidebar();
+
+  // ServerLog-specific state from ServerLogProvider
   const {
-    isOpen: isSidebarOpen,
-    isMobile,
     serverLogExpanded: isExpanded,
     setServerLogExpanded: setIsExpanded,
     setServerLogHeight,
-  } = useSidebar();
+  } = useServerLogContext();
   const { title, noLogs, refreshButton, loading, error: errorText, toggleLabel } = useIntlayer('server-log');
 
   // Custom hooks
