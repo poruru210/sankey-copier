@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TradeGroup, MasterSettings } from '@/types';
@@ -113,7 +114,7 @@ export default function TradeGroupDetailPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <div className="text-xl">{content.loadingTradeGroup}</div>
+          <Typography variant="large">{content.loadingTradeGroup}</Typography>
         </div>
       </div>
     );
@@ -173,10 +174,8 @@ export default function TradeGroupDetailPage() {
 
             {/* Page Title */}
             <div className="mb-6">
-              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-              <p className="text-sm text-muted-foreground">
-                {content.description}
-              </p>
+              <Typography variant="h3" className="mb-1">{content.title}</Typography>
+              <Muted>{content.description}</Muted>
             </div>
 
             {/* Message Display */}

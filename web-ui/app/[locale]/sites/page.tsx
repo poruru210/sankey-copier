@@ -8,6 +8,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, Trash2, Plus, Edit2 } from 'lucide-react';
 import { sitesAtom, selectedSiteIdAtom } from '@/lib/atoms/site';
 import { Site } from '@/lib/types/site';
@@ -128,8 +129,8 @@ export default function SitesPage() {
           <div className="w-[95%] mx-auto p-4">
             {/* Page Title */}
             <div className="mb-4">
-              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-              <p className="text-sm text-muted-foreground">{content.description}</p>
+              <Typography variant="h3" className="mb-1">{content.title}</Typography>
+              <Muted>{content.description}</Muted>
             </div>
 
             {/* Error Message */}
@@ -145,7 +146,7 @@ export default function SitesPage() {
             {/* Site List */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">{content.registeredSites}</h3>
+                <Typography variant="h4" className="text-lg">{content.registeredSites}</Typography>
                 {editingId !== 'new' && (
                   <Button
                     type="button"

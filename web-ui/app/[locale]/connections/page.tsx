@@ -9,6 +9,7 @@ import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 import { selectedSiteAtom } from '@/lib/atoms/site';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { Typography, Muted } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
@@ -37,7 +38,7 @@ export default function Home() {
   if (loading && settings.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-xl">{content.loading}</div>
+        <Typography variant="large">{content.loading}</Typography>
       </div>
     );
   }
@@ -62,10 +63,8 @@ export default function Home() {
           <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
             {/* Page Title */}
             <div className="mb-4">
-              <h1 className="text-2xl md:text-xl font-bold mb-1">{content.title}</h1>
-              <p className="text-sm text-muted-foreground">
-                {content.description}
-              </p>
+              <Typography variant="h3" className="mb-1">{content.title}</Typography>
+              <Muted>{content.description}</Muted>
             </div>
 
             {/* Error Display */}
