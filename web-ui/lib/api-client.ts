@@ -203,4 +203,17 @@ export class ApiClient {
   ): Promise<import('@/types').TradeGroupMember> {
     return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members`, data);
   }
+
+  /**
+   * Update a TradeGroup member's settings
+   */
+  async updateTradeGroupMember(
+    masterAccount: string,
+    memberId: number,
+    settings: import('@/types').SlaveSettings
+  ): Promise<import('@/types').TradeGroupMember> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${memberId}`, {
+      slave_settings: settings,
+    });
+  }
 }

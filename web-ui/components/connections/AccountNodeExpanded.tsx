@@ -2,9 +2,8 @@ import type { EaConnection, CopySettings } from '@/types';
 import { AccountInfoSection } from './AccountInfoSection';
 import { BalanceSection } from './BalanceSection';
 import { ConnectionStatusSection } from './ConnectionStatusSection';
-import { MasterConfigSection } from './MasterConfigSection';
 
-interface AccountCardExpandedProps {
+interface AccountNodeExpandedProps {
   connection?: EaConnection;
   accountSettings: CopySettings[];
   type: 'source' | 'receiver';
@@ -30,14 +29,14 @@ interface AccountCardExpandedProps {
 }
 
 /**
- * Expanded account card content showing detailed account information, balance, and connection status
+ * Expanded account node content showing detailed account information, balance, and connection status
  */
-export function AccountCardExpanded({
+export function AccountNodeExpanded({
   connection,
   accountSettings,
   type,
   content,
-}: AccountCardExpandedProps) {
+}: AccountNodeExpandedProps) {
   return (
     <div className="border-t border-gray-200 dark:border-gray-700 cursor-move">
       <div className="px-2 md:px-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-900/30">
@@ -65,9 +64,6 @@ export function AccountCardExpanded({
               currency: content.currency,
             }}
           />
-
-          {/* Master Config Section (only for Master accounts) */}
-          <MasterConfigSection connection={connection} />
 
           {/* Connection Status Section */}
           <ConnectionStatusSection

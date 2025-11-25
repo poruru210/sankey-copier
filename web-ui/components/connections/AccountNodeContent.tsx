@@ -1,11 +1,11 @@
 import React from 'react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { StatusIndicatorBar } from './StatusIndicatorBar';
-import { AccountCardHeader } from './AccountCardHeader';
-import { AccountCardExpanded } from './AccountCardExpanded';
+import { AccountNodeHeader } from './AccountNodeHeader';
+import { AccountNodeExpanded } from './AccountNodeExpanded';
 import { ErrorWarningAlert } from './ErrorWarningAlert';
 
-interface AccountCardProps {
+interface AccountNodeContentProps {
   account: AccountInfo;
   connection?: EaConnection;
   accountSettings: CopySettings[];
@@ -13,6 +13,8 @@ interface AccountCardProps {
   onToggleEnabled?: (enabled: boolean) => void;
   onEditSetting?: (setting: CopySettings) => void;
   onDeleteSetting?: (setting: CopySettings) => void;
+  onEditMasterSettings?: () => void;
+  onOpenSettingsDrawer?: () => void;
   type: 'source' | 'receiver';
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -44,9 +46,10 @@ interface AccountCardProps {
 }
 
 /**
- * Account card component showing account information with expandable details
+ * Account node content component showing account information with expandable details
+ * Used within React Flow nodes to display account data
  */
-export const AccountCard = React.memo(
+export const AccountNodeContent = React.memo(
   ({
     account,
     connection,
@@ -55,6 +58,8 @@ export const AccountCard = React.memo(
     onToggleEnabled,
     onEditSetting,
     onDeleteSetting,
+    onEditMasterSettings,
+    onOpenSettingsDrawer,
     type,
     onMouseEnter,
     onMouseLeave,
@@ -64,7 +69,7 @@ export const AccountCard = React.memo(
     selectedSourceId,
     isMobile,
     content,
-  }: AccountCardProps) => {
+  }: AccountNodeContentProps) => {
     // Determine visibility based on mobile/desktop and selection/hover state
     let visibilityClass = '';
 
@@ -86,18 +91,20 @@ export const AccountCard = React.memo(
         {/* Status Bar - Top for receiver on mobile, left for receiver on desktop */}
         {type === 'receiver' && <StatusIndicatorBar account={account} type={type} isMobile={isMobile} />}
 
-        {/* Card Content */}
+        {/* Node Content */}
         <div className="flex-1">
-          {/* Card Header */}
-          <AccountCardHeader
+          {/* Node Header */}
+          <AccountNodeHeader
             account={account}
             onToggle={onToggle}
             onToggleEnabled={onToggleEnabled}
+            onEditMasterSettings={type === 'source' ? onEditMasterSettings : undefined}
+            onOpenSettingsDrawer={type === 'receiver' ? onOpenSettingsDrawer : undefined}
           />
 
-          {/* Card Body - Expands on click */}
+          {/* Node Body - Expands on click */}
           {account.isExpanded && (
-            <AccountCardExpanded
+            <AccountNodeExpanded
               connection={connection}
               accountSettings={accountSettings}
               type={type}
@@ -116,4 +123,4 @@ export const AccountCard = React.memo(
   }
 );
 
-AccountCard.displayName = 'AccountCard';
+AccountNodeContent.displayName = 'AccountNodeContent';

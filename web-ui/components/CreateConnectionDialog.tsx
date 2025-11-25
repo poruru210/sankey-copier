@@ -11,10 +11,10 @@ import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
 import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember } from '@/types';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
+import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
+import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
 import {
   Stepper,
   StepperHeader,
@@ -24,6 +24,12 @@ import {
   useStepper,
   type Step as StepType,
 } from '@/components/ui/stepper';
+import {
+  DrawerSection,
+  DrawerSectionHeader,
+  DrawerSectionContent,
+  DrawerFormField,
+} from '@/components/ui/drawer-section';
 
 interface CreateConnectionDialogProps {
   open: boolean;
@@ -80,8 +86,8 @@ export function CreateConnectionDialog({
         className={cn(
           'overflow-hidden p-6',
           isDesktop
-            ? 'h-full w-full max-w-4xl'
-            : 'h-[92vh]'
+            ? `h-full w-full ${DRAWER_SIZE_SETTINGS.desktop}`
+            : DRAWER_SIZE_SETTINGS.mobile
         )}
       >
         <DrawerHeader className={isDesktop ? 'mt-0' : ''}>
@@ -324,18 +330,13 @@ function CreateConnectionForm({
         <StepperContent className="overflow-y-auto pr-2">
           {/* Step 0: Account Selection */}
           <Step stepIndex={0}>
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Master Account Selection */}
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <span className="text-lg">📤</span>
-                    {content.masterAccountLabel.value}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {content.masterAccountDescription.value}
-                  </p>
-                </div>
+              <DrawerSection>
+                <DrawerSectionHeader
+                  title={content.masterAccountLabel.value}
+                  description={content.masterAccountDescription.value}
+                />
                 <SimpleAccountSelector
                   label=""
                   value={formData.master_account}
@@ -344,19 +345,14 @@ function CreateConnectionForm({
                   filterType="Master"
                   required
                 />
-              </div>
+              </DrawerSection>
 
               {/* Slave Account Selection */}
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <span className="text-lg">📥</span>
-                    {content.slaveAccountLabel.value}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {content.slaveAccountDescription.value}
-                  </p>
-                </div>
+              <DrawerSection bordered>
+                <DrawerSectionHeader
+                  title={content.slaveAccountLabel.value}
+                  description={content.slaveAccountDescription.value}
+                />
                 <SimpleAccountSelector
                   label=""
                   value={formData.slave_account}
@@ -365,203 +361,93 @@ function CreateConnectionForm({
                   filterType="Slave"
                   required
                 />
-              </div>
+              </DrawerSection>
             </div>
           </Step>
 
           {/* Step 1: Master Settings */}
           <Step stepIndex={1}>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">📊</span>
-                  Master Settings (Global)
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  These settings apply to all slaves connected to this master.
-                </p>
-              </div>
+            <div className="space-y-6">
+              <DrawerSection>
+                <DrawerSectionHeader
+                  title="Master Settings (Global)"
+                  description="These settings apply to all slaves connected to this master."
+                />
 
-              {/* Warning if other slaves exist */}
-              {existingMembers.length > 0 && (
-                <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-3 border border-yellow-200 dark:border-yellow-800">
-                  <div className="flex">
-                    <AlertTriangle className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                        Existing Connections
-                      </h3>
-                      <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
-                        This master has {existingMembers.length} existing slave{existingMembers.length > 1 ? 's' : ''}.
-                        Changing these settings will affect all slaves connected to this master.
-                      </p>
+                {/* Warning if other slaves exist */}
+                {existingMembers.length > 0 && (
+                  <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-3 border border-yellow-200 dark:border-yellow-800">
+                    <div className="flex">
+                      <AlertTriangle className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                          Existing Connections
+                        </h3>
+                        <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+                          This master has {existingMembers.length} existing slave{existingMembers.length > 1 ? 's' : ''}.
+                          Changing these settings will affect all slaves connected to this master.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </DrawerSection>
 
               {/* Symbol Filters Section */}
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <h4 className="text-sm font-medium flex items-center gap-2">
-                    <span className="text-lg">🔍</span>
-                    Symbol Filters
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Configure symbol name transformations that the Master EA will apply before broadcasting.
-                  </p>
-                </div>
+              <DrawerSection bordered>
+                <DrawerSectionHeader
+                  title="Symbol Filters"
+                  description="Configure symbol name transformations that the Master EA will apply before broadcasting."
+                />
+                <DrawerSectionContent>
+                  {/* Symbol Prefix */}
+                  <DrawerFormField
+                    label="Symbol Prefix"
+                    description="Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)"
+                    htmlFor="master_symbol_prefix"
+                  >
+                    <Input
+                      id="master_symbol_prefix"
+                      type="text"
+                      placeholder="e.g. 'pro.' or 'FX.'"
+                      value={masterSettings.symbol_prefix}
+                      onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
+                      disabled={loadingMembers}
+                    />
+                  </DrawerFormField>
 
-                {/* Symbol Prefix */}
-                <div>
-                  <Label htmlFor="master_symbol_prefix">
-                    Symbol Prefix
-                  </Label>
-                  <Input
-                    id="master_symbol_prefix"
-                    type="text"
-                    placeholder="e.g. 'pro.' or 'FX.'"
-                    value={masterSettings.symbol_prefix}
-                    onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
-                    disabled={loadingMembers}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)
-                  </p>
-                </div>
-
-                {/* Symbol Suffix */}
-                <div>
-                  <Label htmlFor="master_symbol_suffix">
-                    Symbol Suffix
-                  </Label>
-                  <Input
-                    id="master_symbol_suffix"
-                    type="text"
-                    placeholder="e.g. '.m' or '-ECN'"
-                    value={masterSettings.symbol_suffix}
-                    onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
-                    disabled={loadingMembers}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)
-                  </p>
-                </div>
-              </div>
+                  {/* Symbol Suffix */}
+                  <DrawerFormField
+                    label="Symbol Suffix"
+                    description="Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)"
+                    htmlFor="master_symbol_suffix"
+                  >
+                    <Input
+                      id="master_symbol_suffix"
+                      type="text"
+                      placeholder="e.g. '.m' or '-ECN'"
+                      value={masterSettings.symbol_suffix}
+                      onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
+                      disabled={loadingMembers}
+                    />
+                  </DrawerFormField>
+                </DrawerSectionContent>
+              </DrawerSection>
             </div>
           </Step>
 
-          {/* Step 2: Slave Settings */}
+          {/* Step 2: Slave Settings (using shared component) */}
           <Step stepIndex={2}>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <span className="text-lg">⚙️</span>
-                  {content.copySettingsLabel?.value || "Copy Settings"}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Configure how trades are copied.
-                </p>
-              </div>
-
-              {/* Lot Multiplier */}
-              <div>
-                <Label htmlFor="lot_multiplier">
-                  {content.lotMultiplier?.value || "Lot Multiplier"}
-                </Label>
-                <Input
-                  id="lot_multiplier"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="100"
-                  value={formData.lot_multiplier}
-                  onChange={(e) => setFormData({ ...formData, lot_multiplier: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
-                </p>
-              </div>
-
-              {/* Reverse Trade */}
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="reverse_trade"
-                  checked={formData.reverse_trade}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, reverse_trade: checked as boolean })
-                  }
-                />
-                <Label htmlFor="reverse_trade" className="cursor-pointer">
-                  {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
-                </Label>
-              </div>
-
-              {/* Symbol Filters Section */}
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-1">
-                  <h4 className="text-sm font-medium flex items-center gap-2">
-                    <span className="text-lg">🔍</span>
-                    Symbol Filters
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Configure symbol name transformations for this connection.
-                  </p>
-                </div>
-
-                {/* Symbol Prefix */}
-                <div>
-                  <Label htmlFor="symbol_prefix">
-                    Symbol Prefix
-                  </Label>
-                  <Input
-                    id="symbol_prefix"
-                    type="text"
-                    placeholder="e.g. 'pro.' or 'FX.'"
-                    value={formData.symbol_prefix}
-                    onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)
-                  </p>
-                </div>
-
-                {/* Symbol Suffix */}
-                <div>
-                  <Label htmlFor="symbol_suffix">
-                    Symbol Suffix
-                  </Label>
-                  <Input
-                    id="symbol_suffix"
-                    type="text"
-                    placeholder="e.g. '.m' or '-ECN'"
-                    value={formData.symbol_suffix}
-                    onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)
-                  </p>
-                </div>
-
-                {/* Symbol Mappings */}
-                <div>
-                  <Label htmlFor="symbol_mappings">
-                    Symbol Mappings
-                  </Label>
-                  <Input
-                    id="symbol_mappings"
-                    type="text"
-                    placeholder="e.g. 'XAUUSD=GOLD,EURUSD=EUR'"
-                    value={formData.symbol_mappings}
-                    onChange={(e) => setFormData({ ...formData, symbol_mappings: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Map source symbols to target symbols (comma-separated, format: SOURCE=TARGET)
-                  </p>
-                </div>
-              </div>
-            </div>
+            <SlaveSettingsForm
+              formData={{
+                lot_multiplier: formData.lot_multiplier,
+                reverse_trade: formData.reverse_trade,
+                symbol_prefix: formData.symbol_prefix,
+                symbol_suffix: formData.symbol_suffix,
+                symbol_mappings: formData.symbol_mappings,
+              }}
+              onChange={(data) => setFormData({ ...formData, ...data })}
+            />
           </Step>
 
           {/* Validation Messages - Show always if present, but contextually relevant */}

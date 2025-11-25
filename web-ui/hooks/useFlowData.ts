@@ -21,6 +21,7 @@ interface UseFlowDataProps {
   getAccountSettings: (accountId: string, type: 'source' | 'receiver') => CopySettings[];
   handleEditSetting: (setting: CopySettings) => void;
   handleDeleteSetting: (setting: CopySettings) => void;
+  handleEditMasterSettings?: (masterAccount: string) => void;
   isAccountHighlighted: (accountId: string, type: 'source' | 'receiver') => boolean;
   isMobile: boolean;
   content: any;
@@ -51,6 +52,7 @@ export function useFlowData({
   getAccountSettings,
   handleEditSetting,
   handleDeleteSetting,
+  handleEditMasterSettings,
   isAccountHighlighted,
   isMobile,
   content,
@@ -170,6 +172,7 @@ export function useFlowData({
           onToggleEnabled: (enabled: boolean) => toggleSourceEnabled(account.id, enabled),
           onEditSetting: handleEditSetting,
           onDeleteSetting: handleDeleteSetting,
+          onEditMasterSettings: handleEditMasterSettings ? () => handleEditMasterSettings(account.id) : undefined,
           type: 'source' as const,
           isHighlighted,
           hoveredSourceId,
@@ -210,6 +213,8 @@ export function useFlowData({
           onToggleEnabled: (enabled: boolean) => toggleReceiverEnabled(account.id, enabled),
           onEditSetting: handleEditSetting,
           onDeleteSetting: handleDeleteSetting,
+          // For Slave cards, clicking settings button opens edit drawer for first connection
+          onOpenSettingsDrawer: accountSettings.length > 0 ? () => handleEditSetting(accountSettings[0]) : undefined,
           type: 'receiver' as const,
           isHighlighted,
           hoveredSourceId,
@@ -229,6 +234,7 @@ export function useFlowData({
     getAccountSettings,
     handleEditSetting,
     handleDeleteSetting,
+    handleEditMasterSettings,
     hoveredSourceId,
     hoveredReceiverId,
     selectedSourceId,
@@ -277,7 +283,7 @@ export function useFlowData({
 
       const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
 
-      // Direct edge from source to receiver
+      // Direct edge from source to receiver (display only, not clickable)
       edgeList.push({
         id: `edge-${setting.id}`,
         source: `source-${setting.master_account}`,
@@ -287,7 +293,7 @@ export function useFlowData({
           stroke: isActive ? '#22c55e' : '#d1d5db',
           strokeWidth: 2,
           strokeDasharray: isActive ? undefined : '5,5',
-          cursor: 'pointer',
+          cursor: 'default',
         },
         label: labelText,
         labelStyle: {

@@ -22,6 +22,7 @@ const typographyVariants = cva('', {
       large: 'text-lg font-semibold',
       small: 'text-sm font-medium leading-none',
       muted: 'text-sm text-muted-foreground',
+      caption: 'text-xs text-muted-foreground',
       blockquote: 'mt-6 border-l-2 pl-6 italic',
       code: 'relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold',
     },
@@ -42,6 +43,7 @@ const variantElementMap: Record<string, TypographyElement> = {
   large: 'p',
   small: 'small',
   muted: 'p',
+  caption: 'p',
   blockquote: 'blockquote',
   code: 'code',
 };
@@ -113,4 +115,11 @@ const Muted = React.forwardRef<HTMLParagraphElement, Omit<TypographyProps, 'vari
 );
 Muted.displayName = 'Muted';
 
-export { Typography, typographyVariants, H1, H2, H3, H4, Lead, Muted };
+const Caption = React.forwardRef<HTMLParagraphElement, Omit<TypographyProps, 'variant'>>(
+  ({ className, ...props }, ref) => (
+    <Typography ref={ref} variant="caption" className={className} {...props} />
+  )
+);
+Caption.displayName = 'Caption';
+
+export { Typography, typographyVariants, H1, H2, H3, H4, Lead, Muted, Caption };

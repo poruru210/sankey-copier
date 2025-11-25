@@ -94,3 +94,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* React Flow edge cursor override - edges are display only, not clickable */
+.react-flow__edge {
+  cursor: default !important;
+}
+.react-flow__edge-path {
+  cursor: default !important;
+}
+.react-flow__edge-text {
+  cursor: default !important;
+}
+.react-flow__edge-textbg {
+  cursor: default !important;
+}

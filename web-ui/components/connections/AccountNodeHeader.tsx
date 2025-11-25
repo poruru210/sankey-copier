@@ -1,24 +1,30 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+// AccountNodeHeader - Header section of the account node
+// Shows broker icon, account name, enable/disable switch, settings button, and expand toggle
+// For Master (source) nodes: shows Master settings button
+// For Slave (receiver) nodes: shows connection settings button
+
+import { ChevronDown, Settings } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { BrokerIcon } from '@/components/BrokerIcon';
 import type { AccountInfo } from '@/types';
 
-interface AccountCardHeaderProps {
+interface AccountNodeHeaderProps {
   account: AccountInfo;
   onToggle: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
+  onEditMasterSettings?: () => void;
+  onOpenSettingsDrawer?: () => void;
 }
 
-/**
- * Header section of the account card with icon, name, switch, and expand toggle
- */
-export function AccountCardHeader({
+export function AccountNodeHeader({
   account,
   onToggle,
   onToggleEnabled,
-}: AccountCardHeaderProps) {
+  onEditMasterSettings,
+  onOpenSettingsDrawer,
+}: AccountNodeHeaderProps) {
 
   // Split account name into broker name and account number
   // Format: "Broker_Name_AccountNumber"
@@ -34,6 +40,10 @@ export function AccountCardHeader({
   };
 
   const { brokerName, accountNumber } = splitAccountName();
+
+  // Determine which settings button to show
+  const hasSettingsButton = onEditMasterSettings || onOpenSettingsDrawer;
+  const handleSettingsClick = onEditMasterSettings || onOpenSettingsDrawer;
 
   return (
     <div>
@@ -58,13 +68,27 @@ export function AccountCardHeader({
             </div>
           )}
         </div>
-        <div className="noDrag">
+        {/* Switch - smaller size, vertically centered */}
+        <div className="noDrag flex items-center">
           <Switch
             checked={account.isEnabled}
             onCheckedChange={(checked) => onToggleEnabled?.(checked)}
-            className="mr-0.5 md:mr-1 scale-90 md:scale-100"
+            className="scale-75 md:scale-80"
           />
         </div>
+        {/* Settings button - shown for both Master and Slave accounts */}
+        {hasSettingsButton && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSettingsClick?.();
+            }}
+            className="noDrag p-2 md:p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+            title={onEditMasterSettings ? "Master Settings" : "Connection Settings"}
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={onToggle}
           className="noDrag p-2 md:p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors text-gray-600 dark:text-gray-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
