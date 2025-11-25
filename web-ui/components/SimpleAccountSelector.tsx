@@ -2,16 +2,13 @@
 
 import React, { useMemo } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import { Check } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectTrigger,
-  SelectValue,
+  SelectItemCustom,
 } from '@/components/ui/select';
-import * as SelectPrimitive from '@radix-ui/react-select';
-import { cn } from '@/lib/utils';
 import { BrokerIcon } from '@/components/BrokerIcon';
 import type { EaConnection } from '@/types';
 
@@ -115,11 +112,11 @@ export function SimpleAccountSelector({
                 <span className="text-sm flex-shrink-0">{getStatusEmoji(selectedConnection!.status)}</span>
                 <BrokerIcon brokerName={selectedDisplay.brokerName} size="sm" />
                 <div className="flex-1 min-w-0 text-left flex flex-col">
-                  <div className="font-normal text-gray-900 dark:text-gray-100 text-sm truncate leading-tight">
+                  <div className="font-normal text-foreground text-sm truncate leading-tight">
                     {selectedDisplay.brokerName}
                   </div>
                   {selectedDisplay.accountNumber && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400 truncate leading-tight">
+                    <div className="text-xs text-muted-foreground truncate leading-tight">
                       {selectedDisplay.accountNumber}
                     </div>
                   )}
@@ -135,31 +132,26 @@ export function SimpleAccountSelector({
             const brokerName = conn.broker;
             const accountNumber = conn.account_number.toString();
             return (
-              <SelectPrimitive.Item
+              <SelectItemCustom
                 key={conn.account_id}
                 value={conn.account_id}
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                textValue={`${brokerName} ${accountNumber}`}
               >
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-sm">{getStatusEmoji(conn.status)}</span>
                   <BrokerIcon brokerName={brokerName} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <div className="font-normal text-gray-900 dark:text-gray-100 text-sm truncate">
+                    <div className="font-normal text-foreground text-sm truncate">
                       {brokerName}
                     </div>
                     {accountNumber && (
-                      <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                      <div className="text-xs text-muted-foreground truncate">
                         {accountNumber}
                       </div>
                     )}
                   </div>
                 </div>
-                <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
-                  <SelectPrimitive.ItemIndicator>
-                    <Check className="h-4 w-4" />
-                  </SelectPrimitive.ItemIndicator>
-                </span>
-              </SelectPrimitive.Item>
+              </SelectItemCustom>
             );
           })}
         </SelectContent>
