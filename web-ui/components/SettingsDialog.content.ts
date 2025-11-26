@@ -362,6 +362,43 @@ const settingsDialogContent = {
       en: 'e.g. 10.0',
       ja: '例: 10.0',
     }),
+    // Open Sync Policy
+    syncPolicyTitle: t({
+      en: 'Open Sync Policy',
+      ja: 'オープン同期ポリシー',
+    }),
+    syncPolicyDescription: t({
+      en: 'Configure how positions are opened and synchronized.',
+      ja: 'ポジションのオープンと同期の設定。',
+    }),
+    maxSlippage: t({
+      en: 'Max Slippage (points)',
+      ja: '最大スリッページ（ポイント）',
+    }),
+    maxSlippageDescription: t({
+      en: 'Maximum allowed slippage when opening positions. Leave empty for default (30 points).',
+      ja: 'ポジション建て時の最大許容スリッページ。空欄でデフォルト（30ポイント）。',
+    }),
+    maxSlippagePlaceholder: t({
+      en: 'e.g. 30',
+      ja: '例: 30',
+    }),
+    copyPendingOrders: t({
+      en: 'Copy Pending Orders',
+      ja: '待機注文をコピー',
+    }),
+    copyPendingOrdersDesc: t({
+      en: 'Also copy limit and stop orders',
+      ja: '指値・逆指値注文もコピーする',
+    }),
+    autoSyncExisting: t({
+      en: 'Auto Sync Existing',
+      ja: '既存ポジション自動同期',
+    }),
+    autoSyncExistingDesc: t({
+      en: 'Automatically sync existing positions when slave connects',
+      ja: 'スレーブ接続時に既存ポジションを自動同期',
+    }),
     // Symbol Mapping Input
     sourceSymbol: t({
       en: 'Source',

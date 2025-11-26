@@ -169,6 +169,7 @@ impl TestServer {
     ///
     /// This method should be called at the end of each test to ensure clean shutdown.
     /// Without calling this, background tasks may continue running and cause tests to hang.
+    #[allow(dead_code)]
     pub async fn shutdown(mut self) {
         tracing::info!("TestServer shutting down...");
 

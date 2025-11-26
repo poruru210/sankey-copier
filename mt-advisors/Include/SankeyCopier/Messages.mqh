@@ -3,6 +3,8 @@
 //|                        Copyright 2025, SANKEY Copier Project      |
 //|                     Message sending utilities                     |
 //+------------------------------------------------------------------+
+// Purpose: Common message functions shared between Master and Slave EAs
+// Note: Master-specific signal functions moved to MasterSignals.mqh
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
 #ifndef SANKEY_COPIER_MESSAGES_MQH
@@ -10,6 +12,10 @@
 
 #include "Common.mqh"
 #include "Zmq.mqh"
+
+// Include Master signals for backward compatibility
+// Master EA can include Messages.mqh and still use SendOpenSignal etc.
+#include "MasterSignals.mqh"
 
 //+------------------------------------------------------------------+
 //| Send configuration request message to server (for Slave EAs)     |
@@ -183,99 +189,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
    return success;
 }
 
-//+------------------------------------------------------------------+
-//| Send open position signal message (Master)                       |
-//+------------------------------------------------------------------+
-bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
-                    string order_type, double lots, double price, double sl, double tp,
-                    long magic, string comment, string account_id)
-{
-   // Serialize open signal message using MessagePack
-   int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
-                                            lots, price, sl, tp, magic, comment,
-                                            FormatTimestampISO8601(TimeGMT()), account_id);
-
-   if(len <= 0)
-   {
-      Print("ERROR: Failed to serialize open signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      Print("ERROR: Failed to copy open signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
-}
-
-//+------------------------------------------------------------------+
-//| Send close signal message (Master)                               |
-//+------------------------------------------------------------------+
-bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string account_id)
-{
-   // For close signals, we send a trade signal with action="Close"
-   // Only ticket, timestamp, and source_account are needed
-   int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
-
-   if(len <= 0)
-   {
-      Print("ERROR: Failed to serialize close signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      Print("ERROR: Failed to copy close signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
-}
-
-//+------------------------------------------------------------------+
-//| Send modify signal message (Master)                             |
-//+------------------------------------------------------------------+
-bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, double tp, string account_id)
-{
-   // For modify signals, we send a trade signal with action="Modify"
-   // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
-   int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
-
-   if(len <= 0)
-   {
-      Print("ERROR: Failed to serialize modify signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      Print("ERROR: Failed to copy modify signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
-}
+// Note: SendOpenSignal, SendCloseSignal, SendModifySignal moved to MasterSignals.mqh
+// They are still available here through the #include for backward compatibility
 
 #endif // SANKEY_COPIER_MESSAGES_MQH

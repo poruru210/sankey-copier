@@ -99,8 +99,16 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   ArrayResize(g_order_map, 0);
-   ArrayResize(g_pending_order_map, 0);
+   // Recover ticket mappings from existing positions (restart recovery)
+   int recovered = RecoverMappingsFromPositions(g_order_map, g_pending_order_map);
+   if(recovered > 0)
+   {
+      Print("Recovered ", recovered, " position mappings from previous session");
+   }
+   else
+   {
+      Print("No previous position mappings to recover (fresh start)");
+   }
 
    // Initialize configuration arrays
    ArrayResize(g_configs, 0);
@@ -520,8 +528,8 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
-   // Extract account number and build traceable comment: "M12345#98765"
-   string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+   // Build traceable comment for restart recovery: "M{master_ticket}"
+   string comment = BuildMarketComment(master_ticket);
 
    // Execute order
    int ticket = -1;
@@ -683,8 +691,8 @@ void PlacePendingOrder(int master_ticket, string symbol, string order_type_str,
    sl = (sl > 0) ? NormalizeDouble(sl, Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, Digits) : 0;
 
-   // Extract account number and build traceable comment: "P12345#98765"
-   string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+   // Build traceable comment for restart recovery: "P{master_ticket}"
+   string comment = BuildPendingComment(master_ticket);
 
    int ticket = OrderSend(symbol, pending_type, lots, price, Slippage, sl, tp,
                           comment, magic, 0, clrBlue);

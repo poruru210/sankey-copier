@@ -88,6 +88,27 @@ impl ZmqConfigPublisher {
 
         Ok(())
     }
+
+    /// Publish any serializable message to a specific topic
+    /// Used for sync protocol messages (SyncRequest, PositionSnapshot)
+    pub async fn publish_to_topic<T>(&self, topic: &str, message: &T) -> Result<()>
+    where
+        T: serde::Serialize,
+    {
+        let payload = rmp_serde::to_vec_named(message)
+            .context("Failed to serialize message to MessagePack")?;
+
+        let serialized = SerializedMessage {
+            topic: topic.to_string(),
+            payload,
+        };
+
+        self.tx
+            .send(serialized)
+            .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

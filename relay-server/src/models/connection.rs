@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 // Re-export shared message types from DLL
-pub use sankey_copier_zmq::{HeartbeatMessage, RequestConfigMessage, UnregisterMessage};
+pub use sankey_copier_zmq::{
+    HeartbeatMessage, PositionSnapshotMessage, RequestConfigMessage, SyncRequestMessage,
+    UnregisterMessage,
+};
 
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]

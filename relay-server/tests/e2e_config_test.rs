@@ -854,6 +854,9 @@ async fn test_multiple_slaves_same_master() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            auto_sync_existing: false,
         };
 
         server
@@ -1245,6 +1248,9 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                auto_sync_existing: false,
             },
         )
         .await
@@ -1266,6 +1272,9 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                auto_sync_existing: false,
             },
         )
         .await
@@ -1288,6 +1297,9 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                auto_sync_existing: false,
             },
         )
         .await

@@ -16,6 +16,10 @@ export interface CopySettings {
   symbol_map?: string; // Comma-separated format for Slave EA
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy settings
+  max_slippage?: number | null;
+  copy_pending_orders?: boolean;
+  auto_sync_existing?: boolean;
 }
 
 export interface SymbolMapping {
@@ -70,6 +74,10 @@ export interface CreateSettingsRequest {
   symbol_mappings?: string; // Comma-separated format: "XAUUSD=GOLD,EURUSD=EUR"
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy
+  max_slippage?: number | null;
+  copy_pending_orders?: boolean;
+  auto_sync_existing?: boolean;
 }
 
 // ConnectionsView specific types
@@ -159,6 +167,10 @@ export interface SlaveSettings {
   // Lot filtering: min/max lot size from master to copy
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy settings
+  max_slippage?: number | null;       // Max slippage in points (default: 30)
+  copy_pending_orders?: boolean;      // Copy pending orders (limit/stop)
+  auto_sync_existing?: boolean;       // Auto-sync existing positions on connect
 }
 
 export interface TradeGroupMember {

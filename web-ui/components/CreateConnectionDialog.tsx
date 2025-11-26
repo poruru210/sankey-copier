@@ -161,6 +161,10 @@ function CreateConnectionForm({
     symbol_mappings: string;
     source_lot_min: number | null;
     source_lot_max: number | null;
+    // Open Sync Policy
+    max_slippage: number | null;
+    copy_pending_orders: boolean;
+    auto_sync_existing: boolean;
   }>({
     master_account: '',
     slave_account: '',
@@ -172,6 +176,10 @@ function CreateConnectionForm({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    max_slippage: null,
+    copy_pending_orders: false,
+    auto_sync_existing: false,
   });
 
 
@@ -188,6 +196,10 @@ function CreateConnectionForm({
       symbol_mappings: '',
       source_lot_min: null,
       source_lot_max: null,
+      // Open Sync Policy defaults
+      max_slippage: null,
+      copy_pending_orders: false,
+      auto_sync_existing: false,
     });
     setMasterSettings({
       symbol_prefix: '',
@@ -321,6 +333,10 @@ function CreateConnectionForm({
         symbol_mappings: formData.symbol_mappings || undefined,
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
+        // Open Sync Policy
+        max_slippage: formData.max_slippage,
+        copy_pending_orders: formData.copy_pending_orders,
+        auto_sync_existing: formData.auto_sync_existing,
       });
       setStepComplete(2, true);
       onClose();
@@ -468,6 +484,10 @@ function CreateConnectionForm({
                 symbol_mappings: formData.symbol_mappings,
                 source_lot_min: formData.source_lot_min,
                 source_lot_max: formData.source_lot_max,
+                // Open Sync Policy fields
+                max_slippage: formData.max_slippage,
+                copy_pending_orders: formData.copy_pending_orders,
+                auto_sync_existing: formData.auto_sync_existing,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
             />

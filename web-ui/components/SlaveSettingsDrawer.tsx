@@ -54,6 +54,10 @@ export function SlaveSettingsDrawer({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    max_slippage: null,
+    copy_pending_orders: false,
+    auto_sync_existing: false,
   });
 
   // Initialize form data when member changes
@@ -74,6 +78,10 @@ export function SlaveSettingsDrawer({
         symbol_mappings: mappingsStr,
         source_lot_min: settings.source_lot_min ?? null,
         source_lot_max: settings.source_lot_max ?? null,
+        // Open Sync Policy fields
+        max_slippage: settings.max_slippage ?? null,
+        copy_pending_orders: settings.copy_pending_orders ?? false,
+        auto_sync_existing: settings.auto_sync_existing ?? false,
       });
       setMessage(null);
     }
@@ -106,6 +114,10 @@ export function SlaveSettingsDrawer({
         config_version: member.slave_settings.config_version,
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
+        // Open Sync Policy fields
+        max_slippage: formData.max_slippage,
+        copy_pending_orders: formData.copy_pending_orders,
+        auto_sync_existing: formData.auto_sync_existing,
       };
 
       await apiClient.updateTradeGroupMember(masterAccount, member.slave_account, settings);

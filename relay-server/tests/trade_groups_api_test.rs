@@ -385,6 +385,9 @@ async fn test_delete_trade_group_cascade_deletes_members() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        auto_sync_existing: false,
     };
 
     db.add_member("MASTER_CASCADE_TEST", "SLAVE_001", slave_settings.clone())
@@ -442,6 +445,9 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        auto_sync_existing: false,
     };
 
     let request_body = serde_json::json!({

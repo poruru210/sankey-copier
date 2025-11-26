@@ -99,6 +99,19 @@ pub struct SlaveSettings {
     /// Maximum lot size filter: skip trades with lot larger than this value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_lot_max: Option<f64>,
+
+    // === Open Sync Policy Settings ===
+    /// Maximum allowed slippage in points when opening positions (default: 30)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_slippage: Option<i32>,
+
+    /// Whether to copy pending orders (limit/stop orders) in addition to market orders
+    #[serde(default)]
+    pub copy_pending_orders: bool,
+
+    /// Whether to auto-sync existing Master positions when Slave connects
+    #[serde(default)]
+    pub auto_sync_existing: bool,
 }
 
 #[allow(dead_code)]
@@ -213,6 +226,9 @@ mod tests {
             config_version: 1,
             source_lot_min: Some(0.01),
             source_lot_max: Some(10.0),
+            max_slippage: None,
+            copy_pending_orders: false,
+            auto_sync_existing: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -239,6 +255,9 @@ mod tests {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            auto_sync_existing: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();

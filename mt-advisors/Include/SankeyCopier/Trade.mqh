@@ -3,12 +3,16 @@
 //|                        Copyright 2025, SANKEY Copier Project      |
 //|                     Trade filtering and transformation            |
 //+------------------------------------------------------------------+
+// Purpose: Slave EA trade processing functions (filtering, transformation, config)
+// Note: This file contains Slave-specific functionality
+//       Consider renaming to SlaveTrade.mqh in future refactoring
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
 #ifndef SANKEY_COPIER_TRADE_MQH
 #define SANKEY_COPIER_TRADE_MQH
 
 #include "Common.mqh"
+#include "SlaveTypes.mqh"
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |

@@ -27,6 +27,10 @@ export interface SlaveSettingsFormData {
   symbol_mappings: string;
   source_lot_min: number | null;
   source_lot_max: number | null;
+  // Open Sync Policy settings
+  max_slippage: number | null;
+  copy_pending_orders: boolean;
+  auto_sync_existing: boolean;
 }
 
 interface SlaveSettingsFormProps {
@@ -222,6 +226,63 @@ export function SlaveSettingsForm({
               disabled={disabled}
             />
           </DrawerFormField>
+        </DrawerSectionContent>
+      </DrawerSection>
+
+      {/* Open Sync Policy Section */}
+      <DrawerSection bordered>
+        <DrawerSectionHeader
+          title={content.syncPolicyTitle?.value || "Open Sync Policy"}
+          description={content.syncPolicyDescription?.value || "Configure how positions are opened and synchronized."}
+        />
+        <DrawerSectionContent>
+          {/* Max Slippage */}
+          <DrawerFormField
+            label={content.maxSlippage?.value || "Max Slippage (points)"}
+            description={content.maxSlippageDescription?.value || "Maximum allowed slippage when opening positions. Leave empty for default (30 points)."}
+            htmlFor="max_slippage"
+          >
+            <Input
+              id="max_slippage"
+              type="number"
+              step="1"
+              min="0"
+              max="1000"
+              placeholder={content.maxSlippagePlaceholder?.value || "e.g. 30"}
+              value={formData.max_slippage ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                handleChange('max_slippage', val === '' ? null : parseInt(val, 10));
+              }}
+              disabled={disabled}
+            />
+          </DrawerFormField>
+
+          {/* Copy Pending Orders */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="copy_pending_orders"
+              checked={formData.copy_pending_orders}
+              onCheckedChange={(checked) => handleChange('copy_pending_orders', checked as boolean)}
+              disabled={disabled}
+            />
+            <label htmlFor="copy_pending_orders" className="text-sm cursor-pointer">
+              {content.copyPendingOrders?.value || "Copy Pending Orders"} - {content.copyPendingOrdersDesc?.value || "Also copy limit and stop orders"}
+            </label>
+          </div>
+
+          {/* Auto Sync Existing */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="auto_sync_existing"
+              checked={formData.auto_sync_existing}
+              onCheckedChange={(checked) => handleChange('auto_sync_existing', checked as boolean)}
+              disabled={disabled}
+            />
+            <label htmlFor="auto_sync_existing" className="text-sm cursor-pointer">
+              {content.autoSyncExisting?.value || "Auto Sync Existing"} - {content.autoSyncExistingDesc?.value || "Automatically sync existing positions when slave connects"}
+            </label>
+          </div>
         </DrawerSectionContent>
       </DrawerSection>
     </div>

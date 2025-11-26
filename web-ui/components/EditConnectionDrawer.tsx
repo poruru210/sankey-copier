@@ -56,6 +56,10 @@ export function EditConnectionDrawer({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    max_slippage: null,
+    copy_pending_orders: false,
+    auto_sync_existing: false,
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -78,6 +82,10 @@ export function EditConnectionDrawer({
         symbol_mappings: symbolMappingsString,
         source_lot_min: setting.source_lot_min ?? null,
         source_lot_max: setting.source_lot_max ?? null,
+        // Open Sync Policy fields
+        max_slippage: setting.max_slippage ?? null,
+        copy_pending_orders: setting.copy_pending_orders ?? false,
+        auto_sync_existing: setting.auto_sync_existing ?? false,
       });
     }
   }, [setting, open]);

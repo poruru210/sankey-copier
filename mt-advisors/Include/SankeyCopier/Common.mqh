@@ -115,27 +115,7 @@ struct TradeFilters {
     int    blocked_magic_numbers[];
 };
 
-//--- Lot calculation mode constants
-#define LOT_CALC_MODE_MULTIPLIER    0  // Fixed multiplier
-#define LOT_CALC_MODE_MARGIN_RATIO  1  // Based on equity ratio (slave/master)
-
-struct CopyConfig {
-    string master_account;
-    string trade_group_id;
-    int    status;
-    int    lot_calculation_mode;  // 0=multiplier, 1=margin_ratio
-    double lot_multiplier;
-    bool   reverse_trade;
-    int    config_version;
-    string symbol_prefix;   // Master's symbol prefix
-    string symbol_suffix;   // Master's symbol suffix
-    SymbolMapping symbol_mappings[];
-    TradeFilters filters;
-    // Lot filtering
-    double source_lot_min;  // Min lot from master (0 = no filter)
-    double source_lot_max;  // Max lot from master (0 = no filter)
-    double master_equity;   // Master's equity for margin_ratio mode
-};
+// Note: Slave-specific types (CopyConfig, LOT_CALC_MODE_*) moved to SlaveTypes.mqh
 
 //+------------------------------------------------------------------+
 //| Generate AccountID from broker and account number                |

@@ -104,8 +104,16 @@ int OnInit()
    g_trade.SetDeviationInPoints(Slippage);
    g_trade.SetTypeFilling(ORDER_FILLING_IOC);
 
-   ArrayResize(g_order_map, 0);
-   ArrayResize(g_pending_order_map, 0);
+   // Recover ticket mappings from existing positions (restart recovery)
+   int recovered = RecoverMappingsFromPositions(g_order_map, g_pending_order_map);
+   if(recovered > 0)
+   {
+      Print("Recovered ", recovered, " position mappings from previous session");
+   }
+   else
+   {
+      Print("No previous position mappings to recover (fresh start)");
+   }
 
    // Initialize configuration arrays
    ArrayResize(g_configs, 0);
@@ -508,8 +516,8 @@ void OpenPosition(ulong master_ticket, string symbol, string type_str,
    sl = (sl > 0) ? NormalizeDouble(sl, _Digits) : 0;
    tp = (tp > 0) ? NormalizeDouble(tp, _Digits) : 0;
 
-   // Extract account number and build traceable comment: "M12345#98765"
-   string comment = "M" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+   // Build traceable comment for restart recovery: "M{master_ticket}"
+   string comment = BuildMarketComment(master_ticket);
 
    g_trade.SetExpertMagicNumber(magic);
    bool result = false;
@@ -615,8 +623,8 @@ void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
 
    lots = NormalizeDouble(lots, 2);
 
-   // Extract account number and build traceable comment: "P12345#98765"
-   string comment = "P" + IntegerToString(master_ticket) + "#" + ExtractAccountNumber(source_account);
+   // Build traceable comment for restart recovery: "P{master_ticket}"
+   string comment = BuildPendingComment(master_ticket);
 
    g_trade.SetExpertMagicNumber(magic);
 

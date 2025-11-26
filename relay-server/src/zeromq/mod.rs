@@ -1,6 +1,9 @@
 mod config_publisher;
 
-use crate::models::{HeartbeatMessage, RequestConfigMessage, TradeSignal, UnregisterMessage};
+use crate::models::{
+    HeartbeatMessage, PositionSnapshotMessage, RequestConfigMessage, SyncRequestMessage,
+    TradeSignal, UnregisterMessage,
+};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,6 +18,9 @@ pub enum ZmqMessage {
     Unregister(UnregisterMessage),
     Heartbeat(HeartbeatMessage),
     RequestConfig(RequestConfigMessage),
+    // Position sync protocol messages
+    PositionSnapshot(PositionSnapshotMessage),
+    SyncRequest(SyncRequestMessage),
 }
 
 /// Helper struct to determine message type from MessagePack data
@@ -169,6 +175,61 @@ impl ZmqServer {
                                                             );
                                                         }
                                                     }
+                                                }
+                                            }
+                                        }
+                                        // Position sync protocol messages
+                                        "PositionSnapshot" => {
+                                            match rmp_serde::from_slice::<PositionSnapshotMessage>(
+                                                &bytes,
+                                            ) {
+                                                Ok(snapshot) => {
+                                                    tracing::debug!(
+                                                        "Received PositionSnapshot from {}: {} positions",
+                                                        snapshot.source_account,
+                                                        snapshot.positions.len()
+                                                    );
+                                                    if let Err(e) = tx.send(
+                                                        ZmqMessage::PositionSnapshot(snapshot),
+                                                    ) {
+                                                        tracing::error!(
+                                                            "Failed to send PositionSnapshot to channel: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!(
+                                                        "Failed to deserialize PositionSnapshot message: {}",
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        "SyncRequest" => {
+                                            match rmp_serde::from_slice::<SyncRequestMessage>(
+                                                &bytes,
+                                            ) {
+                                                Ok(req) => {
+                                                    tracing::debug!(
+                                                        "Received SyncRequest from {} for master {}",
+                                                        req.slave_account,
+                                                        req.master_account
+                                                    );
+                                                    if let Err(e) =
+                                                        tx.send(ZmqMessage::SyncRequest(req))
+                                                    {
+                                                        tracing::error!(
+                                                            "Failed to send SyncRequest to channel: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!(
+                                                        "Failed to deserialize SyncRequest message: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }

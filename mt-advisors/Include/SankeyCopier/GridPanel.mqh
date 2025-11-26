@@ -12,6 +12,7 @@
 #define SANKEY_COPIER_GRIDPANEL_MQH
 
 #include "Common.mqh"
+#include "SlaveTypes.mqh"
 
 #property strict
 
@@ -101,17 +102,18 @@ void CreatePanelLabel(string name, int x, int y, string text, color clr, int fon
 
 //+------------------------------------------------------------------+
 //| Update text label (MT4/MT5 compatible)                           |
+//| Note: clr=clrNONE means "keep existing color"                    |
 //+------------------------------------------------------------------+
-void UpdatePanelLabel(string name, string text, color clr = -1)
+void UpdatePanelLabel(string name, string text, color clr = clrNONE)
 {
    #ifdef IS_MT5
       ObjectSetString(0, name, OBJPROP_TEXT, text);
-      if(clr != -1)
+      if(clr != clrNONE)
          ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    #else
-      int font_size = ObjectGet(name, OBJPROP_FONTSIZE);
+      int font_size = (int)ObjectGet(name, OBJPROP_FONTSIZE);
       if(font_size == 0) font_size = PANEL_FONT_SIZE;
-      if(clr == -1) clr = ObjectGet(name, OBJPROP_COLOR);
+      if(clr == clrNONE) clr = (color)ObjectGet(name, OBJPROP_COLOR);
       ObjectSetText(name, text, font_size, PANEL_FONT, clr);
    #endif
 }
@@ -259,8 +261,8 @@ public:
    void     ClearRows();
    int      GetRowCount() const { return m_row_count; }
 
-   // Title management
-   void     SetTitle(string title, color clr = -1);
+   // Title management (clr=clrNONE means "use default title color")
+   void     SetTitle(string title, color clr = clrNONE);
 
    // Slave EA panel helpers (high-level update methods)
    bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
@@ -750,24 +752,24 @@ bool CGridPanel::RemoveRow(string row_key)
       }
 
       // Reposition separator line if exists
-      string line_name = GenerateObjectName(key + "_line");
+      string sep_line_name = GenerateObjectName(key + "_line");
       int line_y = new_y + (m_row_height / 2) - 1;
       #ifdef IS_MT5
-         if(ObjectFind(0, line_name) >= 0)
-            ObjectSetInteger(0, line_name, OBJPROP_YDISTANCE, line_y);
+         if(ObjectFind(0, sep_line_name) >= 0)
+            ObjectSetInteger(0, sep_line_name, OBJPROP_YDISTANCE, line_y);
       #else
-         if(ObjectFind(line_name) >= 0)
-            ObjectSet(line_name, OBJPROP_YDISTANCE, line_y);
+         if(ObjectFind(sep_line_name) >= 0)
+            ObjectSet(sep_line_name, OBJPROP_YDISTANCE, line_y);
       #endif
 
       // Reposition centered row if exists
-      string center_name = GenerateObjectName(key + "_center");
+      string ctr_name = GenerateObjectName(key + "_center");
       #ifdef IS_MT5
-         if(ObjectFind(0, center_name) >= 0)
-            ObjectSetInteger(0, center_name, OBJPROP_YDISTANCE, new_y);
+         if(ObjectFind(0, ctr_name) >= 0)
+            ObjectSetInteger(0, ctr_name, OBJPROP_YDISTANCE, new_y);
       #else
-         if(ObjectFind(center_name) >= 0)
-            ObjectSet(center_name, OBJPROP_YDISTANCE, new_y);
+         if(ObjectFind(ctr_name) >= 0)
+            ObjectSet(ctr_name, OBJPROP_YDISTANCE, new_y);
       #endif
    }
 
@@ -825,9 +827,9 @@ void CGridPanel::ClearRows()
 //+------------------------------------------------------------------+
 //| Set panel title (centered)                                        |
 //+------------------------------------------------------------------+
-void CGridPanel::SetTitle(string title, color clr = -1)
+void CGridPanel::SetTitle(string title, color clr)
 {
-   if(clr == -1)
+   if(clr == clrNONE)
       clr = m_title_color;
 
    string title_obj = GenerateObjectName("Title");

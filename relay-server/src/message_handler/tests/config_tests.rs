@@ -76,6 +76,9 @@ async fn test_handle_request_config_slave() {
         filters: TradeFilters::default(),
         source_lot_min: None,
         source_lot_max: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        auto_sync_existing: false,
     };
     handler
         .db

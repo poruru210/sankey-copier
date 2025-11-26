@@ -154,3 +154,49 @@ pub struct TradeSignalMessage {
     pub timestamp: String,
     pub source_account: String,
 }
+
+// =============================================================================
+// Position Sync Protocol Messages
+// =============================================================================
+
+/// Position information for sync protocol
+/// Represents a single open position on Master EA
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionInfo {
+    pub ticket: i64,
+    pub symbol: String,
+    pub order_type: String, // "Buy", "Sell", "BuyLimit", etc.
+    pub lots: f64,
+    pub open_price: f64,
+    pub open_time: String, // ISO 8601 format
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_loss: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub take_profit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magic_number: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+/// Position snapshot message (Master → Slave via Relay)
+/// Sent when Master restarts or in response to SyncRequest
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionSnapshotMessage {
+    pub message_type: String, // "PositionSnapshot"
+    pub source_account: String,
+    pub positions: Vec<PositionInfo>,
+    pub timestamp: String, // ISO 8601 format
+}
+
+/// Sync request message (Slave → Master via Relay)
+/// Sent when Slave starts up and needs to sync with Master
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRequestMessage {
+    pub message_type: String, // "SyncRequest"
+    pub slave_account: String,
+    pub master_account: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_sync_time: Option<String>, // ISO 8601 format, if known
+    pub timestamp: String,
+}
