@@ -26,6 +26,15 @@ pub struct TradeFilters {
     pub blocked_magic_numbers: Option<Vec<i32>>,
 }
 
+/// Lot calculation mode
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LotCalculationMode {
+    #[default]
+    Multiplier,
+    MarginRatio,
+}
+
 /// Slave EA configuration message
 /// Contains all configuration parameters for a Slave EA
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +43,8 @@ pub struct SlaveConfigMessage {
     pub master_account: String,
     pub timestamp: String, // ISO 8601 format
     pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
+    #[serde(default)]
+    pub lot_calculation_mode: LotCalculationMode,
     #[serde(default)]
     pub lot_multiplier: Option<f64>,
     pub reverse_trade: bool,
@@ -44,6 +55,15 @@ pub struct SlaveConfigMessage {
     pub symbol_mappings: Vec<SymbolMapping>,
     pub filters: TradeFilters,
     pub config_version: u32,
+    /// Minimum lot size filter: skip trades with lot smaller than this value
+    #[serde(default)]
+    pub source_lot_min: Option<f64>,
+    /// Maximum lot size filter: skip trades with lot larger than this value
+    #[serde(default)]
+    pub source_lot_max: Option<f64>,
+    /// Master's current equity (for margin_ratio mode calculation)
+    #[serde(default)]
+    pub master_equity: Option<f64>,
 }
 
 /// Master EA configuration message

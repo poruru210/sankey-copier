@@ -48,11 +48,14 @@ export function EditConnectionDrawer({
   const side = isDesktop ? 'right' : 'bottom';
 
   const [formData, setFormData] = useState<SlaveSettingsFormData>({
+    lot_calculation_mode: 'multiplier',
     lot_multiplier: 1.0,
     reverse_trade: false,
     symbol_prefix: '',
     symbol_suffix: '',
     symbol_mappings: '',
+    source_lot_min: null,
+    source_lot_max: null,
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -60,12 +63,21 @@ export function EditConnectionDrawer({
   // Initialize form data when setting changes
   useEffect(() => {
     if (setting) {
+      // Convert symbol_mappings array to string format for editing
+      // Prefer array format, fallback to string format
+      const symbolMappingsString = setting.symbol_mappings && setting.symbol_mappings.length > 0
+        ? setting.symbol_mappings.map(m => `${m.source_symbol}=${m.target_symbol}`).join(',')
+        : (setting.symbol_map || '');
+
       setFormData({
+        lot_calculation_mode: setting.lot_calculation_mode || 'multiplier',
         lot_multiplier: setting.lot_multiplier || 1.0,
         reverse_trade: setting.reverse_trade,
         symbol_prefix: setting.symbol_prefix || '',
         symbol_suffix: setting.symbol_suffix || '',
-        symbol_mappings: setting.symbol_map || '',
+        symbol_mappings: symbolMappingsString,
+        source_lot_min: setting.source_lot_min ?? null,
+        source_lot_max: setting.source_lot_max ?? null,
       });
     }
   }, [setting, open]);
@@ -73,13 +85,26 @@ export function EditConnectionDrawer({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Parse symbol_mappings string to array format
+    // Format: "XAUUSD=GOLD,EURUSD=EUR" -> [{source_symbol: "XAUUSD", target_symbol: "GOLD"}, ...]
+    const symbolMappingsArray = formData.symbol_mappings
+      ? formData.symbol_mappings.split(',').filter(s => s.trim()).map(pair => {
+          const [source, target] = pair.split('=').map(s => s.trim());
+          return { source_symbol: source || '', target_symbol: target || '' };
+        }).filter(m => m.source_symbol && m.target_symbol)
+      : [];
+
     onSave({
       ...setting,
+      lot_calculation_mode: formData.lot_calculation_mode,
       lot_multiplier: formData.lot_multiplier,
       reverse_trade: formData.reverse_trade,
       symbol_prefix: formData.symbol_prefix || undefined,
       symbol_suffix: formData.symbol_suffix || undefined,
+      symbol_mappings: symbolMappingsArray,
       symbol_map: formData.symbol_mappings || undefined,
+      source_lot_min: formData.source_lot_min,
+      source_lot_max: formData.source_lot_max,
     });
     onOpenChange(false);
   };

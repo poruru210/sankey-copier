@@ -167,6 +167,7 @@ fn test_config_message_serialization() {
         master_account: "master_account_456".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         status: 2, // STATUS_CONNECTED
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_prefix: None,
@@ -182,6 +183,9 @@ fn test_config_message_serialization() {
             blocked_magic_numbers: None,
         },
         config_version: 1,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: Some(10000.0),
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");

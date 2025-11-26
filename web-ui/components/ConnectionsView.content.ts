@@ -1,5 +1,9 @@
 import { t, type DeclarationContent } from 'intlayer';
 
+/**
+ * Internationalization content for the ConnectionsView component
+ * Provides Japanese and English translations for all UI strings
+ */
 const connectionsViewContent = {
   key: 'connections-view',
   content: {
@@ -87,42 +91,6 @@ const connectionsViewContent = {
       en: 'Settings',
       ja: '設定',
     }),
-    lotLevel: t({
-      en: 'Log Level',
-      ja: 'ログレベル',
-    }),
-    allLeverage: t({
-      en: 'All Leverage Operations',
-      ja: 'すべてのレバレッジ操作',
-    }),
-    prefix: t({
-      en: 'Prefix',
-      ja: '前置き',
-    }),
-    addSource: t({
-      en: 'Add Source',
-      ja: 'ソースの追加',
-    }),
-    addReceiver: t({
-      en: 'Add Receiver',
-      ja: 'レシーバーの追加',
-    }),
-    hideSettings: t({
-      en: 'Hide Settings',
-      ja: '設定を非表示',
-    }),
-    showSettings: t({
-      en: 'Show Settings',
-      ja: '設定を表示',
-    }),
-    connectAllSources: t({
-      en: 'Connect All Sources',
-      ja: 'すべてのソースを接続',
-    }),
-    disableAllSources: t({
-      en: 'Disable All Sources',
-      ja: 'すべてのソースを無効化',
-    }),
     allSourcesInactive: t({
       en: 'All sources are inactive',
       ja: 'すべてのソースが非アクティブです',
@@ -199,18 +167,6 @@ const connectionsViewContent = {
       en: 'Sources',
       ja: 'ソース数',
     }),
-    selectSource: t({
-      en: 'Select Source',
-      ja: 'ソースを選択',
-    }),
-    selectSourcePlaceholder: t({
-      en: '-- Please select --',
-      ja: '-- 選択してください --',
-    }),
-    tradingConnections: t({
-      en: 'Trading Connections',
-      ja: '取引接続',
-    }),
     refresh: t({
       en: 'Refresh',
       ja: '更新',
@@ -246,6 +202,51 @@ const connectionsViewContent = {
     createFailed: t({
       en: 'Failed to create',
       ja: '作成に失敗しました',
+    }),
+    fixError: t({
+      en: 'Fix Error',
+      ja: 'エラーを修正',
+    }),
+    // Copy Settings Carousel content
+    copySettings: t({
+      en: 'Copy Settings',
+      ja: 'コピー設定',
+    }),
+    marginRatio: t({
+      en: 'Margin Ratio',
+      ja: '証拠金比率',
+    }),
+    symbolRules: t({
+      en: 'Symbol Rules',
+      ja: 'シンボルルール',
+    }),
+    prefix: t({
+      en: 'Prefix',
+      ja: 'プレフィックス',
+    }),
+    suffix: t({
+      en: 'Suffix',
+      ja: 'サフィックス',
+    }),
+    mappings: t({
+      en: 'Mappings',
+      ja: 'マッピング',
+    }),
+    lotFilter: t({
+      en: 'Lot Filter',
+      ja: 'ロットフィルター',
+    }),
+    min: t({
+      en: 'Min',
+      ja: '最小',
+    }),
+    max: t({
+      en: 'Max',
+      ja: '最大',
+    }),
+    noSettings: t({
+      en: 'No settings configured',
+      ja: '設定がありません',
     }),
   },
 } satisfies DeclarationContent;

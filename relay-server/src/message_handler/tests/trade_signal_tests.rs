@@ -1,7 +1,7 @@
 //! Tests for trade signal message handling
 
 use super::*;
-use crate::models::{SlaveSettings, TradeFilters};
+use crate::models::{LotCalculationMode, SlaveSettings, TradeFilters};
 
 #[tokio::test]
 async fn test_handle_trade_signal_with_matching_setting() {
@@ -13,6 +13,7 @@ async fn test_handle_trade_signal_with_matching_setting() {
         handler.db.create_trade_group("MASTER_001").await.unwrap();
 
         let slave_settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             config_version: 1,
             symbol_prefix: None,
             symbol_suffix: None,
@@ -25,6 +26,8 @@ async fn test_handle_trade_signal_with_matching_setting() {
                 allowed_magic_numbers: None,
                 blocked_magic_numbers: None,
             },
+            source_lot_min: None,
+            source_lot_max: None,
         };
         handler
             .db
@@ -48,6 +51,7 @@ async fn test_handle_trade_signal_no_matching_master() {
         handler.db.create_trade_group("MASTER_001").await.unwrap();
 
         let slave_settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             config_version: 1,
             symbol_prefix: None,
             symbol_suffix: None,
@@ -60,6 +64,8 @@ async fn test_handle_trade_signal_no_matching_master() {
                 allowed_magic_numbers: None,
                 blocked_magic_numbers: None,
             },
+            source_lot_min: None,
+            source_lot_max: None,
         };
         handler
             .db
@@ -82,6 +88,7 @@ async fn test_handle_trade_signal_disabled_setting() {
         handler.db.create_trade_group("MASTER_001").await.unwrap();
 
         let slave_settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             config_version: 1,
             symbol_prefix: None,
             symbol_suffix: None,
@@ -94,6 +101,8 @@ async fn test_handle_trade_signal_disabled_setting() {
                 allowed_magic_numbers: None,
                 blocked_magic_numbers: None,
             },
+            source_lot_min: None,
+            source_lot_max: None,
         };
         // Add member and then disable it
         handler

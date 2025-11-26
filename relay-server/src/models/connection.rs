@@ -97,6 +97,7 @@ mod tests {
             master_account: "MASTER_001".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: 2, // STATUS_CONNECTED
+            lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
             symbol_mappings: vec![],
@@ -109,6 +110,9 @@ mod tests {
             config_version: 1,
             symbol_prefix: None,
             symbol_suffix: None,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: None,
         };
 
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();

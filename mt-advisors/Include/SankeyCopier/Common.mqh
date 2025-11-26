@@ -83,6 +83,11 @@
    int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
    void        slave_config_free(HANDLE_TYPE handle);
 
+   // Slave config symbol mappings array access
+   int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
+   string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
+   string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
+
    // Master config message parsing
    HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
    string      master_config_get_string(HANDLE_TYPE handle, string field_name);
@@ -110,15 +115,26 @@ struct TradeFilters {
     int    blocked_magic_numbers[];
 };
 
+//--- Lot calculation mode constants
+#define LOT_CALC_MODE_MULTIPLIER    0  // Fixed multiplier
+#define LOT_CALC_MODE_MARGIN_RATIO  1  // Based on equity ratio (slave/master)
+
 struct CopyConfig {
     string master_account;
     string trade_group_id;
     int    status;
+    int    lot_calculation_mode;  // 0=multiplier, 1=margin_ratio
     double lot_multiplier;
     bool   reverse_trade;
     int    config_version;
+    string symbol_prefix;   // Master's symbol prefix
+    string symbol_suffix;   // Master's symbol suffix
     SymbolMapping symbol_mappings[];
     TradeFilters filters;
+    // Lot filtering
+    double source_lot_min;  // Min lot from master (0 = no filter)
+    double source_lot_max;  // Max lot from master (0 = no filter)
+    double master_equity;   // Master's equity for margin_ratio mode
 };
 
 //+------------------------------------------------------------------+

@@ -216,9 +216,15 @@ private:
    color    m_bg_color;
    color    m_border_color;
    color    m_title_color;
-   
+
    // State
    bool     m_initialized;
+
+   // Carousel state for Slave panel (copy settings pagination)
+   int      m_carousel_index;      // Current page index (0-based)
+   int      m_carousel_count;      // Total number of pages (configs)
+   bool     m_carousel_enabled;    // Whether carousel navigation is enabled
+   CopyConfig m_cached_configs[];  // Cached configs for carousel display
 
    // Internal coordinate calculation methods
    int      CalculateBackgroundX();
@@ -244,6 +250,9 @@ public:
 
    // Row management
    int      AddRow(string row_key, string &values[], color &colors[]);
+   int      AddSeparator(string row_key);  // Add separator line
+   int      AddCenteredRow(string row_key, string text, color clr);  // Add centered text row
+   bool     UpdateCenteredRow(string row_key, string text, color clr = -1);  // Update centered row
    bool     UpdateRow(string row_key, string &values[], color &colors[]);
    bool     UpdateCell(string row_key, int column_index, string value, color clr = -1);
    bool     RemoveRow(string row_key);
@@ -255,7 +264,16 @@ public:
 
    // Slave EA panel helpers (high-level update methods)
    bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
-   
+
+   // Carousel methods for displaying copy settings (Slave panel)
+   void     UpdateCarouselConfigs(CopyConfig &configs[]);  // Update configs and refresh display
+   void     ShowCarouselPage(int index);                   // Show specific page
+   void     NextCarouselPage();                            // Navigate to next config
+   void     PrevCarouselPage();                            // Navigate to previous config
+   int      GetCarouselIndex() const { return m_carousel_index; }
+   int      GetCarouselCount() const { return m_carousel_count; }
+   bool     HandleChartClick(int x, int y);                // Handle click for navigation buttons
+
    // Master EA panel helpers
    bool     InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
    void     UpdateTrackedOrdersRow(int count);
@@ -307,6 +325,12 @@ CGridPanel::CGridPanel()
    m_border_color = PANEL_COLOR_BORDER;
    m_title_color = PANEL_COLOR_TITLE;
    m_initialized = false;
+
+   // Carousel state
+   m_carousel_index = 0;
+   m_carousel_count = 0;
+   m_carousel_enabled = false;
+   ArrayResize(m_cached_configs, 0);
 }
 
 //+------------------------------------------------------------------+
@@ -373,17 +397,6 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
                         initial_height,
                         m_bg_color);
 
-   Print("==== Grid Panel Debug Info ====");
-   Print("Panel initialized: ", m_prefix);
-   Print("Panel width: ", m_panel_width, "px");
-   Print("X offset: ", m_x_offset, "px (from right edge)");
-   Print("Background X (left edge): ", bg_x, "px");
-   Print("Column 0 (label): X=", m_column_widths[0], "px, Width=", LABEL_COLUMN_WIDTH, "px, Anchor=LEFT_UPPER");
-   Print("Column 1 (value): X=", m_column_widths[1], "px, Width=",
-         (m_column_widths[0] - m_column_widths[1] - m_padding_right), "px, Anchor=LEFT_UPPER");
-   Print("Padding: L=", m_padding_left, " R=", m_padding_right);
-   Print("Column spacing: ", (m_column_widths[0] - m_column_widths[1]), "px (label width)");
-   Print("===============================");
    m_initialized = true;
    return true;
 }
@@ -475,6 +488,137 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 }
 
 //+------------------------------------------------------------------+
+//| Add a separator line row using rectangle object                   |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for the separator row              |
+//| Returns: Row index on success, -1 on error                       |
+//| Note: Uses CORNER_RIGHT_UPPER to match panel coordinate system   |
+//+------------------------------------------------------------------+
+int CGridPanel::AddSeparator(string row_key)
+{
+   // Add row key to track this separator
+   int new_size = m_row_count + 1;
+   ArrayResize(m_row_keys, new_size);
+   m_row_keys[m_row_count] = row_key;
+
+   // Calculate position for separator line
+   // Using CORNER_RIGHT_UPPER: XDISTANCE is distance from right edge to left edge of object
+   int row_y = CalculateRowY(m_row_count) + (m_row_height / 2) - 1;
+   int line_width = m_panel_width - m_padding_left - m_padding_right;
+   // Line left edge from right = panel left edge from right - padding_left
+   // Panel left edge = m_x_offset + m_panel_width
+   // Line left edge = (m_x_offset + m_panel_width) - m_padding_left
+   int line_x = m_x_offset + m_panel_width - m_padding_left;
+
+   // Create rectangle label as a thin horizontal line
+   string obj_name = GenerateObjectName(row_key + "_line");
+
+   #ifdef IS_MT5
+      ObjectCreate(0, obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, obj_name, OBJPROP_XDISTANCE, line_x);
+      ObjectSetInteger(0, obj_name, OBJPROP_YDISTANCE, row_y);
+      ObjectSetInteger(0, obj_name, OBJPROP_XSIZE, line_width);
+      ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
+      ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, clrDimGray);  // Border color same as background
+      ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSetInteger(0, obj_name, OBJPROP_WIDTH, 0);  // No border width
+      ObjectSetInteger(0, obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+      ObjectSetInteger(0, obj_name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, obj_name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, obj_name, OBJPROP_ZORDER, 5);  // Above background, below text
+   #else
+      ObjectCreate(obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSet(obj_name, OBJPROP_XDISTANCE, line_x);
+      ObjectSet(obj_name, OBJPROP_YDISTANCE, row_y);
+      ObjectSet(obj_name, OBJPROP_XSIZE, line_width);
+      ObjectSet(obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
+      ObjectSet(obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSet(obj_name, OBJPROP_COLOR, clrDimGray);  // Border color same as background
+      ObjectSet(obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSet(obj_name, OBJPROP_WIDTH, 0);  // No border width
+      ObjectSet(obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+      ObjectSet(obj_name, OBJPROP_BACK, false);
+      ObjectSet(obj_name, OBJPROP_SELECTABLE, false);
+   #endif
+
+   m_row_count++;
+   UpdateBackgroundSize();
+
+   return m_row_count - 1;
+}
+
+//+------------------------------------------------------------------+
+//| Add a centered text row                                           |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for this row                       |
+//|   text    - Text to display (centered)                           |
+//|   clr     - Text color                                           |
+//| Returns: Row index on success, -1 on error                       |
+//+------------------------------------------------------------------+
+int CGridPanel::AddCenteredRow(string row_key, string text, color clr)
+{
+   // Check if row already exists
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == row_key)
+      {
+         Print("Row with key '", row_key, "' already exists");
+         return -1;
+      }
+   }
+
+   // Add row key
+   int new_size = m_row_count + 1;
+   ArrayResize(m_row_keys, new_size);
+   m_row_keys[m_row_count] = row_key;
+
+   // Calculate Y position for this row
+   int row_y = CalculateRowY(m_row_count);
+
+   // Calculate center X position (same as title)
+   int center_x = CalculateTitleX();
+
+   // Create centered label
+   string obj_name = GenerateObjectName(row_key + "_center");
+   CreatePanelLabel(obj_name, center_x, row_y, text, clr, PANEL_DATA_FONT_SIZE, ANCHOR_UPPER);
+
+   m_row_count++;
+   UpdateBackgroundSize();
+
+   return m_row_count - 1;
+}
+
+//+------------------------------------------------------------------+
+//| Update a centered row                                             |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for the row to update              |
+//|   text    - New text to display                                  |
+//|   clr     - New color (-1 to keep existing)                      |
+//| Returns: true on success, false if row not found                 |
+//+------------------------------------------------------------------+
+bool CGridPanel::UpdateCenteredRow(string row_key, string text, color clr = -1)
+{
+   // Find row index
+   int row_index = -1;
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == row_key)
+      {
+         row_index = i;
+         break;
+      }
+   }
+
+   if(row_index == -1)
+      return false;
+
+   string obj_name = GenerateObjectName(row_key + "_center");
+   UpdatePanelLabel(obj_name, text, clr);
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Update an existing row                                           |
 //| Parameters:                                                       |
 //|   row_key - Unique identifier for the row to update            |
@@ -553,7 +697,7 @@ bool CGridPanel::RemoveRow(string row_key)
    if(row_index == -1)
       return false;
 
-   // Delete objects for this row
+   // Delete objects for this row (column labels and separator line)
    for(int col = 0; col < m_column_count; col++)
    {
       string obj_name = GenerateObjectName(row_key + "_col" + IntegerToString(col));
@@ -563,6 +707,22 @@ bool CGridPanel::RemoveRow(string row_key)
          ObjectDelete(obj_name);
       #endif
    }
+
+   // Also delete separator line object if it exists
+   string line_name = GenerateObjectName(row_key + "_line");
+   #ifdef IS_MT5
+      ObjectDelete(0, line_name);
+   #else
+      ObjectDelete(line_name);
+   #endif
+
+   // Also delete centered row object if it exists
+   string center_name = GenerateObjectName(row_key + "_center");
+   #ifdef IS_MT5
+      ObjectDelete(0, center_name);
+   #else
+      ObjectDelete(center_name);
+   #endif
 
    // Remove from array (shift remaining elements)
    for(int i = row_index; i < m_row_count - 1; i++)
@@ -578,6 +738,7 @@ bool CGridPanel::RemoveRow(string row_key)
       int new_y = CalculateRowY(i);
       string key = m_row_keys[i];
 
+      // Reposition column labels
       for(int col = 0; col < m_column_count; col++)
       {
          string obj_name = GenerateObjectName(key + "_col" + IntegerToString(col));
@@ -587,6 +748,27 @@ bool CGridPanel::RemoveRow(string row_key)
             ObjectSet(obj_name, OBJPROP_YDISTANCE, new_y);
          #endif
       }
+
+      // Reposition separator line if exists
+      string line_name = GenerateObjectName(key + "_line");
+      int line_y = new_y + (m_row_height / 2) - 1;
+      #ifdef IS_MT5
+         if(ObjectFind(0, line_name) >= 0)
+            ObjectSetInteger(0, line_name, OBJPROP_YDISTANCE, line_y);
+      #else
+         if(ObjectFind(line_name) >= 0)
+            ObjectSet(line_name, OBJPROP_YDISTANCE, line_y);
+      #endif
+
+      // Reposition centered row if exists
+      string center_name = GenerateObjectName(key + "_center");
+      #ifdef IS_MT5
+         if(ObjectFind(0, center_name) >= 0)
+            ObjectSetInteger(0, center_name, OBJPROP_YDISTANCE, new_y);
+      #else
+         if(ObjectFind(center_name) >= 0)
+            ObjectSet(center_name, OBJPROP_YDISTANCE, new_y);
+      #endif
    }
 
    // Update background size
@@ -600,10 +782,12 @@ bool CGridPanel::RemoveRow(string row_key)
 //+------------------------------------------------------------------+
 void CGridPanel::ClearRows()
 {
-   // Delete all row objects
+   // Delete all row objects (column labels, separator lines, and centered rows)
    for(int i = 0; i < m_row_count; i++)
    {
       string key = m_row_keys[i];
+
+      // Delete column labels
       for(int col = 0; col < m_column_count; col++)
       {
          string obj_name = GenerateObjectName(key + "_col" + IntegerToString(col));
@@ -613,6 +797,22 @@ void CGridPanel::ClearRows()
             ObjectDelete(obj_name);
          #endif
       }
+
+      // Delete separator line if exists
+      string line_name = GenerateObjectName(key + "_line");
+      #ifdef IS_MT5
+         ObjectDelete(0, line_name);
+      #else
+         ObjectDelete(line_name);
+      #endif
+
+      // Delete centered row if exists
+      string center_name = GenerateObjectName(key + "_center");
+      #ifdef IS_MT5
+         ObjectDelete(0, center_name);
+      #else
+         ObjectDelete(center_name);
+      #endif
    }
 
    ArrayResize(m_row_keys, 0);
@@ -623,7 +823,7 @@ void CGridPanel::ClearRows()
 }
 
 //+------------------------------------------------------------------+
-//| Set panel title                                                   |
+//| Set panel title (centered)                                        |
 //+------------------------------------------------------------------+
 void CGridPanel::SetTitle(string title, color clr = -1)
 {
@@ -631,10 +831,11 @@ void CGridPanel::SetTitle(string title, color clr = -1)
       clr = m_title_color;
 
    string title_obj = GenerateObjectName("Title");
-   int title_x = CalculateTitleX();  // Use encapsulated calculation
+   int title_x = CalculateTitleX();  // Center of panel
    int title_y = m_y_offset + m_padding_top;
 
-   CreatePanelLabel(title_obj, title_x, title_y, title, clr, PANEL_TITLE_FONT_SIZE);
+   // Use ANCHOR_UPPER for horizontal centering
+   CreatePanelLabel(title_obj, title_x, title_y, title, clr, PANEL_TITLE_FONT_SIZE, ANCHOR_UPPER);
 }
 
 //+------------------------------------------------------------------+
@@ -653,30 +854,13 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
    // Set title
    SetTitle("Sankey Copier - Slave", PANEL_COLOR_TITLE);
 
+   // Separator after title
+   AddSeparator("sep_top");
+
    // Add standard rows with initial values
    string status_vals[] = {"Status:", "DISABLED"};
    color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
    AddRow("status", status_vals, status_cols);
-
-   string master_vals[] = {"Active:", "0"};
-   color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("master", master_vals, master_cols);
-
-   string server_vals[] = {"Server:", "N/A"};
-   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("server", server_vals, server_cols);
-   
-   string prefix_vals[] = {"Prefix:", "-"};
-   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("prefix", prefix_vals, prefix_cols);
-   
-   string suffix_vals[] = {"Suffix:", "-"};
-   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("suffix", suffix_vals, suffix_cols);
-   
-   string map_vals[] = {"Map:", "-"};
-   color map_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("map", map_vals, map_cols);
 
    m_initialized = true;
    return true;
@@ -751,29 +935,24 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    // Set title
    SetTitle("Sankey Copier - Master", PANEL_COLOR_TITLE);
 
-   // Add standard rows with initial values
+   // Separator after title
+   AddSeparator("sep_top");
+
+   // Add standard rows with initial values (white text except status value)
    string status_vals[] = {"Status:", "ACTIVE"};
-   color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_CONNECTED};
+   color status_cols[] = {clrWhite, PANEL_COLOR_CONNECTED};
    AddRow("status", status_vals, status_cols);
 
-   string server_vals[] = {"Server:", "N/A"};
-   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("server", server_vals, server_cols);
-
-   string magic_vals[] = {"Magic Filter:", "All"};
-   color magic_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("magic", magic_vals, magic_cols);
-   
-   string prefix_vals[] = {"Prefix:", "-"};
-   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   string prefix_vals[] = {"Prefix:", " "};  // Use space to avoid "Label" default
+   color prefix_cols[] = {clrWhite, clrWhite};
    AddRow("prefix", prefix_vals, prefix_cols);
-   
-   string suffix_vals[] = {"Suffix:", "-"};
-   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+
+   string suffix_vals[] = {"Suffix:", " "};  // Use space to avoid "Label" default
+   color suffix_cols[] = {clrWhite, clrWhite};
    AddRow("suffix", suffix_vals, suffix_cols);
 
    string tracked_vals[] = {"Tracked Orders:", "0"};
-   color tracked_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   color tracked_cols[] = {clrWhite, clrWhite};
    AddRow("tracked", tracked_vals, tracked_cols);
 
    return true;
@@ -784,17 +963,11 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateSymbolConfig(string prefix, string suffix, string map)
 {
-   // Update prefix row
-   if(prefix != "")
-      UpdateCell("prefix", 1, prefix, PANEL_COLOR_VALUE);
-   else
-      UpdateCell("prefix", 1, "-", PANEL_COLOR_VALUE);
-   
-   // Update suffix row
-   if(suffix != "")
-      UpdateCell("suffix", 1, suffix, PANEL_COLOR_VALUE);
-   else
-      UpdateCell("suffix", 1, "-", PANEL_COLOR_VALUE);
+   // Update prefix row (use space if empty to avoid "Label" default)
+   UpdateCell("prefix", 1, (prefix == "") ? " " : prefix, clrWhite);
+
+   // Update suffix row (use space if empty to avoid "Label" default)
+   UpdateCell("suffix", 1, (suffix == "") ? " " : suffix, clrWhite);
 }
 
 //+------------------------------------------------------------------+
@@ -1061,8 +1234,8 @@ void CGridPanel::UpdateTrackedOrdersRow(int count)
    vals[0] = "Tracked Orders:";
    vals[1] = IntegerToString(count);
    color cols[2];
-   cols[0] = PANEL_COLOR_LABEL;
-   cols[1] = PANEL_COLOR_VALUE;
+   cols[0] = clrWhite;
+   cols[1] = clrWhite;
    UpdateRow("tracked", vals, cols);
 }
 
@@ -1163,8 +1336,6 @@ void CGridPanel::Delete()
 
    // Delete all rows
    ClearRows();
-
-   Print("Grid panel deleted: ", m_prefix);
 }
 
 //+------------------------------------------------------------------+
@@ -1266,6 +1437,267 @@ void CGridPanel::UpdateBackgroundSize()
 string CGridPanel::GenerateObjectName(string suffix)
 {
    return m_prefix + suffix;
+}
+
+//+------------------------------------------------------------------+
+//| Update carousel configs and refresh display                       |
+//| Shows detailed copy settings with pagination for multiple Masters |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
+{
+   int config_count = ArraySize(configs);
+
+   // Cache configs
+   ArrayResize(m_cached_configs, config_count);
+   for(int i = 0; i < config_count; i++)
+   {
+      m_cached_configs[i] = configs[i];
+   }
+
+   m_carousel_count = config_count;
+   m_carousel_enabled = (config_count > 0);
+
+   // Validate current index
+   if(m_carousel_index >= config_count)
+      m_carousel_index = MathMax(0, config_count - 1);
+
+   // Clear existing carousel rows (cfg_* rows)
+   int i = 0;
+   while(RemoveRow("cfg_" + IntegerToString(i)))
+   {
+      i++;
+   }
+
+   // Remove detail rows if they exist
+   RemoveRow("master_detail");
+   RemoveRow("prefix_row");
+   RemoveRow("suffix_row");
+   for(int j = 0; j < 10; j++)
+      RemoveRow("map_" + IntegerToString(j));
+   RemoveRow("map_more");
+   RemoveRow("lot_mode");
+   RemoveRow("reverse");
+   RemoveRow("sep_bottom");
+   RemoveRow("nav_row");
+
+   if(config_count == 0)
+   {
+      return;
+   }
+
+   // Show current page
+   ShowCarouselPage(m_carousel_index);
+}
+
+//+------------------------------------------------------------------+
+//| Show carousel page at specified index                            |
+//| Displays detailed settings for one Master config                  |
+//+------------------------------------------------------------------+
+void CGridPanel::ShowCarouselPage(int index)
+{
+   if(m_carousel_count == 0 || index < 0 || index >= m_carousel_count)
+      return;
+
+   m_carousel_index = index;
+
+   // Remove previous detail rows
+   RemoveRow("master_detail");
+   RemoveRow("prefix_row");
+   RemoveRow("suffix_row");
+   for(int j = 0; j < 10; j++)
+      RemoveRow("map_" + IntegerToString(j));
+   RemoveRow("map_more");
+   RemoveRow("lot_mode");
+   RemoveRow("reverse");
+   RemoveRow("sep_bottom");
+   RemoveRow("nav_row");
+
+   CopyConfig cfg = m_cached_configs[index];
+
+   // Master account (truncated)
+   string master_label = TruncateText(cfg.master_account, 20);
+   string master_vals[2];
+   master_vals[0] = "Master:";
+   master_vals[1] = master_label;
+   color master_cols[2];
+   master_cols[0] = clrWhite;
+   master_cols[1] = clrWhite;
+   AddRow("master_detail", master_vals, master_cols);
+
+   // Prefix (use space if empty to avoid "Label" default)
+   string prefix_vals[2];
+   prefix_vals[0] = "Prefix:";
+   prefix_vals[1] = (cfg.symbol_prefix == "" || cfg.symbol_prefix == NULL) ? " " : cfg.symbol_prefix;
+   color prefix_cols[2];
+   prefix_cols[0] = clrWhite;
+   prefix_cols[1] = clrWhite;
+   AddRow("prefix_row", prefix_vals, prefix_cols);
+
+   // Suffix (use space if empty to avoid "Label" default)
+   string suffix_vals[2];
+   suffix_vals[0] = "Suffix:";
+   suffix_vals[1] = (cfg.symbol_suffix == "" || cfg.symbol_suffix == NULL) ? " " : cfg.symbol_suffix;
+   color suffix_cols[2];
+   suffix_cols[0] = clrWhite;
+   suffix_cols[1] = clrWhite;
+   AddRow("suffix_row", suffix_vals, suffix_cols);
+
+   // Symbol mappings
+   int mapping_count = ArraySize(cfg.symbol_mappings);
+   if(mapping_count > 0)
+   {
+      int show_count = MathMin(mapping_count, 5);
+      for(int m = 0; m < show_count; m++)
+      {
+         string map_vals[2];
+         if(m == 0)
+            map_vals[0] = "Map:";
+         else
+            map_vals[0] = " ";  // Use space to avoid "Label" default
+         map_vals[1] = cfg.symbol_mappings[m].source_symbol + " -> " + cfg.symbol_mappings[m].target_symbol;
+         color map_cols[2];
+         map_cols[0] = clrWhite;
+         map_cols[1] = clrWhite;
+         AddRow("map_" + IntegerToString(m), map_vals, map_cols);
+      }
+
+      if(mapping_count > 5)
+      {
+         string more_vals[2];
+         more_vals[0] = " ";  // Use space to avoid "Label" default
+         more_vals[1] = "+" + IntegerToString(mapping_count - 5) + " more";
+         color more_cols[2];
+         more_cols[0] = clrWhite;
+         more_cols[1] = clrGray;
+         AddRow("map_more", more_vals, more_cols);
+      }
+   }
+   else
+   {
+      // Show empty Map row
+      string map_vals[2];
+      map_vals[0] = "Map:";
+      map_vals[1] = " ";  // Use space to avoid "Label" default
+      color map_cols[2];
+      map_cols[0] = clrWhite;
+      map_cols[1] = clrWhite;
+      AddRow("map_0", map_vals, map_cols);
+   }
+
+   // Lot Mode
+   string lot_str = "";
+   if(cfg.lot_calculation_mode == LOT_CALC_MODE_MARGIN_RATIO)
+      lot_str = "Margin Ratio";
+   else
+      lot_str = "x" + DoubleToString(cfg.lot_multiplier, 2);
+
+   string lot_vals[2];
+   lot_vals[0] = "Lot Mode:";
+   lot_vals[1] = lot_str;
+   color lot_cols[2];
+   lot_cols[0] = clrWhite;
+   lot_cols[1] = clrWhite;
+   AddRow("lot_mode", lot_vals, lot_cols);
+
+   // Reverse
+   string rev_vals[2];
+   rev_vals[0] = "Reverse:";
+   rev_vals[1] = cfg.reverse_trade ? "ON" : "OFF";
+   color rev_cols[2];
+   rev_cols[0] = clrWhite;
+   rev_cols[1] = clrWhite;
+   AddRow("reverse", rev_vals, rev_cols);
+
+   // Separator and navigation (only if multiple configs)
+   if(m_carousel_count > 1)
+   {
+      AddSeparator("sep_bottom");
+
+      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
+      AddCenteredRow("nav_row", nav_str, clrSkyBlue);
+   }
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Navigate to next carousel page                                   |
+//+------------------------------------------------------------------+
+void CGridPanel::NextCarouselPage()
+{
+   if(m_carousel_count <= 1)
+      return;
+
+   int next_index = (m_carousel_index + 1) % m_carousel_count;
+   ShowCarouselPage(next_index);
+}
+
+//+------------------------------------------------------------------+
+//| Navigate to previous carousel page                               |
+//+------------------------------------------------------------------+
+void CGridPanel::PrevCarouselPage()
+{
+   if(m_carousel_count <= 1)
+      return;
+
+   int prev_index = (m_carousel_index - 1 + m_carousel_count) % m_carousel_count;
+   ShowCarouselPage(prev_index);
+}
+
+//+------------------------------------------------------------------+
+//| Handle chart click for navigation                                |
+//| Returns: true if click was handled (within navigation area)      |
+//+------------------------------------------------------------------+
+bool CGridPanel::HandleChartClick(int x, int y)
+{
+   if(!m_carousel_enabled || m_carousel_count <= 1)
+      return false;
+
+   // Convert screen coordinates to chart coordinates
+   // For CORNER_RIGHT_UPPER, we need to calculate relative to right edge
+   int chart_width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+   int click_x_from_right = chart_width - x;
+
+   // Check if click is within panel X bounds
+   if(click_x_from_right < m_x_offset || click_x_from_right > m_x_offset + m_panel_width)
+      return false;
+
+   // Check if click is within navigation row Y bounds
+   // Navigation row is the last row
+   int nav_row_index = -1;
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == "nav_row")
+      {
+         nav_row_index = i;
+         break;
+      }
+   }
+
+   if(nav_row_index < 0)
+      return false;
+
+   int nav_y_start = CalculateRowY(nav_row_index);
+   int nav_y_end = nav_y_start + m_row_height;
+
+   if(y < nav_y_start || y > nav_y_end)
+      return false;
+
+   // Determine if click is on left (<) or right (>) half
+   int panel_center_from_right = m_x_offset + (m_panel_width / 2);
+
+   if(click_x_from_right > panel_center_from_right)
+   {
+      // Click on left side (< previous)
+      PrevCarouselPage();
+   }
+   else
+   {
+      // Click on right side (> next)
+      NextCarouselPage();
+   }
+
+   return true;
 }
 
 #endif // SANKEY_COPIER_GRIDPANEL_MQH

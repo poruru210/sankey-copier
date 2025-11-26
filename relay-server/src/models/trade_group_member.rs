@@ -39,10 +39,32 @@ pub struct TradeGroupMember {
     pub updated_at: String,
 }
 
+/// Lot calculation mode
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LotCalculationMode {
+    #[default]
+    Multiplier,
+    MarginRatio,
+}
+
+impl From<LotCalculationMode> for sankey_copier_zmq::LotCalculationMode {
+    fn from(mode: LotCalculationMode) -> Self {
+        match mode {
+            LotCalculationMode::Multiplier => sankey_copier_zmq::LotCalculationMode::Multiplier,
+            LotCalculationMode::MarginRatio => sankey_copier_zmq::LotCalculationMode::MarginRatio,
+        }
+    }
+}
+
 /// Slave-specific settings
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SlaveSettings {
-    /// Lot multiplier for trade copying
+    /// Lot calculation mode: "multiplier" (fixed) or "margin_ratio" (equity-based)
+    #[serde(default)]
+    pub lot_calculation_mode: LotCalculationMode,
+
+    /// Lot multiplier for trade copying (used when mode is "multiplier")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lot_multiplier: Option<f64>,
 
@@ -69,18 +91,27 @@ pub struct SlaveSettings {
     /// Configuration version for tracking updates
     #[serde(default)]
     pub config_version: u32,
+
+    /// Minimum lot size filter: skip trades with lot smaller than this value
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_lot_min: Option<f64>,
+
+    /// Maximum lot size filter: skip trades with lot larger than this value
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_lot_max: Option<f64>,
 }
 
 #[allow(dead_code)]
 impl TradeGroupMember {
     /// Create a new TradeGroupMember with default settings
+    /// NOTE: Initial status is DISABLED - user must explicitly enable
     pub fn new(id: i32, trade_group_id: String, slave_account: String) -> Self {
         Self {
             id,
             trade_group_id,
             slave_account,
             slave_settings: SlaveSettings::default(),
-            status: STATUS_ENABLED,
+            status: STATUS_DISABLED,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
@@ -114,7 +145,7 @@ mod tests {
         assert_eq!(member.id, 1);
         assert_eq!(member.trade_group_id, "MASTER_001");
         assert_eq!(member.slave_account, "SLAVE_001");
-        assert_eq!(member.status, STATUS_ENABLED);
+        assert_eq!(member.status, STATUS_DISABLED); // Initial status is DISABLED
         assert_eq!(member.slave_settings.config_version, 0);
         assert!(member.slave_settings.lot_multiplier.is_none());
         assert!(!member.slave_settings.reverse_trade);
@@ -164,6 +195,7 @@ mod tests {
     #[test]
     fn test_slave_settings_serialization() {
         let settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::Multiplier,
             lot_multiplier: Some(1.5),
             reverse_trade: true,
             symbol_prefix: None,
@@ -179,6 +211,8 @@ mod tests {
                 blocked_magic_numbers: None,
             },
             config_version: 1,
+            source_lot_min: Some(0.01),
+            source_lot_max: Some(10.0),
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -188,11 +222,14 @@ mod tests {
         assert!(deserialized.reverse_trade);
         assert_eq!(deserialized.symbol_mappings.len(), 1);
         assert_eq!(deserialized.config_version, 1);
+        assert_eq!(deserialized.source_lot_min, Some(0.01));
+        assert_eq!(deserialized.source_lot_max, Some(10.0));
     }
 
     #[test]
     fn test_slave_settings_with_null_values() {
         let settings = SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: None,
             reverse_trade: false,
             symbol_prefix: None,
@@ -200,18 +237,33 @@ mod tests {
             symbol_mappings: vec![],
             filters: TradeFilters::default(),
             config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
 
         // Should not include null optional fields
-        assert!(!json.contains("lot_multiplier"));
-        assert!(!json.contains("symbol_prefix"));
-        assert!(!json.contains("symbol_suffix"));
+        assert!(!json.contains("\"lot_multiplier\""));
+        assert!(!json.contains("\"symbol_prefix\""));
+        assert!(!json.contains("\"symbol_suffix\""));
+        assert!(!json.contains("\"source_lot_min\""));
+        assert!(!json.contains("\"source_lot_max\""));
 
         // Should include default/empty fields
         assert!(json.contains("reverse_trade"));
         assert!(json.contains("symbol_mappings"));
         assert!(json.contains("config_version"));
+    }
+
+    #[test]
+    fn test_lot_calculation_mode_serialization() {
+        let mode = LotCalculationMode::MarginRatio;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"margin_ratio\"");
+
+        let mode2 = LotCalculationMode::Multiplier;
+        let json2 = serde_json::to_string(&mode2).unwrap();
+        assert_eq!(json2, "\"multiplier\"");
     }
 }

@@ -1,4 +1,4 @@
-use crate::msgpack::{HeartbeatMessage, SlaveConfigMessage, TradeFilters};
+use crate::msgpack::{HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, TradeFilters};
 
 /// Test that new symbol filter fields are correctly serialized and deserialized
 #[test]
@@ -56,6 +56,7 @@ fn test_config_message_none_symbol_filters() {
         master_account: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         status: 2,
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_mappings: vec![],
@@ -68,6 +69,9 @@ fn test_config_message_none_symbol_filters() {
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -86,6 +90,7 @@ fn test_config_message_some_symbol_filters() {
         master_account: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         status: 2,
+        lot_calculation_mode: LotCalculationMode::MarginRatio,
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_mappings: vec![],
@@ -98,6 +103,9 @@ fn test_config_message_some_symbol_filters() {
         config_version: 1,
         symbol_prefix: Some("FX.".to_string()),
         symbol_suffix: Some("-ECN".to_string()),
+        source_lot_min: Some(0.01),
+        source_lot_max: Some(10.0),
+        master_equity: Some(50000.0),
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");

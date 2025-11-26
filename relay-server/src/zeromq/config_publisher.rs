@@ -128,6 +128,7 @@ mod tests {
             master_account: "MASTER456".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             status: 1,
+            lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
             symbol_prefix: None,
@@ -135,6 +136,9 @@ mod tests {
             symbol_mappings: vec![],
             filters: sankey_copier_zmq::TradeFilters::default(),
             config_version: 1,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: Some(10000.0),
         };
 
         // This should succeed (message is queued for sending)
@@ -185,6 +189,7 @@ mod tests {
                     master_account: "MASTER".to_string(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                     status: 1,
+                    lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: Some(1.0),
                     reverse_trade: false,
                     symbol_prefix: None,
@@ -192,6 +197,9 @@ mod tests {
                     symbol_mappings: vec![],
                     filters: sankey_copier_zmq::TradeFilters::default(),
                     config_version: 1,
+                    source_lot_min: None,
+                    source_lot_max: None,
+                    master_equity: None,
                 };
                 pub_clone.send(&config).await
             });

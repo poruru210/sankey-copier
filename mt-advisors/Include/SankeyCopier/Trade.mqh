@@ -126,17 +126,26 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    // Extract extended configuration fields
    int new_status = slave_config_get_int(config_handle, "status");
+   string lot_calc_mode_str = slave_config_get_string(config_handle, "lot_calculation_mode");
+   int new_lot_calc_mode = (lot_calc_mode_str == "margin_ratio") ? LOT_CALC_MODE_MARGIN_RATIO : LOT_CALC_MODE_MULTIPLIER;
    double new_lot_mult = slave_config_get_double(config_handle, "lot_multiplier");
    bool new_reverse = (slave_config_get_bool(config_handle, "reverse_trade") == 1);
    int new_version = slave_config_get_int(config_handle, "config_version");
+   double new_source_lot_min = slave_config_get_double(config_handle, "source_lot_min");
+   double new_source_lot_max = slave_config_get_double(config_handle, "source_lot_max");
+   double new_master_equity = slave_config_get_double(config_handle, "master_equity");
 
    // Log configuration values
    Print("Master Account: ", new_master);
    Print("Trade Group ID: ", new_group);
    Print("Status: ", new_status, " (0=DISABLED, 1=ENABLED, 2=CONNECTED)");
+   Print("Lot Calculation Mode: ", lot_calc_mode_str, " (", new_lot_calc_mode, ")");
    Print("Lot Multiplier: ", new_lot_mult);
    Print("Reverse Trade: ", new_reverse);
    Print("Config Version: ", new_version);
+   Print("Source Lot Min: ", new_source_lot_min);
+   Print("Source Lot Max: ", new_source_lot_max);
+   Print("Master Equity: ", new_master_equity);
 
    Print("DEBUG: Current configs count: ", ArraySize(configs));
    for(int i=0; i<ArraySize(configs); i++) Print("DEBUG: Config[", i, "]: ", configs[i].master_account);
@@ -219,13 +228,39 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       // Update fields
       configs[index].trade_group_id = new_group;
       configs[index].status = new_status;
+      configs[index].lot_calculation_mode = new_lot_calc_mode;
       configs[index].lot_multiplier = new_lot_mult;
       configs[index].reverse_trade = new_reverse;
       configs[index].config_version = new_version;
-      
-      // TODO: Parse symbol mappings and filters from MessagePack
-      // For now, skip arrays until we implement array support in DLL
-      ArrayResize(configs[index].symbol_mappings, 0);
+      configs[index].source_lot_min = new_source_lot_min;
+      configs[index].source_lot_max = new_source_lot_max;
+      configs[index].master_equity = new_master_equity;
+
+      // Parse symbol prefix/suffix from MessagePack
+      configs[index].symbol_prefix = slave_config_get_string(config_handle, "symbol_prefix");
+      configs[index].symbol_suffix = slave_config_get_string(config_handle, "symbol_suffix");
+
+      // Parse symbol mappings from MessagePack
+      int mapping_count = slave_config_get_symbol_mappings_count(config_handle);
+      ArrayResize(configs[index].symbol_mappings, mapping_count);
+      for(int m = 0; m < mapping_count; m++)
+      {
+         configs[index].symbol_mappings[m].source_symbol = slave_config_get_symbol_mapping_source(config_handle, m);
+         configs[index].symbol_mappings[m].target_symbol = slave_config_get_symbol_mapping_target(config_handle, m);
+      }
+
+      // Log symbol mappings if any
+      if(mapping_count > 0)
+      {
+         Print("Symbol Mappings (", mapping_count, "):");
+         for(int m = 0; m < mapping_count; m++)
+         {
+            Print("  ", configs[index].symbol_mappings[m].source_symbol, " -> ",
+                  configs[index].symbol_mappings[m].target_symbol);
+         }
+      }
+
+      // TODO: Parse filters from MessagePack (not yet implemented in DLL)
       ArrayResize(configs[index].filters.allowed_symbols, 0);
       ArrayResize(configs[index].filters.blocked_symbols, 0);
       ArrayResize(configs[index].filters.allowed_magic_numbers, 0);
@@ -389,7 +424,66 @@ void ParseSymbolMappingString(string mapping_str, SymbolMapping &mappings[])
 }
 
 //+------------------------------------------------------------------+
-//| Transform lot size based on multiplier                           |
+//| Check if lot size is within filter range                         |
+//+------------------------------------------------------------------+
+bool IsLotWithinFilter(double lots, double lot_min, double lot_max)
+{
+   // If min filter is set and lots is below it, reject
+   if(lot_min > 0 && lots < lot_min)
+   {
+      Print("Lot filter: ", lots, " is below minimum ", lot_min);
+      return false;
+   }
+
+   // If max filter is set and lots is above it, reject
+   if(lot_max > 0 && lots > lot_max)
+   {
+      Print("Lot filter: ", lots, " is above maximum ", lot_max);
+      return false;
+   }
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Transform lot size based on calculation mode                     |
+//+------------------------------------------------------------------+
+double TransformLotSize(double lots, CopyConfig &config, string symbol)
+{
+   double new_lots = 0;
+
+   if(config.lot_calculation_mode == LOT_CALC_MODE_MARGIN_RATIO)
+   {
+      // Margin ratio mode: slave_lot = master_lot * (slave_equity / master_equity)
+      double slave_equity = GetAccountEquity();
+      double master_equity = config.master_equity;
+
+      if(master_equity > 0)
+      {
+         double ratio = slave_equity / master_equity;
+         new_lots = lots * ratio;
+         Print("Margin ratio mode: slave_equity=", slave_equity,
+               ", master_equity=", master_equity,
+               ", ratio=", ratio,
+               ", lots=", lots, " -> ", new_lots);
+      }
+      else
+      {
+         Print("WARNING: Master equity is 0 or not available, using 1:1 ratio");
+         new_lots = lots;
+      }
+   }
+   else
+   {
+      // Default: Multiplier mode
+      new_lots = lots * config.lot_multiplier;
+   }
+
+   return NormalizeLotSize(new_lots, symbol);
+}
+
+//+------------------------------------------------------------------+
+//| Legacy transform lot size (for backwards compatibility)          |
 //+------------------------------------------------------------------+
 double TransformLotSize(double lots, double multiplier, string symbol)
 {

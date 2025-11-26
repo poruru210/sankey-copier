@@ -4,7 +4,7 @@
 // Following TDD principles: write tests first, then implement.
 
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{MasterSettings, SlaveSettings};
+use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings, SlaveSettings};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 /// Helper to create an in-memory test database
@@ -118,6 +118,7 @@ async fn test_add_member() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
         reverse_trade: false,
         symbol_prefix: None,
@@ -125,6 +126,8 @@ async fn test_add_member() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
@@ -229,6 +232,7 @@ async fn test_update_member_settings() {
         .unwrap();
 
     let new_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(2.0),
         reverse_trade: true,
         symbol_prefix: None,
@@ -236,6 +240,8 @@ async fn test_update_member_settings() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 1,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     db.update_member_settings("MASTER_001", "SLAVE_001", new_settings)
@@ -349,6 +355,7 @@ async fn test_get_settings_for_slave() {
     db.create_trade_group("MASTER_002").await.unwrap();
 
     let settings1 = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_prefix: None,
@@ -356,9 +363,12 @@ async fn test_get_settings_for_slave() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     let settings2 = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(2.0),
         reverse_trade: true,
         symbol_prefix: None,
@@ -366,6 +376,8 @@ async fn test_get_settings_for_slave() {
         symbol_mappings: vec![],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings1)
@@ -375,15 +387,19 @@ async fn test_get_settings_for_slave() {
         .await
         .unwrap();
 
+    // Members are created with DISABLED status, but get_settings_for_slave
+    // returns all members so Slave EA can receive config and show status
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].master_account, "MASTER_001");
+    assert_eq!(result[0].status, 0); // DISABLED
     assert_eq!(result[1].master_account, "MASTER_002");
+    assert_eq!(result[1].status, 0); // DISABLED
 }
 
 #[tokio::test]
-async fn test_get_settings_for_slave_only_enabled() {
+async fn test_get_settings_for_slave_includes_disabled() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
@@ -391,15 +407,13 @@ async fn test_get_settings_for_slave_only_enabled() {
         .await
         .unwrap();
 
-    // Set status to DISABLED (0)
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
-        .await
-        .unwrap();
-
+    // Initial status is DISABLED (0)
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
-    // Should return empty because status is DISABLED
-    assert!(result.is_empty());
+    // Should return the member even with DISABLED status
+    // so that Slave EA can receive config and show appropriate status
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].status, 0); // DISABLED
 }
 
 #[tokio::test]
@@ -529,6 +543,7 @@ async fn test_member_with_symbol_mappings() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_prefix: None,
@@ -545,6 +560,8 @@ async fn test_member_with_symbol_mappings() {
         ],
         filters: TradeFilters::default(),
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)
@@ -570,6 +587,7 @@ async fn test_member_with_filters() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
         reverse_trade: false,
         symbol_prefix: None,
@@ -582,6 +600,8 @@ async fn test_member_with_filters() {
             blocked_magic_numbers: Some(vec![999]),
         },
         config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)

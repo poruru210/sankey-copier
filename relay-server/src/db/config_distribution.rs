@@ -25,7 +25,8 @@ impl Database {
     }
 
     /// Get Slave settings for config distribution to Slave EA
-    /// Returns all enabled settings for the given slave_account
+    /// Returns all settings for the given slave_account (including DISABLED)
+    /// NOTE: DISABLED members are included so Slave EA can show appropriate status
     pub async fn get_settings_for_slave(
         &self,
         slave_account: &str,
@@ -33,7 +34,7 @@ impl Database {
         let rows = sqlx::query(
             "SELECT trade_group_id, slave_account, slave_settings, status
              FROM trade_group_members
-             WHERE slave_account = ? AND status > 0
+             WHERE slave_account = ?
              ORDER BY trade_group_id",
         )
         .bind(slave_account)

@@ -123,6 +123,7 @@ export function useAccountData({
         sourceMap.set(setting.master_account, {
           id: setting.master_account,
           name: setting.master_account,
+          platform: connection?.platform,
           isOnline,
           isEnabled,
           isActive,
@@ -153,6 +154,7 @@ export function useAccountData({
         receiverMap.set(setting.slave_account, {
           id: setting.slave_account,
           name: setting.slave_account,
+          platform: connection?.platform,
           isOnline,
           isEnabled,
           isActive, // Will be updated below based on connected masters

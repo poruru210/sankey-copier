@@ -7,6 +7,7 @@
 
 import { ChevronDown, Settings } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { BrokerIcon } from '@/components/BrokerIcon';
 import type { AccountInfo } from '@/types';
 
@@ -49,7 +50,7 @@ export function AccountNodeHeader({
     <div>
       {/* Header row - Draggable area */}
       <div
-        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 cursor-move drag-handle ${
+        className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 cursor-move drag-handle ${
           account.hasError
             ? 'bg-pink-50 dark:bg-pink-900/20'
             : account.hasWarning
@@ -57,14 +58,25 @@ export function AccountNodeHeader({
             : ''
         }`}
       >
-        <BrokerIcon brokerName={brokerName} size="md" />
+        <BrokerIcon brokerName={brokerName} size="lg" />
         <div className="flex-1 min-w-0">
           <div className="font-normal text-gray-900 dark:text-gray-100 text-xs md:text-sm truncate">
             {brokerName}
           </div>
           {accountNumber && (
-            <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 truncate">
-              {accountNumber}
+            <div className="flex items-center gap-1.5 mt-1 text-[10px] md:text-xs text-gray-600 dark:text-gray-400">
+              {account.platform && (
+                <Badge
+                  className={`text-[8px] md:text-[9px] px-1.5 py-0 h-4 md:h-[18px] font-medium ${
+                    account.platform === 'MT4'
+                      ? 'bg-blue-500 text-white hover:bg-blue-500'
+                      : 'bg-purple-500 text-white hover:bg-purple-500'
+                  }`}
+                >
+                  {account.platform}
+                </Badge>
+              )}
+              <span className="truncate">{accountNumber}</span>
             </div>
           )}
         </div>

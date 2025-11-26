@@ -25,6 +25,7 @@ fn create_test_member() -> TradeGroupMember {
         trade_group_id: "MASTER_001".to_string(),
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings {
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some(1.0),
             reverse_trade: false,
             symbol_prefix: None,
@@ -37,6 +38,8 @@ fn create_test_member() -> TradeGroupMember {
                 blocked_magic_numbers: None,
             },
             config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
         },
         status: 2, // STATUS_CONNECTED
         created_at: Utc::now().to_rfc3339(),

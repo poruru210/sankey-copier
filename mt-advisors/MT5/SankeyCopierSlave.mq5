@@ -201,12 +201,12 @@ void OnTimer()
                      }
                   }
                   
-                  if(any_connected)
+                  if(ArraySize(g_configs) == 0)
+                     g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+                  else if(any_connected)
                      g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
-                  else if(ArraySize(g_configs) > 0)
-                     g_config_panel.UpdateStatusRow(STATUS_ENABLED);
                   else
-                     g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                     g_config_panel.UpdateStatusRow(STATUS_ENABLED);
                }
             }
 
@@ -310,16 +310,16 @@ void OnTimer()
                   }
                }
                
-               if(any_connected)
+               if(ArraySize(g_configs) == 0)
+                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+               else if(any_connected)
                   g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
-               else if(ArraySize(g_configs) > 0)
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected?
                else
-                  g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
             }
             
-            // Update dynamic config list
-            g_config_panel.UpdateConfigList(g_configs);
+            // Update carousel display with detailed copy settings
+            g_config_panel.UpdateCarouselConfigs(g_configs);
          }
       }
    }
@@ -432,13 +432,23 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          return;
       }
 
+      // Apply lot filtering (check source lot before transformation)
+      if(!IsLotWithinFilter(lots, g_configs[config_index].source_lot_min, g_configs[config_index].source_lot_max))
+      {
+         Print("Trade filtered out by lot filter: source_lots=", lots,
+               ", min=", g_configs[config_index].source_lot_min,
+               ", max=", g_configs[config_index].source_lot_max);
+         trade_signal_free(handle);
+         return;
+      }
+
       // Apply transformations
       string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
       mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
       string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
-      
-      // Transform lot size
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index].lot_multiplier, transformed_symbol);
+
+      // Transform lot size based on calculation mode
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
       // Open position with transformed values
@@ -647,3 +657,22 @@ void CancelPendingOrder(ulong master_ticket)
 
 // Ticket mapping functions are now provided by SankeyCopierMapping.mqh
 
+//+------------------------------------------------------------------+
+//| Chart event handler (for panel click navigation)                  |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   // Handle mouse click events for carousel navigation
+   if(id == CHARTEVENT_CLICK && ShowConfigPanel)
+   {
+      int x = (int)lparam;
+      int y = (int)dparam;
+
+      // Check if click is on carousel navigation
+      if(g_config_panel.HandleChartClick(x, y))
+      {
+         // Click was handled by panel
+         return;
+      }
+   }
+}

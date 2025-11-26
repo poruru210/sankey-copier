@@ -1,8 +1,12 @@
+// Lot calculation mode type
+export type LotCalculationMode = 'multiplier' | 'margin_ratio';
+
 export interface CopySettings {
   id: number;
   status: number; // 0=OFF (user disabled), 1=ON (user enabled)
   master_account: string;
   slave_account: string;
+  lot_calculation_mode?: LotCalculationMode;
   lot_multiplier: number | null;
   reverse_trade: boolean;
   symbol_mappings: SymbolMapping[];
@@ -10,6 +14,8 @@ export interface CopySettings {
   symbol_prefix?: string;
   symbol_suffix?: string;
   symbol_map?: string; // Comma-separated format for Slave EA
+  source_lot_min?: number | null;
+  source_lot_max?: number | null;
 }
 
 export interface SymbolMapping {
@@ -55,18 +61,22 @@ export interface ApiResponse<T> {
 export interface CreateSettingsRequest {
   master_account: string;
   slave_account: string;
+  lot_calculation_mode?: LotCalculationMode;
   lot_multiplier: number | null;
   reverse_trade: boolean;
   status: number; // 0=OFF (user disabled), 1=ON (user enabled)
   symbol_prefix?: string;
   symbol_suffix?: string;
   symbol_mappings?: string; // Comma-separated format: "XAUUSD=GOLD,EURUSD=EUR"
+  source_lot_min?: number | null;
+  source_lot_max?: number | null;
 }
 
 // ConnectionsView specific types
 export interface AccountInfo {
   id: string;
   name: string;
+  platform?: 'MT4' | 'MT5';
   isOnline: boolean;
   isEnabled: boolean; // User's switch state (status > 0)
   isActive: boolean; // Calculated active state (ready for trading)
@@ -138,6 +148,7 @@ export interface TradeGroup {
 
 // TradeGroupMember (Slave settings) types
 export interface SlaveSettings {
+  lot_calculation_mode: LotCalculationMode;
   lot_multiplier: number | null;
   reverse_trade: boolean;
   symbol_prefix?: string | null;
@@ -145,6 +156,9 @@ export interface SlaveSettings {
   symbol_mappings: SymbolMapping[];
   filters: TradeFilters;
   config_version: number;
+  // Lot filtering: min/max lot size from master to copy
+  source_lot_min?: number | null;
+  source_lot_max?: number | null;
 }
 
 export interface TradeGroupMember {

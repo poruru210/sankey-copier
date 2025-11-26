@@ -240,8 +240,8 @@ const settingsDialogContent = {
       ja: 'マスター設定',
     }),
     symbolFiltersGlobalTitle: t({
-      en: 'Symbol Filters (Global)',
-      ja: 'フィルター（グローバル）',
+      en: 'Symbol Rules (Global)',
+      ja: 'シンボルルール（グローバル）',
     }),
     symbolFiltersGlobalDescription: t({
       en: 'These settings apply to all slaves connected to this master.',
@@ -267,10 +267,10 @@ const settingsDialogContent = {
       en: 'Saving...',
       ja: '保存中...',
     }),
-    // Slave Settings Form / Symbol Filters
+    // Slave Settings Form / Symbol Rules
     symbolFiltersTitle: t({
-      en: 'Symbol Filters',
-      ja: 'フィルター',
+      en: 'Symbol Rules',
+      ja: 'シンボルルール',
     }),
     symbolFiltersDescription: t({
       en: 'Configure symbol name transformations for this connection.',
@@ -303,6 +303,64 @@ const settingsDialogContent = {
     copySettingsDescription: t({
       en: 'Configure how trades are copied.',
       ja: 'トレードのコピー方法を設定します。',
+    }),
+    // Lot Calculation Mode
+    lotCalculationMode: t({
+      en: 'Lot Calculation Mode',
+      ja: 'ロット計算モード',
+    }),
+    lotCalculationModeDescription: t({
+      en: 'How to calculate lot size for copied trades',
+      ja: 'コピーされるトレードのロットサイズの計算方法',
+    }),
+    lotModeMultiplier: t({
+      en: 'Fixed Multiplier',
+      ja: '固定倍率',
+    }),
+    lotModeMultiplierDesc: t({
+      en: 'Use fixed multiplier value',
+      ja: '固定の倍率値を使用',
+    }),
+    lotModeMarginRatio: t({
+      en: 'Margin Ratio',
+      ja: '証拠金比率',
+    }),
+    lotModeMarginRatioDesc: t({
+      en: 'Calculate based on equity ratio (slave/master)',
+      ja: '証拠金比率（スレーブ/マスター）に基づいて計算',
+    }),
+    // Lot Filters
+    lotFilterTitle: t({
+      en: 'Lot Filter',
+      ja: 'ロットフィルター',
+    }),
+    lotFilterDescription: t({
+      en: 'Filter trades by source lot size. Leave empty for no filtering.',
+      ja: 'コピー元のロットサイズでフィルタリング。空欄でフィルタリングなし。',
+    }),
+    sourceLotMin: t({
+      en: 'Minimum Lot',
+      ja: '最小ロット',
+    }),
+    sourceLotMinDescription: t({
+      en: 'Skip trades with lot size smaller than this value',
+      ja: 'この値より小さいロットのトレードをスキップ',
+    }),
+    sourceLotMinPlaceholder: t({
+      en: 'e.g. 0.01',
+      ja: '例: 0.01',
+    }),
+    sourceLotMax: t({
+      en: 'Maximum Lot',
+      ja: '最大ロット',
+    }),
+    sourceLotMaxDescription: t({
+      en: 'Skip trades with lot size larger than this value',
+      ja: 'この値より大きいロットのトレードをスキップ',
+    }),
+    sourceLotMaxPlaceholder: t({
+      en: 'e.g. 10.0',
+      ja: '例: 10.0',
     }),
     // Symbol Mapping Input
     sourceSymbol: t({

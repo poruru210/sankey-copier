@@ -189,7 +189,7 @@ export function MasterSettingsDrawer({
               </div>
             ) : (
               <>
-                {/* Symbol Filters Section */}
+                {/* Symbol Rules Section */}
                 <DrawerSection bordered>
                   <DrawerSectionHeader
                     title={content.symbolFiltersGlobalTitle.value}

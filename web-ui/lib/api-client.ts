@@ -206,14 +206,33 @@ export class ApiClient {
 
   /**
    * Update a TradeGroup member's settings
+   * Server expects SlaveSettings directly (not wrapped)
    */
   async updateTradeGroupMember(
     masterAccount: string,
-    memberId: number,
+    slaveAccount: string,
     settings: import('@/types').SlaveSettings
-  ): Promise<import('@/types').TradeGroupMember> {
-    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${memberId}`, {
-      slave_settings: settings,
-    });
+  ): Promise<void> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`, settings);
+  }
+
+  /**
+   * Delete a TradeGroup member
+   */
+  async deleteTradeGroupMember(
+    masterAccount: string,
+    slaveAccount: string
+  ): Promise<void> {
+    return this.delete(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`);
+  }
+
+  /**
+   * Toggle a TradeGroup member's status
+   */
+  async toggleTradeGroupMemberStatus(
+    masterAccount: string,
+    slaveAccount: string
+  ): Promise<void> {
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`, {});
   }
 }
