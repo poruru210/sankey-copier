@@ -116,7 +116,7 @@ async fn test_add_member_success() {
 
     assert_eq!(member.slave_account, "SLAVE_001");
     assert_eq!(member.trade_group_id, "MASTER_001");
-    assert_eq!(member.status, 1); // ENABLED
+    assert_eq!(member.status, 0); // DISABLED - initial status is OFF
     assert_eq!(member.slave_settings.lot_multiplier, Some(1.5));
     assert!(!member.slave_settings.reverse_trade);
 }
@@ -282,10 +282,17 @@ async fn test_toggle_member_status_disable() {
     let state = create_test_app_state().await;
     setup_test_trade_group(&state, "MASTER_001").await;
 
-    // Add a member (default status = ENABLED)
+    // Add a member (initial status = DISABLED)
     state
         .db
         .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .await
+        .unwrap();
+
+    // First enable the member
+    state
+        .db
+        .update_member_status("MASTER_001", "SLAVE_001", 1)
         .await
         .unwrap();
 
@@ -324,19 +331,21 @@ async fn test_toggle_member_status_enable() {
     let state = create_test_app_state().await;
     setup_test_trade_group(&state, "MASTER_001").await;
 
-    // Add a member
+    // Add a member (initial status = DISABLED)
     state
         .db
         .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
         .await
         .unwrap();
 
-    // Set to DISABLED first
-    state
+    // Verify initial status is DISABLED
+    let member = state
         .db
-        .update_member_status("MASTER_001", "SLAVE_001", 0)
+        .get_member("MASTER_001", "SLAVE_001")
         .await
+        .unwrap()
         .unwrap();
+    assert_eq!(member.status, 0); // Initial status is DISABLED
 
     let app = create_router(state.clone());
 

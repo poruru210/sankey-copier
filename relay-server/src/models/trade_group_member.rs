@@ -104,13 +104,14 @@ pub struct SlaveSettings {
 #[allow(dead_code)]
 impl TradeGroupMember {
     /// Create a new TradeGroupMember with default settings
+    /// NOTE: Initial status is DISABLED - user must explicitly enable
     pub fn new(id: i32, trade_group_id: String, slave_account: String) -> Self {
         Self {
             id,
             trade_group_id,
             slave_account,
             slave_settings: SlaveSettings::default(),
-            status: STATUS_ENABLED,
+            status: STATUS_DISABLED,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
@@ -144,7 +145,7 @@ mod tests {
         assert_eq!(member.id, 1);
         assert_eq!(member.trade_group_id, "MASTER_001");
         assert_eq!(member.slave_account, "SLAVE_001");
-        assert_eq!(member.status, STATUS_ENABLED);
+        assert_eq!(member.status, STATUS_DISABLED); // Initial status is DISABLED
         assert_eq!(member.slave_settings.config_version, 0);
         assert!(member.slave_settings.lot_multiplier.is_none());
         assert!(!member.slave_settings.reverse_trade);

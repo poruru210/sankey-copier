@@ -387,15 +387,19 @@ async fn test_get_settings_for_slave() {
         .await
         .unwrap();
 
+    // Members are created with DISABLED status, but get_settings_for_slave
+    // returns all members so Slave EA can receive config and show status
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].master_account, "MASTER_001");
+    assert_eq!(result[0].status, 0); // DISABLED
     assert_eq!(result[1].master_account, "MASTER_002");
+    assert_eq!(result[1].status, 0); // DISABLED
 }
 
 #[tokio::test]
-async fn test_get_settings_for_slave_only_enabled() {
+async fn test_get_settings_for_slave_includes_disabled() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
@@ -403,15 +407,13 @@ async fn test_get_settings_for_slave_only_enabled() {
         .await
         .unwrap();
 
-    // Set status to DISABLED (0)
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
-        .await
-        .unwrap();
-
+    // Initial status is DISABLED (0)
     let result = db.get_settings_for_slave("SLAVE_001").await.unwrap();
 
-    // Should return empty because status is DISABLED
-    assert!(result.is_empty());
+    // Should return the member even with DISABLED status
+    // so that Slave EA can receive config and show appropriate status
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].status, 0); // DISABLED
 }
 
 #[tokio::test]

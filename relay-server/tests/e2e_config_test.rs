@@ -933,16 +933,16 @@ async fn test_multiple_slaves_same_master() {
     server.shutdown().await;
 }
 
-/// Test that toggling member status OFF sends status=0 config to Slave EA
+/// Test that new member is created with DISABLED status (user must explicitly enable)
 #[tokio::test]
-async fn test_toggle_member_status_off_sends_disabled_config() {
+async fn test_new_member_initial_status_disabled() {
     // Start test server with dynamic ports
     let server = TestServer::start()
         .await
         .expect("Failed to start test server");
 
-    let master_account = "MASTER_TOGGLE_TEST";
-    let slave_account = "SLAVE_TOGGLE_TEST";
+    let master_account = "MASTER_INITIAL_STATUS_TEST";
+    let slave_account = "SLAVE_INITIAL_STATUS_TEST";
 
     // Create TradeGroup (Master)
     server
@@ -970,6 +970,79 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(200)).await;
 
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+    assert!(config.is_some(), "Should receive config");
+    let config = config.unwrap();
+
+    // Verify initial status is DISABLED (0)
+    assert_eq!(
+        config.status, 0,
+        "New member initial status should be DISABLED (0)"
+    );
+
+    println!("✅ New Member Initial Status E2E test passed: status=0 (DISABLED)");
+
+    server.shutdown().await;
+}
+
+/// Test that toggling member status OFF sends status=0 config to Slave EA
+#[tokio::test]
+async fn test_toggle_member_status_off_sends_disabled_config() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_TOGGLE_TEST";
+    let slave_account = "SLAVE_TOGGLE_TEST";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave member to TradeGroup (initial status = DISABLED)
+    server
+        .db
+        .add_member(master_account, slave_account, SlaveSettings::default())
+        .await
+        .expect("Failed to add member");
+
+    // Enable the member first (so we can test toggle OFF)
+    server
+        .db
+        .update_member_status(master_account, slave_account, 1)
+        .await
+        .expect("Failed to enable member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
     // Step 1: Send Heartbeat and RequestConfig to get initial config
     simulator
         .send_heartbeat()
@@ -981,7 +1054,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
         .expect("Failed to send RequestConfig");
     sleep(Duration::from_millis(200)).await;
 
-    // Receive initial config
+    // Receive initial config (should be ENABLED since we set it above)
     let initial_config = simulator
         .try_receive_config(2000)
         .expect("Failed to receive initial config");
@@ -989,18 +1062,10 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     let initial_config = initial_config.unwrap();
     assert_eq!(
         initial_config.status, 1,
-        "Initial status should be ENABLED (1)"
+        "Status should be ENABLED (1) after manual enable"
     );
 
-    // Step 2: Toggle status OFF via database (simulating Web UI toggle)
-    server
-        .db
-        .update_member_status(master_account, slave_account, 0)
-        .await
-        .expect("Failed to toggle status OFF");
-
-    // Step 3: Use API to toggle status (which triggers config distribution)
-    // We need to use the API endpoint to properly trigger ZMQ notification
+    // Step 2: Toggle OFF via API (which triggers config distribution)
     let client = reqwest::Client::new();
     let toggle_url = format!(
         "{}/api/trade-groups/{}/members/{}/toggle",
@@ -1009,14 +1074,6 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
         slave_account
     );
 
-    // First set it back to enabled so we can toggle it off
-    server
-        .db
-        .update_member_status(master_account, slave_account, 1)
-        .await
-        .expect("Failed to reset status");
-
-    // Toggle OFF via API
     let response = client
         .post(&toggle_url)
         .json(&serde_json::json!({ "enabled": false }))
@@ -1030,7 +1087,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
 
     sleep(Duration::from_millis(200)).await;
 
-    // Step 4: Slave should receive config with status=0
+    // Step 3: Slave should receive config with status=0
     let disabled_config = simulator
         .try_receive_config(2000)
         .expect("Failed to receive disabled config");

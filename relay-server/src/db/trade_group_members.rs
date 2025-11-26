@@ -25,7 +25,7 @@ impl Database {
 
         sqlx::query(
             "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
-             VALUES (?, ?, ?, 1)" // default status = ENABLED
+             VALUES (?, ?, ?, 0)" // default status = DISABLED (user must explicitly enable)
         )
         .bind(trade_group_id)
         .bind(slave_account)
