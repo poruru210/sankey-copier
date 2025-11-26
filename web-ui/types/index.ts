@@ -76,6 +76,7 @@ export interface CreateSettingsRequest {
 export interface AccountInfo {
   id: string;
   name: string;
+  platform?: 'MT4' | 'MT5';
   isOnline: boolean;
   isEnabled: boolean; // User's switch state (status > 0)
   isActive: boolean; // Calculated active state (ready for trading)

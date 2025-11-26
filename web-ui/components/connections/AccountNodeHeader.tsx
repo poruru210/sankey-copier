@@ -7,6 +7,7 @@
 
 import { ChevronDown, Settings } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { BrokerIcon } from '@/components/BrokerIcon';
 import type { AccountInfo } from '@/types';
 
@@ -63,8 +64,19 @@ export function AccountNodeHeader({
             {brokerName}
           </div>
           {accountNumber && (
-            <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 truncate">
-              {accountNumber}
+            <div className="flex items-center gap-1 text-[10px] md:text-xs text-gray-600 dark:text-gray-400">
+              {account.platform && (
+                <Badge
+                  className={`text-[8px] md:text-[9px] px-1 py-0 h-3.5 md:h-4 font-medium ${
+                    account.platform === 'MT4'
+                      ? 'bg-blue-500 text-white hover:bg-blue-500'
+                      : 'bg-purple-500 text-white hover:bg-purple-500'
+                  }`}
+                >
+                  {account.platform}
+                </Badge>
+              )}
+              <span className="truncate">{accountNumber}</span>
             </div>
           )}
         </div>
