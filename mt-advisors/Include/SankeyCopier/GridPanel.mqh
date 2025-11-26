@@ -501,6 +501,7 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 //| Parameters:                                                       |
 //|   row_key - Unique identifier for the separator row              |
 //| Returns: Row index on success, -1 on error                       |
+//| Note: Uses CORNER_RIGHT_UPPER to match panel coordinate system   |
 //+------------------------------------------------------------------+
 int CGridPanel::AddSeparator(string row_key)
 {
@@ -510,9 +511,13 @@ int CGridPanel::AddSeparator(string row_key)
    m_row_keys[m_row_count] = row_key;
 
    // Calculate position for separator line
+   // Using CORNER_RIGHT_UPPER: XDISTANCE is distance from right edge to left edge of object
    int row_y = CalculateRowY(m_row_count) + (m_row_height / 2) - 1;
-   int line_x = m_x_offset + m_padding_left;
    int line_width = m_panel_width - m_padding_left - m_padding_right;
+   // Line left edge from right = panel left edge from right - padding_left
+   // Panel left edge = m_x_offset + m_panel_width
+   // Line left edge = (m_x_offset + m_panel_width) - m_padding_left
+   int line_x = m_x_offset + m_panel_width - m_padding_left;
 
    // Create rectangle label as a thin horizontal line
    string obj_name = GenerateObjectName(row_key + "_line");
@@ -525,9 +530,10 @@ int CGridPanel::AddSeparator(string row_key)
       ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
       ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
       ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-      ObjectSetInteger(0, obj_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSetInteger(0, obj_name, OBJPROP_BACK, false);
       ObjectSetInteger(0, obj_name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, obj_name, OBJPROP_ZORDER, 5);  // Above background, below text
    #else
       ObjectCreate(obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
       ObjectSet(obj_name, OBJPROP_XDISTANCE, line_x);
@@ -536,7 +542,7 @@ int CGridPanel::AddSeparator(string row_key)
       ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
       ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
       ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-      ObjectSet(obj_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSet(obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSet(obj_name, OBJPROP_BACK, false);
       ObjectSet(obj_name, OBJPROP_SELECTABLE, false);
    #endif
