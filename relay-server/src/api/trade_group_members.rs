@@ -454,6 +454,9 @@ pub async fn delete_member(
     );
     let _enter = span.enter();
 
+    // Before deleting, send status=0 config to Slave EA to remove config
+    send_disabled_config_to_slave(&state, &trade_group_id, &slave_account).await;
+
     match state
         .db
         .delete_member(&trade_group_id, &slave_account)
@@ -494,6 +497,46 @@ pub async fn delete_member(
                     )),
             )
         }
+    }
+}
+
+/// Send disabled config (status=0) to Slave EA via ZMQ to remove config
+async fn send_disabled_config_to_slave(
+    state: &AppState,
+    master_account: &str,
+    slave_account: &str,
+) {
+    let config = SlaveConfigMessage {
+        account_id: slave_account.to_string(),
+        master_account: master_account.to_string(),
+        status: 0, // STATUS_DISABLED
+        lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
+        lot_multiplier: None,
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: crate::models::TradeFilters::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        master_equity: None,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    if let Err(e) = state.config_sender.send(&config).await {
+        tracing::error!(
+            slave_account = %slave_account,
+            master_account = %master_account,
+            error = %e,
+            "Failed to send disabled SlaveConfigMessage via ZMQ"
+        );
+    } else {
+        tracing::info!(
+            slave_account = %slave_account,
+            master_account = %master_account,
+            "Successfully sent disabled SlaveConfigMessage via ZMQ"
+        );
     }
 }
 

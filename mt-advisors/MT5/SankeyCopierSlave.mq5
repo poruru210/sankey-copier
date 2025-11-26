@@ -201,12 +201,12 @@ void OnTimer()
                      }
                   }
                   
-                  if(any_connected)
+                  if(ArraySize(g_configs) == 0)
+                     g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+                  else if(any_connected)
                      g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
-                  else if(ArraySize(g_configs) > 0)
-                     g_config_panel.UpdateStatusRow(STATUS_ENABLED);
                   else
-                     g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                     g_config_panel.UpdateStatusRow(STATUS_ENABLED);
                }
             }
 
@@ -310,12 +310,12 @@ void OnTimer()
                   }
                }
                
-               if(any_connected)
+               if(ArraySize(g_configs) == 0)
+                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+               else if(any_connected)
                   g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
-               else if(ArraySize(g_configs) > 0)
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected?
                else
-                  g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
             }
             
             // Update dynamic config list

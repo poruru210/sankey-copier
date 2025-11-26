@@ -933,6 +933,218 @@ async fn test_multiple_slaves_same_master() {
     server.shutdown().await;
 }
 
+/// Test that toggling member status OFF sends status=0 config to Slave EA
+#[tokio::test]
+async fn test_toggle_member_status_off_sends_disabled_config() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_TOGGLE_TEST";
+    let slave_account = "SLAVE_TOGGLE_TEST";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave member to TradeGroup with default settings
+    server
+        .db
+        .add_member(master_account, slave_account, SlaveSettings::default())
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Step 1: Send Heartbeat and RequestConfig to get initial config
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive initial config
+    let initial_config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive initial config");
+    assert!(initial_config.is_some(), "Should receive initial config");
+    let initial_config = initial_config.unwrap();
+    assert_eq!(
+        initial_config.status, 1,
+        "Initial status should be ENABLED (1)"
+    );
+
+    // Step 2: Toggle status OFF via database (simulating Web UI toggle)
+    server
+        .db
+        .update_member_status(master_account, slave_account, 0)
+        .await
+        .expect("Failed to toggle status OFF");
+
+    // Step 3: Use API to toggle status (which triggers config distribution)
+    // We need to use the API endpoint to properly trigger ZMQ notification
+    let client = reqwest::Client::new();
+    let toggle_url = format!(
+        "{}/api/trade-groups/{}/members/{}/toggle",
+        server.http_base_url(),
+        master_account,
+        slave_account
+    );
+
+    // First set it back to enabled so we can toggle it off
+    server
+        .db
+        .update_member_status(master_account, slave_account, 1)
+        .await
+        .expect("Failed to reset status");
+
+    // Toggle OFF via API
+    let response = client
+        .post(&toggle_url)
+        .json(&serde_json::json!({ "enabled": false }))
+        .send()
+        .await
+        .expect("Failed to send toggle request");
+    assert!(
+        response.status().is_success(),
+        "Toggle request should succeed"
+    );
+
+    sleep(Duration::from_millis(200)).await;
+
+    // Step 4: Slave should receive config with status=0
+    let disabled_config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive disabled config");
+
+    assert!(
+        disabled_config.is_some(),
+        "Slave should receive config after status toggle OFF"
+    );
+    let disabled_config = disabled_config.unwrap();
+    assert_eq!(
+        disabled_config.status, 0,
+        "Config status should be DISABLED (0) after toggle OFF"
+    );
+
+    println!("✅ Toggle Status OFF E2E test passed: Slave received status=0 config");
+
+    server.shutdown().await;
+}
+
+/// Test that deleting a member sends status=0 config to Slave EA
+#[tokio::test]
+async fn test_delete_member_sends_disabled_config() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_DELETE_TEST";
+    let slave_account = "SLAVE_DELETE_TEST";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave member to TradeGroup with default settings
+    server
+        .db
+        .add_member(master_account, slave_account, SlaveSettings::default())
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Step 1: Send Heartbeat and RequestConfig to get initial config
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive initial config
+    let initial_config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive initial config");
+    assert!(initial_config.is_some(), "Should receive initial config");
+
+    // Step 2: Delete member via API
+    let client = reqwest::Client::new();
+    let delete_url = format!(
+        "{}/api/trade-groups/{}/members/{}",
+        server.http_base_url(),
+        master_account,
+        slave_account
+    );
+
+    let response = client
+        .delete(&delete_url)
+        .send()
+        .await
+        .expect("Failed to send delete request");
+    assert!(
+        response.status().is_success(),
+        "Delete request should succeed"
+    );
+
+    sleep(Duration::from_millis(200)).await;
+
+    // Step 3: Slave should receive config with status=0
+    let disabled_config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive disabled config after delete");
+
+    assert!(
+        disabled_config.is_some(),
+        "Slave should receive config after member deletion"
+    );
+    let disabled_config = disabled_config.unwrap();
+    assert_eq!(
+        disabled_config.status, 0,
+        "Config status should be DISABLED (0) after member deletion"
+    );
+
+    println!("✅ Delete Member E2E test passed: Slave received status=0 config");
+
+    server.shutdown().await;
+}
+
 /// Test multiple Masters with multiple Slaves (N:M isolation)
 #[tokio::test]
 async fn test_multiple_masters_multiple_slaves() {
