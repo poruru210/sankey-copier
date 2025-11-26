@@ -773,29 +773,24 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    // Set title
    SetTitle("Sankey Copier - Master", PANEL_COLOR_TITLE);
 
-   // Add standard rows with initial values
+   // Separator after title
+   AddSeparator("sep_top");
+
+   // Add standard rows with initial values (white text except status value)
    string status_vals[] = {"Status:", "ACTIVE"};
-   color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_CONNECTED};
+   color status_cols[] = {clrWhite, PANEL_COLOR_CONNECTED};
    AddRow("status", status_vals, status_cols);
 
-   string server_vals[] = {"Server:", "N/A"};
-   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("server", server_vals, server_cols);
-
-   string magic_vals[] = {"Magic Filter:", "All"};
-   color magic_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("magic", magic_vals, magic_cols);
-   
-   string prefix_vals[] = {"Prefix:", "-"};
-   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   string prefix_vals[] = {"Prefix:", ""};
+   color prefix_cols[] = {clrWhite, clrWhite};
    AddRow("prefix", prefix_vals, prefix_cols);
-   
-   string suffix_vals[] = {"Suffix:", "-"};
-   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+
+   string suffix_vals[] = {"Suffix:", ""};
+   color suffix_cols[] = {clrWhite, clrWhite};
    AddRow("suffix", suffix_vals, suffix_cols);
 
    string tracked_vals[] = {"Tracked Orders:", "0"};
-   color tracked_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
+   color tracked_cols[] = {clrWhite, clrWhite};
    AddRow("tracked", tracked_vals, tracked_cols);
 
    return true;
@@ -806,17 +801,11 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateSymbolConfig(string prefix, string suffix, string map)
 {
-   // Update prefix row
-   if(prefix != "")
-      UpdateCell("prefix", 1, prefix, PANEL_COLOR_VALUE);
-   else
-      UpdateCell("prefix", 1, "-", PANEL_COLOR_VALUE);
-   
-   // Update suffix row
-   if(suffix != "")
-      UpdateCell("suffix", 1, suffix, PANEL_COLOR_VALUE);
-   else
-      UpdateCell("suffix", 1, "-", PANEL_COLOR_VALUE);
+   // Update prefix row (white color)
+   UpdateCell("prefix", 1, prefix, clrWhite);
+
+   // Update suffix row (white color)
+   UpdateCell("suffix", 1, suffix, clrWhite);
 }
 
 //+------------------------------------------------------------------+
@@ -1083,8 +1072,8 @@ void CGridPanel::UpdateTrackedOrdersRow(int count)
    vals[0] = "Tracked Orders:";
    vals[1] = IntegerToString(count);
    color cols[2];
-   cols[0] = PANEL_COLOR_LABEL;
-   cols[1] = PANEL_COLOR_VALUE;
+   cols[0] = clrWhite;
+   cols[1] = clrWhite;
    UpdateRow("tracked", vals, cols);
 }
 
