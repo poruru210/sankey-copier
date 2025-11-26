@@ -21,6 +21,7 @@ interface UseFlowDataProps {
   getAccountSettings: (accountId: string, type: 'source' | 'receiver') => CopySettings[];
   handleEditSetting: (setting: CopySettings) => void;
   handleDeleteSetting: (setting: CopySettings) => void;
+  handleEditMasterSettings?: (masterAccount: string) => void;
   isAccountHighlighted: (accountId: string, type: 'source' | 'receiver') => boolean;
   isMobile: boolean;
   content: any;
@@ -51,6 +52,7 @@ export function useFlowData({
   getAccountSettings,
   handleEditSetting,
   handleDeleteSetting,
+  handleEditMasterSettings,
   isAccountHighlighted,
   isMobile,
   content,
@@ -170,6 +172,7 @@ export function useFlowData({
           onToggleEnabled: (enabled: boolean) => toggleSourceEnabled(account.id, enabled),
           onEditSetting: handleEditSetting,
           onDeleteSetting: handleDeleteSetting,
+          onEditMasterSettings: handleEditMasterSettings ? () => handleEditMasterSettings(account.id) : undefined,
           type: 'source' as const,
           isHighlighted,
           hoveredSourceId,
@@ -229,6 +232,7 @@ export function useFlowData({
     getAccountSettings,
     handleEditSetting,
     handleDeleteSetting,
+    handleEditMasterSettings,
     hoveredSourceId,
     hoveredReceiverId,
     selectedSourceId,
