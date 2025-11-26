@@ -1322,7 +1322,10 @@ void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
    RemoveRow("master_detail");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   RemoveRow("symbol_rules");
+   RemoveRow("symbol_header");
+   for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
+      RemoveRow("symbol_map_" + IntegerToString(j));
+   RemoveRow("symbol_more");
    RemoveRow("lot_filter");
    RemoveRow("nav_row");
 
@@ -1361,7 +1364,10 @@ void CGridPanel::ShowCarouselPage(int index)
    RemoveRow("master_detail");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   RemoveRow("symbol_rules");
+   RemoveRow("symbol_header");
+   for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
+      RemoveRow("symbol_map_" + IntegerToString(j));
+   RemoveRow("symbol_more");
    RemoveRow("lot_filter");
    RemoveRow("nav_row");
 
@@ -1405,21 +1411,44 @@ void CGridPanel::ShowCarouselPage(int index)
    rev_cols[1] = cfg.reverse_trade ? clrOrange : PANEL_COLOR_VALUE;
    AddRow("reverse", rev_vals, rev_cols);
 
-   // Row 4: Symbol rules summary
+   // Row 4+: Symbol mappings (show actual mappings, max 5)
    int mapping_count = ArraySize(cfg.symbol_mappings);
-   string rules_str = "";
    if(mapping_count > 0)
-      rules_str = IntegerToString(mapping_count) + " mappings";
-   else
-      rules_str = "-";
+   {
+      // Show header
+      string map_header_vals[2];
+      map_header_vals[0] = "Symbol Map:";
+      map_header_vals[1] = "";
+      color map_header_cols[2];
+      map_header_cols[0] = PANEL_COLOR_LABEL;
+      map_header_cols[1] = PANEL_COLOR_VALUE;
+      AddRow("symbol_header", map_header_vals, map_header_cols);
 
-   string rules_vals[2];
-   rules_vals[0] = "Symbol Map:";
-   rules_vals[1] = rules_str;
-   color rules_cols[2];
-   rules_cols[0] = PANEL_COLOR_LABEL;
-   rules_cols[1] = (mapping_count > 0) ? clrCyan : PANEL_COLOR_VALUE;
-   AddRow("symbol_rules", rules_vals, rules_cols);
+      // Show each mapping (max 5 to avoid panel overflow)
+      int show_count = MathMin(mapping_count, 5);
+      for(int m = 0; m < show_count; m++)
+      {
+         string map_vals[2];
+         map_vals[0] = "  " + cfg.symbol_mappings[m].source_symbol;
+         map_vals[1] = "-> " + cfg.symbol_mappings[m].target_symbol;
+         color map_cols[2];
+         map_cols[0] = clrCyan;
+         map_cols[1] = clrCyan;
+         AddRow("symbol_map_" + IntegerToString(m), map_vals, map_cols);
+      }
+
+      // If more than 5, show "+N more"
+      if(mapping_count > 5)
+      {
+         string more_vals[2];
+         more_vals[0] = "";
+         more_vals[1] = "+" + IntegerToString(mapping_count - 5) + " more";
+         color more_cols[2];
+         more_cols[0] = PANEL_COLOR_LABEL;
+         more_cols[1] = clrGray;
+         AddRow("symbol_more", more_vals, more_cols);
+      }
+   }
 
    // Row 5: Lot filter (if set)
    if(cfg.source_lot_min > 0 || cfg.source_lot_max > 0)

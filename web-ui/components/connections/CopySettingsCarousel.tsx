@@ -172,12 +172,22 @@ export function CopySettingsCarousel({
                 {content.suffix}: {currentSetting.symbol_suffix}
               </span>
             )}
-            {currentSetting.symbol_mappings && currentSetting.symbol_mappings.length > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                {content.mappings}: {currentSetting.symbol_mappings.length}
-              </span>
-            )}
           </div>
+          {/* Show actual symbol mappings */}
+          {currentSetting.symbol_mappings && currentSetting.symbol_mappings.length > 0 && (
+            <div className="mt-1.5 space-y-0.5">
+              {currentSetting.symbol_mappings.map((mapping, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-300"
+                >
+                  <span className="font-medium">{mapping.source_symbol}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="font-medium">{mapping.target_symbol}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
