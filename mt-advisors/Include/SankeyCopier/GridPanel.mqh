@@ -216,9 +216,15 @@ private:
    color    m_bg_color;
    color    m_border_color;
    color    m_title_color;
-   
+
    // State
    bool     m_initialized;
+
+   // Carousel state for Slave panel (copy settings pagination)
+   int      m_carousel_index;      // Current page index (0-based)
+   int      m_carousel_count;      // Total number of pages (configs)
+   bool     m_carousel_enabled;    // Whether carousel navigation is enabled
+   CopyConfig m_cached_configs[];  // Cached configs for carousel display
 
    // Internal coordinate calculation methods
    int      CalculateBackgroundX();
@@ -255,7 +261,16 @@ public:
 
    // Slave EA panel helpers (high-level update methods)
    bool     InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
-   
+
+   // Carousel methods for displaying copy settings (Slave panel)
+   void     UpdateCarouselConfigs(CopyConfig &configs[]);  // Update configs and refresh display
+   void     ShowCarouselPage(int index);                   // Show specific page
+   void     NextCarouselPage();                            // Navigate to next config
+   void     PrevCarouselPage();                            // Navigate to previous config
+   int      GetCarouselIndex() const { return m_carousel_index; }
+   int      GetCarouselCount() const { return m_carousel_count; }
+   bool     HandleChartClick(int x, int y);                // Handle click for navigation buttons
+
    // Master EA panel helpers
    bool     InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int panel_width = DEFAULT_PANEL_WIDTH);
    void     UpdateTrackedOrdersRow(int count);
@@ -307,6 +322,12 @@ CGridPanel::CGridPanel()
    m_border_color = PANEL_COLOR_BORDER;
    m_title_color = PANEL_COLOR_TITLE;
    m_initialized = false;
+
+   // Carousel state
+   m_carousel_index = 0;
+   m_carousel_count = 0;
+   m_carousel_enabled = false;
+   ArrayResize(m_cached_configs, 0);
 }
 
 //+------------------------------------------------------------------+
@@ -1266,6 +1287,254 @@ void CGridPanel::UpdateBackgroundSize()
 string CGridPanel::GenerateObjectName(string suffix)
 {
    return m_prefix + suffix;
+}
+
+//+------------------------------------------------------------------+
+//| Update carousel configs and refresh display                       |
+//| Shows detailed copy settings with pagination for multiple Masters |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
+{
+   int config_count = ArraySize(configs);
+
+   // Cache configs
+   ArrayResize(m_cached_configs, config_count);
+   for(int i = 0; i < config_count; i++)
+   {
+      m_cached_configs[i] = configs[i];
+   }
+
+   m_carousel_count = config_count;
+   m_carousel_enabled = (config_count > 0);
+
+   // Validate current index
+   if(m_carousel_index >= config_count)
+      m_carousel_index = MathMax(0, config_count - 1);
+
+   // Clear existing carousel rows (cfg_* rows)
+   int i = 0;
+   while(RemoveRow("cfg_" + IntegerToString(i)))
+   {
+      i++;
+   }
+
+   // Remove detail rows if they exist
+   RemoveRow("master_detail");
+   RemoveRow("lot_mode");
+   RemoveRow("reverse");
+   RemoveRow("symbol_rules");
+   RemoveRow("lot_filter");
+   RemoveRow("nav_row");
+
+   // Update Active count
+   string master_vals[2];
+   master_vals[0] = "Active:";
+   master_vals[1] = IntegerToString(config_count);
+
+   color master_cols[2];
+   master_cols[0] = PANEL_COLOR_LABEL;
+   master_cols[1] = PANEL_COLOR_VALUE;
+
+   UpdateRow("master", master_vals, master_cols);
+
+   if(config_count == 0)
+   {
+      return;
+   }
+
+   // Show current page
+   ShowCarouselPage(m_carousel_index);
+}
+
+//+------------------------------------------------------------------+
+//| Show carousel page at specified index                            |
+//| Displays detailed settings for one Master config                  |
+//+------------------------------------------------------------------+
+void CGridPanel::ShowCarouselPage(int index)
+{
+   if(m_carousel_count == 0 || index < 0 || index >= m_carousel_count)
+      return;
+
+   m_carousel_index = index;
+
+   // Remove previous detail rows
+   RemoveRow("master_detail");
+   RemoveRow("lot_mode");
+   RemoveRow("reverse");
+   RemoveRow("symbol_rules");
+   RemoveRow("lot_filter");
+   RemoveRow("nav_row");
+
+   CopyConfig cfg = m_cached_configs[index];
+
+   // Row 1: Master account (truncated)
+   string master_label = TruncateText(cfg.master_account, 20);
+   color status_clr = PANEL_COLOR_DISABLED;
+   if(cfg.status == STATUS_CONNECTED) status_clr = PANEL_COLOR_CONNECTED;
+   else if(cfg.status == STATUS_ENABLED) status_clr = PANEL_COLOR_WAITING;
+
+   string detail_vals[2];
+   detail_vals[0] = "Master:";
+   detail_vals[1] = master_label;
+   color detail_cols[2];
+   detail_cols[0] = PANEL_COLOR_LABEL;
+   detail_cols[1] = status_clr;
+   AddRow("master_detail", detail_vals, detail_cols);
+
+   // Row 2: Lot calculation mode
+   string lot_str = "";
+   if(cfg.lot_calculation_mode == LOT_CALC_MODE_MARGIN_RATIO)
+      lot_str = "Margin Ratio (Auto)";
+   else
+      lot_str = "x" + DoubleToString(cfg.lot_multiplier, 2);
+
+   string lot_vals[2];
+   lot_vals[0] = "Lot Mode:";
+   lot_vals[1] = lot_str;
+   color lot_cols[2];
+   lot_cols[0] = PANEL_COLOR_LABEL;
+   lot_cols[1] = PANEL_COLOR_VALUE;
+   AddRow("lot_mode", lot_vals, lot_cols);
+
+   // Row 3: Reverse trade
+   string rev_vals[2];
+   rev_vals[0] = "Reverse:";
+   rev_vals[1] = cfg.reverse_trade ? "ON" : "OFF";
+   color rev_cols[2];
+   rev_cols[0] = PANEL_COLOR_LABEL;
+   rev_cols[1] = cfg.reverse_trade ? clrOrange : PANEL_COLOR_VALUE;
+   AddRow("reverse", rev_vals, rev_cols);
+
+   // Row 4: Symbol rules summary
+   int mapping_count = ArraySize(cfg.symbol_mappings);
+   string rules_str = "";
+   if(mapping_count > 0)
+      rules_str = IntegerToString(mapping_count) + " mappings";
+   else
+      rules_str = "-";
+
+   string rules_vals[2];
+   rules_vals[0] = "Symbol Map:";
+   rules_vals[1] = rules_str;
+   color rules_cols[2];
+   rules_cols[0] = PANEL_COLOR_LABEL;
+   rules_cols[1] = (mapping_count > 0) ? clrCyan : PANEL_COLOR_VALUE;
+   AddRow("symbol_rules", rules_vals, rules_cols);
+
+   // Row 5: Lot filter (if set)
+   if(cfg.source_lot_min > 0 || cfg.source_lot_max > 0)
+   {
+      string filter_str = "";
+      if(cfg.source_lot_min > 0 && cfg.source_lot_max > 0)
+         filter_str = DoubleToString(cfg.source_lot_min, 2) + " - " + DoubleToString(cfg.source_lot_max, 2);
+      else if(cfg.source_lot_min > 0)
+         filter_str = ">= " + DoubleToString(cfg.source_lot_min, 2);
+      else
+         filter_str = "<= " + DoubleToString(cfg.source_lot_max, 2);
+
+      string filter_vals[2];
+      filter_vals[0] = "Lot Filter:";
+      filter_vals[1] = filter_str;
+      color filter_cols[2];
+      filter_cols[0] = PANEL_COLOR_LABEL;
+      filter_cols[1] = PANEL_COLOR_VALUE;
+      AddRow("lot_filter", filter_vals, filter_cols);
+   }
+
+   // Navigation row (only if multiple configs)
+   if(m_carousel_count > 1)
+   {
+      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
+      string nav_vals[2];
+      nav_vals[0] = "";  // Empty label column
+      nav_vals[1] = nav_str;
+      color nav_cols[2];
+      nav_cols[0] = PANEL_COLOR_LABEL;
+      nav_cols[1] = clrSkyBlue;
+      AddRow("nav_row", nav_vals, nav_cols);
+   }
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Navigate to next carousel page                                   |
+//+------------------------------------------------------------------+
+void CGridPanel::NextCarouselPage()
+{
+   if(m_carousel_count <= 1)
+      return;
+
+   int next_index = (m_carousel_index + 1) % m_carousel_count;
+   ShowCarouselPage(next_index);
+}
+
+//+------------------------------------------------------------------+
+//| Navigate to previous carousel page                               |
+//+------------------------------------------------------------------+
+void CGridPanel::PrevCarouselPage()
+{
+   if(m_carousel_count <= 1)
+      return;
+
+   int prev_index = (m_carousel_index - 1 + m_carousel_count) % m_carousel_count;
+   ShowCarouselPage(prev_index);
+}
+
+//+------------------------------------------------------------------+
+//| Handle chart click for navigation                                |
+//| Returns: true if click was handled (within navigation area)      |
+//+------------------------------------------------------------------+
+bool CGridPanel::HandleChartClick(int x, int y)
+{
+   if(!m_carousel_enabled || m_carousel_count <= 1)
+      return false;
+
+   // Convert screen coordinates to chart coordinates
+   // For CORNER_RIGHT_UPPER, we need to calculate relative to right edge
+   int chart_width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+   int click_x_from_right = chart_width - x;
+
+   // Check if click is within panel X bounds
+   if(click_x_from_right < m_x_offset || click_x_from_right > m_x_offset + m_panel_width)
+      return false;
+
+   // Check if click is within navigation row Y bounds
+   // Navigation row is the last row
+   int nav_row_index = -1;
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == "nav_row")
+      {
+         nav_row_index = i;
+         break;
+      }
+   }
+
+   if(nav_row_index < 0)
+      return false;
+
+   int nav_y_start = CalculateRowY(nav_row_index);
+   int nav_y_end = nav_y_start + m_row_height;
+
+   if(y < nav_y_start || y > nav_y_end)
+      return false;
+
+   // Determine if click is on left (<) or right (>) half
+   int panel_center_from_right = m_x_offset + (m_panel_width / 2);
+
+   if(click_x_from_right > panel_center_from_right)
+   {
+      // Click on left side (< previous)
+      PrevCarouselPage();
+   }
+   else
+   {
+      // Click on right side (> next)
+      NextCarouselPage();
+   }
+
+   return true;
 }
 
 #endif // SANKEY_COPIER_GRIDPANEL_MQH

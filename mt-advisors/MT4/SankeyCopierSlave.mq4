@@ -314,8 +314,8 @@ void OnTimer()
                   g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
             }
             
-            // Update dynamic config list
-            g_config_panel.UpdateConfigList(g_configs);
+            // Update carousel display with detailed copy settings
+            g_config_panel.UpdateCarouselConfigs(g_configs);
          }
       }
    }
@@ -721,3 +721,23 @@ void CancelPendingOrder(int master_ticket)
 }
 
 // Ticket mapping functions are now provided by SankeyCopierMapping.mqh
+
+//+------------------------------------------------------------------+
+//| Chart event handler (for panel click navigation)                  |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   // Handle mouse click events for carousel navigation
+   if(id == CHARTEVENT_CLICK && ShowConfigPanel)
+   {
+      int x = (int)lparam;
+      int y = (int)dparam;
+
+      // Check if click is on carousel navigation
+      if(g_config_panel.HandleChartClick(x, y))
+      {
+         // Click was handled by panel
+         return;
+      }
+   }
+}
