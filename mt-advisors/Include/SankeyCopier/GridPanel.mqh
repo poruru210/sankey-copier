@@ -504,9 +504,15 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 //+------------------------------------------------------------------+
 int CGridPanel::AddSeparator(string row_key)
 {
+   // Calculate separator length based on panel width (approx 1 char per 7 pixels)
+   int sep_len = m_panel_width / 7;
+   string sep_line = "";
+   for(int i = 0; i < sep_len; i++)
+      sep_line += "-";
+
    string sep_vals[2];
-   sep_vals[0] = "-------------------------";
-   sep_vals[1] = "";
+   sep_vals[0] = sep_line;
+   sep_vals[1] = " ";  // Use space instead of empty string to avoid "Label" default
    color sep_cols[2];
    sep_cols[0] = clrDimGray;
    sep_cols[1] = clrDimGray;
@@ -781,11 +787,11 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
    color status_cols[] = {clrWhite, PANEL_COLOR_CONNECTED};
    AddRow("status", status_vals, status_cols);
 
-   string prefix_vals[] = {"Prefix:", ""};
+   string prefix_vals[] = {"Prefix:", " "};  // Use space to avoid "Label" default
    color prefix_cols[] = {clrWhite, clrWhite};
    AddRow("prefix", prefix_vals, prefix_cols);
 
-   string suffix_vals[] = {"Suffix:", ""};
+   string suffix_vals[] = {"Suffix:", " "};  // Use space to avoid "Label" default
    color suffix_cols[] = {clrWhite, clrWhite};
    AddRow("suffix", suffix_vals, suffix_cols);
 
@@ -801,11 +807,11 @@ bool CGridPanel::InitializeMasterPanel(string prefix = "SankeyCopierPanel_", int
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateSymbolConfig(string prefix, string suffix, string map)
 {
-   // Update prefix row (white color)
-   UpdateCell("prefix", 1, prefix, clrWhite);
+   // Update prefix row (use space if empty to avoid "Label" default)
+   UpdateCell("prefix", 1, (prefix == "") ? " " : prefix, clrWhite);
 
-   // Update suffix row (white color)
-   UpdateCell("suffix", 1, suffix, clrWhite);
+   // Update suffix row (use space if empty to avoid "Label" default)
+   UpdateCell("suffix", 1, (suffix == "") ? " " : suffix, clrWhite);
 }
 
 //+------------------------------------------------------------------+
@@ -1364,19 +1370,19 @@ void CGridPanel::ShowCarouselPage(int index)
    master_cols[1] = clrWhite;
    AddRow("master_detail", master_vals, master_cols);
 
-   // Prefix
+   // Prefix (use space if empty to avoid "Label" default)
    string prefix_vals[2];
    prefix_vals[0] = "Prefix:";
-   prefix_vals[1] = cfg.symbol_prefix;
+   prefix_vals[1] = (cfg.symbol_prefix == "" || cfg.symbol_prefix == NULL) ? " " : cfg.symbol_prefix;
    color prefix_cols[2];
    prefix_cols[0] = clrWhite;
    prefix_cols[1] = clrWhite;
    AddRow("prefix_row", prefix_vals, prefix_cols);
 
-   // Suffix
+   // Suffix (use space if empty to avoid "Label" default)
    string suffix_vals[2];
    suffix_vals[0] = "Suffix:";
-   suffix_vals[1] = cfg.symbol_suffix;
+   suffix_vals[1] = (cfg.symbol_suffix == "" || cfg.symbol_suffix == NULL) ? " " : cfg.symbol_suffix;
    color suffix_cols[2];
    suffix_cols[0] = clrWhite;
    suffix_cols[1] = clrWhite;
@@ -1393,7 +1399,7 @@ void CGridPanel::ShowCarouselPage(int index)
          if(m == 0)
             map_vals[0] = "Map:";
          else
-            map_vals[0] = "";
+            map_vals[0] = " ";  // Use space to avoid "Label" default
          map_vals[1] = cfg.symbol_mappings[m].source_symbol + " -> " + cfg.symbol_mappings[m].target_symbol;
          color map_cols[2];
          map_cols[0] = clrWhite;
@@ -1404,7 +1410,7 @@ void CGridPanel::ShowCarouselPage(int index)
       if(mapping_count > 5)
       {
          string more_vals[2];
-         more_vals[0] = "";
+         more_vals[0] = " ";  // Use space to avoid "Label" default
          more_vals[1] = "+" + IntegerToString(mapping_count - 5) + " more";
          color more_cols[2];
          more_cols[0] = clrWhite;
@@ -1417,7 +1423,7 @@ void CGridPanel::ShowCarouselPage(int index)
       // Show empty Map row
       string map_vals[2];
       map_vals[0] = "Map:";
-      map_vals[1] = "";
+      map_vals[1] = " ";  // Use space to avoid "Label" default
       color map_cols[2];
       map_cols[0] = clrWhite;
       map_cols[1] = clrWhite;
@@ -1455,7 +1461,7 @@ void CGridPanel::ShowCarouselPage(int index)
 
       string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
       string nav_vals[2];
-      nav_vals[0] = "";
+      nav_vals[0] = " ";  // Use space to avoid "Label" default
       nav_vals[1] = nav_str;
       color nav_cols[2];
       nav_cols[0] = clrWhite;
