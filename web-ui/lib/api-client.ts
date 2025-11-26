@@ -209,11 +209,31 @@ export class ApiClient {
    */
   async updateTradeGroupMember(
     masterAccount: string,
-    memberId: number,
+    slaveAccount: string,
     settings: import('@/types').SlaveSettings
   ): Promise<import('@/types').TradeGroupMember> {
-    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${memberId}`, {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`, {
       slave_settings: settings,
     });
+  }
+
+  /**
+   * Delete a TradeGroup member
+   */
+  async deleteTradeGroupMember(
+    masterAccount: string,
+    slaveAccount: string
+  ): Promise<void> {
+    return this.delete(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`);
+  }
+
+  /**
+   * Toggle a TradeGroup member's status
+   */
+  async toggleTradeGroupMemberStatus(
+    masterAccount: string,
+    slaveAccount: string
+  ): Promise<void> {
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`, {});
   }
 }

@@ -192,7 +192,7 @@ export function useSankeyCopier() {
   const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
     if (!apiClient) return;
 
-    // Find the setting to get master_account for API call
+    // Find the setting to get master_account and slave_account for API call
     const setting = settings.find(s => s.id === id);
     if (!setting) {
       console.error(`Setting ${id} not found`);
@@ -213,22 +213,22 @@ export function useSankeyCopier() {
     // Note: We don't need to worry about stale apiClient here because we clear the map
     // when apiClient changes (in the useEffect above), forcing recreation.
     if (!debouncedFn) {
-      debouncedFn = debounce(async (masterAccount: string, slaveId: number) => {
+      debouncedFn = debounce(async (masterAccount: string, slaveAccount: string) => {
         try {
           await apiClient.post<void>(
-            `/trade-groups/${encodeURIComponent(masterAccount)}/members/${slaveId}/toggle`,
+            `/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`,
             {}
           );
         } catch (err) {
-          console.error(`Failed to toggle setting ${slaveId}`, err);
+          console.error(`Failed to toggle setting for ${slaveAccount}`, err);
           fetchSettings(); // Refresh on error
         }
       }, 300);
       debouncedCallsRef.current.set(id, debouncedFn);
     }
 
-    // Call the debounced function for this ID
-    debouncedFn(setting.master_account, id);
+    // Call the debounced function for this ID (using slave_account for API)
+    debouncedFn(setting.master_account, setting.slave_account);
   }, [apiClient, fetchSettings, setSettings, settings]);
 
   // Create new setting
@@ -257,7 +257,7 @@ export function useSankeyCopier() {
   const updateSetting = async (id: number, updatedData: CopySettings) => {
     if (!apiClient) return;
 
-    // Find the setting to get master_account
+    // Find the setting to get master_account and slave_account
     const originalSetting = settings.find(s => s.id === id);
     if (!originalSetting) {
       throw new Error(`Setting ${id} not found`);
@@ -274,9 +274,9 @@ export function useSankeyCopier() {
       const { convertCopySettingsToSlaveSettings } = await import('@/utils/tradeGroupAdapter');
       const slaveSettings = convertCopySettingsToSlaveSettings(updatedData);
 
-      // Send to new API endpoint
+      // Send to new API endpoint (using slave_account, not numeric id)
       await apiClient.put<void>(
-        `/trade-groups/${encodeURIComponent(originalSetting.master_account)}/members/${id}`,
+        `/trade-groups/${encodeURIComponent(originalSetting.master_account)}/members/${encodeURIComponent(originalSetting.slave_account)}`,
         { slave_settings: slaveSettings, status: updatedData.status }
       );
 
@@ -292,7 +292,7 @@ export function useSankeyCopier() {
   const deleteSetting = async (id: number) => {
     if (!apiClient) return;
 
-    // Find the setting to get master_account
+    // Find the setting to get master_account and slave_account
     const setting = settings.find(s => s.id === id);
     if (!setting) {
       throw new Error(`Setting ${id} not found`);
@@ -303,9 +303,9 @@ export function useSankeyCopier() {
     setSettings((prev) => prev.filter(s => s.id !== id));
 
     try {
-      // Send to new API endpoint
+      // Send to new API endpoint (using slave_account, not numeric id)
       await apiClient.delete<void>(
-        `/trade-groups/${encodeURIComponent(setting.master_account)}/members/${id}`
+        `/trade-groups/${encodeURIComponent(setting.master_account)}/members/${encodeURIComponent(setting.slave_account)}`
       );
 
       // Refresh to ensure consistency

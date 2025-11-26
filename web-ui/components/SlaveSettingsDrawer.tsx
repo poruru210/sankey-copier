@@ -108,7 +108,7 @@ export function SlaveSettingsDrawer({
         source_lot_max: formData.source_lot_max,
       };
 
-      await apiClient.updateTradeGroupMember(masterAccount, member.id, settings);
+      await apiClient.updateTradeGroupMember(masterAccount, member.slave_account, settings);
       setMessage({ type: 'success', text: content.settingsSavedSuccess.value });
 
       // Notify parent and close after short delay
