@@ -1310,6 +1310,8 @@ void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
 
    // Remove detail rows if they exist
    RemoveRow("master_detail");
+   RemoveRow("prefix_row");
+   RemoveRow("suffix_row");
    for(int j = 0; j < 10; j++)
       RemoveRow("map_" + IntegerToString(j));
    RemoveRow("map_more");
@@ -1340,6 +1342,8 @@ void CGridPanel::ShowCarouselPage(int index)
 
    // Remove previous detail rows
    RemoveRow("master_detail");
+   RemoveRow("prefix_row");
+   RemoveRow("suffix_row");
    for(int j = 0; j < 10; j++)
       RemoveRow("map_" + IntegerToString(j));
    RemoveRow("map_more");
@@ -1359,6 +1363,24 @@ void CGridPanel::ShowCarouselPage(int index)
    master_cols[0] = clrWhite;
    master_cols[1] = clrWhite;
    AddRow("master_detail", master_vals, master_cols);
+
+   // Prefix
+   string prefix_vals[2];
+   prefix_vals[0] = "Prefix:";
+   prefix_vals[1] = cfg.symbol_prefix;
+   color prefix_cols[2];
+   prefix_cols[0] = clrWhite;
+   prefix_cols[1] = clrWhite;
+   AddRow("prefix_row", prefix_vals, prefix_cols);
+
+   // Suffix
+   string suffix_vals[2];
+   suffix_vals[0] = "Suffix:";
+   suffix_vals[1] = cfg.symbol_suffix;
+   color suffix_cols[2];
+   suffix_cols[0] = clrWhite;
+   suffix_cols[1] = clrWhite;
+   AddRow("suffix_row", suffix_vals, suffix_cols);
 
    // Symbol mappings
    int mapping_count = ArraySize(cfg.symbol_mappings);

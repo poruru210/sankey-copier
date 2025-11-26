@@ -127,6 +127,8 @@ struct CopyConfig {
     double lot_multiplier;
     bool   reverse_trade;
     int    config_version;
+    string symbol_prefix;   // Master's symbol prefix
+    string symbol_suffix;   // Master's symbol suffix
     SymbolMapping symbol_mappings[];
     TradeFilters filters;
     // Lot filtering

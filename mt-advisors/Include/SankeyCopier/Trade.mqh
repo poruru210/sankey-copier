@@ -236,6 +236,10 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       configs[index].source_lot_max = new_source_lot_max;
       configs[index].master_equity = new_master_equity;
 
+      // Parse symbol prefix/suffix from MessagePack
+      configs[index].symbol_prefix = slave_config_get_string(config_handle, "symbol_prefix");
+      configs[index].symbol_suffix = slave_config_get_string(config_handle, "symbol_suffix");
+
       // Parse symbol mappings from MessagePack
       int mapping_count = slave_config_get_symbol_mappings_count(config_handle);
       ArrayResize(configs[index].symbol_mappings, mapping_count);
