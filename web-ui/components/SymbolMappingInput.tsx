@@ -4,7 +4,7 @@
 // Allows users to add/remove symbol mapping pairs (SOURCE → TARGET)
 // Converts to/from comma-separated string format: "XAUUSD=GOLD,EURUSD=EUR"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ interface SymbolMappingInputProps {
 
 /**
  * Parse comma-separated mapping string to array of mapping objects
+ * Uses stable IDs based on index to prevent unnecessary re-renders
  */
 function parseMappings(value: string): SymbolMapping[] {
   if (!value || value.trim() === '') {
@@ -39,7 +40,7 @@ function parseMappings(value: string): SymbolMapping[] {
     .map((pair, index) => {
       const [source, target] = pair.split('=').map(s => s.trim());
       return {
-        id: `mapping-${index}-${Date.now()}`,
+        id: `mapping-${index}`,
         source: source || '',
         target: target || '',
       };
@@ -63,10 +64,21 @@ export function SymbolMappingInput({
   disabled = false,
 }: SymbolMappingInputProps) {
   const content = useIntlayer('settings-dialog');
-  const [mappings, setMappings] = useState<SymbolMapping[]>([]);
+  const [mappings, setMappings] = useState<SymbolMapping[]>(() => parseMappings(value));
 
-  // Parse incoming value on mount or when value changes externally
+  // Track if we're the source of the change to prevent circular updates
+  const isInternalChange = useRef(false);
+  const lastValueRef = useRef(value);
+
+  // Parse incoming value only when it changes externally
   useEffect(() => {
+    // Skip if this is our own change or value hasn't actually changed
+    if (isInternalChange.current || value === lastValueRef.current) {
+      isInternalChange.current = false;
+      return;
+    }
+
+    lastValueRef.current = value;
     const parsed = parseMappings(value);
     setMappings(parsed);
   }, [value]);
@@ -74,12 +86,14 @@ export function SymbolMappingInput({
   // Notify parent of changes
   const notifyChange = useCallback((newMappings: SymbolMapping[]) => {
     const serialized = serializeMappings(newMappings);
+    isInternalChange.current = true;
+    lastValueRef.current = serialized;
     onChange(serialized);
   }, [onChange]);
 
   const handleAddMapping = () => {
     const newMapping: SymbolMapping = {
-      id: `mapping-${Date.now()}`,
+      id: `mapping-${mappings.length}`,
       source: '',
       target: '',
     };
@@ -90,8 +104,13 @@ export function SymbolMappingInput({
 
   const handleRemoveMapping = (id: string) => {
     const newMappings = mappings.filter(m => m.id !== id);
-    setMappings(newMappings);
-    notifyChange(newMappings);
+    // Reassign IDs to maintain stable keys after removal
+    const reindexedMappings = newMappings.map((m, index) => ({
+      ...m,
+      id: `mapping-${index}`,
+    }));
+    setMappings(reindexedMappings);
+    notifyChange(reindexedMappings);
   };
 
   const handleMappingChange = (id: string, field: 'source' | 'target', fieldValue: string) => {
