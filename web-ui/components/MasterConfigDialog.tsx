@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useIntlayer } from 'next-intlayer';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ export function MasterConfigDialog({
   onOpenChange,
   masterAccount,
 }: MasterConfigDialogProps) {
+  const content = useIntlayer('master-config-dialog');
   const { getMasterConfig, updateMasterConfig, deleteMasterConfig } =
     useMasterConfig();
 
@@ -84,7 +86,7 @@ export function MasterConfigDialog({
       }
     } catch (err) {
       const errorMsg =
-        err instanceof Error ? err.message : 'Failed to load configuration';
+        err instanceof Error ? err.message : content.loadError.value;
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -108,7 +110,7 @@ export function MasterConfigDialog({
       onOpenChange(false);
     } catch (err) {
       const errorMsg =
-        err instanceof Error ? err.message : 'Failed to save configuration';
+        err instanceof Error ? err.message : content.saveError.value;
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -124,7 +126,7 @@ export function MasterConfigDialog({
       onOpenChange(false);
     } catch (err) {
       const errorMsg =
-        err instanceof Error ? err.message : 'Failed to delete configuration';
+        err instanceof Error ? err.message : content.deleteError.value;
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -152,7 +154,7 @@ export function MasterConfigDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Master EA Configuration</DialogTitle>
+            <DialogTitle>{content.title}</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -161,7 +163,7 @@ export function MasterConfigDialog({
               <div className="space-y-1">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <span className="text-lg">📊</span>
-                  Master Account
+                  {content.masterAccountLabel}
                 </h3>
               </div>
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -193,20 +195,20 @@ export function MasterConfigDialog({
               <div className="space-y-1">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <span className="text-lg">🔍</span>
-                  Symbol Transformation (Global)
+                  {content.symbolTransformationTitle}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  These settings apply to all Slaves connected to this Master.
+                  {content.symbolTransformationDescription}
                 </p>
               </div>
 
               {/* Symbol Prefix */}
               <div>
-                <Label htmlFor="symbol_prefix">Symbol Prefix</Label>
+                <Label htmlFor="symbol_prefix">{content.symbolPrefix}</Label>
                 <Input
                   id="symbol_prefix"
                   type="text"
-                  placeholder="e.g. 'pro.' or 'FX.'"
+                  placeholder={content.symbolPrefixPlaceholder.value}
                   value={formData.symbol_prefix}
                   onChange={(e) =>
                     setFormData({ ...formData, symbol_prefix: e.target.value })
@@ -214,18 +216,17 @@ export function MasterConfigDialog({
                   disabled={loading}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Master will remove this prefix when broadcasting symbols
-                  (e.g., pro.EURUSD → EURUSD)
+                  {content.symbolPrefixDescription}
                 </p>
               </div>
 
               {/* Symbol Suffix */}
               <div>
-                <Label htmlFor="symbol_suffix">Symbol Suffix</Label>
+                <Label htmlFor="symbol_suffix">{content.symbolSuffix}</Label>
                 <Input
                   id="symbol_suffix"
                   type="text"
-                  placeholder="e.g. '.m' or '-ECN'"
+                  placeholder={content.symbolSuffixPlaceholder.value}
                   value={formData.symbol_suffix}
                   onChange={(e) =>
                     setFormData({ ...formData, symbol_suffix: e.target.value })
@@ -233,8 +234,7 @@ export function MasterConfigDialog({
                   disabled={loading}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Master will remove this suffix when broadcasting symbols
-                  (e.g., EURUSD.m → EURUSD)
+                  {content.symbolSuffixDescription}
                 </p>
               </div>
             </div>
@@ -248,7 +248,7 @@ export function MasterConfigDialog({
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={loading}
                   >
-                    Delete
+                    {content.delete}
                   </Button>
                 )}
               </div>
@@ -259,10 +259,10 @@ export function MasterConfigDialog({
                   onClick={() => onOpenChange(false)}
                   disabled={loading}
                 >
-                  Cancel
+                  {content.cancel}
                 </Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? 'Saving...' : 'Save'}
+                  {loading ? content.saving : content.save}
                 </Button>
               </div>
             </DialogFooter>
@@ -274,21 +274,19 @@ export function MasterConfigDialog({
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Master Configuration?</AlertDialogTitle>
+            <AlertDialogTitle>{content.deleteConfirmTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the symbol transformation settings for this
-              Master. All Slaves will use their individual symbol settings
-              instead.
+              {content.deleteConfirmDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={loading}>{content.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={loading}
             >
-              {loading ? 'Deleting...' : 'Delete'}
+              {loading ? content.deleting : content.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
