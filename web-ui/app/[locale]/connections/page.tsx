@@ -59,8 +59,8 @@ export default function Home() {
       >
         <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
           {/* Page Title */}
-          <div className="mb-4">
-            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+          <div className="mb-6">
+            <Typography variant="h3" className="mb-2">{content.title}</Typography>
             <Muted>{content.description}</Muted>
           </div>
 
