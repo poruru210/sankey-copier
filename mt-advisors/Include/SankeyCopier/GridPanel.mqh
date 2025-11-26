@@ -397,17 +397,6 @@ bool CGridPanel::Initialize(string prefix, int x_offset, int y_offset,
                         initial_height,
                         m_bg_color);
 
-   Print("==== Grid Panel Debug Info ====");
-   Print("Panel initialized: ", m_prefix);
-   Print("Panel width: ", m_panel_width, "px");
-   Print("X offset: ", m_x_offset, "px (from right edge)");
-   Print("Background X (left edge): ", bg_x, "px");
-   Print("Column 0 (label): X=", m_column_widths[0], "px, Width=", LABEL_COLUMN_WIDTH, "px, Anchor=LEFT_UPPER");
-   Print("Column 1 (value): X=", m_column_widths[1], "px, Width=",
-         (m_column_widths[0] - m_column_widths[1] - m_padding_right), "px, Anchor=LEFT_UPPER");
-   Print("Padding: L=", m_padding_left, " R=", m_padding_right);
-   Print("Column spacing: ", (m_column_widths[0] - m_column_widths[1]), "px (label width)");
-   Print("===============================");
    m_initialized = true;
    return true;
 }
@@ -1347,8 +1336,6 @@ void CGridPanel::Delete()
 
    // Delete all rows
    ClearRows();
-
-   Print("Grid panel deleted: ", m_prefix);
 }
 
 //+------------------------------------------------------------------+
