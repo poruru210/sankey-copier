@@ -1319,15 +1319,14 @@ void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
    }
 
    // Remove detail rows if they exist
+   RemoveRow("nav_row");
    RemoveRow("master_detail");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   RemoveRow("symbol_header");
    for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
       RemoveRow("symbol_map_" + IntegerToString(j));
    RemoveRow("symbol_more");
    RemoveRow("lot_filter");
-   RemoveRow("nav_row");
 
    // Update Active count
    string master_vals[2];
@@ -1361,19 +1360,31 @@ void CGridPanel::ShowCarouselPage(int index)
    m_carousel_index = index;
 
    // Remove previous detail rows
+   RemoveRow("nav_row");
    RemoveRow("master_detail");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   RemoveRow("symbol_header");
    for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
       RemoveRow("symbol_map_" + IntegerToString(j));
    RemoveRow("symbol_more");
    RemoveRow("lot_filter");
-   RemoveRow("nav_row");
 
    CopyConfig cfg = m_cached_configs[index];
 
-   // Row 1: Master account (truncated)
+   // Row 1: Navigation row (only if multiple configs, shown at top)
+   if(m_carousel_count > 1)
+   {
+      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
+      string nav_vals[2];
+      nav_vals[0] = "";  // Empty label column
+      nav_vals[1] = nav_str;
+      color nav_cols[2];
+      nav_cols[0] = PANEL_COLOR_LABEL;
+      nav_cols[1] = clrSkyBlue;
+      AddRow("nav_row", nav_vals, nav_cols);
+   }
+
+   // Row 2: Master account (truncated)
    string master_label = TruncateText(cfg.master_account, 20);
    color status_clr = PANEL_COLOR_DISABLED;
    if(cfg.status == STATUS_CONNECTED) status_clr = PANEL_COLOR_CONNECTED;
@@ -1387,7 +1398,7 @@ void CGridPanel::ShowCarouselPage(int index)
    detail_cols[1] = status_clr;
    AddRow("master_detail", detail_vals, detail_cols);
 
-   // Row 2: Lot calculation mode
+   // Row 3: Lot calculation mode
    string lot_str = "";
    if(cfg.lot_calculation_mode == LOT_CALC_MODE_MARGIN_RATIO)
       lot_str = "Margin Ratio (Auto)";
@@ -1415,24 +1426,19 @@ void CGridPanel::ShowCarouselPage(int index)
    int mapping_count = ArraySize(cfg.symbol_mappings);
    if(mapping_count > 0)
    {
-      // Show header
-      string map_header_vals[2];
-      map_header_vals[0] = "Symbol Map:";
-      map_header_vals[1] = "";
-      color map_header_cols[2];
-      map_header_cols[0] = PANEL_COLOR_LABEL;
-      map_header_cols[1] = PANEL_COLOR_VALUE;
-      AddRow("symbol_header", map_header_vals, map_header_cols);
-
       // Show each mapping (max 5 to avoid panel overflow)
+      // First row has "Symbol Map:" label, subsequent rows have empty label
       int show_count = MathMin(mapping_count, 5);
       for(int m = 0; m < show_count; m++)
       {
          string map_vals[2];
-         map_vals[0] = "  " + cfg.symbol_mappings[m].source_symbol;
-         map_vals[1] = "-> " + cfg.symbol_mappings[m].target_symbol;
+         if(m == 0)
+            map_vals[0] = "Symbol Map:";
+         else
+            map_vals[0] = "";
+         map_vals[1] = cfg.symbol_mappings[m].source_symbol + " -> " + cfg.symbol_mappings[m].target_symbol;
          color map_cols[2];
-         map_cols[0] = clrCyan;
+         map_cols[0] = PANEL_COLOR_LABEL;
          map_cols[1] = clrCyan;
          AddRow("symbol_map_" + IntegerToString(m), map_vals, map_cols);
       }
@@ -1468,19 +1474,6 @@ void CGridPanel::ShowCarouselPage(int index)
       filter_cols[0] = PANEL_COLOR_LABEL;
       filter_cols[1] = PANEL_COLOR_VALUE;
       AddRow("lot_filter", filter_vals, filter_cols);
-   }
-
-   // Navigation row (only if multiple configs)
-   if(m_carousel_count > 1)
-   {
-      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
-      string nav_vals[2];
-      nav_vals[0] = "";  // Empty label column
-      nav_vals[1] = nav_str;
-      color nav_cols[2];
-      nav_cols[0] = PANEL_COLOR_LABEL;
-      nav_cols[1] = clrSkyBlue;
-      AddRow("nav_row", nav_vals, nav_cols);
    }
 
    ChartRedraw();
