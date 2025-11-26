@@ -251,6 +251,8 @@ public:
    // Row management
    int      AddRow(string row_key, string &values[], color &colors[]);
    int      AddSeparator(string row_key);  // Add separator line
+   int      AddCenteredRow(string row_key, string text, color clr);  // Add centered text row
+   bool     UpdateCenteredRow(string row_key, string text, color clr = -1);  // Update centered row
    bool     UpdateRow(string row_key, string &values[], color &colors[]);
    bool     UpdateCell(string row_key, int column_index, string value, color clr = -1);
    bool     RemoveRow(string row_key);
@@ -558,6 +560,76 @@ int CGridPanel::AddSeparator(string row_key)
 }
 
 //+------------------------------------------------------------------+
+//| Add a centered text row                                           |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for this row                       |
+//|   text    - Text to display (centered)                           |
+//|   clr     - Text color                                           |
+//| Returns: Row index on success, -1 on error                       |
+//+------------------------------------------------------------------+
+int CGridPanel::AddCenteredRow(string row_key, string text, color clr)
+{
+   // Check if row already exists
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == row_key)
+      {
+         Print("Row with key '", row_key, "' already exists");
+         return -1;
+      }
+   }
+
+   // Add row key
+   int new_size = m_row_count + 1;
+   ArrayResize(m_row_keys, new_size);
+   m_row_keys[m_row_count] = row_key;
+
+   // Calculate Y position for this row
+   int row_y = CalculateRowY(m_row_count);
+
+   // Calculate center X position (same as title)
+   int center_x = CalculateTitleX();
+
+   // Create centered label
+   string obj_name = GenerateObjectName(row_key + "_center");
+   CreatePanelLabel(obj_name, center_x, row_y, text, clr, PANEL_DATA_FONT_SIZE, ANCHOR_UPPER);
+
+   m_row_count++;
+   UpdateBackgroundSize();
+
+   return m_row_count - 1;
+}
+
+//+------------------------------------------------------------------+
+//| Update a centered row                                             |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for the row to update              |
+//|   text    - New text to display                                  |
+//|   clr     - New color (-1 to keep existing)                      |
+//| Returns: true on success, false if row not found                 |
+//+------------------------------------------------------------------+
+bool CGridPanel::UpdateCenteredRow(string row_key, string text, color clr = -1)
+{
+   // Find row index
+   int row_index = -1;
+   for(int i = 0; i < m_row_count; i++)
+   {
+      if(m_row_keys[i] == row_key)
+      {
+         row_index = i;
+         break;
+      }
+   }
+
+   if(row_index == -1)
+      return false;
+
+   string obj_name = GenerateObjectName(row_key + "_center");
+   UpdatePanelLabel(obj_name, text, clr);
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Update an existing row                                           |
 //| Parameters:                                                       |
 //|   row_key - Unique identifier for the row to update            |
@@ -655,6 +727,14 @@ bool CGridPanel::RemoveRow(string row_key)
       ObjectDelete(line_name);
    #endif
 
+   // Also delete centered row object if it exists
+   string center_name = GenerateObjectName(row_key + "_center");
+   #ifdef IS_MT5
+      ObjectDelete(0, center_name);
+   #else
+      ObjectDelete(center_name);
+   #endif
+
    // Remove from array (shift remaining elements)
    for(int i = row_index; i < m_row_count - 1; i++)
    {
@@ -690,6 +770,16 @@ bool CGridPanel::RemoveRow(string row_key)
          if(ObjectFind(line_name) >= 0)
             ObjectSet(line_name, OBJPROP_YDISTANCE, line_y);
       #endif
+
+      // Reposition centered row if exists
+      string center_name = GenerateObjectName(key + "_center");
+      #ifdef IS_MT5
+         if(ObjectFind(0, center_name) >= 0)
+            ObjectSetInteger(0, center_name, OBJPROP_YDISTANCE, new_y);
+      #else
+         if(ObjectFind(center_name) >= 0)
+            ObjectSet(center_name, OBJPROP_YDISTANCE, new_y);
+      #endif
    }
 
    // Update background size
@@ -703,7 +793,7 @@ bool CGridPanel::RemoveRow(string row_key)
 //+------------------------------------------------------------------+
 void CGridPanel::ClearRows()
 {
-   // Delete all row objects (column labels and separator lines)
+   // Delete all row objects (column labels, separator lines, and centered rows)
    for(int i = 0; i < m_row_count; i++)
    {
       string key = m_row_keys[i];
@@ -726,6 +816,14 @@ void CGridPanel::ClearRows()
       #else
          ObjectDelete(line_name);
       #endif
+
+      // Delete centered row if exists
+      string center_name = GenerateObjectName(key + "_center");
+      #ifdef IS_MT5
+         ObjectDelete(0, center_name);
+      #else
+         ObjectDelete(center_name);
+      #endif
    }
 
    ArrayResize(m_row_keys, 0);
@@ -736,7 +834,7 @@ void CGridPanel::ClearRows()
 }
 
 //+------------------------------------------------------------------+
-//| Set panel title                                                   |
+//| Set panel title (centered)                                        |
 //+------------------------------------------------------------------+
 void CGridPanel::SetTitle(string title, color clr = -1)
 {
@@ -744,10 +842,11 @@ void CGridPanel::SetTitle(string title, color clr = -1)
       clr = m_title_color;
 
    string title_obj = GenerateObjectName("Title");
-   int title_x = CalculateTitleX();  // Use encapsulated calculation
+   int title_x = CalculateTitleX();  // Center of panel
    int title_y = m_y_offset + m_padding_top;
 
-   CreatePanelLabel(title_obj, title_x, title_y, title, clr, PANEL_TITLE_FONT_SIZE);
+   // Use ANCHOR_UPPER for horizontal centering
+   CreatePanelLabel(title_obj, title_x, title_y, title, clr, PANEL_TITLE_FONT_SIZE, ANCHOR_UPPER);
 }
 
 //+------------------------------------------------------------------+
@@ -1528,13 +1627,7 @@ void CGridPanel::ShowCarouselPage(int index)
       AddSeparator("sep_bottom");
 
       string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
-      string nav_vals[2];
-      nav_vals[0] = " ";  // Use space to avoid "Label" default
-      nav_vals[1] = nav_str;
-      color nav_cols[2];
-      nav_cols[0] = clrWhite;
-      nav_cols[1] = clrSkyBlue;
-      AddRow("nav_row", nav_vals, nav_cols);
+      AddCenteredRow("nav_row", nav_str, clrSkyBlue);
    }
 
    ChartRedraw();
