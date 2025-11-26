@@ -233,6 +233,18 @@ function ConnectionsViewReactFlowInner({
         return initialNodes;
       }
 
+      // Check if there are new nodes (nodes in initialNodes that don't exist in currentNodes)
+      // This happens when a new connection is added
+      const hasNewNodes = initialNodes.some(
+        (newNode) => !currentNodes.find((n) => n.id === newNode.id)
+      );
+
+      // If new nodes were added, reset all positions to avoid overlap
+      // This gives the same behavior as browser refresh
+      if (hasNewNodes) {
+        return initialNodes;
+      }
+
       // Preserve positions of ALL existing nodes (even after data updates)
       const updatedNodes = initialNodes.map((newNode) => {
         const existingNode = currentNodes.find((n) => n.id === newNode.id);
