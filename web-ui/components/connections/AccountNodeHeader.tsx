@@ -50,7 +50,7 @@ export function AccountNodeHeader({
     <div>
       {/* Header row - Draggable area */}
       <div
-        className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-2 cursor-move drag-handle ${
+        className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 cursor-move drag-handle ${
           account.hasError
             ? 'bg-pink-50 dark:bg-pink-900/20'
             : account.hasWarning
@@ -64,10 +64,10 @@ export function AccountNodeHeader({
             {brokerName}
           </div>
           {accountNumber && (
-            <div className="flex items-center gap-1 text-[10px] md:text-xs text-gray-600 dark:text-gray-400">
+            <div className="flex items-center gap-1.5 mt-1 text-[10px] md:text-xs text-gray-600 dark:text-gray-400">
               {account.platform && (
                 <Badge
-                  className={`text-[8px] md:text-[9px] px-1 py-0 h-3.5 md:h-4 font-medium ${
+                  className={`text-[8px] md:text-[9px] px-1.5 py-0 h-4 md:h-[18px] font-medium ${
                     account.platform === 'MT4'
                       ? 'bg-blue-500 text-white hover:bg-blue-500'
                       : 'bg-purple-500 text-white hover:bg-purple-500'
