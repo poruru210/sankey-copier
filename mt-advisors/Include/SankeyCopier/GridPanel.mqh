@@ -497,33 +497,54 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 }
 
 //+------------------------------------------------------------------+
-//| Add a separator line row                                          |
+//| Add a separator line row using rectangle object                   |
 //| Parameters:                                                       |
 //|   row_key - Unique identifier for the separator row              |
 //| Returns: Row index on success, -1 on error                       |
 //+------------------------------------------------------------------+
 int CGridPanel::AddSeparator(string row_key)
 {
-   // Calculate separator length for each column (approx 1 char per 7 pixels)
-   // Label column is LABEL_COLUMN_WIDTH, value column is the rest
-   int label_chars = LABEL_COLUMN_WIDTH / 7;
-   int value_chars = (m_panel_width - LABEL_COLUMN_WIDTH - m_padding_left - m_padding_right) / 7;
+   // Add row key to track this separator
+   int new_size = m_row_count + 1;
+   ArrayResize(m_row_keys, new_size);
+   m_row_keys[m_row_count] = row_key;
 
-   string sep_line_0 = "";
-   for(int i = 0; i < label_chars; i++)
-      sep_line_0 += "-";
+   // Calculate position for separator line
+   int row_y = CalculateRowY(m_row_count) + (m_row_height / 2) - 1;
+   int line_x = m_x_offset + m_padding_left;
+   int line_width = m_panel_width - m_padding_left - m_padding_right;
 
-   string sep_line_1 = "";
-   for(int i = 0; i < value_chars; i++)
-      sep_line_1 += "-";
+   // Create rectangle label as a thin horizontal line
+   string obj_name = GenerateObjectName(row_key + "_line");
 
-   string sep_vals[2];
-   sep_vals[0] = sep_line_0;
-   sep_vals[1] = sep_line_1;
-   color sep_cols[2];
-   sep_cols[0] = clrDimGray;
-   sep_cols[1] = clrDimGray;
-   return AddRow(row_key, sep_vals, sep_cols);
+   #ifdef IS_MT5
+      ObjectCreate(0, obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, obj_name, OBJPROP_XDISTANCE, line_x);
+      ObjectSetInteger(0, obj_name, OBJPROP_YDISTANCE, row_y);
+      ObjectSetInteger(0, obj_name, OBJPROP_XSIZE, line_width);
+      ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
+      ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSetInteger(0, obj_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, obj_name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, obj_name, OBJPROP_SELECTABLE, false);
+   #else
+      ObjectCreate(obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSet(obj_name, OBJPROP_XDISTANCE, line_x);
+      ObjectSet(obj_name, OBJPROP_YDISTANCE, row_y);
+      ObjectSetInteger(0, obj_name, OBJPROP_XSIZE, line_width);
+      ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
+      ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSet(obj_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSet(obj_name, OBJPROP_BACK, false);
+      ObjectSet(obj_name, OBJPROP_SELECTABLE, false);
+   #endif
+
+   m_row_count++;
+   UpdateBackgroundSize();
+
+   return m_row_count - 1;
 }
 
 //+------------------------------------------------------------------+
@@ -605,7 +626,7 @@ bool CGridPanel::RemoveRow(string row_key)
    if(row_index == -1)
       return false;
 
-   // Delete objects for this row
+   // Delete objects for this row (column labels and separator line)
    for(int col = 0; col < m_column_count; col++)
    {
       string obj_name = GenerateObjectName(row_key + "_col" + IntegerToString(col));
@@ -615,6 +636,14 @@ bool CGridPanel::RemoveRow(string row_key)
          ObjectDelete(obj_name);
       #endif
    }
+
+   // Also delete separator line object if it exists
+   string line_name = GenerateObjectName(row_key + "_line");
+   #ifdef IS_MT5
+      ObjectDelete(0, line_name);
+   #else
+      ObjectDelete(line_name);
+   #endif
 
    // Remove from array (shift remaining elements)
    for(int i = row_index; i < m_row_count - 1; i++)
@@ -630,6 +659,7 @@ bool CGridPanel::RemoveRow(string row_key)
       int new_y = CalculateRowY(i);
       string key = m_row_keys[i];
 
+      // Reposition column labels
       for(int col = 0; col < m_column_count; col++)
       {
          string obj_name = GenerateObjectName(key + "_col" + IntegerToString(col));
@@ -639,6 +669,17 @@ bool CGridPanel::RemoveRow(string row_key)
             ObjectSet(obj_name, OBJPROP_YDISTANCE, new_y);
          #endif
       }
+
+      // Reposition separator line if exists
+      string line_name = GenerateObjectName(key + "_line");
+      int line_y = new_y + (m_row_height / 2) - 1;
+      #ifdef IS_MT5
+         if(ObjectFind(0, line_name) >= 0)
+            ObjectSetInteger(0, line_name, OBJPROP_YDISTANCE, line_y);
+      #else
+         if(ObjectFind(line_name) >= 0)
+            ObjectSet(line_name, OBJPROP_YDISTANCE, line_y);
+      #endif
    }
 
    // Update background size
@@ -652,10 +693,12 @@ bool CGridPanel::RemoveRow(string row_key)
 //+------------------------------------------------------------------+
 void CGridPanel::ClearRows()
 {
-   // Delete all row objects
+   // Delete all row objects (column labels and separator lines)
    for(int i = 0; i < m_row_count; i++)
    {
       string key = m_row_keys[i];
+
+      // Delete column labels
       for(int col = 0; col < m_column_count; col++)
       {
          string obj_name = GenerateObjectName(key + "_col" + IntegerToString(col));
@@ -665,6 +708,14 @@ void CGridPanel::ClearRows()
             ObjectDelete(obj_name);
          #endif
       }
+
+      // Delete separator line if exists
+      string line_name = GenerateObjectName(key + "_line");
+      #ifdef IS_MT5
+         ObjectDelete(0, line_name);
+      #else
+         ObjectDelete(line_name);
+      #endif
    }
 
    ArrayResize(m_row_keys, 0);
