@@ -42,6 +42,19 @@ interface AccountNodeContentProps {
     receivers: string;
     sources: string;
     lastHeartbeat: string;
+    // Copy Settings Carousel content
+    copySettings: string;
+    lotMultiplier: string;
+    marginRatio: string;
+    reverseTrade: string;
+    symbolRules: string;
+    prefix: string;
+    suffix: string;
+    mappings: string;
+    lotFilter: string;
+    min: string;
+    max: string;
+    noSettings: string;
   };
 }
 
