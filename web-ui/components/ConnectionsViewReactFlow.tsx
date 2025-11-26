@@ -212,7 +212,6 @@ function ConnectionsViewReactFlowInner({
     getAccountSettings,
     handleEditSetting,
     handleDeleteSetting,
-    handleEditMasterSettings,
     isAccountHighlighted,
     isMobile,
     content: accountCardContent,
