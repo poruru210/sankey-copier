@@ -236,9 +236,27 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       configs[index].source_lot_max = new_source_lot_max;
       configs[index].master_equity = new_master_equity;
 
-      // TODO: Parse symbol mappings and filters from MessagePack
-      // For now, skip arrays until we implement array support in DLL
-      ArrayResize(configs[index].symbol_mappings, 0);
+      // Parse symbol mappings from MessagePack
+      int mapping_count = slave_config_get_symbol_mappings_count(config_handle);
+      ArrayResize(configs[index].symbol_mappings, mapping_count);
+      for(int m = 0; m < mapping_count; m++)
+      {
+         configs[index].symbol_mappings[m].source_symbol = slave_config_get_symbol_mapping_source(config_handle, m);
+         configs[index].symbol_mappings[m].target_symbol = slave_config_get_symbol_mapping_target(config_handle, m);
+      }
+
+      // Log symbol mappings if any
+      if(mapping_count > 0)
+      {
+         Print("Symbol Mappings (", mapping_count, "):");
+         for(int m = 0; m < mapping_count; m++)
+         {
+            Print("  ", configs[index].symbol_mappings[m].source_symbol, " -> ",
+                  configs[index].symbol_mappings[m].target_symbol);
+         }
+      }
+
+      // TODO: Parse filters from MessagePack (not yet implemented in DLL)
       ArrayResize(configs[index].filters.allowed_symbols, 0);
       ArrayResize(configs[index].filters.blocked_symbols, 0);
       ArrayResize(configs[index].filters.allowed_magic_numbers, 0);

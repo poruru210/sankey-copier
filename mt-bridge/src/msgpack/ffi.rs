@@ -315,6 +315,67 @@ pub unsafe extern "C" fn master_config_get_string(
     buffer.as_ptr()
 }
 
+// ===========================================================================
+// Symbol Mapping Array Access Functions
+// ===========================================================================
+
+/// Get the number of symbol mappings in a SlaveConfigMessage
+///
+/// # Safety
+/// - handle must be a valid pointer to SlaveConfigMessage
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_symbol_mappings_count(
+    handle: *const SlaveConfigMessage,
+) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    let config = &*handle;
+    config.symbol_mappings.len() as i32
+}
+
+/// Get the source symbol at a specific index from symbol_mappings
+///
+/// # Safety
+/// - handle must be a valid pointer to SlaveConfigMessage
+/// - index must be within bounds (0 <= index < count)
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_symbol_mapping_source(
+    handle: *const SlaveConfigMessage,
+    index: i32,
+) -> *const u16 {
+    if handle.is_null() || index < 0 {
+        return std::ptr::null();
+    }
+    let config = &*handle;
+    let idx = index as usize;
+    if idx >= config.symbol_mappings.len() {
+        return std::ptr::null();
+    }
+    string_to_utf16_buffer(&config.symbol_mappings[idx].source_symbol)
+}
+
+/// Get the target symbol at a specific index from symbol_mappings
+///
+/// # Safety
+/// - handle must be a valid pointer to SlaveConfigMessage
+/// - index must be within bounds (0 <= index < count)
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_symbol_mapping_target(
+    handle: *const SlaveConfigMessage,
+    index: i32,
+) -> *const u16 {
+    if handle.is_null() || index < 0 {
+        return std::ptr::null();
+    }
+    let config = &*handle;
+    let idx = index as usize;
+    if idx >= config.symbol_mappings.len() {
+        return std::ptr::null();
+    }
+    string_to_utf16_buffer(&config.symbol_mappings[idx].target_symbol)
+}
+
 /// Get an integer field from MasterConfigMessage handle
 ///
 /// # Safety

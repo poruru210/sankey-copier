@@ -83,6 +83,11 @@
    int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
    void        slave_config_free(HANDLE_TYPE handle);
 
+   // Slave config symbol mappings array access
+   int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
+   string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
+   string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
+
    // Master config message parsing
    HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
    string      master_config_get_string(HANDLE_TYPE handle, string field_name);
