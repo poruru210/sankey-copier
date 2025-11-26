@@ -413,10 +413,10 @@ function CreateConnectionForm({
                 )}
               </DrawerSection>
 
-              {/* Symbol Filters Section */}
+              {/* Symbol Rules Section */}
               <DrawerSection bordered>
                 <DrawerSectionHeader
-                  title="Symbol Filters"
+                  title="Symbol Rules"
                   description="Configure symbol name transformations that the Master EA will apply before broadcasting."
                 />
                 <DrawerSectionContent>

@@ -240,8 +240,8 @@ const settingsDialogContent = {
       ja: 'マスター設定',
     }),
     symbolFiltersGlobalTitle: t({
-      en: 'Symbol Filters (Global)',
-      ja: 'フィルター（グローバル）',
+      en: 'Symbol Rules (Global)',
+      ja: 'シンボルルール（グローバル）',
     }),
     symbolFiltersGlobalDescription: t({
       en: 'These settings apply to all slaves connected to this master.',
@@ -267,10 +267,10 @@ const settingsDialogContent = {
       en: 'Saving...',
       ja: '保存中...',
     }),
-    // Slave Settings Form / Symbol Filters
+    // Slave Settings Form / Symbol Rules
     symbolFiltersTitle: t({
-      en: 'Symbol Filters',
-      ja: 'フィルター',
+      en: 'Symbol Rules',
+      ja: 'シンボルルール',
     }),
     symbolFiltersDescription: t({
       en: 'Configure symbol name transformations for this connection.',

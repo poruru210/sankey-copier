@@ -172,10 +172,10 @@ export function SlaveSettingsForm({
         </DrawerSectionContent>
       </DrawerSection>
 
-      {/* Symbol Filters Section */}
+      {/* Symbol Rules Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.symbolFiltersTitle?.value || "Symbol Filters"}
+          title={content.symbolFiltersTitle?.value || "Symbol Rules"}
           description={content.symbolFiltersDescription?.value || "Configure symbol name transformations for this connection."}
         />
         <DrawerSectionContent>
