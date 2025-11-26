@@ -529,7 +529,9 @@ int CGridPanel::AddSeparator(string row_key)
       ObjectSetInteger(0, obj_name, OBJPROP_XSIZE, line_width);
       ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
       ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, clrDimGray);  // Border color same as background
       ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSetInteger(0, obj_name, OBJPROP_WIDTH, 0);  // No border width
       ObjectSetInteger(0, obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSetInteger(0, obj_name, OBJPROP_BACK, false);
       ObjectSetInteger(0, obj_name, OBJPROP_SELECTABLE, false);
@@ -538,10 +540,12 @@ int CGridPanel::AddSeparator(string row_key)
       ObjectCreate(obj_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
       ObjectSet(obj_name, OBJPROP_XDISTANCE, line_x);
       ObjectSet(obj_name, OBJPROP_YDISTANCE, row_y);
-      ObjectSetInteger(0, obj_name, OBJPROP_XSIZE, line_width);
-      ObjectSetInteger(0, obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
-      ObjectSetInteger(0, obj_name, OBJPROP_BGCOLOR, clrDimGray);
-      ObjectSetInteger(0, obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSet(obj_name, OBJPROP_XSIZE, line_width);
+      ObjectSet(obj_name, OBJPROP_YSIZE, 1);  // 1 pixel height
+      ObjectSet(obj_name, OBJPROP_BGCOLOR, clrDimGray);
+      ObjectSet(obj_name, OBJPROP_COLOR, clrDimGray);  // Border color same as background
+      ObjectSet(obj_name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSet(obj_name, OBJPROP_WIDTH, 0);  // No border width
       ObjectSet(obj_name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
       ObjectSet(obj_name, OBJPROP_BACK, false);
       ObjectSet(obj_name, OBJPROP_SELECTABLE, false);
