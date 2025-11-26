@@ -504,15 +504,22 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 //+------------------------------------------------------------------+
 int CGridPanel::AddSeparator(string row_key)
 {
-   // Calculate separator length based on panel width (approx 1 char per 7 pixels)
-   int sep_len = m_panel_width / 7;
-   string sep_line = "";
-   for(int i = 0; i < sep_len; i++)
-      sep_line += "-";
+   // Calculate separator length for each column (approx 1 char per 7 pixels)
+   // Label column is LABEL_COLUMN_WIDTH, value column is the rest
+   int label_chars = LABEL_COLUMN_WIDTH / 7;
+   int value_chars = (m_panel_width - LABEL_COLUMN_WIDTH - m_padding_left - m_padding_right) / 7;
+
+   string sep_line_0 = "";
+   for(int i = 0; i < label_chars; i++)
+      sep_line_0 += "-";
+
+   string sep_line_1 = "";
+   for(int i = 0; i < value_chars; i++)
+      sep_line_1 += "-";
 
    string sep_vals[2];
-   sep_vals[0] = sep_line;
-   sep_vals[1] = " ";  // Use space instead of empty string to avoid "Label" default
+   sep_vals[0] = sep_line_0;
+   sep_vals[1] = sep_line_1;
    color sep_cols[2];
    sep_cols[0] = clrDimGray;
    sep_cols[1] = clrDimGray;
