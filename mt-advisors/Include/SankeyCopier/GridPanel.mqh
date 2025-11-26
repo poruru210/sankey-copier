@@ -250,6 +250,7 @@ public:
 
    // Row management
    int      AddRow(string row_key, string &values[], color &colors[]);
+   int      AddSeparator(string row_key);  // Add separator line
    bool     UpdateRow(string row_key, string &values[], color &colors[]);
    bool     UpdateCell(string row_key, int column_index, string value, color clr = -1);
    bool     RemoveRow(string row_key);
@@ -496,6 +497,23 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
 }
 
 //+------------------------------------------------------------------+
+//| Add a separator line row                                          |
+//| Parameters:                                                       |
+//|   row_key - Unique identifier for the separator row              |
+//| Returns: Row index on success, -1 on error                       |
+//+------------------------------------------------------------------+
+int CGridPanel::AddSeparator(string row_key)
+{
+   string sep_vals[2];
+   sep_vals[0] = "-------------------------";
+   sep_vals[1] = "";
+   color sep_cols[2];
+   sep_cols[0] = clrDimGray;
+   sep_cols[1] = clrDimGray;
+   return AddRow(row_key, sep_vals, sep_cols);
+}
+
+//+------------------------------------------------------------------+
 //| Update an existing row                                           |
 //| Parameters:                                                       |
 //|   row_key - Unique identifier for the row to update            |
@@ -674,30 +692,13 @@ bool CGridPanel::InitializeSlavePanel(string prefix = "SankeyCopierPanel_", int 
    // Set title
    SetTitle("Sankey Copier - Slave", PANEL_COLOR_TITLE);
 
+   // Separator after title
+   AddSeparator("sep_top");
+
    // Add standard rows with initial values
    string status_vals[] = {"Status:", "DISABLED"};
    color status_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_DISABLED};
    AddRow("status", status_vals, status_cols);
-
-   string master_vals[] = {"Active:", "0"};
-   color master_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("master", master_vals, master_cols);
-
-   string server_vals[] = {"Server:", "N/A"};
-   color server_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("server", server_vals, server_cols);
-   
-   string prefix_vals[] = {"Prefix:", "-"};
-   color prefix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("prefix", prefix_vals, prefix_cols);
-   
-   string suffix_vals[] = {"Suffix:", "-"};
-   color suffix_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("suffix", suffix_vals, suffix_cols);
-   
-   string map_vals[] = {"Map:", "-"};
-   color map_cols[] = {PANEL_COLOR_LABEL, PANEL_COLOR_VALUE};
-   AddRow("map", map_vals, map_cols);
 
    m_initialized = true;
    return true;
@@ -1319,25 +1320,14 @@ void CGridPanel::UpdateCarouselConfigs(CopyConfig &configs[])
    }
 
    // Remove detail rows if they exist
-   RemoveRow("nav_row");
    RemoveRow("master_detail");
+   for(int j = 0; j < 10; j++)
+      RemoveRow("map_" + IntegerToString(j));
+   RemoveRow("map_more");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
-      RemoveRow("symbol_map_" + IntegerToString(j));
-   RemoveRow("symbol_more");
-   RemoveRow("lot_filter");
-
-   // Update Active count
-   string master_vals[2];
-   master_vals[0] = "Active:";
-   master_vals[1] = IntegerToString(config_count);
-
-   color master_cols[2];
-   master_cols[0] = PANEL_COLOR_LABEL;
-   master_cols[1] = PANEL_COLOR_VALUE;
-
-   UpdateRow("master", master_vals, master_cols);
+   RemoveRow("sep_bottom");
+   RemoveRow("nav_row");
 
    if(config_count == 0)
    {
@@ -1360,48 +1350,73 @@ void CGridPanel::ShowCarouselPage(int index)
    m_carousel_index = index;
 
    // Remove previous detail rows
-   RemoveRow("nav_row");
    RemoveRow("master_detail");
+   for(int j = 0; j < 10; j++)
+      RemoveRow("map_" + IntegerToString(j));
+   RemoveRow("map_more");
    RemoveRow("lot_mode");
    RemoveRow("reverse");
-   for(int j = 0; j < 10; j++)  // Remove up to 10 mapping rows
-      RemoveRow("symbol_map_" + IntegerToString(j));
-   RemoveRow("symbol_more");
-   RemoveRow("lot_filter");
+   RemoveRow("sep_bottom");
+   RemoveRow("nav_row");
 
    CopyConfig cfg = m_cached_configs[index];
 
-   // Row 1: Navigation row (only if multiple configs, shown at top)
-   if(m_carousel_count > 1)
+   // Master account (truncated)
+   string master_label = TruncateText(cfg.master_account, 20);
+   string master_vals[2];
+   master_vals[0] = "Master:";
+   master_vals[1] = master_label;
+   color master_cols[2];
+   master_cols[0] = clrWhite;
+   master_cols[1] = clrWhite;
+   AddRow("master_detail", master_vals, master_cols);
+
+   // Symbol mappings
+   int mapping_count = ArraySize(cfg.symbol_mappings);
+   if(mapping_count > 0)
    {
-      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
-      string nav_vals[2];
-      nav_vals[0] = "";  // Empty label column
-      nav_vals[1] = nav_str;
-      color nav_cols[2];
-      nav_cols[0] = PANEL_COLOR_LABEL;
-      nav_cols[1] = clrSkyBlue;
-      AddRow("nav_row", nav_vals, nav_cols);
+      int show_count = MathMin(mapping_count, 5);
+      for(int m = 0; m < show_count; m++)
+      {
+         string map_vals[2];
+         if(m == 0)
+            map_vals[0] = "Map:";
+         else
+            map_vals[0] = "";
+         map_vals[1] = cfg.symbol_mappings[m].source_symbol + " -> " + cfg.symbol_mappings[m].target_symbol;
+         color map_cols[2];
+         map_cols[0] = clrWhite;
+         map_cols[1] = clrWhite;
+         AddRow("map_" + IntegerToString(m), map_vals, map_cols);
+      }
+
+      if(mapping_count > 5)
+      {
+         string more_vals[2];
+         more_vals[0] = "";
+         more_vals[1] = "+" + IntegerToString(mapping_count - 5) + " more";
+         color more_cols[2];
+         more_cols[0] = clrWhite;
+         more_cols[1] = clrGray;
+         AddRow("map_more", more_vals, more_cols);
+      }
+   }
+   else
+   {
+      // Show empty Map row
+      string map_vals[2];
+      map_vals[0] = "Map:";
+      map_vals[1] = "";
+      color map_cols[2];
+      map_cols[0] = clrWhite;
+      map_cols[1] = clrWhite;
+      AddRow("map_0", map_vals, map_cols);
    }
 
-   // Row 2: Master account (truncated)
-   string master_label = TruncateText(cfg.master_account, 20);
-   color status_clr = PANEL_COLOR_DISABLED;
-   if(cfg.status == STATUS_CONNECTED) status_clr = PANEL_COLOR_CONNECTED;
-   else if(cfg.status == STATUS_ENABLED) status_clr = PANEL_COLOR_WAITING;
-
-   string detail_vals[2];
-   detail_vals[0] = "Master:";
-   detail_vals[1] = master_label;
-   color detail_cols[2];
-   detail_cols[0] = PANEL_COLOR_LABEL;
-   detail_cols[1] = status_clr;
-   AddRow("master_detail", detail_vals, detail_cols);
-
-   // Row 3: Lot calculation mode
+   // Lot Mode
    string lot_str = "";
    if(cfg.lot_calculation_mode == LOT_CALC_MODE_MARGIN_RATIO)
-      lot_str = "Margin Ratio (Auto)";
+      lot_str = "Margin Ratio";
    else
       lot_str = "x" + DoubleToString(cfg.lot_multiplier, 2);
 
@@ -1409,71 +1424,32 @@ void CGridPanel::ShowCarouselPage(int index)
    lot_vals[0] = "Lot Mode:";
    lot_vals[1] = lot_str;
    color lot_cols[2];
-   lot_cols[0] = PANEL_COLOR_LABEL;
-   lot_cols[1] = PANEL_COLOR_VALUE;
+   lot_cols[0] = clrWhite;
+   lot_cols[1] = clrWhite;
    AddRow("lot_mode", lot_vals, lot_cols);
 
-   // Row 3: Reverse trade
+   // Reverse
    string rev_vals[2];
    rev_vals[0] = "Reverse:";
    rev_vals[1] = cfg.reverse_trade ? "ON" : "OFF";
    color rev_cols[2];
-   rev_cols[0] = PANEL_COLOR_LABEL;
-   rev_cols[1] = cfg.reverse_trade ? clrOrange : PANEL_COLOR_VALUE;
+   rev_cols[0] = clrWhite;
+   rev_cols[1] = clrWhite;
    AddRow("reverse", rev_vals, rev_cols);
 
-   // Row 4+: Symbol mappings (show actual mappings, max 5)
-   int mapping_count = ArraySize(cfg.symbol_mappings);
-   if(mapping_count > 0)
+   // Separator and navigation (only if multiple configs)
+   if(m_carousel_count > 1)
    {
-      // Show each mapping (max 5 to avoid panel overflow)
-      // First row has "Symbol Map:" label, subsequent rows have empty label
-      int show_count = MathMin(mapping_count, 5);
-      for(int m = 0; m < show_count; m++)
-      {
-         string map_vals[2];
-         if(m == 0)
-            map_vals[0] = "Symbol Map:";
-         else
-            map_vals[0] = "";
-         map_vals[1] = cfg.symbol_mappings[m].source_symbol + " -> " + cfg.symbol_mappings[m].target_symbol;
-         color map_cols[2];
-         map_cols[0] = PANEL_COLOR_LABEL;
-         map_cols[1] = clrCyan;
-         AddRow("symbol_map_" + IntegerToString(m), map_vals, map_cols);
-      }
+      AddSeparator("sep_bottom");
 
-      // If more than 5, show "+N more"
-      if(mapping_count > 5)
-      {
-         string more_vals[2];
-         more_vals[0] = "";
-         more_vals[1] = "+" + IntegerToString(mapping_count - 5) + " more";
-         color more_cols[2];
-         more_cols[0] = PANEL_COLOR_LABEL;
-         more_cols[1] = clrGray;
-         AddRow("symbol_more", more_vals, more_cols);
-      }
-   }
-
-   // Row 5: Lot filter (if set)
-   if(cfg.source_lot_min > 0 || cfg.source_lot_max > 0)
-   {
-      string filter_str = "";
-      if(cfg.source_lot_min > 0 && cfg.source_lot_max > 0)
-         filter_str = DoubleToString(cfg.source_lot_min, 2) + " - " + DoubleToString(cfg.source_lot_max, 2);
-      else if(cfg.source_lot_min > 0)
-         filter_str = ">= " + DoubleToString(cfg.source_lot_min, 2);
-      else
-         filter_str = "<= " + DoubleToString(cfg.source_lot_max, 2);
-
-      string filter_vals[2];
-      filter_vals[0] = "Lot Filter:";
-      filter_vals[1] = filter_str;
-      color filter_cols[2];
-      filter_cols[0] = PANEL_COLOR_LABEL;
-      filter_cols[1] = PANEL_COLOR_VALUE;
-      AddRow("lot_filter", filter_vals, filter_cols);
+      string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
+      string nav_vals[2];
+      nav_vals[0] = "";
+      nav_vals[1] = nav_str;
+      color nav_cols[2];
+      nav_cols[0] = clrWhite;
+      nav_cols[1] = clrSkyBlue;
+      AddRow("nav_row", nav_vals, nav_cols);
    }
 
    ChartRedraw();
