@@ -7,6 +7,7 @@ import {
   Background,
   Controls,
   NodeTypes,
+  EdgeTypes,
   Edge,
   Node,
   ReactFlowProvider,
@@ -24,6 +25,7 @@ import {
 import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
 import { AccountNode } from '@/components/flow-nodes/AccountNode';
+import { SettingsEdge } from '@/components/flow-edges';
 import { CreateConnectionDialog } from '@/components/CreateConnectionDialog';
 import { EditConnectionDrawer } from '@/components/EditConnectionDrawer';
 import { MasterSettingsDrawer } from '@/components/MasterSettingsDrawer';
@@ -45,6 +47,11 @@ interface ConnectionsViewReactFlowProps {
 const nodeTypes = Object.freeze({
   accountNode: AccountNode,
 }) as NodeTypes;
+
+// Define edgeTypes at module level to prevent recreation warnings
+const edgeTypes = Object.freeze({
+  settingsEdge: SettingsEdge,
+}) as EdgeTypes;
 
 function ConnectionsViewReactFlowInner({
   connections,
@@ -409,6 +416,7 @@ function ConnectionsViewReactFlowInner({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             onNodeDoubleClick={onNodeDoubleClick}

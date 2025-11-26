@@ -213,8 +213,6 @@ export function useFlowData({
           onToggleEnabled: (enabled: boolean) => toggleReceiverEnabled(account.id, enabled),
           onEditSetting: handleEditSetting,
           onDeleteSetting: handleDeleteSetting,
-          // For Slave cards, clicking settings button opens edit drawer for first connection
-          onOpenSettingsDrawer: accountSettings.length > 0 ? () => handleEditSetting(accountSettings[0]) : undefined,
           type: 'receiver' as const,
           isHighlighted,
           hoveredSourceId,
@@ -268,50 +266,27 @@ export function useFlowData({
         sourceAccount.isActive &&
         receiverAccount.isActive;
 
-      // Build label text with copy settings
-      const labelParts: string[] = [];
-
-      // Lot multiplier
-      if (setting.lot_multiplier !== null) {
-        labelParts.push(`×${setting.lot_multiplier}`);
-      }
-
-      // Reverse trade indicator
-      if (setting.reverse_trade) {
-        labelParts.push('⇄');
-      }
-
-      const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
-
-      // Direct edge from source to receiver (display only, not clickable)
+      // Direct edge from source to receiver with settings button
       edgeList.push({
         id: `edge-${setting.id}`,
         source: `source-${setting.master_account}`,
         target: `receiver-${setting.slave_account}`,
+        type: 'settingsEdge',
         animated: isActive,
         style: {
           stroke: isActive ? '#22c55e' : '#d1d5db',
           strokeWidth: 2,
           strokeDasharray: isActive ? undefined : '5,5',
-          cursor: 'default',
         },
-        label: labelText,
-        labelStyle: {
-          fill: isActive ? '#16a34a' : '#6b7280',
-          fontWeight: 600,
-          fontSize: 12,
+        data: {
+          setting,
+          onEditSetting: handleEditSetting,
         },
-        labelBgStyle: {
-          fill: '#ffffff',
-          fillOpacity: 0.9,
-        },
-        labelBgPadding: [8, 4] as [number, number],
-        data: { setting },
       });
     });
 
     return edgeList;
-  }, [settings, sourceAccounts, receiverAccounts]);
+  }, [settings, sourceAccounts, receiverAccounts, handleEditSetting]);
 
   return { nodes, edges };
 }
