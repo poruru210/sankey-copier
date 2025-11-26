@@ -206,15 +206,14 @@ export class ApiClient {
 
   /**
    * Update a TradeGroup member's settings
+   * Server expects SlaveSettings directly (not wrapped)
    */
   async updateTradeGroupMember(
     masterAccount: string,
     slaveAccount: string,
     settings: import('@/types').SlaveSettings
-  ): Promise<import('@/types').TradeGroupMember> {
-    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`, {
-      slave_settings: settings,
-    });
+  ): Promise<void> {
+    return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}`, settings);
   }
 
   /**

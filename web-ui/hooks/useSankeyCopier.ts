@@ -275,9 +275,10 @@ export function useSankeyCopier() {
       const slaveSettings = convertCopySettingsToSlaveSettings(updatedData);
 
       // Send to new API endpoint (using slave_account, not numeric id)
+      // Server expects SlaveSettings directly (not wrapped in { slave_settings: ... })
       await apiClient.put<void>(
         `/trade-groups/${encodeURIComponent(originalSetting.master_account)}/members/${encodeURIComponent(originalSetting.slave_account)}`,
-        { slave_settings: slaveSettings, status: updatedData.status }
+        slaveSettings
       );
 
       // Refresh to ensure consistency
