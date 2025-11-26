@@ -58,7 +58,7 @@ export function AccountNodeHeader({
             : ''
         }`}
       >
-        <BrokerIcon brokerName={brokerName} size="md" />
+        <BrokerIcon brokerName={brokerName} size="lg" />
         <div className="flex-1 min-w-0">
           <div className="font-normal text-gray-900 dark:text-gray-100 text-xs md:text-sm truncate">
             {brokerName}
