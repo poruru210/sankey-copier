@@ -57,6 +57,19 @@ impl From<LotCalculationMode> for sankey_copier_zmq::LotCalculationMode {
     }
 }
 
+/// Sync mode for existing positions when slave connects
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncMode {
+    /// Do not sync existing positions (only copy new trades)
+    #[default]
+    Skip,
+    /// Sync using limit orders at Master's open price
+    LimitOrder,
+    /// Sync using market orders with max price deviation check
+    MarketOrder,
+}
+
 /// Slave-specific settings
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SlaveSettings {
@@ -101,6 +114,20 @@ pub struct SlaveSettings {
     pub source_lot_max: Option<f64>,
 
     // === Open Sync Policy Settings ===
+    /// Sync mode for existing positions when slave connects
+    #[serde(default)]
+    pub sync_mode: SyncMode,
+
+    /// Time limit for limit orders in minutes (0 = GTC, Good Till Cancelled)
+    /// Used when sync_mode = LimitOrder
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_order_expiry_min: Option<i32>,
+
+    /// Max price deviation in pips for market order sync (skip if exceeded)
+    /// Used when sync_mode = MarketOrder
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_sync_max_pips: Option<f64>,
+
     /// Maximum allowed slippage in points when opening positions (default: 30)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_slippage: Option<i32>,
@@ -108,10 +135,6 @@ pub struct SlaveSettings {
     /// Whether to copy pending orders (limit/stop orders) in addition to market orders
     #[serde(default)]
     pub copy_pending_orders: bool,
-
-    /// Whether to auto-sync existing Master positions when Slave connects
-    #[serde(default)]
-    pub auto_sync_existing: bool,
 }
 
 #[allow(dead_code)]
@@ -226,9 +249,11 @@ mod tests {
             config_version: 1,
             source_lot_min: Some(0.01),
             source_lot_max: Some(10.0),
+            sync_mode: SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -255,9 +280,11 @@ mod tests {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -284,5 +311,20 @@ mod tests {
         let mode2 = LotCalculationMode::Multiplier;
         let json2 = serde_json::to_string(&mode2).unwrap();
         assert_eq!(json2, "\"multiplier\"");
+    }
+
+    #[test]
+    fn test_sync_mode_serialization() {
+        let mode = SyncMode::Skip;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"skip\"");
+
+        let mode2 = SyncMode::LimitOrder;
+        let json2 = serde_json::to_string(&mode2).unwrap();
+        assert_eq!(json2, "\"limit_order\"");
+
+        let mode3 = SyncMode::MarketOrder;
+        let json3 = serde_json::to_string(&mode3).unwrap();
+        assert_eq!(json3, "\"market_order\"");
     }
 }

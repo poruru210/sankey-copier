@@ -1,6 +1,9 @@
 // Lot calculation mode type
 export type LotCalculationMode = 'multiplier' | 'margin_ratio';
 
+// Sync mode for existing positions when slave connects
+export type SyncMode = 'skip' | 'limit_order' | 'market_order';
+
 export interface CopySettings {
   id: number;
   status: number; // 0=OFF (user disabled), 1=ON (user enabled)
@@ -17,9 +20,11 @@ export interface CopySettings {
   source_lot_min?: number | null;
   source_lot_max?: number | null;
   // Open Sync Policy settings
-  max_slippage?: number | null;
+  sync_mode?: SyncMode;
+  limit_order_expiry_min?: number | null;  // minutes (0 = GTC)
+  market_sync_max_pips?: number | null;    // pips
+  max_slippage?: number | null;            // points
   copy_pending_orders?: boolean;
-  auto_sync_existing?: boolean;
 }
 
 export interface SymbolMapping {
@@ -75,9 +80,11 @@ export interface CreateSettingsRequest {
   source_lot_min?: number | null;
   source_lot_max?: number | null;
   // Open Sync Policy
+  sync_mode?: SyncMode;
+  limit_order_expiry_min?: number | null;
+  market_sync_max_pips?: number | null;
   max_slippage?: number | null;
   copy_pending_orders?: boolean;
-  auto_sync_existing?: boolean;
 }
 
 // ConnectionsView specific types
@@ -168,9 +175,11 @@ export interface SlaveSettings {
   source_lot_min?: number | null;
   source_lot_max?: number | null;
   // Open Sync Policy settings
-  max_slippage?: number | null;       // Max slippage in points (default: 30)
-  copy_pending_orders?: boolean;      // Copy pending orders (limit/stop)
-  auto_sync_existing?: boolean;       // Auto-sync existing positions on connect
+  sync_mode?: SyncMode;                  // Sync mode: skip, limit_order, market_order
+  limit_order_expiry_min?: number | null; // minutes (0 = GTC)
+  market_sync_max_pips?: number | null;   // max deviation in pips
+  max_slippage?: number | null;           // Max slippage in points (default: 30)
+  copy_pending_orders?: boolean;          // Copy pending orders (limit/stop)
 }
 
 export interface TradeGroupMember {

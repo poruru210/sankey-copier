@@ -13,7 +13,7 @@
 
 mod test_server;
 
-use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings};
+use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
@@ -854,9 +854,11 @@ async fn test_multiple_slaves_same_master() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
 
         server
@@ -1248,9 +1250,11 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
                 max_slippage: None,
                 copy_pending_orders: false,
-                auto_sync_existing: false,
             },
         )
         .await
@@ -1272,9 +1276,11 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
                 max_slippage: None,
                 copy_pending_orders: false,
-                auto_sync_existing: false,
             },
         )
         .await
@@ -1297,9 +1303,11 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
                 max_slippage: None,
                 copy_pending_orders: false,
-                auto_sync_existing: false,
             },
         )
         .await

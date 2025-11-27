@@ -373,7 +373,7 @@ async fn test_delete_trade_group_cascade_deletes_members() {
     db.create_trade_group("MASTER_CASCADE_TEST").await.unwrap();
 
     // Add members to this trade group
-    use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
+    use sankey_copier_relay_server::models::{SlaveSettings, SyncMode, TradeFilters};
     let slave_settings = SlaveSettings {
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
@@ -385,9 +385,11 @@ async fn test_delete_trade_group_cascade_deletes_members() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     db.add_member("MASTER_CASCADE_TEST", "SLAVE_001", slave_settings.clone())
@@ -433,7 +435,7 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
     );
 
     // Add a member via API (without creating TradeGroup first)
-    use sankey_copier_relay_server::models::{SlaveSettings, TradeFilters};
+    use sankey_copier_relay_server::models::{SlaveSettings, SyncMode, TradeFilters};
     let slave_settings = SlaveSettings {
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
@@ -445,9 +447,11 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     let request_body = serde_json::json!({

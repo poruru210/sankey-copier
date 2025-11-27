@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
-import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode } from '@/types';
+import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode, SyncMode } from '@/types';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
@@ -162,9 +162,11 @@ function CreateConnectionForm({
     source_lot_min: number | null;
     source_lot_max: number | null;
     // Open Sync Policy
+    sync_mode: SyncMode;
+    limit_order_expiry_min: number | null;
+    market_sync_max_pips: number | null;
     max_slippage: number | null;
     copy_pending_orders: boolean;
-    auto_sync_existing: boolean;
   }>({
     master_account: '',
     slave_account: '',
@@ -177,9 +179,11 @@ function CreateConnectionForm({
     source_lot_min: null,
     source_lot_max: null,
     // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
     max_slippage: null,
     copy_pending_orders: false,
-    auto_sync_existing: false,
   });
 
 
@@ -197,9 +201,11 @@ function CreateConnectionForm({
       source_lot_min: null,
       source_lot_max: null,
       // Open Sync Policy defaults
+      sync_mode: 'skip',
+      limit_order_expiry_min: null,
+      market_sync_max_pips: null,
       max_slippage: null,
       copy_pending_orders: false,
-      auto_sync_existing: false,
     });
     setMasterSettings({
       symbol_prefix: '',
@@ -334,9 +340,11 @@ function CreateConnectionForm({
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
         // Open Sync Policy
+        sync_mode: formData.sync_mode,
+        limit_order_expiry_min: formData.limit_order_expiry_min,
+        market_sync_max_pips: formData.market_sync_max_pips,
         max_slippage: formData.max_slippage,
         copy_pending_orders: formData.copy_pending_orders,
-        auto_sync_existing: formData.auto_sync_existing,
       });
       setStepComplete(2, true);
       onClose();
@@ -485,9 +493,11 @@ function CreateConnectionForm({
                 source_lot_min: formData.source_lot_min,
                 source_lot_max: formData.source_lot_max,
                 // Open Sync Policy fields
+                sync_mode: formData.sync_mode,
+                limit_order_expiry_min: formData.limit_order_expiry_min,
+                market_sync_max_pips: formData.market_sync_max_pips,
                 max_slippage: formData.max_slippage,
                 copy_pending_orders: formData.copy_pending_orders,
-                auto_sync_existing: formData.auto_sync_existing,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
             />

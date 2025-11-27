@@ -40,9 +40,11 @@ fn create_test_member() -> TradeGroupMember {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         },
         status: 2, // STATUS_CONNECTED
         created_at: Utc::now().to_rfc3339(),

@@ -57,9 +57,11 @@ export function EditConnectionDrawer({
     source_lot_min: null,
     source_lot_max: null,
     // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
     max_slippage: null,
     copy_pending_orders: false,
-    auto_sync_existing: false,
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -83,9 +85,11 @@ export function EditConnectionDrawer({
         source_lot_min: setting.source_lot_min ?? null,
         source_lot_max: setting.source_lot_max ?? null,
         // Open Sync Policy fields
+        sync_mode: setting.sync_mode ?? 'skip',
+        limit_order_expiry_min: setting.limit_order_expiry_min ?? null,
+        market_sync_max_pips: setting.market_sync_max_pips ?? null,
         max_slippage: setting.max_slippage ?? null,
         copy_pending_orders: setting.copy_pending_orders ?? false,
-        auto_sync_existing: setting.auto_sync_existing ?? false,
       });
     }
   }, [setting, open]);

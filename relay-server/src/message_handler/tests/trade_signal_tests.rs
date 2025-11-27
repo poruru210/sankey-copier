@@ -28,9 +28,11 @@ async fn test_handle_trade_signal_with_matching_setting() {
             },
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
         handler
             .db
@@ -69,9 +71,11 @@ async fn test_handle_trade_signal_no_matching_master() {
             },
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
         handler
             .db
@@ -109,9 +113,11 @@ async fn test_handle_trade_signal_disabled_setting() {
             },
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         };
         // Add member and then disable it
         handler

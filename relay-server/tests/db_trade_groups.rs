@@ -4,7 +4,9 @@
 // Following TDD principles: write tests first, then implement.
 
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings, SlaveSettings};
+use sankey_copier_relay_server::models::{
+    LotCalculationMode, MasterSettings, SlaveSettings, SyncMode,
+};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 /// Helper to create an in-memory test database
@@ -128,9 +130,11 @@ async fn test_add_member() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
@@ -245,9 +249,11 @@ async fn test_update_member_settings() {
         config_version: 1,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     db.update_member_settings("MASTER_001", "SLAVE_001", new_settings)
@@ -371,9 +377,11 @@ async fn test_get_settings_for_slave() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     let settings2 = SlaveSettings {
@@ -387,9 +395,11 @@ async fn test_get_settings_for_slave() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings1)
@@ -574,9 +584,11 @@ async fn test_member_with_symbol_mappings() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)
@@ -617,9 +629,11 @@ async fn test_member_with_filters() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)

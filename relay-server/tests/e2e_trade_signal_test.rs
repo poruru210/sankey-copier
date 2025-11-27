@@ -18,7 +18,7 @@ mod test_server;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use sankey_copier_relay_server::models::{
-    LotCalculationMode, OrderType, SlaveSettings, TradeAction, TradeSignal,
+    LotCalculationMode, OrderType, SlaveSettings, SyncMode, TradeAction, TradeSignal,
 };
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
@@ -488,9 +488,11 @@ fn default_test_slave_settings() -> SlaveSettings {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
-        auto_sync_existing: false,
     }
 }
 
@@ -1614,9 +1616,11 @@ async fn test_slave_individual_lot_multiplier() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         }
     })
     .await

@@ -92,9 +92,11 @@ async fn test_add_member_success() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         },
     };
 
@@ -494,9 +496,11 @@ async fn test_member_with_complex_settings() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
-            auto_sync_existing: false,
         },
     };
 

@@ -16,7 +16,7 @@ import {
   DrawerFormField,
 } from '@/components/ui/drawer-section';
 import { SymbolMappingInput } from '@/components/SymbolMappingInput';
-import type { LotCalculationMode } from '@/types';
+import type { LotCalculationMode, SyncMode } from '@/types';
 
 export interface SlaveSettingsFormData {
   lot_calculation_mode: LotCalculationMode;
@@ -28,9 +28,11 @@ export interface SlaveSettingsFormData {
   source_lot_min: number | null;
   source_lot_max: number | null;
   // Open Sync Policy settings
+  sync_mode: SyncMode;
+  limit_order_expiry_min: number | null;
+  market_sync_max_pips: number | null;
   max_slippage: number | null;
   copy_pending_orders: boolean;
-  auto_sync_existing: boolean;
 }
 
 interface SlaveSettingsFormProps {
@@ -233,9 +235,88 @@ export function SlaveSettingsForm({
       <DrawerSection bordered>
         <DrawerSectionHeader
           title={content.syncPolicyTitle?.value || "Open Sync Policy"}
-          description={content.syncPolicyDescription?.value || "Configure how positions are opened and synchronized."}
+          description={content.syncPolicyDescription?.value || "Configure how existing positions are synchronized when slave connects."}
         />
         <DrawerSectionContent>
+          {/* Sync Mode */}
+          <DrawerFormField
+            label={content.syncMode?.value || "Existing Position Sync"}
+            description={content.syncModeDescription?.value || "How to handle existing master positions when slave connects"}
+            htmlFor="sync_mode"
+          >
+            <RadioGroup
+              value={formData.sync_mode}
+              onValueChange={(value) => handleChange('sync_mode', value as SyncMode)}
+              disabled={disabled}
+              className="flex flex-col space-y-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="skip" id="sync_skip" />
+                <Label htmlFor="sync_skip" className="text-sm font-normal cursor-pointer">
+                  {content.syncModeSkip?.value || "Don't Sync"} - {content.syncModeSkipDesc?.value || "Only copy new trades, ignore existing positions"}
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="limit_order" id="sync_limit" />
+                <Label htmlFor="sync_limit" className="text-sm font-normal cursor-pointer">
+                  {content.syncModeLimitOrder?.value || "Limit Order"} - {content.syncModeLimitOrderDesc?.value || "Sync at Master's open price with time limit"}
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="market_order" id="sync_market" />
+                <Label htmlFor="sync_market" className="text-sm font-normal cursor-pointer">
+                  {content.syncModeMarketOrder?.value || "Market Order"} - {content.syncModeMarketOrderDesc?.value || "Sync immediately if price deviation is within limit"}
+                </Label>
+              </div>
+            </RadioGroup>
+          </DrawerFormField>
+
+          {/* Limit Order Expiry - only show when sync_mode is limit_order */}
+          {formData.sync_mode === 'limit_order' && (
+            <DrawerFormField
+              label={content.limitOrderExpiry?.value || "Limit Order Expiry (minutes)"}
+              description={content.limitOrderExpiryDescription?.value || "Time limit for limit orders. 0 = Good Till Cancelled (GTC)."}
+              htmlFor="limit_order_expiry_min"
+            >
+              <Input
+                id="limit_order_expiry_min"
+                type="number"
+                step="1"
+                min="0"
+                placeholder={content.limitOrderExpiryPlaceholder?.value || "e.g. 60 (0 = GTC)"}
+                value={formData.limit_order_expiry_min ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleChange('limit_order_expiry_min', val === '' ? null : parseInt(val, 10));
+                }}
+                disabled={disabled}
+              />
+            </DrawerFormField>
+          )}
+
+          {/* Market Sync Max Pips - only show when sync_mode is market_order */}
+          {formData.sync_mode === 'market_order' && (
+            <DrawerFormField
+              label={content.marketSyncMaxPips?.value || "Max Price Deviation (pips)"}
+              description={content.marketSyncMaxPipsDescription?.value || "Skip sync if current price differs from open price by more than this value."}
+              htmlFor="market_sync_max_pips"
+            >
+              <Input
+                id="market_sync_max_pips"
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder={content.marketSyncMaxPipsPlaceholder?.value || "e.g. 10.0"}
+                value={formData.market_sync_max_pips ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleChange('market_sync_max_pips', val === '' ? null : parseFloat(val));
+                }}
+                disabled={disabled}
+              />
+            </DrawerFormField>
+          )}
+
           {/* Max Slippage */}
           <DrawerFormField
             label={content.maxSlippage?.value || "Max Slippage (points)"}
@@ -268,19 +349,6 @@ export function SlaveSettingsForm({
             />
             <label htmlFor="copy_pending_orders" className="text-sm cursor-pointer">
               {content.copyPendingOrders?.value || "Copy Pending Orders"} - {content.copyPendingOrdersDesc?.value || "Also copy limit and stop orders"}
-            </label>
-          </div>
-
-          {/* Auto Sync Existing */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="auto_sync_existing"
-              checked={formData.auto_sync_existing}
-              onCheckedChange={(checked) => handleChange('auto_sync_existing', checked as boolean)}
-              disabled={disabled}
-            />
-            <label htmlFor="auto_sync_existing" className="text-sm cursor-pointer">
-              {content.autoSyncExisting?.value || "Auto Sync Existing"} - {content.autoSyncExistingDesc?.value || "Automatically sync existing positions when slave connects"}
             </label>
           </div>
         </DrawerSectionContent>

@@ -55,9 +55,11 @@ export function SlaveSettingsDrawer({
     source_lot_min: null,
     source_lot_max: null,
     // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
     max_slippage: null,
     copy_pending_orders: false,
-    auto_sync_existing: false,
   });
 
   // Initialize form data when member changes
@@ -79,9 +81,11 @@ export function SlaveSettingsDrawer({
         source_lot_min: settings.source_lot_min ?? null,
         source_lot_max: settings.source_lot_max ?? null,
         // Open Sync Policy fields
+        sync_mode: settings.sync_mode ?? 'skip',
+        limit_order_expiry_min: settings.limit_order_expiry_min ?? null,
+        market_sync_max_pips: settings.market_sync_max_pips ?? null,
         max_slippage: settings.max_slippage ?? null,
         copy_pending_orders: settings.copy_pending_orders ?? false,
-        auto_sync_existing: settings.auto_sync_existing ?? false,
       });
       setMessage(null);
     }
@@ -115,9 +119,11 @@ export function SlaveSettingsDrawer({
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
         // Open Sync Policy fields
+        sync_mode: formData.sync_mode,
+        limit_order_expiry_min: formData.limit_order_expiry_min,
+        market_sync_max_pips: formData.market_sync_max_pips,
         max_slippage: formData.max_slippage,
         copy_pending_orders: formData.copy_pending_orders,
-        auto_sync_existing: formData.auto_sync_existing,
       };
 
       await apiClient.updateTradeGroupMember(masterAccount, member.slave_account, settings);
