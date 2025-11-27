@@ -1985,3 +1985,104 @@ async fn test_multiple_slaves_different_sync_policies() {
 
     server.shutdown().await;
 }
+
+/// Test regression for symbol prefix issue:
+/// Ensure Slave receives its OWN prefix, not the Master's prefix.
+#[tokio::test]
+async fn test_slave_config_prefix_distribution() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_PREFIX_TEST";
+    let slave_account = "SLAVE_PREFIX_TEST";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Update Master settings to have a specific prefix
+    // This ensures we can distinguish if Slave receives Master's prefix
+    let mut master_settings = sankey_copier_relay_server::models::MasterSettings::default();
+    master_settings.symbol_prefix = Some("MASTER_".to_string());
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to update master settings");
+
+    // Add Slave member with a DIFFERENT prefix
+    let slave_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: Some("SLAVE_".to_string()), // This is what we expect to receive
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, slave_settings)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+
+    assert!(config.is_some(), "Slave should receive config");
+    let config = config.unwrap();
+
+    // VERIFICATION: Check that we received the SLAVE's prefix, not the MASTER's
+    assert_eq!(
+        config.symbol_prefix,
+        Some("SLAVE_".to_string()),
+        "Regression Test Failed: Slave received wrong prefix. Expected 'SLAVE_', got {:?}",
+        config.symbol_prefix
+    );
+
+    // Also verify suffix is None (as set for Slave), just to be sure
+    assert!(config.symbol_suffix.is_none());
+
+    println!("✅ Regression Test Passed: Slave received correct prefix 'SLAVE_' (ignored Master's 'MASTER_')");
+
+    server.shutdown().await;
+}
