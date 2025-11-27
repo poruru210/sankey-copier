@@ -43,6 +43,8 @@ const DrawerContent = React.forwardRef<
     <DrawerOverlay />
     <DrawerPrimitive.Content
       ref={ref}
+      // Suppress "Missing Description" warning when no DrawerDescription is used
+      aria-describedby={undefined}
       className={cn(
         'fixed z-[9999] flex flex-col border bg-background',
         // Position based on side
