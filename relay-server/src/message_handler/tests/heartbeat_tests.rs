@@ -4,7 +4,8 @@ use super::*;
 
 #[tokio::test]
 async fn test_handle_heartbeat() {
-    let handler = create_test_handler().await;
+    // Use TestContext for proper ZeroMQ resource cleanup
+    let ctx = create_test_context().await;
     let account_id = "TEST_001".to_string();
 
     // Send heartbeat (auto-registration)
@@ -29,13 +30,16 @@ async fn test_handle_heartbeat() {
         symbol_suffix: None,
         symbol_map: None,
     };
-    handler.handle_heartbeat(hb_msg).await;
+    ctx.handle_heartbeat(hb_msg).await;
 
     // Verify EA was auto-registered with correct balance and equity
-    let ea = handler.connection_manager.get_ea(&account_id).await;
+    let ea = ctx.connection_manager.get_ea(&account_id).await;
     assert!(ea.is_some());
     let ea = ea.unwrap();
     assert_eq!(ea.balance, 12000.0);
     assert_eq!(ea.equity, 11500.0);
     assert_eq!(ea.status, crate::models::ConnectionStatus::Online);
+
+    // Explicit cleanup to release ZeroMQ resources
+    ctx.cleanup().await;
 }

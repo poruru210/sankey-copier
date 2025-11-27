@@ -174,7 +174,8 @@ fn test_parse_position_snapshot_ffi() {
         assert!((lots - 0.1).abs() < 0.001, "lots should be 0.1");
 
         let open_price_utf16: Vec<u16> = "open_price".encode_utf16().chain(Some(0)).collect();
-        let open_price = position_snapshot_get_position_double(handle, 0, open_price_utf16.as_ptr());
+        let open_price =
+            position_snapshot_get_position_double(handle, 0, open_price_utf16.as_ptr());
         assert!(
             (open_price - 1.08500).abs() < 0.00001,
             "open_price should be 1.08500"
@@ -187,10 +188,16 @@ fn test_parse_position_snapshot_ffi() {
 
         // Test second position
         let symbol_ptr2 = position_snapshot_get_position_string(handle, 1, symbol_utf16.as_ptr());
-        assert!(!symbol_ptr2.is_null(), "second position symbol should be retrievable");
+        assert!(
+            !symbol_ptr2.is_null(),
+            "second position symbol should be retrievable"
+        );
 
         let lots2 = position_snapshot_get_position_double(handle, 1, lots_utf16.as_ptr());
-        assert!((lots2 - 0.2).abs() < 0.001, "second position lots should be 0.2");
+        assert!(
+            (lots2 - 0.2).abs() < 0.001,
+            "second position lots should be 0.2"
+        );
 
         // Free the handle
         position_snapshot_free(handle);
@@ -264,10 +271,7 @@ fn test_parse_sync_request_ffi() {
         // Test sync_request_get_string for slave_account
         let slave_utf16: Vec<u16> = "slave_account".encode_utf16().chain(Some(0)).collect();
         let slave_ptr = sync_request_get_string(handle, slave_utf16.as_ptr());
-        assert!(
-            !slave_ptr.is_null(),
-            "slave_account should be retrievable"
-        );
+        assert!(!slave_ptr.is_null(), "slave_account should be retrievable");
 
         // Test sync_request_get_string for master_account
         let master_utf16: Vec<u16> = "master_account".encode_utf16().chain(Some(0)).collect();
@@ -344,10 +348,7 @@ fn test_parse_sync_request_ffi_invalid_data() {
 fn test_position_snapshot_builder_ffi() {
     // Test creating PositionSnapshot using builder FFI
     unsafe {
-        let account_utf16: Vec<u16> = "BUILDER_MASTER_001"
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
+        let account_utf16: Vec<u16> = "BUILDER_MASTER_001".encode_utf16().chain(Some(0)).collect();
         let handle = create_position_snapshot_builder(account_utf16.as_ptr());
         assert!(
             !handle.is_null(),

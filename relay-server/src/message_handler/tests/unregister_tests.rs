@@ -5,7 +5,7 @@ use crate::models::UnregisterMessage;
 
 #[tokio::test]
 async fn test_handle_unregister() {
-    let handler = create_test_handler().await;
+    let ctx = create_test_context().await;
     let account_id = "TEST_001".to_string();
 
     // First auto-register via heartbeat
@@ -30,19 +30,20 @@ async fn test_handle_unregister() {
         symbol_suffix: None,
         symbol_map: None,
     };
-    handler.handle_heartbeat(hb_msg).await;
+    ctx.handle_heartbeat(hb_msg).await;
 
     // Then unregister
-    handler
-        .handle_unregister(UnregisterMessage {
-            message_type: "Unregister".to_string(),
-            account_id: account_id.clone(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        })
-        .await;
+    ctx.handle_unregister(UnregisterMessage {
+        message_type: "Unregister".to_string(),
+        account_id: account_id.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    })
+    .await;
 
     // Verify EA status is Offline
-    let ea = handler.connection_manager.get_ea(&account_id).await;
+    let ea = ctx.connection_manager.get_ea(&account_id).await;
     assert!(ea.is_some());
     assert_eq!(ea.unwrap().status, crate::models::ConnectionStatus::Offline);
+
+    ctx.cleanup().await;
 }

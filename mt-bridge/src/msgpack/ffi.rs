@@ -3,8 +3,8 @@
 // Why: Provides C-compatible interface for parsing and accessing MessagePack messages from EA
 
 use super::helpers::{
-    string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX, MAX_STRING_LEN, STRING_BUFFER_1,
-    STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
+    free_handle, parse_msgpack, string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX,
+    MAX_STRING_LEN, STRING_BUFFER_1, STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
 };
 use super::types::{
     MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SlaveConfigMessage, SyncMode,
@@ -24,15 +24,7 @@ pub unsafe extern "C" fn parse_slave_config(
     data: *const u8,
     data_len: i32,
 ) -> *mut SlaveConfigMessage {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-    match rmp_serde::from_slice::<SlaveConfigMessage>(slice) {
-        Ok(config) => Box::into_raw(Box::new(config)),
-        Err(_) => std::ptr::null_mut(),
-    }
+    parse_msgpack(data, data_len)
 }
 
 /// Free a Slave ConfigMessage handle
@@ -44,9 +36,7 @@ pub unsafe extern "C" fn parse_slave_config(
 /// - `handle` is only freed once
 #[no_mangle]
 pub unsafe extern "C" fn slave_config_free(handle: *mut SlaveConfigMessage) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle)
 }
 
 /// Parse MessagePack data as MasterConfigMessage and return an opaque handle
@@ -59,15 +49,7 @@ pub unsafe extern "C" fn parse_master_config(
     data: *const u8,
     data_len: i32,
 ) -> *mut MasterConfigMessage {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-    match rmp_serde::from_slice::<MasterConfigMessage>(slice) {
-        Ok(config) => Box::into_raw(Box::new(config)),
-        Err(_) => std::ptr::null_mut(),
-    }
+    parse_msgpack(data, data_len)
 }
 
 /// Free a MasterConfigMessage handle
@@ -79,9 +61,7 @@ pub unsafe extern "C" fn parse_master_config(
 /// - `handle` is only freed once
 #[no_mangle]
 pub unsafe extern "C" fn master_config_free(handle: *mut MasterConfigMessage) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle)
 }
 
 /// Get a string field from Slave ConfigMessage handle
@@ -450,15 +430,7 @@ pub unsafe extern "C" fn parse_trade_signal(
     data: *const u8,
     data_len: i32,
 ) -> *mut TradeSignalMessage {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-    match rmp_serde::from_slice::<TradeSignalMessage>(slice) {
-        Ok(msg) => Box::into_raw(Box::new(msg)),
-        Err(_) => std::ptr::null_mut(),
-    }
+    parse_msgpack(data, data_len)
 }
 
 /// Free a TradeSignalMessage handle
@@ -468,9 +440,7 @@ pub unsafe extern "C" fn parse_trade_signal(
 /// - handle must not be used after calling this function
 #[no_mangle]
 pub unsafe extern "C" fn trade_signal_free(handle: *mut TradeSignalMessage) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle)
 }
 
 /// Get a string field from TradeSignalMessage handle
@@ -579,15 +549,7 @@ pub unsafe extern "C" fn parse_position_snapshot(
     data: *const u8,
     data_len: i32,
 ) -> *mut PositionSnapshotMessage {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-    match rmp_serde::from_slice::<PositionSnapshotMessage>(slice) {
-        Ok(snapshot) => Box::into_raw(Box::new(snapshot)),
-        Err(_) => std::ptr::null_mut(),
-    }
+    parse_msgpack(data, data_len)
 }
 
 /// Free a PositionSnapshotMessage handle
@@ -597,9 +559,7 @@ pub unsafe extern "C" fn parse_position_snapshot(
 /// - handle must not be used after calling this function
 #[no_mangle]
 pub unsafe extern "C" fn position_snapshot_free(handle: *mut PositionSnapshotMessage) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle)
 }
 
 /// Get a string field from PositionSnapshotMessage handle
@@ -821,17 +781,11 @@ pub unsafe extern "C" fn create_sync_request(
 /// - data must be a valid buffer of at least data_len bytes
 /// - The returned handle must be freed with `sync_request_free()`
 #[no_mangle]
-pub unsafe extern "C" fn parse_sync_request(data: *const u8, data_len: i32) -> *mut SyncRequestMessage {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-
-    match rmp_serde::from_slice::<SyncRequestMessage>(slice) {
-        Ok(msg) => Box::into_raw(Box::new(msg)),
-        Err(_) => std::ptr::null_mut(),
-    }
+pub unsafe extern "C" fn parse_sync_request(
+    data: *const u8,
+    data_len: i32,
+) -> *mut SyncRequestMessage {
+    parse_msgpack(data, data_len)
 }
 
 /// Get a string field from SyncRequestMessage
@@ -879,9 +833,7 @@ pub unsafe extern "C" fn sync_request_get_string(
 /// - The handle must not be used after calling this function
 #[no_mangle]
 pub unsafe extern "C" fn sync_request_free(handle: *mut SyncRequestMessage) {
-    if !handle.is_null() {
-        let _ = Box::from_raw(handle);
-    }
+    free_handle(handle)
 }
 
 // ===========================================================================
@@ -1026,7 +978,5 @@ pub unsafe extern "C" fn position_snapshot_builder_serialize(
 /// - handle must not be used after calling this function
 #[no_mangle]
 pub unsafe extern "C" fn position_snapshot_builder_free(handle: *mut PositionSnapshotMessage) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle)
 }
