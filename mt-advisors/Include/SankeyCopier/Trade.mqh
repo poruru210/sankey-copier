@@ -555,18 +555,19 @@ double TransformLotSize(double lots, double multiplier, string symbol)
 
 //+------------------------------------------------------------------+
 //| Reverse order type if enabled                                    |
+//| Uses PascalCase format matching relay-server's OrderType enum    |
 //+------------------------------------------------------------------+
 string ReverseOrderType(string type, bool reverse)
 {
    if(!reverse) return type;
-   
-   if(type == "ORDER_TYPE_BUY") return "ORDER_TYPE_SELL";
-   if(type == "ORDER_TYPE_SELL") return "ORDER_TYPE_BUY";
-   if(type == "ORDER_TYPE_BUY_LIMIT") return "ORDER_TYPE_SELL_LIMIT";
-   if(type == "ORDER_TYPE_SELL_LIMIT") return "ORDER_TYPE_BUY_LIMIT";
-   if(type == "ORDER_TYPE_BUY_STOP") return "ORDER_TYPE_SELL_STOP";
-   if(type == "ORDER_TYPE_SELL_STOP") return "ORDER_TYPE_BUY_STOP";
-   
+
+   if(type == "Buy") return "Sell";
+   if(type == "Sell") return "Buy";
+   if(type == "BuyLimit") return "SellLimit";
+   if(type == "SellLimit") return "BuyLimit";
+   if(type == "BuyStop") return "SellStop";
+   if(type == "SellStop") return "BuyStop";
+
    return type;
 }
 

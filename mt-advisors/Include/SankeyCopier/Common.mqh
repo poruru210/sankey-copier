@@ -346,39 +346,41 @@ string GetServerName()
 
 //+------------------------------------------------------------------+
 //| Get string representation of order type                          |
+//| Returns PascalCase format matching relay-server's OrderType enum |
 //+------------------------------------------------------------------+
 string GetOrderTypeString(int type)
 {
    #ifdef IS_MT5
-      if(type == ORDER_TYPE_BUY) return "ORDER_TYPE_BUY";
-      if(type == ORDER_TYPE_SELL) return "ORDER_TYPE_SELL";
-      if(type == ORDER_TYPE_BUY_LIMIT) return "ORDER_TYPE_BUY_LIMIT";
-      if(type == ORDER_TYPE_SELL_LIMIT) return "ORDER_TYPE_SELL_LIMIT";
-      if(type == ORDER_TYPE_BUY_STOP) return "ORDER_TYPE_BUY_STOP";
-      if(type == ORDER_TYPE_SELL_STOP) return "ORDER_TYPE_SELL_STOP";
+      if(type == ORDER_TYPE_BUY) return "Buy";
+      if(type == ORDER_TYPE_SELL) return "Sell";
+      if(type == ORDER_TYPE_BUY_LIMIT) return "BuyLimit";
+      if(type == ORDER_TYPE_SELL_LIMIT) return "SellLimit";
+      if(type == ORDER_TYPE_BUY_STOP) return "BuyStop";
+      if(type == ORDER_TYPE_SELL_STOP) return "SellStop";
    #else
-      if(type == OP_BUY) return "ORDER_TYPE_BUY";
-      if(type == OP_SELL) return "ORDER_TYPE_SELL";
-      if(type == OP_BUYLIMIT) return "ORDER_TYPE_BUY_LIMIT";
-      if(type == OP_SELLLIMIT) return "ORDER_TYPE_SELL_LIMIT";
-      if(type == OP_BUYSTOP) return "ORDER_TYPE_BUY_STOP";
-      if(type == OP_SELLSTOP) return "ORDER_TYPE_SELL_STOP";
+      if(type == OP_BUY) return "Buy";
+      if(type == OP_SELL) return "Sell";
+      if(type == OP_BUYLIMIT) return "BuyLimit";
+      if(type == OP_SELLLIMIT) return "SellLimit";
+      if(type == OP_BUYSTOP) return "BuyStop";
+      if(type == OP_SELLSTOP) return "SellStop";
    #endif
-   return "UNKNOWN";
+   return "Unknown";
 }
 
 //+------------------------------------------------------------------+
 //| Get enum order type from string                                  |
+//| Accepts PascalCase format from relay-server's OrderType enum     |
 //+------------------------------------------------------------------+
 ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
 {
-   if(type_str == "ORDER_TYPE_BUY") return ORDER_TYPE_BUY;
-   if(type_str == "ORDER_TYPE_SELL") return ORDER_TYPE_SELL;
-   if(type_str == "ORDER_TYPE_BUY_LIMIT") return ORDER_TYPE_BUY_LIMIT;
-   if(type_str == "ORDER_TYPE_SELL_LIMIT") return ORDER_TYPE_SELL_LIMIT;
-   if(type_str == "ORDER_TYPE_BUY_STOP") return ORDER_TYPE_BUY_STOP;
-   if(type_str == "ORDER_TYPE_SELL_STOP") return ORDER_TYPE_SELL_STOP;
-   
+   if(type_str == "Buy") return ORDER_TYPE_BUY;
+   if(type_str == "Sell") return ORDER_TYPE_SELL;
+   if(type_str == "BuyLimit") return ORDER_TYPE_BUY_LIMIT;
+   if(type_str == "SellLimit") return ORDER_TYPE_SELL_LIMIT;
+   if(type_str == "BuyStop") return ORDER_TYPE_BUY_STOP;
+   if(type_str == "SellStop") return ORDER_TYPE_SELL_STOP;
+
    return (ENUM_ORDER_TYPE)-1;
 }
 
