@@ -17,6 +17,8 @@
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Messages.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveTrade.mqh"
+#include "../Include/SankeyCopier/MessageParsing.mqh"
 
 //--- Input parameters
 input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
@@ -535,16 +537,18 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
       // Open position with transformed values (pass config slippage)
-      OpenPosition(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account, magic_number, trade_slippage);
+      ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
+                       transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account,
+                       magic_number, trade_slippage, MaxSignalDelayMs, UsePendingOrderForDelayed, MaxRetries, Slippage);
    }
    else if(action == "Close" && AllowCloseOrders)
    {
-      ClosePosition(master_ticket, trade_slippage);
-      CancelPendingOrder(master_ticket);  // Also cancel any pending orders
+      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, trade_slippage, Slippage);
+      ExecuteCancelPendingOrder(g_trade, g_pending_order_map, master_ticket);
    }
    else if(action == "Modify")
    {
-      ModifyPosition(master_ticket, sl, tp);
+      ExecuteModifyTrade(g_trade, g_order_map, master_ticket, sl, tp);
    }
 
    // Free the handle
@@ -665,17 +669,17 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
       if(sync_mode == SYNC_MODE_LIMIT_ORDER)
       {
          // Place limit order at master's open price
-         SyncWithLimitOrder((ulong)master_ticket, transformed_symbol, transformed_order_type,
-                            transformed_lots, open_price, sl, tp, source_account,
-                            magic_number, limit_order_expiry);
+         SyncWithLimitOrder(g_trade, g_pending_order_map, (ulong)master_ticket, transformed_symbol,
+                            transformed_order_type, transformed_lots, open_price, sl, tp,
+                            source_account, magic_number, limit_order_expiry);
          synced_count++;
       }
       else if(sync_mode == SYNC_MODE_MARKET_ORDER)
       {
          // Execute market order if within price deviation
-         if(SyncWithMarketOrder((ulong)master_ticket, transformed_symbol, transformed_order_type,
-                                transformed_lots, open_price, sl, tp, source_account,
-                                magic_number, trade_slippage, market_sync_max_pips))
+         if(SyncWithMarketOrder(g_trade, g_order_map, (ulong)master_ticket, transformed_symbol,
+                                transformed_order_type, transformed_lots, open_price, sl, tp,
+                                source_account, magic_number, trade_slippage, market_sync_max_pips, Slippage))
          {
             synced_count++;
          }
@@ -691,335 +695,7 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    position_snapshot_free(handle);
 }
 
-//+------------------------------------------------------------------+
-//| Sync position using limit order (at master's open price)          |
-//+------------------------------------------------------------------+
-void SyncWithLimitOrder(ulong master_ticket, string symbol, string type_str,
-                        double lots, double price, double sl, double tp,
-                        string source_account, int magic, int expiry_minutes)
-{
-   // Determine limit order type based on current price
-   ENUM_ORDER_TYPE base_type = GetOrderTypeEnum(type_str);
-   if((int)base_type == -1) return;
-
-   ENUM_ORDER_TYPE limit_type;
-   double current_price;
-
-   if(base_type == ORDER_TYPE_BUY)
-   {
-      current_price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-      // If open_price < current -> BUY_LIMIT, else BUY_STOP
-      limit_type = (price < current_price) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_BUY_STOP;
-   }
-   else if(base_type == ORDER_TYPE_SELL)
-   {
-      current_price = SymbolInfoDouble(symbol, SYMBOL_BID);
-      // If open_price > current -> SELL_LIMIT, else SELL_STOP
-      limit_type = (price > current_price) ? ORDER_TYPE_SELL_LIMIT : ORDER_TYPE_SELL_STOP;
-   }
-   else
-   {
-      Print("ERROR: Cannot sync pending order type: ", type_str);
-      return;
-   }
-
-   lots = NormalizeLotSize(lots, symbol);
-
-   // Calculate expiration time
-   datetime expiration = 0;
-   if(expiry_minutes > 0)
-   {
-      expiration = TimeGMT() + expiry_minutes * 60;
-   }
-
-   // Build traceable comment: "S{master_ticket}" for sync orders
-   string comment = "S" + IntegerToString(master_ticket);
-
-   g_trade.SetExpertMagicNumber(magic);
-
-   bool result = g_trade.OrderOpen(symbol, limit_type, lots, 0, price, sl, tp,
-                                    (expiry_minutes > 0) ? ORDER_TIME_SPECIFIED : ORDER_TIME_GTC,
-                                    expiration, comment);
-
-   if(result)
-   {
-      ulong ticket = g_trade.ResultOrder();
-      Print("Sync limit order placed: #", ticket, " for master #", master_ticket,
-            " ", EnumToString(limit_type), " @ ", price);
-      // Add to pending order map (will be converted to position when filled)
-      AddPendingTicketMapping(g_pending_order_map, master_ticket, ticket);
-   }
-   else
-   {
-      Print("ERROR: Failed to place sync limit order for master #", master_ticket,
-            " Error: ", GetLastError());
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Sync position using market order (if within price deviation)      |
-//| Returns true if order was executed, false if price deviation      |
-//| exceeded max_pips                                                 |
-//+------------------------------------------------------------------+
-bool SyncWithMarketOrder(ulong master_ticket, string symbol, string type_str,
-                         double lots, double master_price, double sl, double tp,
-                         string source_account, int magic, int slippage_points,
-                         double max_pips)
-{
-   ENUM_ORDER_TYPE order_type = GetOrderTypeEnum(type_str);
-   if((int)order_type == -1) return false;
-
-   // Get current market price
-   double current_price;
-   if(order_type == ORDER_TYPE_BUY)
-      current_price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-   else if(order_type == ORDER_TYPE_SELL)
-      current_price = SymbolInfoDouble(symbol, SYMBOL_BID);
-   else
-      return false;  // Cannot sync pending orders with market order
-
-   // Calculate price deviation in pips
-   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
-   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-   double pip_size = (digits == 3 || digits == 5) ? point * 10 : point;
-   double deviation_pips = MathAbs(current_price - master_price) / pip_size;
-
-   Print("  Price deviation: ", DoubleToString(deviation_pips, 1), " pips (max: ", max_pips, ")");
-
-   // Check if within acceptable deviation
-   if(deviation_pips > max_pips)
-   {
-      Print("  -> Price deviation ", deviation_pips, " exceeds max ", max_pips, " pips");
-      return false;
-   }
-
-   lots = NormalizeLotSize(lots, symbol);
-
-   // Build traceable comment: "S{master_ticket}" for sync orders
-   string comment = "S" + IntegerToString(master_ticket);
-
-   g_trade.SetExpertMagicNumber(magic);
-   g_trade.SetDeviationInPoints(slippage_points);
-
-   bool result = false;
-   if(order_type == ORDER_TYPE_BUY)
-      result = g_trade.Buy(lots, symbol, 0, sl, tp, comment);
-   else if(order_type == ORDER_TYPE_SELL)
-      result = g_trade.Sell(lots, symbol, 0, sl, tp, comment);
-
-   if(result)
-   {
-      ulong ticket = g_trade.ResultOrder();
-      Print("  -> Market sync executed: #", ticket, " (deviation: ", deviation_pips, " pips)");
-      AddTicketMapping(g_order_map, master_ticket, ticket);
-      return true;
-   }
-   else
-   {
-      Print("  -> Market sync failed, Error: ", GetLastError());
-      return false;
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Open position                                                     |
-//+------------------------------------------------------------------+
-void OpenPosition(ulong master_ticket, string symbol, string type_str,
-                  double lots, double price, double sl, double tp, string timestamp,
-                  string source_account, int magic, int slippage_points = 0)
-{
-   if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
-   {
-      Print("Already copied master #", master_ticket);
-      return;
-   }
-
-   // Check signal delay
-   datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeGMT();
-   int delay_ms = (int)((current_time - signal_time) * 1000);
-
-   if(delay_ms > MaxSignalDelayMs)
-   {
-      if(!UsePendingOrderForDelayed)
-      {
-         Print("Signal too old (", delay_ms, "ms > ", MaxSignalDelayMs, "ms). Skipping master #", master_ticket);
-         return;
-      }
-      else
-      {
-         Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
-         PlacePendingOrder(master_ticket, symbol, type_str, lots, price, sl, tp, source_account, delay_ms, magic);
-         return;
-      }
-   }
-
-   ENUM_ORDER_TYPE order_type = GetOrderTypeEnum(type_str);
-   if((int)order_type == -1) return;
-
-   lots = NormalizeDouble(lots, 2);
-   price = NormalizeDouble(price, _Digits);
-   sl = (sl > 0) ? NormalizeDouble(sl, _Digits) : 0;
-   tp = (tp > 0) ? NormalizeDouble(tp, _Digits) : 0;
-
-   // Build traceable comment for restart recovery: "M{master_ticket}"
-   string comment = BuildMarketComment(master_ticket);
-
-   g_trade.SetExpertMagicNumber(magic);
-
-   // Apply slippage from config (or use global Slippage as default)
-   int effective_slippage = (slippage_points > 0) ? slippage_points : Slippage;
-   g_trade.SetDeviationInPoints(effective_slippage);
-
-   bool result = false;
-
-   for(int i = 0; i < MaxRetries; i++)
-   {
-      if(order_type == ORDER_TYPE_BUY)
-         result = g_trade.Buy(lots, symbol, 0, sl, tp, comment);
-      else if(order_type == ORDER_TYPE_SELL)
-         result = g_trade.Sell(lots, symbol, 0, sl, tp, comment);
-
-      if(result)
-      {
-         ulong ticket = g_trade.ResultOrder();
-         Print("Position opened: #", ticket, " from master #", master_ticket,
-               " (delay: ", delay_ms, "ms, slippage: ", effective_slippage, " pts)");
-         AddTicketMapping(g_order_map, master_ticket, ticket);
-         break;
-      }
-      else
-      {
-         Print("Failed to open position, attempt ", i+1, "/", MaxRetries);
-         Sleep(1000);
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Close position                                                    |
-//+------------------------------------------------------------------+
-void ClosePosition(ulong master_ticket, int slippage_points = 0)
-{
-   ulong slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
-   if(slave_ticket == 0)
-   {
-      Print("No slave position for master #", master_ticket);
-      return;
-   }
-
-   if(!PositionSelectByTicket(slave_ticket))
-   {
-      Print("Position #", slave_ticket, " not found");
-      RemoveTicketMapping(g_order_map, master_ticket);
-      return;
-   }
-
-   // Apply slippage from config (or use global Slippage as default)
-   int effective_slippage = (slippage_points > 0) ? slippage_points : Slippage;
-   g_trade.SetDeviationInPoints(effective_slippage);
-
-   if(g_trade.PositionClose(slave_ticket))
-   {
-      Print("Position closed: #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
-      RemoveTicketMapping(g_order_map, master_ticket);
-   }
-   else
-   {
-      Print("Failed to close position #", slave_ticket);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Modify position                                                   |
-//+------------------------------------------------------------------+
-void ModifyPosition(ulong master_ticket, double sl, double tp)
-{
-   ulong slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
-   if(slave_ticket == 0) return;
-
-   if(!PositionSelectByTicket(slave_ticket)) return;
-
-   if(g_trade.PositionModify(slave_ticket, sl, tp))
-   {
-      Print("Position modified: #", slave_ticket);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Place pending order at original price                            |
-//+------------------------------------------------------------------+
-void PlacePendingOrder(ulong master_ticket, string symbol, string type_str,
-                       double lots, double price, double sl, double tp, string source_account, int delay_ms, int magic)
-{
-   // Check if pending order already exists
-   if(GetPendingTicketFromMapping(g_pending_order_map, master_ticket) > 0)
-   {
-      Print("Pending order already exists for master #", master_ticket);
-      return;
-   }
-
-   ENUM_ORDER_TYPE order_type = GetOrderTypeEnum(type_str);
-   if((int)order_type == -1) return;
-
-   // Convert to pending order type
-   ENUM_ORDER_TYPE pending_type;
-   double current_price;
-
-   if(order_type == ORDER_TYPE_BUY)
-   {
-      current_price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-      pending_type = (price < current_price) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_BUY_STOP;
-   }
-   else
-   {
-      current_price = SymbolInfoDouble(symbol, SYMBOL_BID);
-      pending_type = (price > current_price) ? ORDER_TYPE_SELL_LIMIT : ORDER_TYPE_SELL_STOP;
-   }
-
-   lots = NormalizeDouble(lots, 2);
-
-   // Build traceable comment for restart recovery: "P{master_ticket}"
-   string comment = BuildPendingComment(master_ticket);
-
-   g_trade.SetExpertMagicNumber(magic);
-
-   bool result = g_trade.OrderOpen(symbol, pending_type, lots, 0, price, sl, tp,
-                                    ORDER_TIME_GTC, 0, comment);
-
-   if(result)
-   {
-      ulong ticket = g_trade.ResultOrder();
-      Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
-      AddPendingTicketMapping(g_pending_order_map, master_ticket, ticket);
-   }
-   else
-   {
-      Print("Failed to place pending order for master #", master_ticket);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Cancel pending order                                              |
-//+------------------------------------------------------------------+
-void CancelPendingOrder(ulong master_ticket)
-{
-   ulong pending_ticket = GetPendingTicketFromMapping(g_pending_order_map, master_ticket);
-   if(pending_ticket == 0)
-      return;
-
-   if(g_trade.OrderDelete(pending_ticket))
-   {
-      Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
-      RemovePendingTicketMapping(g_pending_order_map, master_ticket);
-   }
-   else
-   {
-      Print("Failed to cancel pending order #", pending_ticket);
-   }
-}
-
-// Ticket mapping functions are now provided by SankeyCopierMapping.mqh
+// Trade functions are now provided by SlaveTrade.mqh
 
 //+------------------------------------------------------------------+
 //| Chart event handler (for panel click navigation)                  |
