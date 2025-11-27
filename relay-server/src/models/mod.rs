@@ -41,18 +41,29 @@ pub enum TradeAction {
     Modify,
 }
 
+/// Trade signal message structure
+/// Note: Some fields are optional because Close/Modify actions may not include all data.
+/// The mt-bridge serializer sends None for fields not applicable to the action type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeSignal {
     pub action: TradeAction,
     pub ticket: i64,
-    pub symbol: String,
-    pub order_type: OrderType,
-    pub lots: f64,
-    pub open_price: f64,
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub order_type: Option<OrderType>,
+    #[serde(default)]
+    pub lots: Option<f64>,
+    #[serde(default)]
+    pub open_price: Option<f64>,
+    #[serde(default)]
     pub stop_loss: Option<f64>,
+    #[serde(default)]
     pub take_profit: Option<f64>,
-    pub magic_number: i32,
-    pub comment: String,
+    #[serde(default)]
+    pub magic_number: Option<i32>,
+    #[serde(default)]
+    pub comment: Option<String>,
     pub timestamp: DateTime<Utc>,
     pub source_account: String,
 }

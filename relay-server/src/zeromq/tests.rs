@@ -10,14 +10,14 @@ fn test_message_discriminator_trade_signal() {
     let signal = TradeSignal {
         action: TradeAction::Open,
         ticket: 12345,
-        symbol: "EURUSD".to_string(),
-        order_type: OrderType::Buy,
-        lots: 0.1,
-        open_price: 1.1000,
+        symbol: Some("EURUSD".to_string()),
+        order_type: Some(OrderType::Buy),
+        lots: Some(0.1),
+        open_price: Some(1.1000),
         stop_loss: Some(1.0950),
         take_profit: Some(1.1050),
-        magic_number: 0,
-        comment: "Test".to_string(),
+        magic_number: Some(0),
+        comment: Some("Test".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
     };
@@ -31,8 +31,8 @@ fn test_message_discriminator_trade_signal() {
 
     // Should successfully deserialize as TradeSignal
     let deserialized: TradeSignal = rmp_serde::from_slice(&bytes).unwrap();
-    assert_eq!(deserialized.symbol, "EURUSD");
-    assert_eq!(deserialized.lots, 0.1);
+    assert_eq!(deserialized.symbol.as_deref(), Some("EURUSD"));
+    assert_eq!(deserialized.lots, Some(0.1));
 }
 
 /// Test that Heartbeat messages can be distinguished by message_type field
@@ -180,14 +180,14 @@ fn test_publish_message_topic_format() {
         payload: TradeSignal {
             action: TradeAction::Open,
             ticket: 12345,
-            symbol: "EURUSD".to_string(),
-            order_type: OrderType::Buy,
-            lots: 0.1,
-            open_price: 1.1000,
+            symbol: Some("EURUSD".to_string()),
+            order_type: Some(OrderType::Buy),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
             stop_loss: None,
             take_profit: None,
-            magic_number: 0,
-            comment: "".to_string(),
+            magic_number: Some(0),
+            comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
         },
@@ -207,14 +207,14 @@ fn test_trade_action_variants() {
         let signal = TradeSignal {
             action: action.clone(),
             ticket: 12345,
-            symbol: "EURUSD".to_string(),
-            order_type: OrderType::Buy,
-            lots: 0.1,
-            open_price: 1.1000,
+            symbol: Some("EURUSD".to_string()),
+            order_type: Some(OrderType::Buy),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
             stop_loss: None,
             take_profit: None,
-            magic_number: 0,
-            comment: "".to_string(),
+            magic_number: Some(0),
+            comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
         };
@@ -246,14 +246,14 @@ fn test_order_type_variants() {
         let signal = TradeSignal {
             action: TradeAction::Open,
             ticket: 12345,
-            symbol: "EURUSD".to_string(),
-            order_type: order_type.clone(),
-            lots: 0.1,
-            open_price: 1.1000,
+            symbol: Some("EURUSD".to_string()),
+            order_type: Some(order_type.clone()),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
             stop_loss: None,
             take_profit: None,
-            magic_number: 0,
-            comment: "".to_string(),
+            magic_number: Some(0),
+            comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
         };
@@ -261,10 +261,10 @@ fn test_order_type_variants() {
         let bytes = rmp_serde::to_vec_named(&signal).unwrap();
         let deserialized: TradeSignal = rmp_serde::from_slice(&bytes).unwrap();
 
-        // Verify order_type is preserved
+        // Verify order_type is preserved (unwrap Option before comparing discriminants)
         assert_eq!(
-            std::mem::discriminant(&deserialized.order_type),
-            std::mem::discriminant(&order_type)
+            deserialized.order_type.as_ref().map(std::mem::discriminant),
+            Some(std::mem::discriminant(&order_type))
         );
     }
 }

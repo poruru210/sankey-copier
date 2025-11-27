@@ -159,6 +159,7 @@ impl MasterEaSimulator {
     }
 
     /// Create an Open signal
+    /// Note: Uses Some() for optional fields to match mt-bridge::TradeSignalMessage format
     #[allow(clippy::too_many_arguments)]
     fn create_open_signal(
         &self,
@@ -174,32 +175,33 @@ impl MasterEaSimulator {
         TradeSignal {
             action: TradeAction::Open,
             ticket,
-            symbol: symbol.to_string(),
-            order_type,
-            lots,
-            open_price: price,
+            symbol: Some(symbol.to_string()),
+            order_type: Some(order_type),
+            lots: Some(lots),
+            open_price: Some(price),
             stop_loss: sl,
             take_profit: tp,
-            magic_number: magic,
-            comment: "E2E Test".to_string(),
+            magic_number: Some(magic),
+            comment: Some("E2E Test".to_string()),
             timestamp: Utc::now(),
             source_account: self.account_id.clone(),
         }
     }
 
     /// Create a Close signal
+    /// Note: Close signals may have fewer fields populated in real scenarios
     fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignal {
         TradeSignal {
             action: TradeAction::Close,
             ticket,
-            symbol: symbol.to_string(),
-            order_type: OrderType::Buy,
-            lots,
-            open_price: 0.0,
+            symbol: Some(symbol.to_string()),
+            order_type: Some(OrderType::Buy),
+            lots: Some(lots),
+            open_price: None, // Not needed for close
             stop_loss: None,
             take_profit: None,
-            magic_number: 0,
-            comment: "E2E Test Close".to_string(),
+            magic_number: Some(0),
+            comment: Some("E2E Test Close".to_string()),
             timestamp: Utc::now(),
             source_account: self.account_id.clone(),
         }
@@ -216,14 +218,14 @@ impl MasterEaSimulator {
         TradeSignal {
             action: TradeAction::Modify,
             ticket,
-            symbol: symbol.to_string(),
-            order_type: OrderType::Buy,
-            lots: 0.0,
-            open_price: 0.0,
+            symbol: Some(symbol.to_string()),
+            order_type: None, // Not needed for modify
+            lots: None,       // Not needed for modify
+            open_price: None, // Not needed for modify
             stop_loss: sl,
             take_profit: tp,
-            magic_number: 0,
-            comment: "E2E Test Modify".to_string(),
+            magic_number: Some(0),
+            comment: Some("E2E Test Modify".to_string()),
             timestamp: Utc::now(),
             source_account: self.account_id.clone(),
         }
@@ -627,8 +629,8 @@ async fn test_open_close_cycle() {
     assert_eq!(topic1, master_account);
     assert!(matches!(sig1.action, TradeAction::Open));
     assert_eq!(sig1.ticket, 12345);
-    assert_eq!(sig1.symbol, "EURUSD");
-    assert_eq!(sig1.lots, 0.1);
+    assert_eq!(sig1.symbol.as_deref(), Some("EURUSD"));
+    assert_eq!(sig1.lots, Some(0.1));
 
     // Verify Close signal
     let (topic2, sig2) = &signals[1];
@@ -1487,11 +1489,11 @@ async fn test_multi_master_same_symbol_open() {
     // Each slave receives only its master's signal (no cross-contamination)
     assert_eq!(signals1.len(), 1);
     assert_eq!(signals1[0].1.ticket, 100);
-    assert!(matches!(signals1[0].1.order_type, OrderType::Buy));
+    assert!(matches!(signals1[0].1.order_type, Some(OrderType::Buy)));
 
     assert_eq!(signals2.len(), 1);
     assert_eq!(signals2[0].1.ticket, 200);
-    assert!(matches!(signals2[0].1.order_type, OrderType::Sell));
+    assert!(matches!(signals2[0].1.order_type, Some(OrderType::Sell)));
 
     println!("✅ test_multi_master_same_symbol_open passed");
 
@@ -1656,10 +1658,11 @@ async fn test_slave_individual_lot_multiplier() {
     assert_eq!(signals.len(), 1, "Should receive 1 signal");
 
     // Verify lot multiplier applied: 0.1 * 2.0 = 0.2
+    let lots = signals[0].1.lots.expect("lots should be present");
     assert!(
-        (signals[0].1.lots - 0.2).abs() < 0.001,
+        (lots - 0.2).abs() < 0.001,
         "Lots should be 0.2 (0.1 * 2.0), got {}",
-        signals[0].1.lots
+        lots
     );
 
     println!("✅ test_slave_individual_lot_multiplier passed");

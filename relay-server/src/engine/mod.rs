@@ -18,33 +18,37 @@ impl CopyEngine {
             return false;
         }
 
-        // Check symbol filters
-        if let Some(ref allowed) = member.slave_settings.filters.allowed_symbols {
-            if !allowed.contains(&signal.symbol) {
-                tracing::debug!("Symbol {} not in allowed list", signal.symbol);
-                return false;
+        // Check symbol filters (only if signal has symbol)
+        if let Some(ref symbol) = signal.symbol {
+            if let Some(ref allowed) = member.slave_settings.filters.allowed_symbols {
+                if !allowed.contains(symbol) {
+                    tracing::debug!("Symbol {} not in allowed list", symbol);
+                    return false;
+                }
+            }
+
+            if let Some(ref blocked) = member.slave_settings.filters.blocked_symbols {
+                if blocked.contains(symbol) {
+                    tracing::debug!("Symbol {} is blocked", symbol);
+                    return false;
+                }
             }
         }
 
-        if let Some(ref blocked) = member.slave_settings.filters.blocked_symbols {
-            if blocked.contains(&signal.symbol) {
-                tracing::debug!("Symbol {} is blocked", signal.symbol);
-                return false;
+        // Check magic number filters (only if signal has magic_number)
+        if let Some(magic_number) = signal.magic_number {
+            if let Some(ref allowed) = member.slave_settings.filters.allowed_magic_numbers {
+                if !allowed.contains(&magic_number) {
+                    tracing::debug!("Magic number {} not in allowed list", magic_number);
+                    return false;
+                }
             }
-        }
 
-        // Check magic number filters
-        if let Some(ref allowed) = member.slave_settings.filters.allowed_magic_numbers {
-            if !allowed.contains(&signal.magic_number) {
-                tracing::debug!("Magic number {} not in allowed list", signal.magic_number);
-                return false;
-            }
-        }
-
-        if let Some(ref blocked) = member.slave_settings.filters.blocked_magic_numbers {
-            if blocked.contains(&signal.magic_number) {
-                tracing::debug!("Magic number {} is blocked", signal.magic_number);
-                return false;
+            if let Some(ref blocked) = member.slave_settings.filters.blocked_magic_numbers {
+                if blocked.contains(&magic_number) {
+                    tracing::debug!("Magic number {} is blocked", magic_number);
+                    return false;
+                }
             }
         }
 
@@ -61,20 +65,25 @@ impl CopyEngine {
     ) -> Result<TradeSignal> {
         let mut transformed = signal.clone();
 
-        // Convert symbol using member's symbol mappings
-        transformed.symbol =
-            converter.convert(&signal.symbol, &member.slave_settings.symbol_mappings);
-
-        // Apply lot multiplier
-        if let Some(multiplier) = member.slave_settings.lot_multiplier {
-            transformed.lots = signal.lots * multiplier;
-            // Round to 2 decimal places
-            transformed.lots = (transformed.lots * 100.0).round() / 100.0;
+        // Convert symbol using member's symbol mappings (if present)
+        if let Some(ref symbol) = signal.symbol {
+            transformed.symbol =
+                Some(converter.convert(symbol, &member.slave_settings.symbol_mappings));
         }
 
-        // Reverse trade if enabled
+        // Apply lot multiplier (if lots present)
+        if let (Some(lots), Some(multiplier)) = (signal.lots, member.slave_settings.lot_multiplier)
+        {
+            let new_lots = lots * multiplier;
+            // Round to 2 decimal places
+            transformed.lots = Some((new_lots * 100.0).round() / 100.0);
+        }
+
+        // Reverse trade if enabled (if order_type present)
         if member.slave_settings.reverse_trade {
-            transformed.order_type = Self::reverse_order_type(&signal.order_type);
+            if let Some(ref order_type) = signal.order_type {
+                transformed.order_type = Some(Self::reverse_order_type(order_type));
+            }
         }
 
         Ok(transformed)
