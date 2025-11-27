@@ -1,4 +1,6 @@
-use crate::msgpack::{HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, TradeFilters};
+use crate::msgpack::{
+    HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters,
+};
 
 /// Test that new symbol filter fields are correctly serialized and deserialized
 #[test]
@@ -72,6 +74,12 @@ fn test_config_message_none_symbol_filters() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -106,6 +114,12 @@ fn test_config_message_some_symbol_filters() {
         source_lot_min: Some(0.01),
         source_lot_max: Some(10.0),
         master_equity: Some(50000.0),
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::MarketOrder,
+        limit_order_expiry_min: Some(60),
+        market_sync_max_pips: Some(50.0),
+        max_slippage: Some(30),
+        copy_pending_orders: true,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");

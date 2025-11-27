@@ -15,7 +15,7 @@ mod tests;
 // Re-export public types for external use
 pub use types::{
     HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
-    PositionSnapshotMessage, RequestConfigMessage, SlaveConfigMessage, SymbolMapping,
+    PositionSnapshotMessage, RequestConfigMessage, SlaveConfigMessage, SymbolMapping, SyncMode,
     SyncRequestMessage, TradeFilters, TradeSignalMessage, UnregisterMessage,
 };
 

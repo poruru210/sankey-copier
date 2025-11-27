@@ -23,6 +23,7 @@ pub use msgpack::{
     SlaveConfig,
     SlaveConfigMessage,
     SymbolMapping,
+    SyncMode,
     SyncRequestMessage,
     TradeFilters,
     TradeSignalMessage,

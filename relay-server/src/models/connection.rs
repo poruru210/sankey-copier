@@ -116,6 +116,12 @@ mod tests {
             source_lot_min: None,
             source_lot_max: None,
             master_equity: None,
+            // Open Sync Policy defaults
+            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
         };
 
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();

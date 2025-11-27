@@ -160,6 +160,12 @@ mod tests {
             source_lot_min: None,
             source_lot_max: None,
             master_equity: Some(10000.0),
+            // Open Sync Policy defaults
+            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
         };
 
         // This should succeed (message is queued for sending)
@@ -221,6 +227,12 @@ mod tests {
                     source_lot_min: None,
                     source_lot_max: None,
                     master_equity: None,
+                    // Open Sync Policy defaults
+                    sync_mode: sankey_copier_zmq::SyncMode::default(),
+                    limit_order_expiry_min: None,
+                    market_sync_max_pips: None,
+                    max_slippage: None,
+                    copy_pending_orders: false,
                 };
                 pub_clone.send(&config).await
             });

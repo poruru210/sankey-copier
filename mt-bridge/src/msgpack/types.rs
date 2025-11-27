@@ -35,6 +35,19 @@ pub enum LotCalculationMode {
     MarginRatio,
 }
 
+/// Sync mode for existing positions when slave connects
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncMode {
+    /// Do not sync existing positions (only copy new trades)
+    #[default]
+    Skip,
+    /// Sync using limit orders at Master's open price
+    LimitOrder,
+    /// Sync using market orders with max price deviation check
+    MarketOrder,
+}
+
 /// Slave EA configuration message
 /// Contains all configuration parameters for a Slave EA
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +77,25 @@ pub struct SlaveConfigMessage {
     /// Master's current equity (for margin_ratio mode calculation)
     #[serde(default)]
     pub master_equity: Option<f64>,
+
+    // === Open Sync Policy Settings ===
+    /// Sync mode for existing positions when slave connects
+    #[serde(default)]
+    pub sync_mode: SyncMode,
+    /// Time limit for limit orders in minutes (0 = GTC, Good Till Cancelled)
+    /// Used when sync_mode = LimitOrder
+    #[serde(default)]
+    pub limit_order_expiry_min: Option<i32>,
+    /// Max price deviation in pips for market order sync (skip if exceeded)
+    /// Used when sync_mode = MarketOrder
+    #[serde(default)]
+    pub market_sync_max_pips: Option<f64>,
+    /// Maximum allowed slippage in points when opening positions (default: 30)
+    #[serde(default)]
+    pub max_slippage: Option<i32>,
+    /// Whether to copy pending orders (limit/stop orders) in addition to market orders
+    #[serde(default)]
+    pub copy_pending_orders: bool,
 }
 
 /// Master EA configuration message

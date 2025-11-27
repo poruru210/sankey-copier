@@ -74,6 +74,16 @@ impl MessageHandler {
                                     source_lot_min: member.slave_settings.source_lot_min,
                                     source_lot_max: member.slave_settings.source_lot_max,
                                     master_equity,
+                                    // Open Sync Policy settings
+                                    sync_mode: member.slave_settings.sync_mode.clone().into(),
+                                    limit_order_expiry_min: member
+                                        .slave_settings
+                                        .limit_order_expiry_min,
+                                    market_sync_max_pips: member
+                                        .slave_settings
+                                        .market_sync_max_pips,
+                                    max_slippage: member.slave_settings.max_slippage,
+                                    copy_pending_orders: member.slave_settings.copy_pending_orders,
                                 };
 
                                 if let Err(e) = self.config_sender.send(&config).await {

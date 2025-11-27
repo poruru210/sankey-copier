@@ -57,6 +57,16 @@ impl From<LotCalculationMode> for sankey_copier_zmq::LotCalculationMode {
     }
 }
 
+impl From<SyncMode> for sankey_copier_zmq::SyncMode {
+    fn from(mode: SyncMode) -> Self {
+        match mode {
+            SyncMode::Skip => sankey_copier_zmq::SyncMode::Skip,
+            SyncMode::LimitOrder => sankey_copier_zmq::SyncMode::LimitOrder,
+            SyncMode::MarketOrder => sankey_copier_zmq::SyncMode::MarketOrder,
+        }
+    }
+}
+
 /// Sync mode for existing positions when slave connects
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "snake_case")]

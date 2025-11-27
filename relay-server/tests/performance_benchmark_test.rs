@@ -1,5 +1,5 @@
 use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
-use sankey_copier_zmq::LotCalculationMode;
+use sankey_copier_zmq::{LotCalculationMode, SyncMode};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
 ///
@@ -31,6 +31,11 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -79,6 +84,11 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -166,6 +176,11 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();
@@ -237,6 +252,11 @@ async fn test_estimate_parsing_performance() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let json = serde_json::to_string(&config).unwrap();

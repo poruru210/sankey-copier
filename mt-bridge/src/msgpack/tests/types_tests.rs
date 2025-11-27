@@ -186,6 +186,12 @@ fn test_config_message_serialization() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: Some(10000.0),
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");

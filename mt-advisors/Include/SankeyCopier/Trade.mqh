@@ -139,6 +139,18 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    double new_source_lot_max = slave_config_get_double(config_handle, "source_lot_max");
    double new_master_equity = slave_config_get_double(config_handle, "master_equity");
 
+   // Extract Open Sync Policy fields
+   string sync_mode_str = slave_config_get_string(config_handle, "sync_mode");
+   int new_sync_mode = SYNC_MODE_SKIP;
+   if(sync_mode_str == "limit_order")
+      new_sync_mode = SYNC_MODE_LIMIT_ORDER;
+   else if(sync_mode_str == "market_order")
+      new_sync_mode = SYNC_MODE_MARKET_ORDER;
+   int new_limit_order_expiry = slave_config_get_int(config_handle, "limit_order_expiry_min");
+   double new_market_sync_max_pips = slave_config_get_double(config_handle, "market_sync_max_pips");
+   int new_max_slippage = slave_config_get_int(config_handle, "max_slippage");
+   bool new_copy_pending_orders = (slave_config_get_bool(config_handle, "copy_pending_orders") == 1);
+
    // Log configuration values
    Print("Master Account: ", new_master);
    Print("Trade Group ID: ", new_group);
@@ -150,6 +162,11 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    Print("Source Lot Min: ", new_source_lot_min);
    Print("Source Lot Max: ", new_source_lot_max);
    Print("Master Equity: ", new_master_equity);
+   Print("Sync Mode: ", sync_mode_str, " (", new_sync_mode, ")");
+   Print("Limit Order Expiry: ", new_limit_order_expiry, " min");
+   Print("Market Sync Max Pips: ", new_market_sync_max_pips);
+   Print("Max Slippage: ", new_max_slippage, " points");
+   Print("Copy Pending Orders: ", new_copy_pending_orders);
 
    Print("DEBUG: Current configs count: ", ArraySize(configs));
    for(int i=0; i<ArraySize(configs); i++) Print("DEBUG: Config[", i, "]: ", configs[i].master_account);
@@ -239,6 +256,13 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       configs[index].source_lot_min = new_source_lot_min;
       configs[index].source_lot_max = new_source_lot_max;
       configs[index].master_equity = new_master_equity;
+
+      // Open Sync Policy settings
+      configs[index].sync_mode = new_sync_mode;
+      configs[index].limit_order_expiry_min = new_limit_order_expiry;
+      configs[index].market_sync_max_pips = new_market_sync_max_pips;
+      configs[index].max_slippage = new_max_slippage;
+      configs[index].copy_pending_orders = new_copy_pending_orders;
 
       // Parse symbol prefix/suffix from MessagePack
       configs[index].symbol_prefix = slave_config_get_string(config_handle, "symbol_prefix");

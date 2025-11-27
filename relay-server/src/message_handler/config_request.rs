@@ -136,6 +136,12 @@ impl MessageHandler {
                         source_lot_min: settings.slave_settings.source_lot_min,
                         source_lot_max: settings.slave_settings.source_lot_max,
                         master_equity,
+                        // Open Sync Policy settings
+                        sync_mode: settings.slave_settings.sync_mode.clone().into(),
+                        limit_order_expiry_min: settings.slave_settings.limit_order_expiry_min,
+                        market_sync_max_pips: settings.slave_settings.market_sync_max_pips,
+                        max_slippage: settings.slave_settings.max_slippage,
+                        copy_pending_orders: settings.slave_settings.copy_pending_orders,
                     };
 
                     // Send CONFIG via MessagePack

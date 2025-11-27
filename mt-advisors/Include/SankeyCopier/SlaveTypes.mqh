@@ -28,6 +28,11 @@
 // Holds all configuration parameters for copying trades from a specific Master EA
 // Each Slave EA can have multiple CopyConfig entries (one per Master)
 
+// Sync mode constants for existing positions when slave connects
+#define SYNC_MODE_SKIP          0  // Do not sync existing positions (only copy new trades)
+#define SYNC_MODE_LIMIT_ORDER   1  // Sync using limit orders at Master's open price
+#define SYNC_MODE_MARKET_ORDER  2  // Sync using market orders with max price deviation check
+
 struct CopyConfig {
     string master_account;           // Master EA's account identifier
     string trade_group_id;           // Trade group for PUB/SUB topic subscription
@@ -44,6 +49,12 @@ struct CopyConfig {
     double source_lot_min;           // Min lot from master (0 = no filter)
     double source_lot_max;           // Max lot from master (0 = no filter)
     double master_equity;            // Master's equity for margin_ratio mode calculation
+    // Open Sync Policy settings
+    int    sync_mode;                // 0=skip, 1=limit_order, 2=market_order
+    int    limit_order_expiry_min;   // Time limit for limit orders in minutes (0 = GTC)
+    double market_sync_max_pips;     // Max price deviation in pips for market order sync
+    int    max_slippage;             // Maximum allowed slippage in points (default: 30)
+    bool   copy_pending_orders;      // Whether to copy pending orders
 };
 
 #endif // SANKEY_COPIER_SLAVE_TYPES_MQH

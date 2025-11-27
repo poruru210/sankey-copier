@@ -522,6 +522,12 @@ async fn send_disabled_config_to_slave(
         source_lot_max: None,
         master_equity: None,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        // Open Sync Policy defaults
+        sync_mode: sankey_copier_zmq::SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -585,6 +591,12 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         source_lot_max: member.slave_settings.source_lot_max,
         master_equity,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        // Open Sync Policy settings
+        sync_mode: member.slave_settings.sync_mode.clone().into(),
+        limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
+        market_sync_max_pips: member.slave_settings.market_sync_max_pips,
+        max_slippage: member.slave_settings.max_slippage,
+        copy_pending_orders: member.slave_settings.copy_pending_orders,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {

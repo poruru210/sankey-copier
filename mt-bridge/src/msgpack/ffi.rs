@@ -6,7 +6,7 @@ use super::helpers::{
     string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX, MAX_STRING_LEN, STRING_BUFFER_1,
     STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
 };
-use super::types::{MasterConfigMessage, SlaveConfigMessage, TradeSignalMessage};
+use super::types::{MasterConfigMessage, SlaveConfigMessage, SyncMode, TradeSignalMessage};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::LazyLock;
@@ -108,8 +108,11 @@ pub unsafe extern "C" fn slave_config_get_string(
         Err(_) => return std::ptr::null(),
     };
 
-    // Use a static empty string to avoid temporary value dropped error
+    // Use static strings for enum values and empty string
     static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
+    static SYNC_MODE_SKIP: LazyLock<String> = LazyLock::new(|| "skip".to_string());
+    static SYNC_MODE_LIMIT_ORDER: LazyLock<String> = LazyLock::new(|| "limit_order".to_string());
+    static SYNC_MODE_MARKET_ORDER: LazyLock<String> = LazyLock::new(|| "market_order".to_string());
 
     let value = match field.as_str() {
         "account_id" => &config.account_id,
@@ -117,6 +120,11 @@ pub unsafe extern "C" fn slave_config_get_string(
         "timestamp" => &config.timestamp,
         "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
         "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
+        "sync_mode" => match config.sync_mode {
+            SyncMode::Skip => &*SYNC_MODE_SKIP,
+            SyncMode::LimitOrder => &*SYNC_MODE_LIMIT_ORDER,
+            SyncMode::MarketOrder => &*SYNC_MODE_MARKET_ORDER,
+        },
         _ => return std::ptr::null(),
     };
 
@@ -172,10 +180,13 @@ pub unsafe extern "C" fn slave_config_get_double(
         Err(_) => return 0.0,
     };
 
-    if field == "lot_multiplier" {
-        config.lot_multiplier.unwrap_or(1.0)
-    } else {
-        0.0
+    match field.as_str() {
+        "lot_multiplier" => config.lot_multiplier.unwrap_or(1.0),
+        "source_lot_min" => config.source_lot_min.unwrap_or(0.0),
+        "source_lot_max" => config.source_lot_max.unwrap_or(0.0),
+        "master_equity" => config.master_equity.unwrap_or(0.0),
+        "market_sync_max_pips" => config.market_sync_max_pips.unwrap_or(0.0),
+        _ => 0.0,
     }
 }
 
@@ -208,6 +219,7 @@ pub unsafe extern "C" fn slave_config_get_bool(
 
     let result = match field.as_str() {
         "reverse_trade" => config.reverse_trade,
+        "copy_pending_orders" => config.copy_pending_orders,
         _ => false,
     };
 
@@ -248,6 +260,8 @@ pub unsafe extern "C" fn slave_config_get_int(
     match field.as_str() {
         "config_version" => config.config_version as i32,
         "status" => config.status,
+        "max_slippage" => config.max_slippage.unwrap_or(30), // default: 30 points
+        "limit_order_expiry_min" => config.limit_order_expiry_min.unwrap_or(0), // default: 0 (GTC)
         _ => 0,
     }
 }
