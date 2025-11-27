@@ -70,7 +70,8 @@
                           string symbol_prefix, string symbol_suffix, string symbol_map);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
-                                 long magic_number, string comment, string timestamp, string source_account);
+                                 long magic_number, string comment, string timestamp, string source_account,
+                                 double close_ratio);
    // Note: get_serialized_buffer() uses pointer syntax not supported in MQL4/MQL5
    // Use copy_serialized_buffer() instead
    int    copy_serialized_buffer(uchar &dest[], int max_len);
