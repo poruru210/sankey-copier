@@ -21,20 +21,19 @@
 #include "../Include/SankeyCopier/MessageParsing.mqh"
 
 //--- Input parameters
+// Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
+// configured via Web-UI and received through the config message from relay-server.
+// Only ZMQ connection settings remain as input parameters.
 input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
 input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to receive trade signals (SUB)
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
-input int      Slippage = 3;
-input int      MaxRetries = 3;
-input bool     AllowNewOrders = true;
-input bool     AllowCloseOrders = true;
-input int      MaxSignalDelayMs = 5000;                      // Maximum allowed signal delay (milliseconds)
-input bool     UsePendingOrderForDelayed = false;            // Use pending order for delayed signals
-input string   SymbolPrefix = "";       // Symbol prefix to add (e.g. "pro.")
-input string   SymbolSuffix = "";       // Symbol suffix to add (e.g. ".m")
-input string   SymbolMap = "";          // Symbol mapping (e.g. "XAUUSD=GOLD,BTCUSD=Bitcoin")
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
+
+//--- Default values for trade execution (used before config is received)
+#define DEFAULT_SLIPPAGE              30     // Default slippage in points
+#define DEFAULT_MAX_RETRIES           3      // Default retry attempts
+#define DEFAULT_MAX_SIGNAL_DELAY_MS   5000   // Default max signal delay
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
@@ -69,9 +68,8 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Parse symbol mapping
-   ParseSymbolMappingString(SymbolMap, g_local_mappings);
-   Print("Parsed ", ArraySize(g_local_mappings), " local symbol mappings");
+   // Symbol mappings are now received from config via Web-UI
+   ArrayResize(g_local_mappings, 0);
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -103,7 +101,7 @@ int OnInit()
    }
 
    g_trade.SetExpertMagicNumber(0);
-   g_trade.SetDeviationInPoints(Slippage);
+   g_trade.SetDeviationInPoints(DEFAULT_SLIPPAGE);  // Will be updated per-trade from config
    g_trade.SetTypeFilling(ORDER_FILLING_IOC);
 
    // Recover ticket mappings from existing positions (restart recovery)
@@ -132,7 +130,8 @@ int OnInit()
       // Show NO_CONFIGURATION status initially (no config received yet)
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
       g_config_panel.UpdateServerRow(RelayServerAddress);
-      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, SymbolMap);
+      // Symbol config is now per-Master from Web-UI, will be shown in carousel
+      g_config_panel.UpdateSymbolConfig("", "", "");
    }
 
    ChartRedraw();
@@ -176,7 +175,8 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT5", SymbolPrefix, SymbolSuffix, SymbolMap);
+      // Slave doesn't send symbol settings in heartbeat - those are managed per-Master config by relay server
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT5");
 
       if(heartbeat_sent)
       {
@@ -494,10 +494,18 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       return;
    }
 
-   // Get slippage from config (use global Slippage as fallback if not set)
+   // Get trade settings from config (use defaults as fallback)
    int trade_slippage = (g_configs[config_index].max_slippage > 0)
                         ? g_configs[config_index].max_slippage
-                        : Slippage;
+                        : DEFAULT_SLIPPAGE;
+   int max_retries = (g_configs[config_index].max_retries > 0)
+                     ? g_configs[config_index].max_retries
+                     : DEFAULT_MAX_RETRIES;
+   int max_signal_delay = (g_configs[config_index].max_signal_delay_ms > 0)
+                          ? g_configs[config_index].max_signal_delay_ms
+                          : DEFAULT_MAX_SIGNAL_DELAY_MS;
+   bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
+   bool allow_new_orders = g_configs[config_index].allow_new_orders;
 
    // Check if connected to Master for Open signals only
    // Close/Modify signals are allowed even when disconnected (to close existing positions)
@@ -508,7 +516,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       return;
    }
 
-   if(action == "Open" && AllowNewOrders)
+   if(action == "Open" && allow_new_orders)
    {
       // Apply filtering
       if(!ShouldProcessTrade(symbol, magic_number, g_configs[config_index]))
@@ -531,21 +539,25 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       // Apply transformations
       string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
       mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
-      string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+      // Symbol prefix/suffix now from config (per-Master)
+      string transformed_symbol = GetLocalSymbol(mapped_symbol,
+                                    g_configs[config_index].symbol_prefix,
+                                    g_configs[config_index].symbol_suffix);
 
       // Transform lot size based on calculation mode
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
-      // Open position with transformed values (pass config slippage)
+      // Open position with transformed values (pass config settings)
       ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
                        transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account,
-                       magic_number, trade_slippage, MaxSignalDelayMs, UsePendingOrderForDelayed, MaxRetries, Slippage);
+                       magic_number, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
-   else if(action == "Close" && AllowCloseOrders)
+   else if(action == "Close")
    {
+      // Close trades are always allowed (to close existing positions)
       double close_ratio = trade_signal_get_double(handle, "close_ratio");
-      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, close_ratio, trade_slippage, Slippage);
+      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, close_ratio, trade_slippage, DEFAULT_SLIPPAGE);
       ExecuteCancelPendingOrder(g_trade, g_pending_order_map, master_ticket);
    }
    else if(action == "Modify")
@@ -616,7 +628,7 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    double market_sync_max_pips = g_configs[config_index].market_sync_max_pips;
    int trade_slippage = (g_configs[config_index].max_slippage > 0)
                         ? g_configs[config_index].max_slippage
-                        : Slippage;
+                        : DEFAULT_SLIPPAGE;
 
    Print("Sync mode: ", (sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
    if(sync_mode == SYNC_MODE_LIMIT_ORDER)
@@ -656,10 +668,12 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
          continue;
       }
 
-      // Apply symbol transformations
+      // Apply symbol transformations (prefix/suffix from config per-Master)
       string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
       mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings);
-      string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+      string transformed_symbol = GetLocalSymbol(mapped_symbol,
+                                    g_configs[config_index].symbol_prefix,
+                                    g_configs[config_index].symbol_suffix);
 
       // Transform lot size
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
@@ -681,7 +695,7 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
          // Execute market order if within price deviation
          if(SyncWithMarketOrder(g_trade, g_order_map, (ulong)master_ticket, transformed_symbol,
                                 transformed_order_type, transformed_lots, open_price, sl, tp,
-                                source_account, magic_number, trade_slippage, market_sync_max_pips, Slippage))
+                                source_account, magic_number, trade_slippage, market_sync_max_pips, DEFAULT_SLIPPAGE))
          {
             synced_count++;
          }

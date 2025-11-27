@@ -530,6 +530,12 @@ async fn send_disabled_config_to_slave(
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        // Disabled = no new orders allowed
+        allow_new_orders: false,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -579,6 +585,12 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         market_sync_max_pips: member.slave_settings.market_sync_max_pips,
         max_slippage: member.slave_settings.max_slippage,
         copy_pending_orders: member.slave_settings.copy_pending_orders,
+        // Trade Execution settings
+        max_retries: member.slave_settings.max_retries,
+        max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
+        use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
+        // Derived from status: allow new orders when enabled
+        allow_new_orders: member.status > 0,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {

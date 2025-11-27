@@ -25,6 +25,10 @@ export interface CopySettings {
   market_sync_max_pips?: number | null;    // pips
   max_slippage?: number | null;            // points
   copy_pending_orders?: boolean;
+  // Trade Execution settings
+  max_retries?: number;                     // Max order retry count (default: 3)
+  max_signal_delay_ms?: number;             // Max signal delay in ms (default: 5000)
+  use_pending_order_for_delayed?: boolean;  // Use pending order for delayed signals
 }
 
 export interface SymbolMapping {
@@ -85,6 +89,10 @@ export interface CreateSettingsRequest {
   market_sync_max_pips?: number | null;
   max_slippage?: number | null;
   copy_pending_orders?: boolean;
+  // Trade Execution settings
+  max_retries?: number;
+  max_signal_delay_ms?: number;
+  use_pending_order_for_delayed?: boolean;
 }
 
 // ConnectionsView specific types
@@ -180,6 +188,10 @@ export interface SlaveSettings {
   market_sync_max_pips?: number | null;   // max deviation in pips
   max_slippage?: number | null;           // Max slippage in points (default: 30)
   copy_pending_orders?: boolean;          // Copy pending orders (limit/stop)
+  // Trade Execution settings
+  max_retries?: number;                   // Max order retry count (default: 3)
+  max_signal_delay_ms?: number;           // Max signal delay in ms (default: 5000)
+  use_pending_order_for_delayed?: boolean; // Use pending order for delayed signals
 }
 
 export interface TradeGroupMember {

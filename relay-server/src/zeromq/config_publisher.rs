@@ -166,6 +166,11 @@ mod tests {
             market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
+            // Trade Execution defaults
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
+            allow_new_orders: true,
         };
 
         // This should succeed (message is queued for sending)
@@ -233,6 +238,11 @@ mod tests {
                     market_sync_max_pips: None,
                     max_slippage: None,
                     copy_pending_orders: false,
+                    // Trade Execution defaults
+                    max_retries: 3,
+                    max_signal_delay_ms: 5000,
+                    use_pending_order_for_delayed: false,
+                    allow_new_orders: true,
                 };
                 pub_clone.send(&config).await
             });

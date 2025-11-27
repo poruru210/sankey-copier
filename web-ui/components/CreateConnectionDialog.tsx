@@ -167,6 +167,12 @@ function CreateConnectionForm({
     market_sync_max_pips: number | null;
     max_slippage: number | null;
     copy_pending_orders: boolean;
+    // Trade Execution
+    max_retries: number;
+    max_signal_delay_ms: number;
+    use_pending_order_for_delayed: boolean;
+    // Filter settings
+    allowed_magic_numbers: string;
   }>({
     master_account: '',
     slave_account: '',
@@ -184,6 +190,12 @@ function CreateConnectionForm({
     market_sync_max_pips: null,
     max_slippage: null,
     copy_pending_orders: false,
+    // Trade Execution defaults
+    max_retries: 3,
+    max_signal_delay_ms: 5000,
+    use_pending_order_for_delayed: false,
+    // Filter defaults
+    allowed_magic_numbers: '',
   });
 
 
@@ -206,6 +218,12 @@ function CreateConnectionForm({
       market_sync_max_pips: null,
       max_slippage: null,
       copy_pending_orders: false,
+      // Trade Execution defaults
+      max_retries: 3,
+      max_signal_delay_ms: 5000,
+      use_pending_order_for_delayed: false,
+      // Filter defaults
+      allowed_magic_numbers: '',
     });
     setMasterSettings({
       symbol_prefix: '',
@@ -498,6 +516,12 @@ function CreateConnectionForm({
                 market_sync_max_pips: formData.market_sync_max_pips,
                 max_slippage: formData.max_slippage,
                 copy_pending_orders: formData.copy_pending_orders,
+                // Trade Execution fields
+                max_retries: formData.max_retries,
+                max_signal_delay_ms: formData.max_signal_delay_ms,
+                use_pending_order_for_delayed: formData.use_pending_order_for_delayed,
+                // Filter fields
+                allowed_magic_numbers: formData.allowed_magic_numbers,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
             />

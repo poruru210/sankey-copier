@@ -84,6 +84,14 @@ impl MessageHandler {
                                         .market_sync_max_pips,
                                     max_slippage: member.slave_settings.max_slippage,
                                     copy_pending_orders: member.slave_settings.copy_pending_orders,
+                                    // Trade Execution settings
+                                    max_retries: member.slave_settings.max_retries,
+                                    max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
+                                    use_pending_order_for_delayed: member
+                                        .slave_settings
+                                        .use_pending_order_for_delayed,
+                                    // Derived from status: allow new orders when enabled
+                                    allow_new_orders: effective_status > 0,
                                 };
 
                                 if let Err(e) = self.config_sender.send(&config).await {

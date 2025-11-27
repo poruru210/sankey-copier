@@ -17,14 +17,18 @@
 #include <SankeyCopier/GridPanel.mqh>
 
 //--- Input parameters
+// Note: MagicFilter moved to Slave side (allowed_magic_numbers)
+// Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
 input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Server ZMQ address (PULL)
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config/sync (SUB)
-input int      MagicFilter = 0;                               // Magic number filter (0 = all)
-input string   SymbolPrefix = "";                             // Symbol prefix to filter and strip (e.g. "pro.")
-input string   SymbolSuffix = "";                             // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;                            // Scan interval in milliseconds
 input bool     ShowConfigPanel = true;                        // Show configuration panel on chart
 input int      PanelWidth = 280;                              // Configuration panel width (pixels)
+
+//--- Global config variables (populated from Web-UI config)
+string g_symbol_prefix = "";       // Symbol prefix from config
+string g_symbol_suffix = "";       // Symbol suffix from config
+uint   g_config_version = 0;       // Current config version
 
 //--- Order tracking structure
 struct OrderInfo
@@ -60,7 +64,6 @@ int OnInit()
    Print("Auto-generated AccountID: ", AccountID);
 
    Print("Relay Server Address: ", RelayServerAddress);
-   Print("Magic Filter: ", MagicFilter);
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -108,9 +111,10 @@ int OnInit()
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
 
       g_config_panel.UpdateServerRow(RelayServerAddress);
-      g_config_panel.UpdateMagicFilterRow(MagicFilter);
+      // MagicFilter removed - now filtered on Slave side via allowed_magic_numbers
+      g_config_panel.UpdateMagicFilterRow(0); // Show 0 = All
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
-      g_config_panel.UpdateSymbolConfig(SymbolPrefix, SymbolSuffix, "");
+      g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
    }
 
    g_initialized = true;
@@ -162,7 +166,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT4", SymbolPrefix, SymbolSuffix, "");
+      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT4", g_symbol_prefix, g_symbol_suffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable
@@ -217,9 +221,91 @@ void OnTimer()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          Print("Received MessagePack message for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessSyncRequest(msgpack_payload, payload_len);
+
+         // Try to parse as MasterConfig first
+         HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
+         if(config_handle != 0 && config_handle != -1)
+         {
+            // Valid MasterConfig
+            ProcessMasterConfigMessage(msgpack_payload, payload_len);
+         }
+         else
+         {
+            // Not MasterConfig - try SyncRequest
+            ProcessSyncRequest(msgpack_payload, payload_len);
+         }
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Process Master configuration message (MessagePack)               |
+//+------------------------------------------------------------------+
+void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
+{
+   Print("=== Processing Master Configuration Message ===");
+
+   // Parse MessagePack once and get a handle to the Master config structure
+   HANDLE_TYPE config_handle = parse_master_config(msgpack_data, data_len);
+   if(config_handle == 0 || config_handle == -1)
+   {
+      Print("ERROR: Failed to parse MessagePack Master config");
+      return;
+   }
+
+   // Extract fields from the parsed config using the handle
+   string config_account_id = master_config_get_string(config_handle, "account_id");
+   string prefix = master_config_get_string(config_handle, "symbol_prefix");
+   string suffix = master_config_get_string(config_handle, "symbol_suffix");
+   int version = master_config_get_int(config_handle, "config_version");
+
+   if(config_account_id == "")
+   {
+      Print("ERROR: Invalid config message received - missing account_id");
+      master_config_free(config_handle);
+      return;
+   }
+
+   // Verify this config is for us
+   if(config_account_id != AccountID)
+   {
+      Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
+      master_config_free(config_handle);
+      return;
+   }
+
+   // Log configuration values
+   Print("Account ID: ", config_account_id);
+   Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
+   Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
+   Print("Config Version: ", version);
+
+   // Update global configuration variables
+   g_symbol_prefix = prefix;
+   g_symbol_suffix = suffix;
+   g_config_version = (uint)version;
+
+   // Update configuration panel
+   if(ShowConfigPanel)
+   {
+      g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
+
+      // Update status after receiving configuration
+      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+      if(!local_trade_allowed)
+      {
+         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
+      }
+      else
+      {
+         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
+      }
+   }
+
+   // Free the config handle
+   master_config_free(config_handle);
+
+   Print("=== Master Configuration Updated ===");
 }
 
 //+------------------------------------------------------------------+
@@ -260,7 +346,7 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
    sync_request_free(handle);
 
    // Send position snapshot
-   if(SendPositionSnapshot(g_zmq_socket, AccountID, SymbolPrefix, SymbolSuffix))
+   if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
    {
       Print("Position snapshot sent to slave: ", slave_account);
    }
@@ -307,16 +393,14 @@ void ScanExistingOrders()
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         if(MagicFilter == 0 || OrderMagicNumber() == MagicFilter)
+         // Magic number filtering is now done on Slave side via allowed_magic_numbers
+         string symbol = OrderSymbol();
+         if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
          {
-            string symbol = OrderSymbol();
-            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
-            {
-               int ticket = OrderTicket();
-               AddTrackedOrder(ticket);
-               SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
-               Print("Tracking existing order: #", ticket);
-            }
+            int ticket = OrderTicket();
+            AddTrackedOrder(ticket);
+            SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
+            Print("Tracking existing order: #", ticket);
          }
       }
    }
@@ -335,13 +419,12 @@ void CheckForNewOrders()
       {
          int ticket = OrderTicket();
 
-         if(MagicFilter != 0 && OrderMagicNumber() != MagicFilter)
-            continue;
+         // Magic number filtering is now done on Slave side via allowed_magic_numbers
 
          if(!IsOrderTracked(ticket))
          {
             string symbol = OrderSymbol();
-            if(MatchesSymbolFilter(symbol, SymbolPrefix, SymbolSuffix))
+            if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
             {
                AddTrackedOrder(ticket);
                SendOpenSignalFromOrder(ticket);
@@ -463,7 +546,7 @@ void SendOpenSignalFromOrder(int ticket)
 
    string order_type = GetOrderTypeString(OrderType());
    string raw_symbol = OrderSymbol();
-   string symbol = GetCleanSymbol(raw_symbol, SymbolPrefix, SymbolSuffix);
+   string symbol = GetCleanSymbol(raw_symbol, g_symbol_prefix, g_symbol_suffix);
    
    SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, symbol,
                   order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),

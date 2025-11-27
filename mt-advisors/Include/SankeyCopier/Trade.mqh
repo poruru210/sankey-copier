@@ -156,6 +156,14 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    int new_max_slippage = slave_config_get_int(config_handle, "max_slippage");
    bool new_copy_pending_orders = (slave_config_get_bool(config_handle, "copy_pending_orders") == 1);
 
+   // Extract Trade Execution settings
+   int new_max_retries = slave_config_get_int(config_handle, "max_retries");
+   if(new_max_retries <= 0) new_max_retries = 3; // Default: 3 retries
+   int new_max_signal_delay_ms = slave_config_get_int(config_handle, "max_signal_delay_ms");
+   if(new_max_signal_delay_ms <= 0) new_max_signal_delay_ms = 5000; // Default: 5000ms
+   bool new_use_pending_order_for_delayed = (slave_config_get_bool(config_handle, "use_pending_order_for_delayed") == 1);
+   bool new_allow_new_orders = (slave_config_get_bool(config_handle, "allow_new_orders") == 1);
+
    // Log configuration values
    Print("Master Account: ", new_master);
    Print("Trade Group ID: ", new_group);
@@ -172,6 +180,10 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    Print("Market Sync Max Pips: ", new_market_sync_max_pips);
    Print("Max Slippage: ", new_max_slippage, " points");
    Print("Copy Pending Orders: ", new_copy_pending_orders);
+   Print("Max Retries: ", new_max_retries);
+   Print("Max Signal Delay: ", new_max_signal_delay_ms, " ms");
+   Print("Use Pending Order for Delayed: ", new_use_pending_order_for_delayed);
+   Print("Allow New Orders: ", new_allow_new_orders);
 
    Print("DEBUG: Current configs count: ", ArraySize(configs));
    for(int i=0; i<ArraySize(configs); i++) Print("DEBUG: Config[", i, "]: ", configs[i].master_account);
@@ -272,6 +284,12 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       configs[index].max_slippage = new_max_slippage;
       configs[index].copy_pending_orders = new_copy_pending_orders;
 
+      // Trade Execution settings
+      configs[index].max_retries = new_max_retries;
+      configs[index].max_signal_delay_ms = new_max_signal_delay_ms;
+      configs[index].use_pending_order_for_delayed = new_use_pending_order_for_delayed;
+      configs[index].allow_new_orders = new_allow_new_orders;
+
       // Parse symbol prefix/suffix from MessagePack
       configs[index].symbol_prefix = slave_config_get_string(config_handle, "symbol_prefix");
       configs[index].symbol_suffix = slave_config_get_string(config_handle, "symbol_suffix");
@@ -296,11 +314,26 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          }
       }
 
-      // TODO: Parse filters from MessagePack (not yet implemented in DLL)
+      // Parse filters from MessagePack
       ArrayResize(configs[index].filters.allowed_symbols, 0);
       ArrayResize(configs[index].filters.blocked_symbols, 0);
-      ArrayResize(configs[index].filters.allowed_magic_numbers, 0);
       ArrayResize(configs[index].filters.blocked_magic_numbers, 0);
+
+      // Parse allowed_magic_numbers filter
+      int magic_count = slave_config_get_allowed_magic_count(config_handle);
+      ArrayResize(configs[index].filters.allowed_magic_numbers, magic_count);
+      for(int m = 0; m < magic_count; m++)
+      {
+         configs[index].filters.allowed_magic_numbers[m] = slave_config_get_allowed_magic_at(config_handle, m);
+      }
+      if(magic_count > 0)
+      {
+         Print("Allowed Magic Numbers (", magic_count, "):");
+         for(int m = 0; m < magic_count; m++)
+         {
+            Print("  ", configs[index].filters.allowed_magic_numbers[m]);
+         }
+      }
 
       // Send SyncRequest when:
       // 1. New config is added (not just updated)

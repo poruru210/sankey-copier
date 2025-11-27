@@ -142,6 +142,14 @@ impl MessageHandler {
                         market_sync_max_pips: settings.slave_settings.market_sync_max_pips,
                         max_slippage: settings.slave_settings.max_slippage,
                         copy_pending_orders: settings.slave_settings.copy_pending_orders,
+                        // Trade Execution settings
+                        max_retries: settings.slave_settings.max_retries,
+                        max_signal_delay_ms: settings.slave_settings.max_signal_delay_ms,
+                        use_pending_order_for_delayed: settings
+                            .slave_settings
+                            .use_pending_order_for_delayed,
+                        // Derived from status: allow new orders when enabled
+                        allow_new_orders: effective_status > 0,
                     };
 
                     // Send CONFIG via MessagePack

@@ -96,6 +96,32 @@ pub struct SlaveConfigMessage {
     /// Whether to copy pending orders (limit/stop orders) in addition to market orders
     #[serde(default)]
     pub copy_pending_orders: bool,
+
+    // === Trade Execution Settings ===
+    /// Maximum number of order retries on failure (default: 3)
+    #[serde(default = "default_max_retries")]
+    pub max_retries: i32,
+    /// Maximum allowed signal delay in milliseconds (default: 5000)
+    #[serde(default = "default_max_signal_delay_ms")]
+    pub max_signal_delay_ms: i32,
+    /// Use pending order for delayed signals instead of skipping
+    #[serde(default)]
+    pub use_pending_order_for_delayed: bool,
+    /// Allow opening new orders (derived from status: true when status > 0)
+    #[serde(default = "default_allow_new_orders")]
+    pub allow_new_orders: bool,
+}
+
+fn default_max_retries() -> i32 {
+    3
+}
+
+fn default_max_signal_delay_ms() -> i32 {
+    5000
+}
+
+fn default_allow_new_orders() -> bool {
+    true
 }
 
 /// Master EA configuration message

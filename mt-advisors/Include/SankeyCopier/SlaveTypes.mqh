@@ -55,6 +55,11 @@ struct CopyConfig {
     double market_sync_max_pips;     // Max price deviation in pips for market order sync
     int    max_slippage;             // Maximum allowed slippage in points (default: 30)
     bool   copy_pending_orders;      // Whether to copy pending orders
+    // Trade Execution settings
+    int    max_retries;              // Maximum retry attempts for failed orders (default: 3)
+    int    max_signal_delay_ms;      // Maximum allowed signal delay in ms (default: 5000)
+    bool   use_pending_order_for_delayed; // Use pending order for delayed signals
+    bool   allow_new_orders;         // Whether to allow opening new trades (derived from status)
 };
 
 #endif // SANKEY_COPIER_SLAVE_TYPES_MQH

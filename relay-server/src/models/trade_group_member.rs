@@ -145,6 +145,27 @@ pub struct SlaveSettings {
     /// Whether to copy pending orders (limit/stop orders) in addition to market orders
     #[serde(default)]
     pub copy_pending_orders: bool,
+
+    // === Trade Execution Settings ===
+    /// Maximum number of order retries on failure (default: 3)
+    #[serde(default = "default_max_retries")]
+    pub max_retries: i32,
+
+    /// Maximum allowed signal delay in milliseconds (default: 5000)
+    #[serde(default = "default_max_signal_delay_ms")]
+    pub max_signal_delay_ms: i32,
+
+    /// Use pending order for delayed signals instead of skipping
+    #[serde(default)]
+    pub use_pending_order_for_delayed: bool,
+}
+
+fn default_max_retries() -> i32 {
+    3
+}
+
+fn default_max_signal_delay_ms() -> i32 {
+    5000
 }
 
 #[allow(dead_code)]
@@ -264,6 +285,9 @@ mod tests {
             market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
+            max_retries: 5,
+            max_signal_delay_ms: 3000,
+            use_pending_order_for_delayed: true,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -275,6 +299,9 @@ mod tests {
         assert_eq!(deserialized.config_version, 1);
         assert_eq!(deserialized.source_lot_min, Some(0.01));
         assert_eq!(deserialized.source_lot_max, Some(10.0));
+        assert_eq!(deserialized.max_retries, 5);
+        assert_eq!(deserialized.max_signal_delay_ms, 3000);
+        assert!(deserialized.use_pending_order_for_delayed);
     }
 
     #[test]
@@ -295,6 +322,9 @@ mod tests {
             market_sync_max_pips: None,
             max_slippage: None,
             copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -310,6 +340,8 @@ mod tests {
         assert!(json.contains("reverse_trade"));
         assert!(json.contains("symbol_mappings"));
         assert!(json.contains("config_version"));
+        assert!(json.contains("max_retries"));
+        assert!(json.contains("max_signal_delay_ms"));
     }
 
     #[test]

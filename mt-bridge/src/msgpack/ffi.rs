@@ -203,6 +203,8 @@ pub unsafe extern "C" fn slave_config_get_bool(
     let result = match field.as_str() {
         "reverse_trade" => config.reverse_trade,
         "copy_pending_orders" => config.copy_pending_orders,
+        "use_pending_order_for_delayed" => config.use_pending_order_for_delayed,
+        "allow_new_orders" => config.allow_new_orders,
         _ => false,
     };
 
@@ -245,6 +247,8 @@ pub unsafe extern "C" fn slave_config_get_int(
         "status" => config.status,
         "max_slippage" => config.max_slippage.unwrap_or(30), // default: 30 points
         "limit_order_expiry_min" => config.limit_order_expiry_min.unwrap_or(0), // default: 0 (GTC)
+        "max_retries" => config.max_retries,
+        "max_signal_delay_ms" => config.max_signal_delay_ms,
         _ => 0,
     }
 }
@@ -371,6 +375,49 @@ pub unsafe extern "C" fn slave_config_get_symbol_mapping_target(
         return std::ptr::null();
     }
     string_to_utf16_buffer(&config.symbol_mappings[idx].target_symbol)
+}
+
+// ===========================================================================
+// Filter Array Access Functions (allowed_magic_numbers)
+// ===========================================================================
+
+/// Get the number of allowed magic numbers in a SlaveConfigMessage
+///
+/// # Safety
+/// - handle must be a valid pointer to SlaveConfigMessage
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_allowed_magic_count(
+    handle: *const SlaveConfigMessage,
+) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    let config = &*handle;
+    match &config.filters.allowed_magic_numbers {
+        Some(v) => v.len() as i32,
+        None => 0,
+    }
+}
+
+/// Get the allowed magic number at a specific index
+///
+/// # Safety
+/// - handle must be a valid pointer to SlaveConfigMessage
+/// - index must be within bounds (0 <= index < count)
+#[no_mangle]
+pub unsafe extern "C" fn slave_config_get_allowed_magic_at(
+    handle: *const SlaveConfigMessage,
+    index: i32,
+) -> i32 {
+    if handle.is_null() || index < 0 {
+        return 0;
+    }
+    let config = &*handle;
+    let idx = index as usize;
+    match &config.filters.allowed_magic_numbers {
+        Some(v) if idx < v.len() => v[idx],
+        _ => 0,
+    }
 }
 
 /// Get an integer field from MasterConfigMessage handle

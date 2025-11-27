@@ -36,6 +36,11 @@ async fn test_config_message_size_benchmark() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -89,6 +94,11 @@ async fn test_config_message_size_benchmark() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -181,6 +191,11 @@ async fn test_config_message_size_benchmark() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();
@@ -257,6 +272,11 @@ async fn test_estimate_parsing_performance() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let json = serde_json::to_string(&config).unwrap();

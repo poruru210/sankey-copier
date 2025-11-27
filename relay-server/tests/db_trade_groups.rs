@@ -135,6 +135,10 @@ async fn test_add_member() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
@@ -254,6 +258,10 @@ async fn test_update_member_settings() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     db.update_member_settings("MASTER_001", "SLAVE_001", new_settings)
@@ -382,6 +390,10 @@ async fn test_get_settings_for_slave() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     let settings2 = SlaveSettings {
@@ -400,6 +412,10 @@ async fn test_get_settings_for_slave() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings1)
@@ -589,6 +605,10 @@ async fn test_member_with_symbol_mappings() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)
@@ -634,6 +654,10 @@ async fn test_member_with_filters() {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     db.add_member("MASTER_001", "SLAVE_001", settings)

@@ -89,6 +89,10 @@
    string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
    string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
 
+   // Slave config allowed magic numbers filter access
+   int         slave_config_get_allowed_magic_count(HANDLE_TYPE handle);
+   int         slave_config_get_allowed_magic_at(HANDLE_TYPE handle, int index);
+
    // Master config message parsing
    HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
    string      master_config_get_string(HANDLE_TYPE handle, string field_name);

@@ -455,6 +455,10 @@ fn default_test_slave_settings() -> SlaveSettings {
         market_sync_max_pips: None,
         max_slippage: None,
         copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     }
 }
 

@@ -17,10 +17,9 @@
 #include "../Include/SankeyCopier/GridPanel.mqh"
 
 //--- Input parameters
+// Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
 input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send signals/heartbeats (PULL)
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config updates (SUB)
-input string   SymbolPrefix = "";       // Symbol prefix to filter and strip (e.g. "pro.")
-input string   SymbolSuffix = "";       // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
@@ -73,9 +72,10 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Initialize symbol prefix/suffix from input parameters (will be overridden by config)
-   g_symbol_prefix = SymbolPrefix;
-   g_symbol_suffix = SymbolSuffix;
+   // Symbol prefix/suffix are now managed via Web-UI MasterSettings
+   // They will be set when config is received from relay-server
+   g_symbol_prefix = "";
+   g_symbol_suffix = "";
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();

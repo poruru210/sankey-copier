@@ -33,6 +33,12 @@ export interface SlaveSettingsFormData {
   market_sync_max_pips: number | null;
   max_slippage: number | null;
   copy_pending_orders: boolean;
+  // Trade Execution settings
+  max_retries: number;
+  max_signal_delay_ms: number;
+  use_pending_order_for_delayed: boolean;
+  // Filter settings
+  allowed_magic_numbers: string; // Comma-separated list
 }
 
 interface SlaveSettingsFormProps {
@@ -351,6 +357,91 @@ export function SlaveSettingsForm({
               {content.copyPendingOrders?.value || "Copy Pending Orders"} - {content.copyPendingOrdersDesc?.value || "Also copy limit and stop orders"}
             </label>
           </div>
+        </DrawerSectionContent>
+      </DrawerSection>
+
+      {/* Trade Execution Settings Section */}
+      <DrawerSection bordered>
+        <DrawerSectionHeader
+          title={content.tradeExecutionTitle?.value || "Trade Execution"}
+          description={content.tradeExecutionDescription?.value || "Configure signal processing and order execution behavior."}
+        />
+        <DrawerSectionContent>
+          {/* Max Retries */}
+          <DrawerFormField
+            label={content.maxRetries?.value || "Max Retries"}
+            description={content.maxRetriesDescription?.value || "Maximum number of order retry attempts on failure."}
+            htmlFor="max_retries"
+          >
+            <Input
+              id="max_retries"
+              type="number"
+              step="1"
+              min="0"
+              max="10"
+              placeholder="3"
+              value={formData.max_retries}
+              onChange={(e) => handleChange('max_retries', parseInt(e.target.value, 10) || 3)}
+              disabled={disabled}
+            />
+          </DrawerFormField>
+
+          {/* Max Signal Delay */}
+          <DrawerFormField
+            label={content.maxSignalDelay?.value || "Max Signal Delay (ms)"}
+            description={content.maxSignalDelayDescription?.value || "Maximum allowed signal delay in milliseconds. Signals older than this are skipped or handled based on the setting below."}
+            htmlFor="max_signal_delay_ms"
+          >
+            <Input
+              id="max_signal_delay_ms"
+              type="number"
+              step="100"
+              min="0"
+              max="60000"
+              placeholder="5000"
+              value={formData.max_signal_delay_ms}
+              onChange={(e) => handleChange('max_signal_delay_ms', parseInt(e.target.value, 10) || 5000)}
+              disabled={disabled}
+            />
+          </DrawerFormField>
+
+          {/* Use Pending Order for Delayed */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="use_pending_order_for_delayed"
+              checked={formData.use_pending_order_for_delayed}
+              onCheckedChange={(checked) => handleChange('use_pending_order_for_delayed', checked as boolean)}
+              disabled={disabled}
+            />
+            <label htmlFor="use_pending_order_for_delayed" className="text-sm cursor-pointer">
+              {content.usePendingOrderForDelayed?.value || "Use Pending Order for Delayed Signals"} - {content.usePendingOrderForDelayedDesc?.value || "Place limit order at original price instead of skipping"}
+            </label>
+          </div>
+        </DrawerSectionContent>
+      </DrawerSection>
+
+      {/* Magic Number Filter Section */}
+      <DrawerSection bordered>
+        <DrawerSectionHeader
+          title={content.magicFilterTitle?.value || "Magic Number Filter"}
+          description={content.magicFilterDescription?.value || "Filter which trades to copy based on magic number. Leave empty to copy all trades."}
+        />
+        <DrawerSectionContent>
+          {/* Allowed Magic Numbers */}
+          <DrawerFormField
+            label={content.allowedMagicNumbers?.value || "Allowed Magic Numbers"}
+            description={content.allowedMagicNumbersDescription?.value || "Comma-separated list of magic numbers to copy. Only trades with these magic numbers will be copied."}
+            htmlFor="allowed_magic_numbers"
+          >
+            <Input
+              id="allowed_magic_numbers"
+              type="text"
+              placeholder={content.allowedMagicNumbersPlaceholder?.value || "e.g. 12345, 67890"}
+              value={formData.allowed_magic_numbers}
+              onChange={(e) => handleChange('allowed_magic_numbers', e.target.value)}
+              disabled={disabled}
+            />
+          </DrawerFormField>
         </DrawerSectionContent>
       </DrawerSection>
     </div>
