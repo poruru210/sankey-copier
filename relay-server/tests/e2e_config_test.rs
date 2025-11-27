@@ -2007,8 +2007,10 @@ async fn test_slave_config_prefix_distribution() {
 
     // Update Master settings to have a specific prefix
     // This ensures we can distinguish if Slave receives Master's prefix
-    let mut master_settings = sankey_copier_relay_server::models::MasterSettings::default();
-    master_settings.symbol_prefix = Some("MASTER_".to_string());
+    let master_settings = sankey_copier_relay_server::models::MasterSettings {
+        symbol_prefix: Some("MASTER_".to_string()),
+        ..Default::default()
+    };
     server
         .db
         .update_master_settings(master_account, master_settings)

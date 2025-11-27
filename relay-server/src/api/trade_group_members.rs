@@ -11,7 +11,7 @@ use axum::{
 use sankey_copier_zmq::SlaveConfigMessage;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{MasterSettings, SlaveSettings, TradeGroupMember};
+use crate::models::{SlaveSettings, TradeGroupMember};
 
 use super::{AppState, ProblemDetails};
 
@@ -305,6 +305,8 @@ pub async fn update_member(
                 config_version = updated_settings.config_version,
                 lot_multiplier = ?updated_settings.lot_multiplier,
                 reverse_trade = updated_settings.reverse_trade,
+                symbol_prefix = ?updated_settings.symbol_prefix,
+                symbol_suffix = ?updated_settings.symbol_suffix,
                 "Successfully updated member settings"
             );
 
@@ -548,26 +550,6 @@ async fn send_disabled_config_to_slave(
 
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
-    // Fetch Master settings to include symbol_prefix/suffix
-    let master_settings = match state.db.get_trade_group(master_account).await {
-        Ok(Some(tg)) => tg.master_settings,
-        Ok(None) => {
-            tracing::warn!(
-                master_account = %master_account,
-                "Master settings not found when sending Slave config"
-            );
-            MasterSettings::default()
-        }
-        Err(e) => {
-            tracing::error!(
-                master_account = %master_account,
-                error = %e,
-                "Failed to fetch Master settings for Slave config"
-            );
-            MasterSettings::default()
-        }
-    };
-
     // Fetch Master's equity for margin_ratio mode
     let master_equity = state
         .connection_manager

@@ -37,8 +37,10 @@ export function convertMembersToCopySettings(
         reverse_trade: member.slave_settings.reverse_trade,
         symbol_mappings: member.slave_settings.symbol_mappings,
         filters: member.slave_settings.filters,
-        symbol_prefix: member.slave_settings.symbol_prefix ?? tradeGroup.master_settings.symbol_prefix ?? undefined,
-        symbol_suffix: member.slave_settings.symbol_suffix ?? tradeGroup.master_settings.symbol_suffix ?? undefined,
+        // Use slave's own settings - do NOT fallback to master's values
+        // If slave's prefix/suffix is null/undefined, it should stay empty (not inherit from master)
+        symbol_prefix: member.slave_settings.symbol_prefix ?? undefined,
+        symbol_suffix: member.slave_settings.symbol_suffix ?? undefined,
       });
     }
   }
