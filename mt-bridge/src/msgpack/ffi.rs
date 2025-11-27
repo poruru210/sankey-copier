@@ -855,6 +855,12 @@ pub unsafe extern "C" fn sync_request_get_string(
         None => return std::ptr::null(),
     };
 
+    // Handle last_sync_time separately since it's Option<String>
+    if field == "last_sync_time" {
+        let value = msg.last_sync_time.as_deref().unwrap_or("");
+        return string_to_utf16_buffer(value);
+    }
+
     let value = match field.as_str() {
         "message_type" => &msg.message_type,
         "slave_account" => &msg.slave_account,
