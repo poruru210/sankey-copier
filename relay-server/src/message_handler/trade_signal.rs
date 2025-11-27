@@ -76,11 +76,12 @@ impl MessageHandler {
         master_settings: &MasterSettings,
     ) {
         // Transform signal
+        // SymbolConverter removes master's prefix/suffix and adds slave's prefix/suffix
         let converter = SymbolConverter {
-            prefix_remove: None,
-            suffix_remove: None,
-            prefix_add: None,
-            suffix_add: None,
+            prefix_remove: master_settings.symbol_prefix.clone(),
+            suffix_remove: master_settings.symbol_suffix.clone(),
+            prefix_add: member.slave_settings.symbol_prefix.clone(),
+            suffix_add: member.slave_settings.symbol_suffix.clone(),
         };
 
         match self
@@ -96,7 +97,8 @@ impl MessageHandler {
                 );
 
                 // Send to trade group using PUB/SUB with master_account as topic
-                // This allows multiple slaves to subscribe to the same master's trades
+                // All slaves subscribe to their master's topic and receive all signals
+                // Filtering (e.g., disabled slave skipping Open) is done on Slave EA side
                 if let Err(e) = self
                     .zmq_sender
                     .send_signal(&member.trade_group_id, &transformed)

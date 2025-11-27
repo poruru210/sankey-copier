@@ -1,4 +1,6 @@
-use crate::models::{MasterSettings, OrderType, SymbolConverter, TradeGroupMember, TradeSignal};
+use crate::models::{
+    MasterSettings, OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal,
+};
 use anyhow::Result;
 
 #[cfg(test)]
@@ -15,7 +17,47 @@ impl CopyEngine {
     pub fn should_copy_trade(&self, signal: &TradeSignal, member: &TradeGroupMember) -> bool {
         // Check if copying is enabled and master is connected (STATUS_CONNECTED = 2)
         if !member.is_connected() {
+            tracing::debug!(
+                "Member {} is not connected (status={})",
+                member.slave_account,
+                member.status
+            );
             return false;
+        }
+
+        // Check pending order filter (only applies to Open signals)
+        if signal.action == TradeAction::Open {
+            if let Some(ref order_type) = signal.order_type {
+                let is_pending = matches!(
+                    order_type,
+                    OrderType::BuyLimit
+                        | OrderType::SellLimit
+                        | OrderType::BuyStop
+                        | OrderType::SellStop
+                );
+                if is_pending && !member.slave_settings.copy_pending_orders {
+                    tracing::debug!("Pending orders disabled for this member");
+                    return false;
+                }
+            }
+        }
+
+        // Check source lot limits (only for Open signals with lots)
+        if signal.action == TradeAction::Open {
+            if let Some(lots) = signal.lots {
+                if let Some(min) = member.slave_settings.source_lot_min {
+                    if lots < min {
+                        tracing::debug!("Lots {} below minimum {}", lots, min);
+                        return false;
+                    }
+                }
+                if let Some(max) = member.slave_settings.source_lot_max {
+                    if lots > max {
+                        tracing::debug!("Lots {} above maximum {}", lots, max);
+                        return false;
+                    }
+                }
+            }
         }
 
         // Check symbol filters (only if signal has symbol)
@@ -71,13 +113,18 @@ impl CopyEngine {
                 Some(converter.convert(symbol, &member.slave_settings.symbol_mappings));
         }
 
-        // Apply lot multiplier (if lots present)
-        if let (Some(lots), Some(multiplier)) = (signal.lots, member.slave_settings.lot_multiplier)
-        {
-            let new_lots = lots * multiplier;
-            // Round to 2 decimal places
-            transformed.lots = Some((new_lots * 100.0).round() / 100.0);
+        // Apply lot multiplier only for Open signals (not Close)
+        // For Close signals, close_ratio is used on slave side
+        if signal.action == TradeAction::Open {
+            if let (Some(lots), Some(multiplier)) =
+                (signal.lots, member.slave_settings.lot_multiplier)
+            {
+                let new_lots = lots * multiplier;
+                // Round to 2 decimal places
+                transformed.lots = Some((new_lots * 100.0).round() / 100.0);
+            }
         }
+        // For Close signals, close_ratio is passed through unchanged (cloned)
 
         // Reverse trade if enabled (if order_type present)
         if member.slave_settings.reverse_trade {

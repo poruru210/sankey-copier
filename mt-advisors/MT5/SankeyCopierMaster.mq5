@@ -31,6 +31,7 @@ struct PositionInfo
    ulong  ticket;
    double sl;
    double tp;
+   double lots;  // Track volume for partial close detection
 };
 
 //--- Order tracking structure (for Pending Orders)
@@ -40,6 +41,7 @@ struct OrderInfo
    double price;
    double sl;
    double tp;
+   double lots;  // Track volume for partial close detection
 };
 
 //--- Global variables
@@ -337,6 +339,7 @@ void OnTick()
       //--- 1. Scan Positions ---
       CheckForNewPositions();
       CheckForModifiedPositions();
+      CheckForPartialCloses();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
       
@@ -433,11 +436,17 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
    {
-      // Position was closed
+      // Deal added to history (could be partial or full close)
       if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
-         SendPositionCloseSignal(trans.position);
-         RemoveTrackedPosition(trans.position);
+         // Check if position still exists (partial close) or not (full close)
+         if(!PositionSelectByTicket(trans.position))
+         {
+            // Position no longer exists - full close
+            SendPositionCloseSignal(trans.position, 0.0);
+            RemoveTrackedPosition(trans.position);
+         }
+         // If position still exists, it's a partial close - handled by CheckForPartialCloses
       }
    }
    
@@ -575,6 +584,37 @@ void CheckForModifiedPositions()
 }
 
 //+------------------------------------------------------------------+
+//| Check for partial closes (volume reduction)                       |
+//+------------------------------------------------------------------+
+void CheckForPartialCloses()
+{
+   for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+   {
+      ulong ticket = g_tracked_positions[i].ticket;
+      if(PositionSelectByTicket(ticket))
+      {
+         double current_lots = PositionGetDouble(POSITION_VOLUME);
+         double tracked_lots = g_tracked_positions[i].lots;
+
+         // Check if volume has decreased (partial close)
+         if(current_lots < tracked_lots && tracked_lots > 0)
+         {
+            // Calculate close_ratio: portion that was closed
+            double close_ratio = (tracked_lots - current_lots) / tracked_lots;
+
+            Print("Partial close detected: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (close_ratio: ", close_ratio, ")");
+
+            // Send partial close signal
+            SendPositionCloseSignal(ticket, close_ratio);
+
+            // Update tracked volume (position still exists)
+            g_tracked_positions[i].lots = current_lots;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Check for closed positions                                        |
 //+------------------------------------------------------------------+
 void CheckForClosedPositions()
@@ -584,7 +624,8 @@ void CheckForClosedPositions()
       ulong ticket = g_tracked_positions[i].ticket;
       if(!PositionSelectByTicket(ticket))
       {
-         SendPositionCloseSignal(ticket);
+         // Full close (close_ratio = 1.0 or 0.0 for backward compat)
+         SendPositionCloseSignal(ticket, 0.0);
          RemoveTrackedPosition(ticket);
       }
    }
@@ -616,11 +657,12 @@ void SendPositionOpenSignal(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Send close signal                                                 |
+//| Send close signal with optional close_ratio                       |
+//| close_ratio: 0 = full close, 0 < ratio < 1.0 = partial close     |
 //+------------------------------------------------------------------+
-void SendPositionCloseSignal(ulong ticket)
+void SendPositionCloseSignal(ulong ticket, double close_ratio = 0.0)
 {
-   SendCloseSignal(g_zmq_socket, ticket, AccountID);
+   SendCloseSignal(g_zmq_socket, ticket, close_ratio, AccountID);
 }
 
 //+------------------------------------------------------------------+
@@ -646,7 +688,7 @@ bool IsPositionTracked(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Add position to tracking list with current SL/TP                 |
+//| Add position to tracking list with current SL/TP/Lots            |
 //+------------------------------------------------------------------+
 void AddTrackedPosition(ulong ticket)
 {
@@ -658,23 +700,25 @@ void AddTrackedPosition(ulong ticket)
    g_tracked_positions[size].ticket = ticket;
    g_tracked_positions[size].sl = PositionGetDouble(POSITION_SL);
    g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
+   g_tracked_positions[size].lots = PositionGetDouble(POSITION_VOLUME);
 }
 
 //+------------------------------------------------------------------+
-//| Add order to tracking list                                       |
+//| Add order to tracking list with current volume                   |
 //+------------------------------------------------------------------+
 void AddTrackedOrder(ulong ticket)
 {
    if(!OrderSelect(ticket)) return;
    if(IsOrderTracked(ticket)) return;
-   
+
    int size = ArraySize(g_tracked_orders);
    ArrayResize(g_tracked_orders, size + 1);
-   
+
    g_tracked_orders[size].ticket = ticket;
    g_tracked_orders[size].price  = OrderGetDouble(ORDER_PRICE_OPEN);
    g_tracked_orders[size].sl     = OrderGetDouble(ORDER_SL);
    g_tracked_orders[size].tp     = OrderGetDouble(ORDER_TP);
+   g_tracked_orders[size].lots   = OrderGetDouble(ORDER_VOLUME_INITIAL);
 }
 
 //+------------------------------------------------------------------+
@@ -787,10 +831,11 @@ void SendOrderModifySignal(ulong ticket)
 
 //+------------------------------------------------------------------+
 //| Send order close signal (delete)                                 |
+//| Pending orders don't have partial close - always full close      |
 //+------------------------------------------------------------------+
 void SendOrderCloseSignal(ulong ticket)
 {
-   SendCloseSignal(g_zmq_socket, ticket, AccountID);
+   SendCloseSignal(g_zmq_socket, ticket, 0.0, AccountID);
 }
 
 //+------------------------------------------------------------------+

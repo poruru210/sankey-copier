@@ -453,18 +453,19 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       return;
    }
 
-   // Check if connected to Master before processing any trades
-   if(g_configs[config_index].status != STATUS_CONNECTED)
-   {
-      Print("Trade signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
-      trade_signal_free(handle);
-      return;
-   }
-
    // Get slippage from config (use global Slippage as fallback if not set)
    int trade_slippage = (g_configs[config_index].max_slippage > 0)
                         ? g_configs[config_index].max_slippage
                         : Slippage;
+
+   // Check if connected to Master for Open signals only
+   // Close/Modify signals are allowed even when disconnected (to close existing positions)
+   if(action == "Open" && g_configs[config_index].status != STATUS_CONNECTED)
+   {
+      Print("Open signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
+      trade_signal_free(handle);
+      return;
+   }
 
    if(action == "Open")
    {
@@ -508,7 +509,8 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    {
       if(AllowCloseOrders)
       {
-         ExecuteCloseTrade(g_order_map, master_ticket, trade_slippage, Slippage);
+         double close_ratio = trade_signal_get_double(handle, "close_ratio");
+         ExecuteCloseTrade(g_order_map, master_ticket, close_ratio, trade_slippage, Slippage);
          ExecuteCancelPendingOrder(g_pending_order_map, master_ticket);
       }
    }

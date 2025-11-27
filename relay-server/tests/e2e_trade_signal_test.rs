@@ -18,12 +18,13 @@ mod test_server;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use sankey_copier_relay_server::models::{
-    LotCalculationMode, OrderType, SlaveSettings, SyncMode, TradeAction, TradeSignal,
+    LotCalculationMode, MasterSettings, OrderType, SlaveSettings, SyncMode, TradeAction,
+    TradeSignal,
 };
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    HeartbeatMessage, TradeFilters, ZMQ_PUSH, ZMQ_SUB,
+    HeartbeatMessage, SymbolMapping, TradeFilters, TradeSignalMessage, ZMQ_PUSH, ZMQ_SUB,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -145,8 +146,9 @@ impl MasterEaSimulator {
         Ok(())
     }
 
-    /// Send a TradeSignal
-    fn send_trade_signal(&self, signal: &TradeSignal) -> anyhow::Result<()> {
+    /// Send a TradeSignal using mt-bridge's TradeSignalMessage format
+    /// This tests the full flow: mt-bridge serialization -> relay-server parsing
+    fn send_trade_signal(&self, signal: &TradeSignalMessage) -> anyhow::Result<()> {
         let bytes = rmp_serde::to_vec_named(signal)?;
         unsafe {
             if zmq_socket_send_binary(self.push_socket_handle, bytes.as_ptr(), bytes.len() as i32)
@@ -158,8 +160,19 @@ impl MasterEaSimulator {
         Ok(())
     }
 
-    /// Create an Open signal
-    /// Note: Uses Some() for optional fields to match mt-bridge::TradeSignalMessage format
+    /// Convert OrderType to string format used by mt-bridge
+    fn order_type_to_string(order_type: OrderType) -> String {
+        match order_type {
+            OrderType::Buy => "Buy".to_string(),
+            OrderType::Sell => "Sell".to_string(),
+            OrderType::BuyLimit => "BuyLimit".to_string(),
+            OrderType::SellLimit => "SellLimit".to_string(),
+            OrderType::BuyStop => "BuyStop".to_string(),
+            OrderType::SellStop => "SellStop".to_string(),
+        }
+    }
+
+    /// Create an Open signal using mt-bridge's TradeSignalMessage format
     #[allow(clippy::too_many_arguments)]
     fn create_open_signal(
         &self,
@@ -171,69 +184,102 @@ impl MasterEaSimulator {
         sl: Option<f64>,
         tp: Option<f64>,
         magic: i32,
-    ) -> TradeSignal {
-        TradeSignal {
-            action: TradeAction::Open,
+    ) -> TradeSignalMessage {
+        TradeSignalMessage {
+            action: "Open".to_string(),
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some(order_type),
+            order_type: Some(Self::order_type_to_string(order_type)),
             lots: Some(lots),
             open_price: Some(price),
             stop_loss: sl,
             take_profit: tp,
-            magic_number: Some(magic),
+            magic_number: Some(magic as i64),
             comment: Some("E2E Test".to_string()),
-            timestamp: Utc::now(),
+            timestamp: Utc::now().to_rfc3339(),
             source_account: self.account_id.clone(),
+            close_ratio: None, // Not applicable for Open
         }
     }
 
-    /// Create a Close signal
-    /// Note: Close signals may have fewer fields populated in real scenarios
-    fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignal {
-        TradeSignal {
-            action: TradeAction::Close,
+    /// Create a Close signal (full close) using mt-bridge's TradeSignalMessage format
+    fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignalMessage {
+        TradeSignalMessage {
+            action: "Close".to_string(),
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some(OrderType::Buy),
+            order_type: Some("Buy".to_string()),
             lots: Some(lots),
-            open_price: None, // Not needed for close
+            open_price: None,
             stop_loss: None,
             take_profit: None,
             magic_number: Some(0),
             comment: Some("E2E Test Close".to_string()),
-            timestamp: Utc::now(),
+            timestamp: Utc::now().to_rfc3339(),
             source_account: self.account_id.clone(),
+            close_ratio: None, // None = full close
         }
     }
 
-    /// Create a Modify signal (TP/SL change)
+    /// Create a Partial Close signal with close_ratio using mt-bridge format
+    /// close_ratio: 0.0 < ratio < 1.0 indicates partial close percentage
+    fn create_partial_close_signal(
+        &self,
+        ticket: i64,
+        symbol: &str,
+        lots: f64,
+        close_ratio: f64,
+    ) -> TradeSignalMessage {
+        TradeSignalMessage {
+            action: "Close".to_string(),
+            ticket,
+            symbol: Some(symbol.to_string()),
+            order_type: Some("Buy".to_string()),
+            lots: Some(lots),
+            open_price: None,
+            stop_loss: None,
+            take_profit: None,
+            magic_number: Some(0),
+            comment: Some("E2E Test Partial Close".to_string()),
+            timestamp: Utc::now().to_rfc3339(),
+            source_account: self.account_id.clone(),
+            close_ratio: Some(close_ratio),
+        }
+    }
+
+    /// Create a Modify signal (TP/SL change) using mt-bridge format
     fn create_modify_signal(
         &self,
         ticket: i64,
         symbol: &str,
         sl: Option<f64>,
         tp: Option<f64>,
-    ) -> TradeSignal {
-        TradeSignal {
-            action: TradeAction::Modify,
+    ) -> TradeSignalMessage {
+        TradeSignalMessage {
+            action: "Modify".to_string(),
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: None, // Not needed for modify
-            lots: None,       // Not needed for modify
-            open_price: None, // Not needed for modify
+            order_type: None,
+            lots: None,
+            open_price: None,
             stop_loss: sl,
             take_profit: tp,
             magic_number: Some(0),
             comment: Some("E2E Test Modify".to_string()),
-            timestamp: Utc::now(),
+            timestamp: Utc::now().to_rfc3339(),
             source_account: self.account_id.clone(),
+            close_ratio: None,
         }
     }
 
     /// Create a delayed signal (timestamp in the past)
-    fn create_delayed_signal(&self, mut signal: TradeSignal, delay_ms: i64) -> TradeSignal {
-        signal.timestamp = Utc::now() - ChronoDuration::milliseconds(delay_ms);
+    fn create_delayed_signal(
+        &self,
+        mut signal: TradeSignalMessage,
+        delay_ms: i64,
+    ) -> TradeSignalMessage {
+        let past_time = Utc::now() - ChronoDuration::milliseconds(delay_ms);
+        signal.timestamp = past_time.to_rfc3339();
         signal
     }
 }
@@ -343,11 +389,25 @@ impl SlaveEaSimulator {
     }
 
     /// Subscribe to trade signals from a specific master account
+    /// Server sends signals to trade_group_id (master_account) topic
+    /// All slaves under the same master subscribe to this topic
     fn subscribe_to_master(&self, master_account: &str) -> anyhow::Result<()> {
         let topic_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
         unsafe {
             if zmq_socket_subscribe(self.trade_socket_handle, topic_utf16.as_ptr()) != 1 {
                 anyhow::bail!("Failed to subscribe to master: {}", master_account);
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    /// Subscribe to trade signals for this slave's own account (not used in current design)
+    fn subscribe_to_self(&self) -> anyhow::Result<()> {
+        let topic_utf16: Vec<u16> = self.account_id.encode_utf16().chain(Some(0)).collect();
+        unsafe {
+            if zmq_socket_subscribe(self.trade_socket_handle, topic_utf16.as_ptr()) != 1 {
+                anyhow::bail!("Failed to subscribe to self: {}", self.account_id);
             }
         }
         Ok(())
@@ -1916,6 +1976,1240 @@ async fn test_stale_signal_too_old() {
     );
 
     println!("✅ test_stale_signal_too_old passed");
+
+    server.shutdown().await;
+}
+
+/// Test partial close signal with close_ratio
+/// Verifies:
+/// 1. close_ratio is preserved through the relay
+/// 2. Lot multiplier is NOT applied to Close signals (only Open)
+#[tokio::test]
+async fn test_partial_close_signal() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_PARTIAL_001";
+    let slave_account = "SLAVE_PARTIAL_001";
+
+    // Set up slave with 2x lot multiplier to verify it's not applied to Close
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.lot_multiplier = Some(2.0); // 2x multiplier
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Step 1: Open a position (lot multiplier should apply: 1.0 * 2.0 = 2.0)
+    let open_signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
+    master.send_trade_signal(&open_signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let open_signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(open_signals.len(), 1, "Should receive Open signal");
+    assert_eq!(
+        open_signals[0].1.lots,
+        Some(2.0),
+        "Lot multiplier should be applied to Open: 1.0 * 2.0 = 2.0"
+    );
+
+    // Step 2: Partial close with 50% close_ratio
+    // Note: Master's lots=1.0 (original), close_ratio=0.5 means 50% closed
+    // Lot multiplier should NOT be applied to Close signal
+    let partial_close_signal = master.create_partial_close_signal(12345, "EURUSD", 1.0, 0.5); // 50% partial close
+    master.send_trade_signal(&partial_close_signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let close_signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(close_signals.len(), 1, "Should receive Close signal");
+
+    let received_signal = &close_signals[0].1;
+    assert_eq!(received_signal.action, TradeAction::Close);
+    assert_eq!(
+        received_signal.close_ratio,
+        Some(0.5),
+        "close_ratio should be preserved: 0.5"
+    );
+    assert_eq!(
+        received_signal.lots,
+        Some(1.0),
+        "Lot multiplier should NOT be applied to Close signal"
+    );
+
+    println!("✅ test_partial_close_signal passed");
+
+    server.shutdown().await;
+}
+
+/// Test full close signal (close_ratio = None)
+/// Verifies backward compatibility - close without close_ratio works as full close
+#[tokio::test]
+async fn test_full_close_signal_no_ratio() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_FULLCLOSE_001";
+    let slave_account = "SLAVE_FULLCLOSE_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        default_test_slave_settings()
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send full close signal (no close_ratio)
+    let close_signal = master.create_close_signal(12346, "GBPUSD", 0.5);
+    master.send_trade_signal(&close_signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals.len(), 1, "Should receive Close signal");
+
+    let received_signal = &signals[0].1;
+    assert_eq!(received_signal.action, TradeAction::Close);
+    assert_eq!(
+        received_signal.close_ratio, None,
+        "close_ratio should be None for full close"
+    );
+
+    println!("✅ test_full_close_signal_no_ratio passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Symbol Transformation Tests
+// =============================================================================
+
+/// Test symbol prefix/suffix transformation
+/// Master sends "pro.EURUSD.m" -> Slave receives "fx.EURUSD"
+#[tokio::test]
+async fn test_symbol_prefix_suffix_transformation() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_SYMBOL_001";
+    let slave_account = "SLAVE_SYMBOL_001";
+
+    // Create trade group and update master settings with prefix/suffix
+    server.db.create_trade_group(master_account).await.unwrap();
+    let master_settings = MasterSettings {
+        symbol_prefix: Some("pro.".to_string()),
+        symbol_suffix: Some(".m".to_string()),
+        config_version: 0,
+    };
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .unwrap();
+
+    let mut settings = default_test_slave_settings();
+    settings.symbol_prefix = Some("fx.".to_string()); // Slave adds "fx." prefix
+    settings.symbol_suffix = None;
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings)
+        .await
+        .unwrap();
+    server
+        .db
+        .update_member_status(master_account, slave_account, STATUS_CONNECTED)
+        .await
+        .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Master sends signal with prefixed/suffixed symbol
+    let signal = master.create_open_signal(
+        12345,
+        "pro.EURUSD.m", // Master's symbol with prefix/suffix
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals.len(), 1, "Should receive signal");
+
+    // Slave should receive transformed symbol: "fx.EURUSD"
+    assert_eq!(
+        signals[0].1.symbol.as_deref(),
+        Some("fx.EURUSD"),
+        "Symbol should be transformed: pro.EURUSD.m -> fx.EURUSD"
+    );
+
+    println!("✅ test_symbol_prefix_suffix_transformation passed");
+
+    server.shutdown().await;
+}
+
+/// Test symbol mapping (XAUUSD -> GOLD)
+#[tokio::test]
+async fn test_symbol_mapping() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MAPPING_001";
+    let slave_account = "SLAVE_MAPPING_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.symbol_mappings = vec![
+            SymbolMapping {
+                source_symbol: "XAUUSD".to_string(),
+                target_symbol: "GOLD".to_string(),
+            },
+            SymbolMapping {
+                source_symbol: "XAGUSD".to_string(),
+                target_symbol: "SILVER".to_string(),
+            },
+        ];
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send XAUUSD signal
+    let signal =
+        master.create_open_signal(12345, "XAUUSD", OrderType::Buy, 0.1, 2000.0, None, None, 0);
+    master.send_trade_signal(&signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals.len(), 1, "Should receive signal");
+
+    assert_eq!(
+        signals[0].1.symbol.as_deref(),
+        Some("GOLD"),
+        "XAUUSD should be mapped to GOLD"
+    );
+
+    println!("✅ test_symbol_mapping passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Trade Filter Tests
+// =============================================================================
+
+/// Test allowed symbols filter - only specified symbols are copied
+#[tokio::test]
+async fn test_allowed_symbols_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_ALLOWED_001";
+    let slave_account = "SLAVE_ALLOWED_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.filters = TradeFilters {
+            allowed_symbols: Some(vec!["EURUSD".to_string(), "GBPUSD".to_string()]),
+            blocked_symbols: None,
+            allowed_magic_numbers: None,
+            blocked_magic_numbers: None,
+        };
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send allowed symbol - should be received
+    let signal1 =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "EURUSD should be received (allowed)");
+
+    // Send non-allowed symbol - should NOT be received
+    let signal2 =
+        master.create_open_signal(12346, "USDJPY", OrderType::Buy, 0.1, 150.0, None, None, 0);
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "USDJPY should NOT be received (not in allowed list)"
+    );
+
+    println!("✅ test_allowed_symbols_filter passed");
+
+    server.shutdown().await;
+}
+
+/// Test blocked symbols filter - specified symbols are excluded
+#[tokio::test]
+async fn test_blocked_symbols_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_BLOCKED_001";
+    let slave_account = "SLAVE_BLOCKED_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.filters = TradeFilters {
+            allowed_symbols: None,
+            blocked_symbols: Some(vec!["XAUUSD".to_string(), "XAGUSD".to_string()]),
+            allowed_magic_numbers: None,
+            blocked_magic_numbers: None,
+        };
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send non-blocked symbol - should be received
+    let signal1 =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "EURUSD should be received (not blocked)");
+
+    // Send blocked symbol - should NOT be received
+    let signal2 =
+        master.create_open_signal(12346, "XAUUSD", OrderType::Buy, 0.1, 2000.0, None, None, 0);
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(signals2.len(), 0, "XAUUSD should NOT be received (blocked)");
+
+    println!("✅ test_blocked_symbols_filter passed");
+
+    server.shutdown().await;
+}
+
+/// Test allowed magic numbers filter
+#[tokio::test]
+async fn test_allowed_magic_numbers_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MAGIC_ALLOW_001";
+    let slave_account = "SLAVE_MAGIC_ALLOW_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.filters = TradeFilters {
+            allowed_symbols: None,
+            blocked_symbols: None,
+            allowed_magic_numbers: Some(vec![12345, 67890]),
+            blocked_magic_numbers: None,
+        };
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send allowed magic number - should be received
+    let signal1 = master.create_open_signal(
+        1001,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        12345,
+    );
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(
+        signals1.len(),
+        1,
+        "Magic 12345 should be received (allowed)"
+    );
+
+    // Send non-allowed magic number - should NOT be received
+    let signal2 = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        99999,
+    );
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "Magic 99999 should NOT be received (not allowed)"
+    );
+
+    println!("✅ test_allowed_magic_numbers_filter passed");
+
+    server.shutdown().await;
+}
+
+/// Test blocked magic numbers filter
+#[tokio::test]
+async fn test_blocked_magic_numbers_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MAGIC_BLOCK_001";
+    let slave_account = "SLAVE_MAGIC_BLOCK_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.filters = TradeFilters {
+            allowed_symbols: None,
+            blocked_symbols: None,
+            allowed_magic_numbers: None,
+            blocked_magic_numbers: Some(vec![11111, 22222]),
+        };
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send non-blocked magic number - should be received
+    let signal1 = master.create_open_signal(
+        1001,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        33333,
+    );
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(
+        signals1.len(),
+        1,
+        "Magic 33333 should be received (not blocked)"
+    );
+
+    // Send blocked magic number - should NOT be received
+    let signal2 = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        11111,
+    );
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "Magic 11111 should NOT be received (blocked)"
+    );
+
+    println!("✅ test_blocked_magic_numbers_filter passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Reverse Trade Tests
+// =============================================================================
+
+/// Test reverse trade mode - Buy becomes Sell
+#[tokio::test]
+async fn test_reverse_trade_buy_to_sell() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_REVERSE_001";
+    let slave_account = "SLAVE_REVERSE_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.reverse_trade = true;
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send Buy signal - should become Sell
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals.len(), 1, "Should receive signal");
+
+    assert_eq!(
+        signals[0].1.order_type,
+        Some(OrderType::Sell),
+        "Buy should be reversed to Sell"
+    );
+
+    println!("✅ test_reverse_trade_buy_to_sell passed");
+
+    server.shutdown().await;
+}
+
+/// Test reverse trade mode with pending orders
+#[tokio::test]
+async fn test_reverse_trade_pending_orders() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_REVERSE_PEND_001";
+    let slave_account = "SLAVE_REVERSE_PEND_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.reverse_trade = true;
+        settings.copy_pending_orders = true;
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send BuyLimit - should become SellLimit
+    let signal = master.create_open_signal(
+        12345,
+        "EURUSD",
+        OrderType::BuyLimit,
+        0.1,
+        1.0800,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals.len(), 1, "Should receive signal");
+
+    assert_eq!(
+        signals[0].1.order_type,
+        Some(OrderType::SellLimit),
+        "BuyLimit should be reversed to SellLimit"
+    );
+
+    println!("✅ test_reverse_trade_pending_orders passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Source Lot Limits Tests
+// =============================================================================
+
+/// Test source_lot_min filter - signals below minimum are excluded
+#[tokio::test]
+async fn test_source_lot_min_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_LOTMIN_001";
+    let slave_account = "SLAVE_LOTMIN_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.source_lot_min = Some(0.5); // Minimum 0.5 lots
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send signal above minimum - should be received
+    let signal1 =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(
+        signals1.len(),
+        1,
+        "1.0 lots should be received (>= 0.5 min)"
+    );
+
+    // Send signal below minimum - should NOT be received
+    let signal2 =
+        master.create_open_signal(12346, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "0.1 lots should NOT be received (< 0.5 min)"
+    );
+
+    println!("✅ test_source_lot_min_filter passed");
+
+    server.shutdown().await;
+}
+
+/// Test source_lot_max filter - signals above maximum are excluded
+#[tokio::test]
+async fn test_source_lot_max_filter() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_LOTMAX_001";
+    let slave_account = "SLAVE_LOTMAX_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.source_lot_max = Some(1.0); // Maximum 1.0 lots
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Send signal below maximum - should be received
+    let signal1 =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.5, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(
+        signals1.len(),
+        1,
+        "0.5 lots should be received (<= 1.0 max)"
+    );
+
+    // Send signal above maximum - should NOT be received
+    let signal2 =
+        master.create_open_signal(12346, "EURUSD", OrderType::Buy, 5.0, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "5.0 lots should NOT be received (> 1.0 max)"
+    );
+
+    println!("✅ test_source_lot_max_filter passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Multiple Partial Close Tests
+// =============================================================================
+
+/// Test multiple sequential partial closes
+/// 1.0 lot -> 50% close -> 0.5 lot -> 50% close -> 0.25 lot
+#[tokio::test]
+async fn test_multiple_sequential_partial_closes() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MULTI_PARTIAL_001";
+    let slave_account = "SLAVE_MULTI_PARTIAL_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        default_test_slave_settings()
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Open position with 1.0 lots
+    let open_signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
+    master.send_trade_signal(&open_signal).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "Should receive Open signal");
+
+    // First partial close: 50% (1.0 -> 0.5)
+    let partial1 = master.create_partial_close_signal(12345, "EURUSD", 1.0, 0.5);
+    master.send_trade_signal(&partial1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals2.len(), 1, "Should receive first partial close");
+    assert_eq!(
+        signals2[0].1.close_ratio,
+        Some(0.5),
+        "First close_ratio should be 0.5"
+    );
+
+    // Second partial close: 50% of remaining (0.5 -> 0.25)
+    let partial2 = master.create_partial_close_signal(12345, "EURUSD", 0.5, 0.5);
+    master.send_trade_signal(&partial2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals3 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals3.len(), 1, "Should receive second partial close");
+    assert_eq!(
+        signals3[0].1.close_ratio,
+        Some(0.5),
+        "Second close_ratio should be 0.5"
+    );
+
+    println!("✅ test_multiple_sequential_partial_closes passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Disabled Slave Tests
+// =============================================================================
+
+/// Test that both enabled and disabled slaves receive signals
+/// (Filtering for disabled slaves happens on Slave EA side, not relay-server)
+#[tokio::test]
+async fn test_disabled_slave_receives_signals() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_DISABLED_001";
+    let slave_enabled = "SLAVE_ENABLED_001";
+    let slave_disabled = "SLAVE_DISABLED_001";
+
+    // Create trade group
+    server.db.create_trade_group(master_account).await.unwrap();
+
+    // Add enabled slave (status = CONNECTED)
+    server
+        .db
+        .add_member(master_account, slave_enabled, default_test_slave_settings())
+        .await
+        .unwrap();
+    server
+        .db
+        .update_member_status(master_account, slave_enabled, STATUS_CONNECTED)
+        .await
+        .unwrap();
+
+    // Add disabled slave (status = 0)
+    server
+        .db
+        .add_member(
+            master_account,
+            slave_disabled,
+            default_test_slave_settings(),
+        )
+        .await
+        .unwrap();
+    server
+        .db
+        .update_member_status(master_account, slave_disabled, 0) // STATUS_DISABLED
+        .await
+        .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave1 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_enabled,
+    )
+    .unwrap();
+
+    let slave2 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_disabled,
+    )
+    .unwrap();
+
+    slave1.subscribe_to_master(master_account).unwrap();
+    slave2.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave1, &slave2])
+        .await
+        .unwrap();
+
+    // Send signal
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&signal).unwrap();
+
+    sleep(Duration::from_millis(300)).await;
+
+    // Enabled slave should receive
+    let signals1 = slave1.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "Enabled slave should receive signal");
+
+    // Disabled slave ALSO receives signal (filtering happens on Slave EA side)
+    let signals2 = slave2.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        1,
+        "Disabled slave should also receive signal (EA-side filtering)"
+    );
+
+    println!("✅ test_disabled_slave_receives_signals passed");
+
+    server.shutdown().await;
+}
+
+// =============================================================================
+// Pending Order Tests
+// =============================================================================
+
+/// Test pending order types (BuyLimit, SellLimit, BuyStop, SellStop)
+#[tokio::test]
+async fn test_pending_order_types() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_PENDING_001";
+    let slave_account = "SLAVE_PENDING_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.copy_pending_orders = true;
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Test BuyLimit
+    let buy_limit = master.create_open_signal(
+        1001,
+        "EURUSD",
+        OrderType::BuyLimit,
+        0.1,
+        1.0800,
+        Some(1.0750),
+        Some(1.0900),
+        0,
+    );
+    master.send_trade_signal(&buy_limit).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "BuyLimit should be received");
+    assert_eq!(signals1[0].1.order_type, Some(OrderType::BuyLimit));
+
+    // Test SellLimit
+    let sell_limit = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::SellLimit,
+        0.1,
+        1.0900,
+        Some(1.0950),
+        Some(1.0800),
+        0,
+    );
+    master.send_trade_signal(&sell_limit).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals2.len(), 1, "SellLimit should be received");
+    assert_eq!(signals2[0].1.order_type, Some(OrderType::SellLimit));
+
+    // Test BuyStop
+    let buy_stop = master.create_open_signal(
+        1003,
+        "EURUSD",
+        OrderType::BuyStop,
+        0.1,
+        1.0900,
+        Some(1.0850),
+        Some(1.1000),
+        0,
+    );
+    master.send_trade_signal(&buy_stop).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals3 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals3.len(), 1, "BuyStop should be received");
+    assert_eq!(signals3[0].1.order_type, Some(OrderType::BuyStop));
+
+    // Test SellStop
+    let sell_stop = master.create_open_signal(
+        1004,
+        "EURUSD",
+        OrderType::SellStop,
+        0.1,
+        1.0800,
+        Some(1.0850),
+        Some(1.0700),
+        0,
+    );
+    master.send_trade_signal(&sell_stop).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals4 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals4.len(), 1, "SellStop should be received");
+    assert_eq!(signals4[0].1.order_type, Some(OrderType::SellStop));
+
+    println!("✅ test_pending_order_types passed");
+
+    server.shutdown().await;
+}
+
+/// Test copy_pending_orders = false - pending orders should not be copied
+#[tokio::test]
+async fn test_pending_orders_disabled() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_NO_PENDING_001";
+    let slave_account = "SLAVE_NO_PENDING_001";
+
+    setup_test_scenario(&server, master_account, &[slave_account], |_| {
+        let mut settings = default_test_slave_settings();
+        settings.copy_pending_orders = false; // Disabled
+        settings
+    })
+    .await
+    .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Market order should be received
+    let market_order =
+        master.create_open_signal(1001, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    master.send_trade_signal(&market_order).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "Market order (Buy) should be received");
+
+    // Pending order should NOT be received
+    let pending_order = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::BuyLimit,
+        0.1,
+        1.0800,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&pending_order).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(500, 1).unwrap();
+    assert_eq!(
+        signals2.len(),
+        0,
+        "Pending order (BuyLimit) should NOT be received when copy_pending_orders=false"
+    );
+
+    println!("✅ test_pending_orders_disabled passed");
 
     server.shutdown().await;
 }

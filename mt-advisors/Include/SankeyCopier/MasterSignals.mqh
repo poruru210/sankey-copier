@@ -23,9 +23,10 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
                     long magic, string comment, string account_id)
 {
    // Serialize open signal message using MessagePack
+   // close_ratio = 0.0 for Open signals (not a partial close)
    int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
                                             lots, price, sl, tp, magic, comment,
-                                            FormatTimestampISO8601(TimeGMT()), account_id);
+                                            FormatTimestampISO8601(TimeGMT()), account_id, 0.0);
 
    if(len <= 0)
    {
@@ -51,13 +52,14 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 //+------------------------------------------------------------------+
 //| Send close signal message (Master)                               |
 //| Called when Master EA closes a position to notify Slaves         |
+//| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
-bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string account_id)
+bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ratio, string account_id)
 {
    // For close signals, we send a trade signal with action="Close"
-   // Only ticket, timestamp, and source_account are needed
+   // close_ratio indicates what portion was closed (0 = full close for backward compat)
    int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id, close_ratio);
 
    if(len <= 0)
    {
@@ -88,8 +90,9 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 {
    // For modify signals, we send a trade signal with action="Modify"
    // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
+   // close_ratio = 0.0 for Modify signals (not a close operation)
    int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id);
+                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id, 0.0);
 
    if(len <= 0)
    {

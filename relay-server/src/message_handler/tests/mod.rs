@@ -139,5 +139,6 @@ pub(crate) fn create_test_trade_signal() -> TradeSignal {
         comment: Some("Test trade".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
+        close_ratio: None,
     }
 }

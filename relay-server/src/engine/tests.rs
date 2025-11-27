@@ -16,6 +16,7 @@ fn create_test_signal() -> TradeSignal {
         comment: Some("Test trade".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
+        close_ratio: None,
     }
 }
 
@@ -209,4 +210,82 @@ fn test_reverse_order_type() {
         CopyEngine::reverse_order_type(&OrderType::SellStop),
         OrderType::BuyStop
     ));
+}
+
+#[test]
+fn test_partial_close_signal_preserves_ratio() {
+    // Test that close_ratio is preserved in Close signals
+    let engine = CopyEngine::new();
+    let mut signal = create_test_signal();
+    signal.action = TradeAction::Close;
+    signal.close_ratio = Some(0.5); // 50% partial close
+
+    let master_settings = create_test_master_settings();
+    let member = create_test_member();
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // close_ratio should be preserved
+    assert_eq!(transformed.close_ratio, Some(0.5));
+}
+
+#[test]
+fn test_lot_multiplier_not_applied_to_close_signal() {
+    // Test that lot multiplier is NOT applied to Close signals
+    // (Close uses ratio-based calculation, not lot multiplier)
+    let engine = CopyEngine::new();
+    let mut signal = create_test_signal();
+    signal.action = TradeAction::Close;
+    signal.lots = Some(1.0);
+    signal.close_ratio = Some(0.5);
+
+    let master_settings = create_test_master_settings();
+    let mut member = create_test_member();
+    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // Lots should NOT be multiplied for Close signals
+    assert_eq!(transformed.lots, Some(1.0)); // Unchanged
+    assert_eq!(transformed.close_ratio, Some(0.5)); // Preserved
+}
+
+#[test]
+fn test_lot_multiplier_applied_to_open_signal() {
+    // Verify lot multiplier IS applied to Open signals (using existing test pattern)
+    let engine = CopyEngine::new();
+    let signal = create_test_signal(); // action = Open, lots = 0.1
+
+    let master_settings = create_test_master_settings();
+    let mut member = create_test_member();
+    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // Lots should be multiplied for Open signals: 0.1 * 2.0 = 0.2
+    assert_eq!(transformed.lots, Some(0.2));
 }

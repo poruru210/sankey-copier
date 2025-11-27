@@ -504,6 +504,7 @@ pub unsafe extern "C" fn trade_signal_get_double(
         "open_price" => msg.open_price.unwrap_or(0.0),
         "stop_loss" => msg.stop_loss.unwrap_or(0.0),
         "take_profit" => msg.take_profit.unwrap_or(0.0),
+        "close_ratio" => msg.close_ratio.unwrap_or(0.0),
         _ => 0.0,
     }
 }

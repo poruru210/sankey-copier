@@ -153,9 +153,11 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 
 //+------------------------------------------------------------------+
 //| Close position (MT5)                                              |
+//| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
 void ExecuteCloseTrade(CTrade &trade, TicketMapping &order_map[],
-                       ulong master_ticket, int slippage_points, int default_slippage)
+                       ulong master_ticket, double close_ratio,
+                       int slippage_points, int default_slippage)
 {
    ulong slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket == 0)
@@ -174,14 +176,47 @@ void ExecuteCloseTrade(CTrade &trade, TicketMapping &order_map[],
    int effective_slippage = (slippage_points > 0) ? slippage_points : default_slippage;
    trade.SetDeviationInPoints(effective_slippage);
 
-   if(trade.PositionClose(slave_ticket))
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   double current_lots = PositionGetDouble(POSITION_VOLUME);
+
+   // Determine if this is a partial close or full close
+   bool is_partial_close = (close_ratio > 0.0 && close_ratio < 1.0);
+
+   if(is_partial_close)
    {
-      Print("Position closed: #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
-      RemoveTicketMapping(order_map, master_ticket);
+      // Partial close: apply close_ratio to current position volume
+      double close_lots = NormalizeLotSize(current_lots * close_ratio, symbol);
+
+      // Ensure close_lots is valid (at least minimum lot size)
+      if(close_lots <= 0.0)
+      {
+         Print("Partial close lots too small, skipping. Ratio: ", close_ratio, " Current: ", current_lots);
+         return;
+      }
+
+      if(trade.PositionClosePartial(slave_ticket, close_lots))
+      {
+         Print("Partial close: #", slave_ticket, " closed ", close_lots, " lots (",
+               (close_ratio * 100.0), "%), remaining: ", (current_lots - close_lots), " lots");
+         // Keep mapping - position still open with remaining lots
+      }
+      else
+      {
+         Print("Failed to partial close position #", slave_ticket, ", lots: ", close_lots);
+      }
    }
    else
    {
-      Print("Failed to close position #", slave_ticket);
+      // Full close
+      if(trade.PositionClose(slave_ticket))
+      {
+         Print("Position closed: #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
+         RemoveTicketMapping(order_map, master_ticket);
+      }
+      else
+      {
+         Print("Failed to close position #", slave_ticket);
+      }
    }
 }
 
@@ -494,9 +529,11 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
 //+------------------------------------------------------------------+
 //| Close order (MT4)                                                 |
+//| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
 void ExecuteCloseTrade(TicketMapping &order_map[],
-                       int master_ticket, int slippage_points, int default_slippage)
+                       int master_ticket, double close_ratio,
+                       int slippage_points, int default_slippage)
 {
    int slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket <= 0)
@@ -514,13 +551,47 @@ void ExecuteCloseTrade(TicketMapping &order_map[],
    RefreshRates();
    double close_price = (OrderType() == OP_BUY) ? Bid : Ask;
    int effective_slippage = (slippage_points > 0) ? slippage_points : default_slippage;
+   string symbol = OrderSymbol();
+   double current_lots = OrderLots();
 
-   bool result = OrderClose(slave_ticket, OrderLots(), close_price, effective_slippage, clrRed);
+   // Determine if this is a partial close or full close
+   bool is_partial_close = (close_ratio > 0.0 && close_ratio < 1.0);
+   double close_lots;
+
+   if(is_partial_close)
+   {
+      // Partial close: apply close_ratio to current order volume
+      close_lots = NormalizeLotSize(current_lots * close_ratio, symbol);
+
+      // Ensure close_lots is valid (at least minimum lot size)
+      if(close_lots <= 0.0)
+      {
+         Print("Partial close lots too small, skipping. Ratio: ", close_ratio, " Current: ", current_lots);
+         return;
+      }
+   }
+   else
+   {
+      // Full close
+      close_lots = current_lots;
+   }
+
+   bool result = OrderClose(slave_ticket, close_lots, close_price, effective_slippage, clrRed);
 
    if(result)
    {
-      Print("Order closed successfully: slave #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
-      RemoveTicketMapping(order_map, master_ticket);
+      if(is_partial_close)
+      {
+         Print("Partial close: #", slave_ticket, " closed ", close_lots, " lots (",
+               (close_ratio * 100.0), "%), remaining: ", (current_lots - close_lots), " lots");
+         // Keep mapping - order still open with remaining lots (MT4 may create new ticket)
+         // Note: MT4 may create a new order ticket for remaining lots, mapping may need update
+      }
+      else
+      {
+         Print("Order closed successfully: slave #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
+         RemoveTicketMapping(order_map, master_ticket);
+      }
    }
    else
    {

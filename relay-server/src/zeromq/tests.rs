@@ -20,6 +20,7 @@ fn test_message_discriminator_trade_signal() {
         comment: Some("Test".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
+        close_ratio: None,
     };
 
     let bytes = rmp_serde::to_vec_named(&signal).unwrap();
@@ -190,6 +191,7 @@ fn test_publish_message_topic_format() {
             comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
+            close_ratio: None,
         },
     };
 
@@ -217,6 +219,7 @@ fn test_trade_action_variants() {
             comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
+            close_ratio: None,
         };
 
         let bytes = rmp_serde::to_vec_named(&signal).unwrap();
@@ -256,6 +259,7 @@ fn test_order_type_variants() {
             comment: Some("".to_string()),
             timestamp: Utc::now(),
             source_account: "MASTER_001".to_string(),
+            close_ratio: None,
         };
 
         let bytes = rmp_serde::to_vec_named(&signal).unwrap();

@@ -24,7 +24,7 @@ pub struct SlaveConfigWithMaster {
     pub slave_settings: SlaveSettings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OrderType {
     Buy,
     Sell,
@@ -34,7 +34,7 @@ pub enum OrderType {
     SellStop,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TradeAction {
     Open,
     Close,
@@ -66,6 +66,10 @@ pub struct TradeSignal {
     pub comment: Option<String>,
     pub timestamp: DateTime<Utc>,
     pub source_account: String,
+    /// Close ratio for partial close (0.0-1.0)
+    /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
+    #[serde(default)]
+    pub close_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -185,6 +185,10 @@ pub struct TradeSignalMessage {
     pub comment: Option<String>,
     pub timestamp: String,
     pub source_account: String,
+    /// Close ratio for partial close (0.0-1.0)
+    /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_ratio: Option<f64>,
 }
 
 // =============================================================================

@@ -32,6 +32,7 @@ struct OrderInfo
    int    ticket;
    double sl;
    double tp;
+   double lots;  // Track volume for partial close detection
 };
 
 //--- Global variables
@@ -283,6 +284,7 @@ void OnTick()
    {
       CheckForNewOrders();
       CheckForModifiedOrders();
+      CheckForPartialCloses();
       CheckForClosedOrders();
       last_scan = TimeCurrent();
       
@@ -378,6 +380,37 @@ void CheckForModifiedOrders()
 }
 
 //+------------------------------------------------------------------+
+//| Check for partial closes (volume reduction)                       |
+//+------------------------------------------------------------------+
+void CheckForPartialCloses()
+{
+   for(int i = 0; i < ArraySize(g_tracked_orders); i++)
+   {
+      int ticket = g_tracked_orders[i].ticket;
+      if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES))
+      {
+         double current_lots = OrderLots();
+         double tracked_lots = g_tracked_orders[i].lots;
+
+         // Check if volume has decreased (partial close)
+         if(current_lots < tracked_lots && tracked_lots > 0)
+         {
+            // Calculate close_ratio: portion that was closed
+            double close_ratio = (tracked_lots - current_lots) / tracked_lots;
+
+            Print("Partial close detected: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (close_ratio: ", close_ratio, ")");
+
+            // Send partial close signal
+            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, close_ratio, AccountID);
+
+            // Update tracked volume (order still exists)
+            g_tracked_orders[i].lots = current_lots;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Check for closed orders                                           |
 //+------------------------------------------------------------------+
 void CheckForClosedOrders()
@@ -402,10 +435,10 @@ void CheckForClosedOrders()
 
       if(!found)
       {
-         // Order was closed
+         // Order was closed (full close)
          if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
          {
-            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, AccountID);
+            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, 0.0, AccountID);
             RemoveTrackedOrder(ticket);
             Print("Order closed: #", ticket);
          }
@@ -463,7 +496,7 @@ bool IsOrderTracked(int ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Add order to tracking list with current SL/TP                    |
+//| Add order to tracking list with current SL/TP/Lots               |
 //+------------------------------------------------------------------+
 void AddTrackedOrder(int ticket)
 {
@@ -475,6 +508,7 @@ void AddTrackedOrder(int ticket)
    g_tracked_orders[size].ticket = ticket;
    g_tracked_orders[size].sl = OrderStopLoss();
    g_tracked_orders[size].tp = OrderTakeProfit();
+   g_tracked_orders[size].lots = OrderLots();
 }
 
 //+------------------------------------------------------------------+
