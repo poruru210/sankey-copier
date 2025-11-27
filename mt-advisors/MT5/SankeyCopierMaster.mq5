@@ -247,9 +247,80 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessMasterConfigMessage(msgpack_payload, payload_len);
+         Print("Received MessagePack message for topic '", topic, "' (", payload_len, " bytes)");
+
+         // Try to parse as MasterConfig first
+         HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
+         if(config_handle > 0)
+         {
+            string account_id = master_config_get_string(config_handle, "account_id");
+            if(account_id != "")
+            {
+               // Valid MasterConfig
+               master_config_free(config_handle);
+               ProcessMasterConfigMessage(msgpack_payload, payload_len);
+            }
+            else
+            {
+               // No account_id - try SyncRequest
+               master_config_free(config_handle);
+               ProcessSyncRequest(msgpack_payload, payload_len);
+            }
+         }
+         else
+         {
+            // Failed to parse as MasterConfig - try SyncRequest
+            ProcessSyncRequest(msgpack_payload, payload_len);
+         }
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Process SyncRequest message (from Slave EA)                       |
+//+------------------------------------------------------------------+
+void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
+{
+   // Try to parse as SyncRequest
+   HANDLE_TYPE handle = parse_sync_request(msgpack_data, data_len);
+   if(handle == 0 || handle == -1)
+   {
+      // Not a SyncRequest - ignore silently (could be other message type)
+      return;
+   }
+
+   // Get the fields
+   string slave_account = sync_request_get_string(handle, "slave_account");
+   string master_account = sync_request_get_string(handle, "master_account");
+
+   if(slave_account == "" || master_account == "")
+   {
+      Print("Invalid SyncRequest received - missing fields");
+      sync_request_free(handle);
+      return;
+   }
+
+   // Check if this request is for us
+   if(master_account != AccountID)
+   {
+      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
+      sync_request_free(handle);
+      return;
+   }
+
+   Print("=== Received SyncRequest from Slave: ", slave_account, " ===");
+
+   // Free the handle before sending response
+   sync_request_free(handle);
+
+   // Send position snapshot
+   if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
+   {
+      Print("Position snapshot sent to slave: ", slave_account);
+   }
+   else
+   {
+      Print("ERROR: Failed to send position snapshot to slave: ", slave_account);
    }
 }
 

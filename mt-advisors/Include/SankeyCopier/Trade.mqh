@@ -13,6 +13,7 @@
 
 #include "Common.mqh"
 #include "SlaveTypes.mqh"
+#include "Messages.mqh"
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
@@ -102,10 +103,14 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 
 //+------------------------------------------------------------------+
 //| Process configuration message (MessagePack)                      |
+//| Extended version with sync request support                       |
 //+------------------------------------------------------------------+
 void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
                           CopyConfig &configs[],
-                          HANDLE_TYPE zmq_trade_socket)
+                          HANDLE_TYPE zmq_trade_socket,
+                          HANDLE_TYPE zmq_context = -1,
+                          string server_address = "",
+                          string slave_account = "")
 {
    Print("=== Processing Configuration Message ===");
 
@@ -210,6 +215,9 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    }
    else
    {
+      // Track if this is a new config (for sync request triggering)
+      bool is_new_config = (index == -1);
+
       // Add or Update configuration
       if(index == -1)
       {
@@ -218,7 +226,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          index = ArraySize(configs);
          ArrayResize(configs, index + 1);
          configs[index].master_account = new_master;
-         
+
          // Subscribe to new trade group
          if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
          {
@@ -293,6 +301,32 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       ArrayResize(configs[index].filters.blocked_symbols, 0);
       ArrayResize(configs[index].filters.allowed_magic_numbers, 0);
       ArrayResize(configs[index].filters.blocked_magic_numbers, 0);
+
+      // Send SyncRequest when:
+      // 1. New config is added (not just updated)
+      // 2. Status is CONNECTED (Master is online)
+      // 3. sync_mode is not SKIP (user wants to sync existing positions)
+      // 4. ZMQ context is valid (caller provided sync parameters)
+      if(is_new_config &&
+         new_status == STATUS_CONNECTED &&
+         new_sync_mode != SYNC_MODE_SKIP &&
+         zmq_context >= 0 &&
+         server_address != "" &&
+         slave_account != "")
+      {
+         Print("=== Triggering Position Sync Request ===");
+         Print("Sync mode: ", (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
+         Print("Requesting position snapshot from master: ", new_master);
+
+         if(SendSyncRequestMessage(zmq_context, server_address, slave_account, new_master))
+         {
+            Print("SyncRequest sent successfully to master: ", new_master);
+         }
+         else
+         {
+            Print("ERROR: Failed to send SyncRequest to master: ", new_master);
+         }
+      }
    }
 
    // Free the config handle

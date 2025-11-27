@@ -165,6 +165,24 @@ void RemovePendingTicketMapping(PendingTicketMapping &map[], TICKET_TYPE master_
 }
 
 //+------------------------------------------------------------------+
+//| Get master ticket from pending order ticket (reverse lookup)      |
+//| Used to identify which master position a filled order belongs to  |
+//| Parameters:                                                       |
+//|   map            - Pending mapping array                         |
+//|   pending_ticket - Pending order ticket number to look up        |
+//| Returns: Master ticket if found, 0 if not found                  |
+//+------------------------------------------------------------------+
+TICKET_TYPE GetMasterTicketFromPendingMapping(PendingTicketMapping &map[], TICKET_TYPE pending_ticket)
+{
+   for(int i = 0; i < ArraySize(map); i++)
+   {
+      if(map[i].pending_ticket == pending_ticket)
+         return map[i].master_ticket;
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
 //| Transform symbol based on mappings                               |
 //+------------------------------------------------------------------+
 string TransformSymbol(string symbol, SymbolMapping &mappings[])

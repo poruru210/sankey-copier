@@ -279,10 +279,33 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket);
+         Print("Received MessagePack message on config socket for topic '", topic, "' (", payload_len, " bytes)");
 
-         g_has_received_config = true;
+         // Try to parse as SlaveConfig first
+         HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
+         if(config_handle > 0)
+         {
+            string master_account = slave_config_get_string(config_handle, "master_account");
+            if(master_account != "")
+            {
+               // Valid SlaveConfig - process it
+               slave_config_free(config_handle);
+               ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
+                                    g_zmq_context, RelayServerAddress, AccountID);
+               g_has_received_config = true;
+            }
+            else
+            {
+               // Not a SlaveConfig - try PositionSnapshot
+               slave_config_free(config_handle);
+               ProcessPositionSnapshot(msgpack_payload, payload_len);
+            }
+         }
+         else
+         {
+            // Failed to parse as SlaveConfig - try PositionSnapshot
+            ProcessPositionSnapshot(msgpack_payload, payload_len);
+         }
          
          if(ArraySize(g_configs) != g_last_config_count)
          {
@@ -337,7 +360,11 @@ void OnTick()
    if(!g_initialized)
       return;
 
+   // Check if any pending orders have been filled
+   CheckPendingOrderFills();
+
    // Check for trade signal messages (MessagePack format)
+   // Note: PositionSnapshot is received via config socket in OnTimer
    uchar trade_buffer[];
    ArrayResize(trade_buffer, MESSAGE_BUFFER_SIZE);
    int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, MESSAGE_BUFFER_SIZE);
@@ -368,6 +395,9 @@ void OnTick()
          ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
 
          Print("Received MessagePack trade signal for topic '", topic, "' (", payload_len, " bytes)");
+
+         // Trade socket only handles TradeSignal messages
+         // PositionSnapshot is received via config socket in OnTimer
          ProcessTradeSignal(msgpack_payload, payload_len);
       }
    }
@@ -429,6 +459,11 @@ void ProcessTradeSignal(uchar &data[], int data_len)
       return;
    }
 
+   // Get slippage from config (use global Slippage as fallback if not set)
+   int trade_slippage = (g_configs[config_index].max_slippage > 0)
+                        ? g_configs[config_index].max_slippage
+                        : Slippage;
+
    if(action == "Open")
    {
       if(AllowNewOrders)
@@ -460,15 +495,15 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
          string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
-         // Open order with transformed values
-         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp, source_account);
+         // Open order with transformed values (pass config slippage)
+         OpenOrder(master_ticket, transformed_symbol, transformed_order_type, transformed_lots, open_price, stop_loss, take_profit, magic, timestamp, source_account, trade_slippage);
       }
    }
    else if(action == "Close")
    {
       if(AllowCloseOrders)
       {
-         CloseOrder(master_ticket);
+         CloseOrder(master_ticket, trade_slippage);
          CancelPendingOrder(master_ticket);  // Also cancel any pending orders
       }
    }
@@ -482,10 +517,323 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 }
 
 //+------------------------------------------------------------------+
+//| Process position snapshot for sync (MT4)                          |
+//| Called when Slave receives PositionSnapshot from Master           |
+//+------------------------------------------------------------------+
+void ProcessPositionSnapshot(uchar &data[], int data_len)
+{
+   Print("=== Processing Position Snapshot ===");
+
+   // Parse the PositionSnapshot message
+   HANDLE_TYPE handle = parse_position_snapshot(data, data_len);
+   if(handle == 0 || handle == -1)
+   {
+      Print("ERROR: Failed to parse PositionSnapshot message");
+      return;
+   }
+
+   // Get source account (master)
+   string source_account = position_snapshot_get_string(handle, "source_account");
+   if(source_account == "")
+   {
+      Print("ERROR: PositionSnapshot has empty source_account");
+      position_snapshot_free(handle);
+      return;
+   }
+
+   Print("PositionSnapshot from master: ", source_account);
+
+   // Find matching config for this master
+   int config_index = -1;
+   for(int i = 0; i < ArraySize(g_configs); i++)
+   {
+      if(g_configs[i].master_account == source_account)
+      {
+         config_index = i;
+         break;
+      }
+   }
+
+   if(config_index == -1)
+   {
+      Print("PositionSnapshot rejected: No config for master ", source_account);
+      position_snapshot_free(handle);
+      return;
+   }
+
+   // Check sync_mode - should not be SKIP
+   int sync_mode = g_configs[config_index].sync_mode;
+   if(sync_mode == SYNC_MODE_SKIP)
+   {
+      Print("PositionSnapshot ignored: sync_mode is SKIP");
+      position_snapshot_free(handle);
+      return;
+   }
+
+   // Get sync parameters from config
+   int limit_order_expiry = g_configs[config_index].limit_order_expiry_min;
+   double market_sync_max_pips = g_configs[config_index].market_sync_max_pips;
+   int trade_slippage = (g_configs[config_index].max_slippage > 0)
+                        ? g_configs[config_index].max_slippage
+                        : Slippage;
+
+   Print("Sync mode: ", (sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
+
+   // Get position count
+   int position_count = position_snapshot_get_positions_count(handle);
+   Print("Positions to sync: ", position_count);
+
+   int synced_count = 0;
+   int skipped_count = 0;
+
+   // Process each position
+   for(int i = 0; i < position_count; i++)
+   {
+      // Extract position data
+      long master_ticket_long = position_snapshot_get_position_int(handle, i, "ticket");
+      int master_ticket = (int)master_ticket_long;
+      string symbol = position_snapshot_get_position_string(handle, i, "symbol");
+      string order_type_str = position_snapshot_get_position_string(handle, i, "order_type");
+      double lots = position_snapshot_get_position_double(handle, i, "lots");
+      double open_price = position_snapshot_get_position_double(handle, i, "open_price");
+      double sl = position_snapshot_get_position_double(handle, i, "stop_loss");
+      double tp = position_snapshot_get_position_double(handle, i, "take_profit");
+      long magic_long = position_snapshot_get_position_int(handle, i, "magic_number");
+      int magic_number = (int)magic_long;
+
+      Print("Position ", i + 1, "/", position_count, ": #", master_ticket,
+            " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price);
+
+      // Check if we already have this position mapped
+      if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
+      {
+         Print("  -> Already mapped, skipping");
+         skipped_count++;
+         continue;
+      }
+
+      // Apply symbol transformations
+      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
+      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings);
+      string transformed_symbol = GetLocalSymbol(mapped_symbol, SymbolPrefix, SymbolSuffix);
+
+      // Transform lot size
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
+
+      // Reverse order type if configured
+      string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
+
+      // Execute sync based on mode
+      if(sync_mode == SYNC_MODE_LIMIT_ORDER)
+      {
+         SyncWithLimitOrder(master_ticket, transformed_symbol, transformed_order_type,
+                            transformed_lots, open_price, sl, tp, source_account,
+                            magic_number, limit_order_expiry);
+         synced_count++;
+      }
+      else if(sync_mode == SYNC_MODE_MARKET_ORDER)
+      {
+         if(SyncWithMarketOrder(master_ticket, transformed_symbol, transformed_order_type,
+                                transformed_lots, open_price, sl, tp, source_account,
+                                magic_number, trade_slippage, market_sync_max_pips))
+         {
+            synced_count++;
+         }
+         else
+         {
+            Print("  -> Price deviation too large, skipped");
+            skipped_count++;
+         }
+      }
+   }
+
+   Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
+   position_snapshot_free(handle);
+}
+
+//+------------------------------------------------------------------+
+//| Sync position using limit order (at master's open price) - MT4    |
+//+------------------------------------------------------------------+
+void SyncWithLimitOrder(int master_ticket, string symbol, string type_str,
+                        double lots, double price, double sl, double tp,
+                        string source_account, int magic, int expiry_minutes)
+{
+   // Determine base order type
+   int base_type = GetOrderType(type_str);
+   if(base_type == -1) return;
+
+   int limit_type;
+   double current_price;
+
+   if(base_type == OP_BUY)
+   {
+      current_price = MarketInfo(symbol, MODE_ASK);
+      // If open_price < current -> BUY_LIMIT, else BUY_STOP
+      limit_type = (price < current_price) ? OP_BUYLIMIT : OP_BUYSTOP;
+   }
+   else if(base_type == OP_SELL)
+   {
+      current_price = MarketInfo(symbol, MODE_BID);
+      // If open_price > current -> SELL_LIMIT, else SELL_STOP
+      limit_type = (price > current_price) ? OP_SELLLIMIT : OP_SELLSTOP;
+   }
+   else
+   {
+      Print("ERROR: Cannot sync pending order type: ", type_str);
+      return;
+   }
+
+   lots = NormalizeLotSize(lots, symbol);
+
+   // Calculate expiration time
+   datetime expiration = 0;
+   if(expiry_minutes > 0)
+   {
+      expiration = TimeGMT() + expiry_minutes * 60;
+   }
+
+   // Build traceable comment: "S{master_ticket}" for sync orders
+   string comment = "S" + IntegerToString(master_ticket);
+
+   int ticket = OrderSend(symbol, limit_type, lots, price, 0, sl, tp, comment, magic, expiration);
+
+   if(ticket > 0)
+   {
+      Print("Sync limit order placed: #", ticket, " for master #", master_ticket,
+            " type=", limit_type, " @ ", price);
+      AddPendingTicketMapping(g_pending_order_map, master_ticket, ticket);
+   }
+   else
+   {
+      Print("ERROR: Failed to place sync limit order for master #", master_ticket,
+            " Error: ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Sync position using market order (if within price deviation) MT4  |
+//| Returns true if order was executed, false if price deviation      |
+//| exceeded max_pips                                                 |
+//+------------------------------------------------------------------+
+bool SyncWithMarketOrder(int master_ticket, string symbol, string type_str,
+                         double lots, double master_price, double sl, double tp,
+                         string source_account, int magic, int slippage_points,
+                         double max_pips)
+{
+   int order_type = GetOrderType(type_str);
+   if(order_type == -1 || (order_type != OP_BUY && order_type != OP_SELL))
+      return false;
+
+   // Get current market price
+   double current_price;
+   if(order_type == OP_BUY)
+      current_price = MarketInfo(symbol, MODE_ASK);
+   else
+      current_price = MarketInfo(symbol, MODE_BID);
+
+   // Calculate price deviation in pips
+   double point = MarketInfo(symbol, MODE_POINT);
+   int digits = (int)MarketInfo(symbol, MODE_DIGITS);
+   double pip_size = (digits == 3 || digits == 5) ? point * 10 : point;
+   double deviation_pips = MathAbs(current_price - master_price) / pip_size;
+
+   Print("  Price deviation: ", DoubleToString(deviation_pips, 1), " pips (max: ", max_pips, ")");
+
+   // Check if within acceptable deviation
+   if(deviation_pips > max_pips)
+   {
+      Print("  -> Price deviation ", deviation_pips, " exceeds max ", max_pips, " pips");
+      return false;
+   }
+
+   lots = NormalizeLotSize(lots, symbol);
+
+   // Build traceable comment: "S{master_ticket}" for sync orders
+   string comment = "S" + IntegerToString(master_ticket);
+
+   // Apply slippage from config
+   int effective_slippage = (slippage_points > 0) ? slippage_points : Slippage;
+
+   int ticket = OrderSend(symbol, order_type, lots, current_price, effective_slippage,
+                          sl, tp, comment, magic, 0);
+
+   if(ticket > 0)
+   {
+      Print("  -> Market sync executed: #", ticket, " (deviation: ", deviation_pips, " pips)");
+      AddTicketMapping(g_order_map, master_ticket, ticket);
+      return true;
+   }
+   else
+   {
+      Print("  -> Market sync failed, Error: ", GetLastError());
+      return false;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if pending orders have been filled (MT4 polling)            |
+//| MT4 doesn't have OnTradeTransaction, so we poll on each tick      |
+//+------------------------------------------------------------------+
+void CheckPendingOrderFills()
+{
+   // Process in reverse order since we may remove elements
+   for(int i = ArraySize(g_pending_order_map) - 1; i >= 0; i--)
+   {
+      int master_ticket = g_pending_order_map[i].master_ticket;
+      int pending_ticket = g_pending_order_map[i].pending_ticket;
+
+      // Try to select the pending order
+      if(OrderSelect(pending_ticket, SELECT_BY_TICKET))
+      {
+         int order_type = OrderType();
+
+         // Check if order is still pending (type >= 2 means pending order)
+         if(order_type >= OP_BUYLIMIT)
+         {
+            // Still pending, nothing to do
+            continue;
+         }
+
+         // Order has been converted to market order (filled)
+         // In MT4, the ticket remains the same after fill
+         RemovePendingTicketMapping(g_pending_order_map, master_ticket);
+         AddTicketMapping(g_order_map, master_ticket, pending_ticket);
+
+         Print("=== Pending Order Filled ===");
+         Print("  Pending #", pending_ticket, " -> Position #", pending_ticket);
+         Print("  Master ticket: #", master_ticket);
+         Print("  Mapping moved to active order map");
+      }
+      else
+      {
+         // Order not found - may have been cancelled or deleted
+         // Check order history
+         if(OrderSelect(pending_ticket, SELECT_BY_TICKET, MODE_HISTORY))
+         {
+            int close_time = (int)OrderCloseTime();
+            if(close_time > 0)
+            {
+               // Order was closed/cancelled
+               Print("Pending order #", pending_ticket, " was cancelled/deleted for master #", master_ticket);
+               RemovePendingTicketMapping(g_pending_order_map, master_ticket);
+            }
+         }
+         else
+         {
+            // Order doesn't exist at all - remove from map
+            Print("Pending order #", pending_ticket, " not found, removing mapping for master #", master_ticket);
+            RemovePendingTicketMapping(g_pending_order_map, master_ticket);
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Open new order                                                    |
 //+------------------------------------------------------------------+
 void OpenOrder(int master_ticket, string symbol, string order_type_str, double lots,
-               double price, double sl, double tp, int magic, string timestamp, string source_account)
+               double price, double sl, double tp, int magic, string timestamp,
+               string source_account, int slippage_points = 0)
 {
    // Check if already copied
    int slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
@@ -531,6 +879,9 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
    // Build traceable comment for restart recovery: "M{master_ticket}"
    string comment = BuildMarketComment(master_ticket);
 
+   // Apply slippage from config (or use global Slippage as default)
+   int effective_slippage = (slippage_points > 0) ? slippage_points : Slippage;
+
    // Execute order
    int ticket = -1;
    for(int attempt = 0; attempt < MaxRetries; attempt++)
@@ -540,18 +891,19 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
       if(order_type == OP_BUY || order_type == OP_SELL)
       {
          double exec_price = (order_type == OP_BUY) ? Ask : Bid;
-         ticket = OrderSend(symbol, order_type, lots, exec_price, Slippage, sl, tp,
+         ticket = OrderSend(symbol, order_type, lots, exec_price, effective_slippage, sl, tp,
                            comment, magic, 0, clrGreen);
       }
       else
       {
-         ticket = OrderSend(symbol, order_type, lots, price, Slippage, sl, tp,
+         ticket = OrderSend(symbol, order_type, lots, price, effective_slippage, sl, tp,
                            comment, magic, 0, clrBlue);
       }
 
       if(ticket > 0)
       {
-         Print("Order opened successfully: slave #", ticket, " from master #", master_ticket);
+         Print("Order opened successfully: slave #", ticket, " from master #", master_ticket,
+               " (delay: ", delay_ms, "ms, slippage: ", effective_slippage, " pts)");
          AddTicketMapping(g_order_map, master_ticket, ticket);
          break;
       }
@@ -567,7 +919,7 @@ void OpenOrder(int master_ticket, string symbol, string order_type_str, double l
 //+------------------------------------------------------------------+
 //| Close order                                                       |
 //+------------------------------------------------------------------+
-void CloseOrder(int master_ticket)
+void CloseOrder(int master_ticket, int slippage_points = 0)
 {
    int slave_ticket = GetSlaveTicketFromMapping(g_order_map, master_ticket);
    if(slave_ticket <= 0)
@@ -585,11 +937,14 @@ void CloseOrder(int master_ticket)
    RefreshRates();
    double close_price = (OrderType() == OP_BUY) ? Bid : Ask;
 
-   bool result = OrderClose(slave_ticket, OrderLots(), close_price, Slippage, clrRed);
+   // Apply slippage from config (or use global Slippage as default)
+   int effective_slippage = (slippage_points > 0) ? slippage_points : Slippage;
+
+   bool result = OrderClose(slave_ticket, OrderLots(), close_price, effective_slippage, clrRed);
 
    if(result)
    {
-      Print("Order closed successfully: slave #", slave_ticket);
+      Print("Order closed successfully: slave #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
       RemoveTicketMapping(g_order_map, master_ticket);
    }
    else

@@ -6,7 +6,10 @@ use super::helpers::{
     string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX, MAX_STRING_LEN, STRING_BUFFER_1,
     STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
 };
-use super::types::{MasterConfigMessage, SlaveConfigMessage, SyncMode, TradeSignalMessage};
+use super::types::{
+    MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SlaveConfigMessage, SyncMode,
+    SyncRequestMessage, TradeSignalMessage,
+};
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::LazyLock;
@@ -559,5 +562,465 @@ pub unsafe extern "C" fn trade_signal_get_int(
         "ticket" => msg.ticket,
         "magic_number" => msg.magic_number.unwrap_or(0),
         _ => 0,
+    }
+}
+
+// ===========================================================================
+// PositionSnapshot FFI Functions
+// ===========================================================================
+
+/// Parse MessagePack data as PositionSnapshotMessage and return an opaque handle
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+/// The returned handle must be freed with `position_snapshot_free()`.
+#[no_mangle]
+pub unsafe extern "C" fn parse_position_snapshot(
+    data: *const u8,
+    data_len: i32,
+) -> *mut PositionSnapshotMessage {
+    if data.is_null() || data_len <= 0 {
+        return std::ptr::null_mut();
+    }
+
+    let slice = std::slice::from_raw_parts(data, data_len as usize);
+    match rmp_serde::from_slice::<PositionSnapshotMessage>(slice) {
+        Ok(snapshot) => Box::into_raw(Box::new(snapshot)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Free a PositionSnapshotMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer created by parse_position_snapshot or null
+/// - handle must not be used after calling this function
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_free(handle: *mut PositionSnapshotMessage) {
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
+}
+
+/// Get a string field from PositionSnapshotMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_get_string(
+    handle: *const PositionSnapshotMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let snapshot = &*handle;
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return std::ptr::null(),
+    };
+
+    let value = match field.as_str() {
+        "message_type" => &snapshot.message_type,
+        "source_account" => &snapshot.source_account,
+        "timestamp" => &snapshot.timestamp,
+        _ => return std::ptr::null(),
+    };
+
+    string_to_utf16_buffer(value)
+}
+
+/// Get the number of positions in a PositionSnapshotMessage
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_get_positions_count(
+    handle: *const PositionSnapshotMessage,
+) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    let snapshot = &*handle;
+    snapshot.positions.len() as i32
+}
+
+/// Get a string field from a position at the specified index
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - index must be within bounds (0 <= index < count)
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_get_position_string(
+    handle: *const PositionSnapshotMessage,
+    index: i32,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || index < 0 || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let snapshot = &*handle;
+    let idx = index as usize;
+    if idx >= snapshot.positions.len() {
+        return std::ptr::null();
+    }
+
+    let pos = &snapshot.positions[idx];
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return std::ptr::null(),
+    };
+
+    // For optional string fields, use static empty string
+    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
+
+    let value = match field.as_str() {
+        "symbol" => &pos.symbol,
+        "order_type" => &pos.order_type,
+        "open_time" => &pos.open_time,
+        "comment" => pos.comment.as_ref().unwrap_or(&EMPTY_STRING),
+        _ => return std::ptr::null(),
+    };
+
+    string_to_utf16_buffer(value)
+}
+
+/// Get a double field from a position at the specified index
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - index must be within bounds (0 <= index < count)
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_get_position_double(
+    handle: *const PositionSnapshotMessage,
+    index: i32,
+    field_name: *const u16,
+) -> f64 {
+    if handle.is_null() || index < 0 || field_name.is_null() {
+        return 0.0;
+    }
+
+    let snapshot = &*handle;
+    let idx = index as usize;
+    if idx >= snapshot.positions.len() {
+        return 0.0;
+    }
+
+    let pos = &snapshot.positions[idx];
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return 0.0,
+    };
+
+    match field.as_str() {
+        "lots" => pos.lots,
+        "open_price" => pos.open_price,
+        "stop_loss" => pos.stop_loss.unwrap_or(0.0),
+        "take_profit" => pos.take_profit.unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+
+/// Get an integer field from a position at the specified index
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - index must be within bounds (0 <= index < count)
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_get_position_int(
+    handle: *const PositionSnapshotMessage,
+    index: i32,
+    field_name: *const u16,
+) -> i64 {
+    if handle.is_null() || index < 0 || field_name.is_null() {
+        return 0;
+    }
+
+    let snapshot = &*handle;
+    let idx = index as usize;
+    if idx >= snapshot.positions.len() {
+        return 0;
+    }
+
+    let pos = &snapshot.positions[idx];
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    match field.as_str() {
+        "ticket" => pos.ticket,
+        "magic_number" => pos.magic_number.unwrap_or(0),
+        _ => 0,
+    }
+}
+
+// ===========================================================================
+// SyncRequest FFI Functions
+// ===========================================================================
+
+/// Create and serialize a SyncRequestMessage to MessagePack
+/// Returns the number of bytes written to the output buffer, or 0 on error
+///
+/// # Safety
+/// - slave_account must be a valid null-terminated UTF-16 string pointer
+/// - master_account must be a valid null-terminated UTF-16 string pointer
+/// - output must be a valid buffer of at least output_len bytes
+#[no_mangle]
+pub unsafe extern "C" fn create_sync_request(
+    slave_account: *const u16,
+    master_account: *const u16,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if slave_account.is_null() || master_account.is_null() || output.is_null() || output_len <= 0 {
+        return 0;
+    }
+
+    let slave_str = match utf16_to_string(slave_account) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let master_str = match utf16_to_string(master_account) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let msg = SyncRequestMessage {
+        message_type: "SyncRequest".to_string(),
+        slave_account: slave_str,
+        master_account: master_str,
+        last_sync_time: None, // Not tracking sync history yet
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    match rmp_serde::to_vec_named(&msg) {
+        Ok(bytes) => {
+            if bytes.len() > output_len as usize {
+                return 0; // Buffer too small
+            }
+            let out_slice = std::slice::from_raw_parts_mut(output, bytes.len());
+            out_slice.copy_from_slice(&bytes);
+            bytes.len() as i32
+        }
+        Err(_) => 0,
+    }
+}
+
+/// Parse a SyncRequestMessage from MessagePack data
+/// Returns a pointer to the parsed message, or null on error
+///
+/// # Safety
+/// - data must be a valid buffer of at least data_len bytes
+/// - The returned handle must be freed with `sync_request_free()`
+#[no_mangle]
+pub unsafe extern "C" fn parse_sync_request(data: *const u8, data_len: i32) -> *mut SyncRequestMessage {
+    if data.is_null() || data_len <= 0 {
+        return std::ptr::null_mut();
+    }
+
+    let slice = std::slice::from_raw_parts(data, data_len as usize);
+
+    match rmp_serde::from_slice::<SyncRequestMessage>(slice) {
+        Ok(msg) => Box::into_raw(Box::new(msg)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Get a string field from SyncRequestMessage
+///
+/// # Safety
+/// - handle must be a valid pointer to SyncRequestMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+/// - Caller is responsible for the returned string memory
+#[no_mangle]
+pub unsafe extern "C" fn sync_request_get_string(
+    handle: *const SyncRequestMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let msg = &*handle;
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return std::ptr::null(),
+    };
+
+    let value = match field.as_str() {
+        "message_type" => &msg.message_type,
+        "slave_account" => &msg.slave_account,
+        "master_account" => &msg.master_account,
+        "timestamp" => &msg.timestamp,
+        _ => return std::ptr::null(),
+    };
+
+    string_to_utf16_buffer(value)
+}
+
+/// Free a parsed SyncRequestMessage
+///
+/// # Safety
+/// - handle must be a valid pointer returned by `parse_sync_request()`
+/// - The handle must not be used after calling this function
+#[no_mangle]
+pub unsafe extern "C" fn sync_request_free(handle: *mut SyncRequestMessage) {
+    if !handle.is_null() {
+        let _ = Box::from_raw(handle);
+    }
+}
+
+// ===========================================================================
+// PositionSnapshot Builder FFI Functions (for Master EA)
+// ===========================================================================
+
+/// Create a new PositionSnapshotMessage builder
+///
+/// # Safety
+/// - source_account must be a valid null-terminated UTF-16 string pointer
+/// - The returned handle must be freed with `position_snapshot_builder_free()`
+#[no_mangle]
+pub unsafe extern "C" fn create_position_snapshot_builder(
+    source_account: *const u16,
+) -> *mut PositionSnapshotMessage {
+    if source_account.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let account_str = match utf16_to_string(source_account) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+
+    let snapshot = PositionSnapshotMessage {
+        message_type: "PositionSnapshot".to_string(),
+        source_account: account_str,
+        positions: Vec::new(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    Box::into_raw(Box::new(snapshot))
+}
+
+/// Add a position to the PositionSnapshotMessage builder
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - symbol, order_type, open_time must be valid null-terminated UTF-16 string pointers
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_builder_add_position(
+    handle: *mut PositionSnapshotMessage,
+    ticket: i64,
+    symbol: *const u16,
+    order_type: *const u16,
+    lots: f64,
+    open_price: f64,
+    stop_loss: f64,
+    take_profit: f64,
+    magic_number: i64,
+    open_time: *const u16,
+) -> i32 {
+    if handle.is_null() || symbol.is_null() || order_type.is_null() || open_time.is_null() {
+        return 0;
+    }
+
+    let snapshot = &mut *handle;
+
+    let symbol_str = match utf16_to_string(symbol) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let order_type_str = match utf16_to_string(order_type) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let open_time_str = match utf16_to_string(open_time) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let position = PositionInfo {
+        ticket,
+        symbol: symbol_str,
+        order_type: order_type_str,
+        lots,
+        open_price,
+        open_time: open_time_str,
+        stop_loss: if stop_loss > 0.0 {
+            Some(stop_loss)
+        } else {
+            None
+        },
+        take_profit: if take_profit > 0.0 {
+            Some(take_profit)
+        } else {
+            None
+        },
+        magic_number: if magic_number != 0 {
+            Some(magic_number)
+        } else {
+            None
+        },
+        comment: None, // EA doesn't need to send comment for sync
+    };
+
+    snapshot.positions.push(position);
+    1 // Success
+}
+
+/// Serialize the PositionSnapshotMessage to MessagePack
+/// Returns the number of bytes written, or 0 on error
+///
+/// # Safety
+/// - handle must be a valid pointer to PositionSnapshotMessage
+/// - output must be a valid buffer of at least output_len bytes
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_builder_serialize(
+    handle: *const PositionSnapshotMessage,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if handle.is_null() || output.is_null() || output_len <= 0 {
+        return 0;
+    }
+
+    let snapshot = &*handle;
+
+    // Update timestamp to current time before serializing
+    let mut snapshot_copy = snapshot.clone();
+    snapshot_copy.timestamp = chrono::Utc::now().to_rfc3339();
+
+    match rmp_serde::to_vec_named(&snapshot_copy) {
+        Ok(bytes) => {
+            if bytes.len() > output_len as usize {
+                return 0; // Buffer too small
+            }
+            let out_slice = std::slice::from_raw_parts_mut(output, bytes.len());
+            out_slice.copy_from_slice(&bytes);
+            bytes.len() as i32
+        }
+        Err(_) => 0,
+    }
+}
+
+/// Free a PositionSnapshotMessage builder handle
+///
+/// # Safety
+/// - handle must be a valid pointer created by create_position_snapshot_builder or null
+/// - handle must not be used after calling this function
+#[no_mangle]
+pub unsafe extern "C" fn position_snapshot_builder_free(handle: *mut PositionSnapshotMessage) {
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
     }
 }

@@ -17,13 +17,14 @@
 #include <SankeyCopier/GridPanel.mqh>
 
 //--- Input parameters
-input string   RelayServerAddress = DEFAULT_ADDR_PULL;  // Server ZMQ address (PULL)
-input int      MagicFilter = 0;                         // Magic number filter (0 = all)
-input string   SymbolPrefix = "";                       // Symbol prefix to filter and strip (e.g. "pro.")
-input string   SymbolSuffix = "";                       // Symbol suffix to filter and strip (e.g. ".m")
-input int      ScanInterval = 100;                      // Scan interval in milliseconds
-input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
-input int      PanelWidth = 280;                        // Configuration panel width (pixels)
+input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Server ZMQ address (PULL)
+input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config/sync (SUB)
+input int      MagicFilter = 0;                               // Magic number filter (0 = all)
+input string   SymbolPrefix = "";                             // Symbol prefix to filter and strip (e.g. "pro.")
+input string   SymbolSuffix = "";                             // Symbol suffix to filter and strip (e.g. ".m")
+input int      ScanInterval = 100;                            // Scan interval in milliseconds
+input bool     ShowConfigPanel = true;                        // Show configuration panel on chart
+input int      PanelWidth = 280;                              // Configuration panel width (pixels)
 
 //--- Order tracking structure
 struct OrderInfo
@@ -37,6 +38,7 @@ struct OrderInfo
 string      AccountID;                  // Auto-generated from broker + account number
 HANDLE_TYPE g_zmq_context = -1;
 HANDLE_TYPE g_zmq_socket = -1;
+HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving config/sync requests
 OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
@@ -68,6 +70,24 @@ int OnInit()
    g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
+      CleanupZmqContext(g_zmq_context);
+      return INIT_FAILED;
+   }
+
+   // Create and connect config socket (SUB to receive SyncRequest)
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Master Config SUB");
+   if(g_zmq_config_socket < 0)
+   {
+      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
+      CleanupZmqContext(g_zmq_context);
+      return INIT_FAILED;
+   }
+
+   // Subscribe to messages for this account ID
+   if(!SubscribeToTopic(g_zmq_config_socket, AccountID))
+   {
+      CleanupZmqSocket(g_zmq_config_socket, "Master Config SUB");
+      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
       CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
@@ -117,7 +137,7 @@ void OnDeinit(const int reason)
       g_config_panel.Delete();
 
    // Cleanup ZMQ resources
-   CleanupZmqResources(g_zmq_socket, g_zmq_context, "Master PUSH");
+   CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
 
    Print("=== SankeyCopier Master EA (MT4) Stopped ===");
 }
@@ -149,7 +169,7 @@ void OnTimer()
       {
          Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
          g_last_trade_allowed = current_trade_allowed;
-         
+
          // Update panel status
          if(ShowConfigPanel)
          {
@@ -163,6 +183,89 @@ void OnTimer()
             }
          }
       }
+   }
+
+   // Check for SyncRequest messages
+   uchar config_buffer[];
+   ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
+   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, MESSAGE_BUFFER_SIZE);
+
+   if(config_bytes > 0)
+   {
+      // Find the space separator between topic and MessagePack payload
+      int space_pos = -1;
+      for(int i = 0; i < config_bytes; i++)
+      {
+         if(config_buffer[i] == SPACE_CHAR)
+         {
+            space_pos = i;
+            break;
+         }
+      }
+
+      if(space_pos > 0)
+      {
+         // Extract topic
+         string topic = CharArrayToString(config_buffer, 0, space_pos);
+
+         // Extract MessagePack payload
+         int payload_start = space_pos + 1;
+         int payload_len = config_bytes - payload_start;
+         uchar msgpack_payload[];
+         ArrayResize(msgpack_payload, payload_len);
+         ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
+
+         Print("Received MessagePack message for topic '", topic, "' (", payload_len, " bytes)");
+         ProcessSyncRequest(msgpack_payload, payload_len);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Process SyncRequest message (from Slave EA)                       |
+//+------------------------------------------------------------------+
+void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
+{
+   // Try to parse as SyncRequest
+   HANDLE_TYPE handle = parse_sync_request(msgpack_data, data_len);
+   if(handle == 0 || handle == -1)
+   {
+      // Not a SyncRequest - ignore silently
+      return;
+   }
+
+   // Get the fields
+   string slave_account = sync_request_get_string(handle, "slave_account");
+   string master_account = sync_request_get_string(handle, "master_account");
+
+   if(slave_account == "" || master_account == "")
+   {
+      Print("Invalid SyncRequest received - missing fields");
+      sync_request_free(handle);
+      return;
+   }
+
+   // Check if this request is for us
+   if(master_account != AccountID)
+   {
+      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
+      sync_request_free(handle);
+      return;
+   }
+
+   Print("=== Received SyncRequest from Slave: ", slave_account, " ===");
+
+   // Free the handle before sending response
+   sync_request_free(handle);
+
+   // Send position snapshot
+   if(SendPositionSnapshot(g_zmq_socket, AccountID, SymbolPrefix, SymbolSuffix))
+   {
+      Print("Position snapshot sent to slave: ", slave_account);
+   }
+   else
+   {
+      Print("ERROR: Failed to send position snapshot to slave: ", slave_account);
    }
 }
 

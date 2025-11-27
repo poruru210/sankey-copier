@@ -100,6 +100,31 @@
    double      trade_signal_get_double(HANDLE_TYPE handle, string field_name);
    long        trade_signal_get_int(HANDLE_TYPE handle, string field_name);
    void        trade_signal_free(HANDLE_TYPE handle);
+
+   // Position snapshot parsing (Slave receives from Master)
+   HANDLE_TYPE parse_position_snapshot(uchar &data[], int data_len);
+   string      position_snapshot_get_string(HANDLE_TYPE handle, string field_name);
+   int         position_snapshot_get_positions_count(HANDLE_TYPE handle);
+   string      position_snapshot_get_position_string(HANDLE_TYPE handle, int index, string field_name);
+   double      position_snapshot_get_position_double(HANDLE_TYPE handle, int index, string field_name);
+   long        position_snapshot_get_position_int(HANDLE_TYPE handle, int index, string field_name);
+   void        position_snapshot_free(HANDLE_TYPE handle);
+
+   // SyncRequest creation (Slave sends to Master)
+   int         create_sync_request(string slave_account, string master_account, uchar &output[], int output_len);
+
+   // SyncRequest parsing (Master receives from Slave)
+   HANDLE_TYPE parse_sync_request(uchar &data[], int data_len);
+   string      sync_request_get_string(HANDLE_TYPE handle, string field_name);
+   void        sync_request_free(HANDLE_TYPE handle);
+
+   // Position snapshot builder (Master sends to Slave)
+   HANDLE_TYPE create_position_snapshot_builder(string source_account);
+   int         position_snapshot_builder_add_position(HANDLE_TYPE handle, long ticket, string symbol, string order_type,
+                                                       double lots, double open_price, double stop_loss, double take_profit,
+                                                       long magic_number, string open_time);
+   int         position_snapshot_builder_serialize(HANDLE_TYPE handle, uchar &output[], int output_len);
+   void        position_snapshot_builder_free(HANDLE_TYPE handle);
 #import
 
 //--- Common structures

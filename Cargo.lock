@@ -1841,6 +1841,7 @@ name = "sankey-copier-mt-bridge"
 version = "1.0.0"
 dependencies = [
  "cargo-husky",
+ "chrono",
  "rmp-serde",
  "serde",
  "serde_json",

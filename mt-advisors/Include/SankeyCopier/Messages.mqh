@@ -189,6 +189,55 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
    return success;
 }
 
+//+------------------------------------------------------------------+
+//| Send sync request message to server (Slave EA only)              |
+//| Used to request position snapshot from Master when Slave starts   |
+//+------------------------------------------------------------------+
+bool SendSyncRequestMessage(HANDLE_TYPE zmq_context, string server_address,
+                            string slave_account, string master_account)
+{
+   // Create temporary PUSH socket for sync request
+   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+   if(push_socket < 0)
+   {
+      Print("ERROR: Failed to create sync request socket");
+      return false;
+   }
+
+   if(zmq_socket_connect(push_socket, server_address) == 0)
+   {
+      Print("ERROR: Failed to connect for sync request: ", server_address);
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Create and serialize SyncRequest message
+   uchar buffer[];
+   ArrayResize(buffer, MESSAGE_BUFFER_SIZE);
+   int len = create_sync_request(slave_account, master_account, buffer, MESSAGE_BUFFER_SIZE);
+
+   if(len <= 0)
+   {
+      Print("ERROR: Failed to create sync request message");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Resize buffer to actual size
+   ArrayResize(buffer, len);
+
+   // Send binary MessagePack data
+   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
+
+   if(success)
+      Print("SyncRequest sent to master: ", master_account);
+   else
+      Print("ERROR: Failed to send sync request message");
+
+   zmq_socket_destroy(push_socket);
+   return success;
+}
+
 // Note: SendOpenSignal, SendCloseSignal, SendModifySignal moved to MasterSignals.mqh
 // They are still available here through the #include for backward compatibility
 
