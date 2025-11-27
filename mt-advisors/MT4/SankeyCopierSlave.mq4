@@ -363,7 +363,7 @@ void OnTick()
       return;
 
    // Check if any pending orders have been filled
-   CheckPendingOrderFills();
+   CheckPendingOrderFills(g_pending_order_map, g_order_map);
 
    // Check for trade signal messages (MessagePack format)
    // Note: PositionSnapshot is received via config socket in OnTimer
