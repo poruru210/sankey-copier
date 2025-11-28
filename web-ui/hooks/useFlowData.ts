@@ -101,7 +101,6 @@ export function useFlowData({
       if (enabled) {
         // Master is being enabled
         // Only enable connection if Slave is ALSO enabled
-        // Note: We use the current disabledReceiverIds state
         const isSlaveEnabled = !disabledReceiverIds.includes(setting.slave_account);
         if (isSlaveEnabled && !isCurrentlyEnabled) {
           onToggle(setting.id, setting.status);
@@ -243,6 +242,7 @@ export function useFlowData({
     toggleReceiverExpand,
     toggleSourceEnabled,
     toggleReceiverEnabled,
+    settings,
   ]);
 
   const edges = useMemo(() => {

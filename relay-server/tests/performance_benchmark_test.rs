@@ -1,5 +1,5 @@
 use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
-use sankey_copier_zmq::LotCalculationMode;
+use sankey_copier_zmq::{LotCalculationMode, SyncMode};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
 ///
@@ -14,6 +14,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
@@ -31,6 +32,16 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -45,6 +56,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_MODERATE_001".to_string(),
         master_account: "MASTER_MODERATE_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_MODERATE_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
@@ -79,6 +91,16 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -93,6 +115,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_MAXIMUM_CONFIGURATION_001".to_string(),
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(2.5),
@@ -166,6 +189,16 @@ async fn test_config_message_size_benchmark() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();
@@ -211,6 +244,7 @@ async fn test_estimate_parsing_performance() {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
@@ -237,6 +271,16 @@ async fn test_estimate_parsing_performance() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let json = serde_json::to_string(&config).unwrap();

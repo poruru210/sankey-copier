@@ -126,6 +126,7 @@ function getSegmentLabel(
     installations: content.installations,
     sites: content.sites,
     'trade-groups': content.tradeGroups,
+    settings: content.settings,
   };
 
   // Check if this is a known route

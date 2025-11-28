@@ -120,6 +120,7 @@ impl MessageHandler {
                         account_id: settings.slave_account.clone(),
                         master_account: settings.master_account.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
+                        trade_group_id: settings.master_account.clone(),
                         status: effective_status,
                         lot_calculation_mode: settings
                             .slave_settings
@@ -136,6 +137,20 @@ impl MessageHandler {
                         source_lot_min: settings.slave_settings.source_lot_min,
                         source_lot_max: settings.slave_settings.source_lot_max,
                         master_equity,
+                        // Open Sync Policy settings
+                        sync_mode: settings.slave_settings.sync_mode.clone().into(),
+                        limit_order_expiry_min: settings.slave_settings.limit_order_expiry_min,
+                        market_sync_max_pips: settings.slave_settings.market_sync_max_pips,
+                        max_slippage: settings.slave_settings.max_slippage,
+                        copy_pending_orders: settings.slave_settings.copy_pending_orders,
+                        // Trade Execution settings
+                        max_retries: settings.slave_settings.max_retries,
+                        max_signal_delay_ms: settings.slave_settings.max_signal_delay_ms,
+                        use_pending_order_for_delayed: settings
+                            .slave_settings
+                            .use_pending_order_for_delayed,
+                        // Derived from status: allow new orders when enabled
+                        allow_new_orders: effective_status > 0,
                     };
 
                     // Send CONFIG via MessagePack

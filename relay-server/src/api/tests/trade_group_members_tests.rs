@@ -92,7 +92,16 @@ async fn test_add_member_success() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
         },
+        status: 0,
     };
 
     let response = app
@@ -129,6 +138,7 @@ async fn test_add_member_auto_creates_trade_group() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings::default(),
+        status: 0,
     };
 
     let response = app
@@ -172,7 +182,7 @@ async fn test_get_member_success() {
     };
     state
         .db
-        .add_member("MASTER_001", "SLAVE_001", settings)
+        .add_member("MASTER_001", "SLAVE_001", settings, 0)
         .await
         .unwrap();
 
@@ -234,7 +244,7 @@ async fn test_update_member_success() {
     };
     state
         .db
-        .add_member("MASTER_001", "SLAVE_001", settings)
+        .add_member("MASTER_001", "SLAVE_001", settings, 0)
         .await
         .unwrap();
 
@@ -285,7 +295,7 @@ async fn test_toggle_member_status_disable() {
     // Add a member (initial status = DISABLED)
     state
         .db
-        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -334,7 +344,7 @@ async fn test_toggle_member_status_enable() {
     // Add a member (initial status = DISABLED)
     state
         .db
-        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -385,7 +395,7 @@ async fn test_delete_member_success() {
     // Add a member
     state
         .db
-        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+        .add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -427,7 +437,7 @@ async fn test_list_members_with_multiple_members() {
         };
         state
             .db
-            .add_member("MASTER_001", &format!("SLAVE_00{}", i), settings)
+            .add_member("MASTER_001", &format!("SLAVE_00{}", i), settings, 0)
             .await
             .unwrap();
     }
@@ -491,7 +501,16 @@ async fn test_member_with_complex_settings() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
         },
+        status: 0,
     };
 
     let response = app
@@ -553,7 +572,7 @@ async fn test_add_member_duplicate_conflict() {
     // Add the first member
     state
         .db
-        .add_member("MASTER_001", "SLAVE_DUP", slave_settings.clone())
+        .add_member("MASTER_001", "SLAVE_DUP", slave_settings.clone(), 0)
         .await
         .unwrap();
 
@@ -563,6 +582,7 @@ async fn test_add_member_duplicate_conflict() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_DUP".to_string(),
         slave_settings,
+        status: 0,
     };
 
     let response = app

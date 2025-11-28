@@ -54,6 +54,18 @@ export function SlaveSettingsDrawer({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
+    max_slippage: null,
+    copy_pending_orders: false,
+    // Trade Execution defaults
+    max_retries: 3,
+    max_signal_delay_ms: 5000,
+    use_pending_order_for_delayed: false,
+    // Filter defaults
+    allowed_magic_numbers: '',
   });
 
   // Initialize form data when member changes
@@ -64,6 +76,10 @@ export function SlaveSettingsDrawer({
       const mappingsStr = settings.symbol_mappings
         ?.map(m => `${m.source_symbol}=${m.target_symbol}`)
         .join(',') || '';
+      // Convert allowed_magic_numbers array to comma-separated string
+      const magicStr = settings.filters?.allowed_magic_numbers
+        ?.map(n => n.toString())
+        .join(', ') || '';
 
       setFormData({
         lot_calculation_mode: settings.lot_calculation_mode || 'multiplier',
@@ -74,6 +90,18 @@ export function SlaveSettingsDrawer({
         symbol_mappings: mappingsStr,
         source_lot_min: settings.source_lot_min ?? null,
         source_lot_max: settings.source_lot_max ?? null,
+        // Open Sync Policy fields
+        sync_mode: settings.sync_mode ?? 'skip',
+        limit_order_expiry_min: settings.limit_order_expiry_min ?? null,
+        market_sync_max_pips: settings.market_sync_max_pips ?? null,
+        max_slippage: settings.max_slippage ?? null,
+        copy_pending_orders: settings.copy_pending_orders ?? false,
+        // Trade Execution fields
+        max_retries: settings.max_retries ?? 3,
+        max_signal_delay_ms: settings.max_signal_delay_ms ?? 5000,
+        use_pending_order_for_delayed: settings.use_pending_order_for_delayed ?? false,
+        // Filter fields
+        allowed_magic_numbers: magicStr,
       });
       setMessage(null);
     }
@@ -95,6 +123,13 @@ export function SlaveSettingsDrawer({
           }).filter(m => m.source_symbol && m.target_symbol)
         : [];
 
+      // Convert comma-separated magic numbers to array format
+      const allowedMagicNumbers = formData.allowed_magic_numbers
+        ? formData.allowed_magic_numbers.split(',')
+            .map(s => parseInt(s.trim(), 10))
+            .filter(n => !isNaN(n))
+        : null;
+
       const settings: SlaveSettings = {
         lot_calculation_mode: formData.lot_calculation_mode,
         lot_multiplier: formData.lot_multiplier,
@@ -102,10 +137,23 @@ export function SlaveSettingsDrawer({
         symbol_prefix: formData.symbol_prefix || null,
         symbol_suffix: formData.symbol_suffix || null,
         symbol_mappings: symbolMappings,
-        filters: member.slave_settings.filters,
+        filters: {
+          ...member.slave_settings.filters,
+          allowed_magic_numbers: allowedMagicNumbers && allowedMagicNumbers.length > 0 ? allowedMagicNumbers : null,
+        },
         config_version: member.slave_settings.config_version,
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
+        // Open Sync Policy fields
+        sync_mode: formData.sync_mode,
+        limit_order_expiry_min: formData.limit_order_expiry_min,
+        market_sync_max_pips: formData.market_sync_max_pips,
+        max_slippage: formData.max_slippage,
+        copy_pending_orders: formData.copy_pending_orders,
+        // Trade Execution fields
+        max_retries: formData.max_retries,
+        max_signal_delay_ms: formData.max_signal_delay_ms,
+        use_pending_order_for_delayed: formData.use_pending_order_for_delayed,
       };
 
       await apiClient.updateTradeGroupMember(masterAccount, member.slave_account, settings);

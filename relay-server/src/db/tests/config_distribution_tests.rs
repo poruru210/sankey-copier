@@ -14,7 +14,7 @@ async fn test_update_master_statuses_connected() {
     let slave_settings = create_test_slave_settings();
 
     // Member 1: DISABLED
-    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone())
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone(), 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_001", 0)
@@ -22,7 +22,7 @@ async fn test_update_master_statuses_connected() {
         .unwrap(); // DISABLED
 
     // Member 2: ENABLED
-    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone())
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone(), 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_002", 1)
@@ -30,7 +30,7 @@ async fn test_update_master_statuses_connected() {
         .unwrap(); // ENABLED
 
     // Member 3: ENABLED
-    db.add_member("MASTER_001", "SLAVE_003", slave_settings)
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings, 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_003", 1)
@@ -79,7 +79,7 @@ async fn test_update_master_statuses_disconnected() {
     let slave_settings = create_test_slave_settings();
 
     // Member 1: DISABLED
-    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone())
+    db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone(), 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_001", 0)
@@ -87,7 +87,7 @@ async fn test_update_master_statuses_disconnected() {
         .unwrap(); // DISABLED
 
     // Member 2: ENABLED
-    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone())
+    db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone(), 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_002", 1)
@@ -95,7 +95,7 @@ async fn test_update_master_statuses_disconnected() {
         .unwrap(); // ENABLED
 
     // Member 3: CONNECTED
-    db.add_member("MASTER_001", "SLAVE_003", slave_settings)
+    db.add_member("MASTER_001", "SLAVE_003", slave_settings, 0)
         .await
         .unwrap();
     db.update_member_status("MASTER_001", "SLAVE_003", 2)

@@ -14,7 +14,9 @@ impl MessageHandler {
         // Notify WebSocket clients
         let _ = self.broadcast_tx.send(format!(
             "trade_received:{}:{}:{}",
-            signal.source_account, signal.symbol, signal.lots
+            signal.source_account,
+            signal.symbol.as_deref().unwrap_or("?"),
+            signal.lots.unwrap_or(0.0)
         ));
 
         // Get master settings for symbol prefix/suffix
@@ -74,11 +76,12 @@ impl MessageHandler {
         master_settings: &MasterSettings,
     ) {
         // Transform signal
+        // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
         let converter = SymbolConverter {
-            prefix_remove: None,
-            suffix_remove: None,
-            prefix_add: None,
-            suffix_add: None,
+            prefix_remove: master_settings.symbol_prefix.clone(),
+            suffix_remove: master_settings.symbol_suffix.clone(),
+            prefix_add: member.slave_settings.symbol_prefix.clone(),
+            suffix_add: member.slave_settings.symbol_suffix.clone(),
         };
 
         match self
@@ -89,12 +92,13 @@ impl MessageHandler {
                 tracing::info!(
                     "Copying trade to {}: {} {} lots",
                     member.slave_account,
-                    transformed.symbol,
-                    transformed.lots
+                    transformed.symbol.as_deref().unwrap_or("?"),
+                    transformed.lots.unwrap_or(0.0)
                 );
 
                 // Send to trade group using PUB/SUB with master_account as topic
-                // This allows multiple slaves to subscribe to the same master's trades
+                // All slaves subscribe to their master's topic and receive all signals
+                // Filtering (e.g., disabled slave skipping Open) is done on Slave EA side
                 if let Err(e) = self
                     .zmq_sender
                     .send_signal(&member.trade_group_id, &transformed)
@@ -111,7 +115,10 @@ impl MessageHandler {
                     // Notify WebSocket clients
                     let _ = self.broadcast_tx.send(format!(
                         "trade_copied:{}:{}:{}:{}",
-                        member.slave_account, transformed.symbol, transformed.lots, member.id
+                        member.slave_account,
+                        transformed.symbol.as_deref().unwrap_or("?"),
+                        transformed.lots.unwrap_or(0.0),
+                        member.id
                     ));
                 }
             }

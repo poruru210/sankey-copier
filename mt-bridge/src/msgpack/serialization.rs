@@ -142,6 +142,7 @@ pub unsafe extern "C" fn serialize_trade_signal(
     comment: *const u16,
     timestamp: *const u16,
     source_account: *const u16,
+    close_ratio: f64, // 0.0 = not a partial close, 0.0 < ratio <= 1.0 = partial/full close
 ) -> i32 {
     let msg = TradeSignalMessage {
         action: utf16_to_string(action).unwrap_or_default(),
@@ -168,6 +169,11 @@ pub unsafe extern "C" fn serialize_trade_signal(
         comment: utf16_to_string_opt(comment),
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
         source_account: utf16_to_string(source_account).unwrap_or_default(),
+        close_ratio: if close_ratio > 0.0 {
+            Some(close_ratio)
+        } else {
+            None
+        },
     };
 
     match rmp_serde::to_vec_named(&msg) {

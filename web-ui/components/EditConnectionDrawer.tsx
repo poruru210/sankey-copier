@@ -56,6 +56,18 @@ export function EditConnectionDrawer({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
+    max_slippage: null,
+    copy_pending_orders: false,
+    // Trade Execution defaults
+    max_retries: 3,
+    max_signal_delay_ms: 5000,
+    use_pending_order_for_delayed: false,
+    // Filter defaults
+    allowed_magic_numbers: '',
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -69,6 +81,11 @@ export function EditConnectionDrawer({
         ? setting.symbol_mappings.map(m => `${m.source_symbol}=${m.target_symbol}`).join(',')
         : (setting.symbol_map || '');
 
+      // Convert allowed_magic_numbers array to comma-separated string
+      const magicStr = setting.filters?.allowed_magic_numbers
+        ?.map(n => n.toString())
+        .join(', ') || '';
+
       setFormData({
         lot_calculation_mode: setting.lot_calculation_mode || 'multiplier',
         lot_multiplier: setting.lot_multiplier || 1.0,
@@ -78,6 +95,18 @@ export function EditConnectionDrawer({
         symbol_mappings: symbolMappingsString,
         source_lot_min: setting.source_lot_min ?? null,
         source_lot_max: setting.source_lot_max ?? null,
+        // Open Sync Policy fields
+        sync_mode: setting.sync_mode ?? 'skip',
+        limit_order_expiry_min: setting.limit_order_expiry_min ?? null,
+        market_sync_max_pips: setting.market_sync_max_pips ?? null,
+        max_slippage: setting.max_slippage ?? null,
+        copy_pending_orders: setting.copy_pending_orders ?? false,
+        // Trade Execution fields
+        max_retries: setting.max_retries ?? 3,
+        max_signal_delay_ms: setting.max_signal_delay_ms ?? 5000,
+        use_pending_order_for_delayed: setting.use_pending_order_for_delayed ?? false,
+        // Filter fields
+        allowed_magic_numbers: magicStr,
       });
     }
   }, [setting, open]);
@@ -94,6 +123,13 @@ export function EditConnectionDrawer({
         }).filter(m => m.source_symbol && m.target_symbol)
       : [];
 
+    // Convert comma-separated magic numbers to array format
+    const allowedMagicNumbers = formData.allowed_magic_numbers
+      ? formData.allowed_magic_numbers.split(',')
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n))
+      : null;
+
     onSave({
       ...setting,
       lot_calculation_mode: formData.lot_calculation_mode,
@@ -105,6 +141,21 @@ export function EditConnectionDrawer({
       symbol_map: formData.symbol_mappings || undefined,
       source_lot_min: formData.source_lot_min,
       source_lot_max: formData.source_lot_max,
+      // Open Sync Policy fields
+      sync_mode: formData.sync_mode,
+      limit_order_expiry_min: formData.limit_order_expiry_min,
+      market_sync_max_pips: formData.market_sync_max_pips,
+      max_slippage: formData.max_slippage,
+      copy_pending_orders: formData.copy_pending_orders,
+      // Trade Execution fields
+      max_retries: formData.max_retries,
+      max_signal_delay_ms: formData.max_signal_delay_ms,
+      use_pending_order_for_delayed: formData.use_pending_order_for_delayed,
+      // Filter fields
+      filters: {
+        ...setting.filters,
+        allowed_magic_numbers: allowedMagicNumbers && allowedMagicNumbers.length > 0 ? allowedMagicNumbers : null,
+      },
     });
     onOpenChange(false);
   };

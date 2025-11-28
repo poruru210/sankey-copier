@@ -9,9 +9,11 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
-import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode } from '@/types';
+import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode, SyncMode } from '@/types';
 import { Input } from '@/components/ui/input';
-import { AlertCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Power } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
@@ -161,6 +163,20 @@ function CreateConnectionForm({
     symbol_mappings: string;
     source_lot_min: number | null;
     source_lot_max: number | null;
+    // Open Sync Policy
+    sync_mode: SyncMode;
+    limit_order_expiry_min: number | null;
+    market_sync_max_pips: number | null;
+    max_slippage: number | null;
+    copy_pending_orders: boolean;
+    // Trade Execution
+    max_retries: number;
+    max_signal_delay_ms: number;
+    use_pending_order_for_delayed: boolean;
+    // Filter settings
+    allowed_magic_numbers: string;
+    // Enable on create - user choice to enable immediately
+    enable_on_create: boolean;
   }>({
     master_account: '',
     slave_account: '',
@@ -172,6 +188,20 @@ function CreateConnectionForm({
     symbol_mappings: '',
     source_lot_min: null,
     source_lot_max: null,
+    // Open Sync Policy defaults
+    sync_mode: 'skip',
+    limit_order_expiry_min: null,
+    market_sync_max_pips: null,
+    max_slippage: null,
+    copy_pending_orders: false,
+    // Trade Execution defaults
+    max_retries: 3,
+    max_signal_delay_ms: 5000,
+    use_pending_order_for_delayed: false,
+    // Filter defaults
+    allowed_magic_numbers: '',
+    // Enable on create - default OFF
+    enable_on_create: false,
   });
 
 
@@ -188,6 +218,20 @@ function CreateConnectionForm({
       symbol_mappings: '',
       source_lot_min: null,
       source_lot_max: null,
+      // Open Sync Policy defaults
+      sync_mode: 'skip',
+      limit_order_expiry_min: null,
+      market_sync_max_pips: null,
+      max_slippage: null,
+      copy_pending_orders: false,
+      // Trade Execution defaults
+      max_retries: 3,
+      max_signal_delay_ms: 5000,
+      use_pending_order_for_delayed: false,
+      // Filter defaults
+      allowed_magic_numbers: '',
+      // Enable on create - default OFF
+      enable_on_create: false,
     });
     setMasterSettings({
       symbol_prefix: '',
@@ -279,12 +323,14 @@ function CreateConnectionForm({
     // Step 1: Master Settings → Save and go to Step 2 (Slave Settings)
     if (currentStep === 1) {
       try {
-        // Only update master settings if they exist or have values
-        if (apiClient && formData.master_account && (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
+        // Only update master settings if TradeGroup already exists (not for new connections)
+        // For new connections, master settings will be saved after member creation in handleSubmit
+        if (existingTradeGroup && apiClient && formData.master_account &&
+            (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
           await apiClient.updateTradeGroupSettings(formData.master_account, {
             symbol_prefix: masterSettings.symbol_prefix || null,
             symbol_suffix: masterSettings.symbol_suffix || null,
-            config_version: existingTradeGroup?.master_settings.config_version || 0,
+            config_version: existingTradeGroup.master_settings.config_version || 0,
           });
         }
         setStepComplete(1, true);
@@ -309,19 +355,44 @@ function CreateConnectionForm({
         return;
       }
 
-      onCreate({
+      // Create the member with user-selected status
+      // status: 0 = DISABLED, 2 = CONNECTED (enabled)
+      await onCreate({
         master_account: formData.master_account,
         slave_account: formData.slave_account,
         lot_calculation_mode: formData.lot_calculation_mode,
         lot_multiplier: formData.lot_multiplier,
         reverse_trade: formData.reverse_trade,
-        status: 0, // STATUS_DISABLED (default OFF)
+        status: formData.enable_on_create ? 2 : 0,
         symbol_prefix: formData.symbol_prefix || undefined,
         symbol_suffix: formData.symbol_suffix || undefined,
         symbol_mappings: formData.symbol_mappings || undefined,
         source_lot_min: formData.source_lot_min,
         source_lot_max: formData.source_lot_max,
+        // Open Sync Policy
+        sync_mode: formData.sync_mode,
+        limit_order_expiry_min: formData.limit_order_expiry_min,
+        market_sync_max_pips: formData.market_sync_max_pips,
+        max_slippage: formData.max_slippage,
+        copy_pending_orders: formData.copy_pending_orders,
       });
+
+      // For new connections, update master settings after TradeGroup is created
+      // TradeGroup is auto-created by add_member, so we can now save master settings
+      if (!existingTradeGroup && apiClient &&
+          (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
+        try {
+          await apiClient.updateTradeGroupSettings(formData.master_account, {
+            symbol_prefix: masterSettings.symbol_prefix || null,
+            symbol_suffix: masterSettings.symbol_suffix || null,
+            config_version: 0,
+          });
+        } catch (err) {
+          console.error('Failed to update master settings after member creation:', err);
+          // Continue even if master settings update fails - member is already created
+        }
+      }
+
       setStepComplete(2, true);
       onClose();
     }
@@ -468,9 +539,45 @@ function CreateConnectionForm({
                 symbol_mappings: formData.symbol_mappings,
                 source_lot_min: formData.source_lot_min,
                 source_lot_max: formData.source_lot_max,
+                // Open Sync Policy fields
+                sync_mode: formData.sync_mode,
+                limit_order_expiry_min: formData.limit_order_expiry_min,
+                market_sync_max_pips: formData.market_sync_max_pips,
+                max_slippage: formData.max_slippage,
+                copy_pending_orders: formData.copy_pending_orders,
+                // Trade Execution fields
+                max_retries: formData.max_retries,
+                max_signal_delay_ms: formData.max_signal_delay_ms,
+                use_pending_order_for_delayed: formData.use_pending_order_for_delayed,
+                // Filter fields
+                allowed_magic_numbers: formData.allowed_magic_numbers,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
             />
+
+            {/* Enable on Create Checkbox */}
+            <DrawerSection bordered className="mt-6">
+              <div className="flex items-start space-x-3 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                <Checkbox
+                  id="enable_on_create"
+                  checked={formData.enable_on_create}
+                  onCheckedChange={(checked) => setFormData({ ...formData, enable_on_create: !!checked })}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <Label
+                    htmlFor="enable_on_create"
+                    className="text-sm font-medium text-green-800 dark:text-green-200 cursor-pointer flex items-center gap-2"
+                  >
+                    <Power className="h-4 w-4" />
+                    有効化する
+                  </Label>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                    保存後すぐにコピーを開始します。チェックしない場合は無効状態で保存されます。
+                  </p>
+                </div>
+              </div>
+            </DrawerSection>
           </Step>
 
           {/* Validation Messages - Show always if present, but contextually relevant */}
@@ -542,7 +649,7 @@ function CreateConnectionForm({
             {/* Submit button for step 2 */}
             {currentStep === 2 && (
               <Button type="submit" disabled={!validation.isValid}>
-                {content.saveAndEnable.value}
+                {content.save.value}
               </Button>
             )}
           </div>

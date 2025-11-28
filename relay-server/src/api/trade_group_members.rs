@@ -11,7 +11,7 @@ use axum::{
 use sankey_copier_zmq::SlaveConfigMessage;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{MasterSettings, SlaveSettings, TradeGroupMember};
+use crate::models::{SlaveSettings, TradeGroupMember};
 
 use super::{AppState, ProblemDetails};
 
@@ -21,6 +21,10 @@ pub struct AddMemberRequest {
     pub slave_account: String,
     #[serde(default)]
     pub slave_settings: SlaveSettings,
+    /// Initial status for the member (0 = DISABLED, 2 = CONNECTED/enabled)
+    /// Defaults to 0 (disabled) if not specified
+    #[serde(default)]
+    pub status: i32,
 }
 
 /// Request body for toggling member status
@@ -123,13 +127,14 @@ pub async fn add_member(
         }
     }
 
-    // Add member to database
+    // Add member to database with the requested status
     match state
         .db
         .add_member(
             &trade_group_id,
             &request.slave_account,
             request.slave_settings.clone(),
+            request.status,
         )
         .await
     {
@@ -305,6 +310,8 @@ pub async fn update_member(
                 config_version = updated_settings.config_version,
                 lot_multiplier = ?updated_settings.lot_multiplier,
                 reverse_trade = updated_settings.reverse_trade,
+                symbol_prefix = ?updated_settings.symbol_prefix,
+                symbol_suffix = ?updated_settings.symbol_suffix,
                 "Successfully updated member settings"
             );
 
@@ -509,7 +516,7 @@ async fn send_disabled_config_to_slave(
     let config = SlaveConfigMessage {
         account_id: slave_account.to_string(),
         master_account: master_account.to_string(),
-        status: 0, // STATUS_DISABLED
+        status: 4, // STATUS_REMOVED
         lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
         lot_multiplier: None,
         reverse_trade: false,
@@ -522,6 +529,19 @@ async fn send_disabled_config_to_slave(
         source_lot_max: None,
         master_equity: None,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: master_account.to_string(),
+        // Open Sync Policy defaults
+        sync_mode: sankey_copier_zmq::SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        // Disabled = no new orders allowed
+        allow_new_orders: false,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -542,26 +562,6 @@ async fn send_disabled_config_to_slave(
 
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
-    // Fetch Master settings to include symbol_prefix/suffix
-    let master_settings = match state.db.get_trade_group(master_account).await {
-        Ok(Some(tg)) => tg.master_settings,
-        Ok(None) => {
-            tracing::warn!(
-                master_account = %master_account,
-                "Master settings not found when sending Slave config"
-            );
-            MasterSettings::default()
-        }
-        Err(e) => {
-            tracing::error!(
-                master_account = %master_account,
-                error = %e,
-                "Failed to fetch Master settings for Slave config"
-            );
-            MasterSettings::default()
-        }
-    };
-
     // Fetch Master's equity for margin_ratio mode
     let master_equity = state
         .connection_manager
@@ -572,12 +572,13 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
     let config = SlaveConfigMessage {
         account_id: member.slave_account.clone(),
         master_account: master_account.to_string(),
+        trade_group_id: master_account.to_string(),
         status: member.status,
         lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
         lot_multiplier: member.slave_settings.lot_multiplier,
         reverse_trade: member.slave_settings.reverse_trade,
-        symbol_prefix: master_settings.symbol_prefix,
-        symbol_suffix: master_settings.symbol_suffix,
+        symbol_prefix: member.slave_settings.symbol_prefix.clone(),
+        symbol_suffix: member.slave_settings.symbol_suffix.clone(),
         symbol_mappings: member.slave_settings.symbol_mappings.clone(),
         filters: member.slave_settings.filters.clone(),
         config_version: member.slave_settings.config_version,
@@ -585,6 +586,18 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         source_lot_max: member.slave_settings.source_lot_max,
         master_equity,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        // Open Sync Policy settings
+        sync_mode: member.slave_settings.sync_mode.clone().into(),
+        limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
+        market_sync_max_pips: member.slave_settings.market_sync_max_pips,
+        max_slippage: member.slave_settings.max_slippage,
+        copy_pending_orders: member.slave_settings.copy_pending_orders,
+        // Trade Execution settings
+        max_retries: member.slave_settings.max_retries,
+        max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
+        use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
+        // Derived from status: allow new orders when enabled
+        allow_new_orders: member.status > 0,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {

@@ -6,16 +6,17 @@ fn create_test_signal() -> TradeSignal {
     TradeSignal {
         action: TradeAction::Open,
         ticket: 12345,
-        symbol: "EURUSD".to_string(),
-        order_type: OrderType::Buy,
-        lots: 0.1,
-        open_price: 1.1000,
+        symbol: Some("EURUSD".to_string()),
+        order_type: Some(OrderType::Buy),
+        lots: Some(0.1),
+        open_price: Some(1.1000),
         stop_loss: Some(1.0950),
         take_profit: Some(1.1050),
-        magic_number: 0,
-        comment: "Test trade".to_string(),
+        magic_number: Some(0),
+        comment: Some("Test trade".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
+        close_ratio: None,
     }
 }
 
@@ -40,6 +41,14 @@ fn create_test_member() -> TradeGroupMember {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: crate::models::SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
         },
         status: 2, // STATUS_CONNECTED
         created_at: Utc::now().to_rfc3339(),
@@ -153,8 +162,8 @@ fn test_transform_signal_lot_multiplier() {
     let result = engine
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
-    assert_eq!(result.lots, 0.2);
-    assert_eq!(result.symbol, "EURUSD");
+    assert_eq!(result.lots, Some(0.2));
+    assert_eq!(result.symbol.as_deref(), Some("EURUSD"));
 }
 
 #[test]
@@ -175,7 +184,7 @@ fn test_transform_signal_reverse_trade() {
     let result = engine
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
-    assert!(matches!(result.order_type, OrderType::Sell));
+    assert!(matches!(result.order_type, Some(OrderType::Sell)));
 }
 
 #[test]
@@ -204,4 +213,82 @@ fn test_reverse_order_type() {
         CopyEngine::reverse_order_type(&OrderType::SellStop),
         OrderType::BuyStop
     ));
+}
+
+#[test]
+fn test_partial_close_signal_preserves_ratio() {
+    // Test that close_ratio is preserved in Close signals
+    let engine = CopyEngine::new();
+    let mut signal = create_test_signal();
+    signal.action = TradeAction::Close;
+    signal.close_ratio = Some(0.5); // 50% partial close
+
+    let master_settings = create_test_master_settings();
+    let member = create_test_member();
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // close_ratio should be preserved
+    assert_eq!(transformed.close_ratio, Some(0.5));
+}
+
+#[test]
+fn test_lot_multiplier_not_applied_to_close_signal() {
+    // Test that lot multiplier is NOT applied to Close signals
+    // (Close uses ratio-based calculation, not lot multiplier)
+    let engine = CopyEngine::new();
+    let mut signal = create_test_signal();
+    signal.action = TradeAction::Close;
+    signal.lots = Some(1.0);
+    signal.close_ratio = Some(0.5);
+
+    let master_settings = create_test_master_settings();
+    let mut member = create_test_member();
+    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // Lots should NOT be multiplied for Close signals
+    assert_eq!(transformed.lots, Some(1.0)); // Unchanged
+    assert_eq!(transformed.close_ratio, Some(0.5)); // Preserved
+}
+
+#[test]
+fn test_lot_multiplier_applied_to_open_signal() {
+    // Verify lot multiplier IS applied to Open signals (using existing test pattern)
+    let engine = CopyEngine::new();
+    let signal = create_test_signal(); // action = Open, lots = 0.1
+
+    let master_settings = create_test_master_settings();
+    let mut member = create_test_member();
+    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    let converter = SymbolConverter {
+        prefix_remove: None,
+        suffix_remove: None,
+        prefix_add: None,
+        suffix_add: None,
+    };
+
+    let transformed = engine
+        .transform_signal(signal.clone(), &member, &master_settings, &converter)
+        .unwrap();
+
+    // Lots should be multiplied for Open signals: 0.1 * 2.0 = 0.2
+    assert_eq!(transformed.lots, Some(0.2));
 }

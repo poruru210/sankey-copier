@@ -9,18 +9,17 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-//--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
 #include "../Include/SankeyCopier/Zmq.mqh"
 #include "../Include/SankeyCopier/Messages.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Logging.mqh"
 
 //--- Input parameters
+// Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
 input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send signals/heartbeats (PULL)
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config updates (SUB)
-input string   SymbolPrefix = "";       // Symbol prefix to filter and strip (e.g. "pro.")
-input string   SymbolSuffix = "";       // Symbol suffix to filter and strip (e.g. ".m")
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
@@ -31,6 +30,7 @@ struct PositionInfo
    ulong  ticket;
    double sl;
    double tp;
+   double lots;  // Track volume for partial close detection
 };
 
 //--- Order tracking structure (for Pending Orders)
@@ -40,6 +40,7 @@ struct OrderInfo
    double price;
    double sl;
    double tp;
+   double lots;  // Track volume for partial close detection
 };
 
 //--- Global variables
@@ -71,9 +72,10 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Initialize symbol prefix/suffix from input parameters (will be overridden by config)
-   g_symbol_prefix = SymbolPrefix;
-   g_symbol_suffix = SymbolSuffix;
+   // Symbol prefix/suffix are now managed via Web-UI MasterSettings
+   // They will be set when config is received from relay-server
+   g_symbol_prefix = "";
+   g_symbol_suffix = "";
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -106,6 +108,12 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Subscribe to VictoriaLogs config (global broadcast)
+   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   {
+      Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
    // Scan existing positions and orders
    ScanExistingPositions();
    ScanExistingOrders();
@@ -129,6 +137,10 @@ int OnInit()
    }
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+
+   // VictoriaLogs is configured via server-pushed vlogs_config message
+   // (no local endpoint parameter needed)
+
    ChartRedraw();
    return INIT_SUCCEEDED;
 }
@@ -138,6 +150,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Flush VictoriaLogs before shutdown
+   VLogsFlush();
+
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
@@ -247,9 +262,92 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack config for topic '", topic, "' (", payload_len, " bytes)");
-         ProcessMasterConfigMessage(msgpack_payload, payload_len);
+         // Check for VLogs config message first (global broadcast)
+         if(topic == "vlogs_config")
+         {
+            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
+            if(vlogs_handle != 0 && vlogs_handle != -1)
+            {
+               VLogsApplyConfig(vlogs_handle, "master", AccountID);
+               vlogs_config_free(vlogs_handle);
+            }
+         }
+         // Try to parse as MasterConfig
+         else if(topic == AccountID)
+         {
+            HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
+            if(config_handle > 0)
+            {
+               string account_id = master_config_get_string(config_handle, "account_id");
+               if(account_id != "")
+               {
+                  // Valid MasterConfig
+                  master_config_free(config_handle);
+                  ProcessMasterConfigMessage(msgpack_payload, payload_len);
+               }
+               else
+               {
+                  // No account_id - try SyncRequest
+                  master_config_free(config_handle);
+                  ProcessSyncRequest(msgpack_payload, payload_len);
+               }
+            }
+            else
+            {
+               // Failed to parse as MasterConfig - try SyncRequest
+               ProcessSyncRequest(msgpack_payload, payload_len);
+            }
+         }
       }
+   }
+
+   // Flush VictoriaLogs periodically
+   VLogsFlushIfNeeded();
+}
+
+//+------------------------------------------------------------------+
+//| Process SyncRequest message (from Slave EA)                       |
+//+------------------------------------------------------------------+
+void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
+{
+   // Try to parse as SyncRequest
+   HANDLE_TYPE handle = parse_sync_request(msgpack_data, data_len);
+   if(handle == 0 || handle == -1)
+   {
+      // Not a SyncRequest - ignore silently (could be other message type)
+      return;
+   }
+
+   // Get the fields
+   string slave_account = sync_request_get_string(handle, "slave_account");
+   string master_account = sync_request_get_string(handle, "master_account");
+
+   if(slave_account == "" || master_account == "")
+   {
+      Print("Invalid SyncRequest received - missing fields");
+      sync_request_free(handle);
+      return;
+   }
+
+   // Check if this request is for us
+   if(master_account != AccountID)
+   {
+      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
+      sync_request_free(handle);
+      return;
+   }
+
+   // Free the handle before sending response
+   sync_request_free(handle);
+
+   // Send position snapshot
+   if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
+   {
+      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
+   }
+   else
+   {
+      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
    }
 }
 
@@ -266,6 +364,7 @@ void OnTick()
       //--- 1. Scan Positions ---
       CheckForNewPositions();
       CheckForModifiedPositions();
+      CheckForPartialCloses();
       CheckForClosedPositions();
       last_scan = TimeCurrent();
       
@@ -311,15 +410,14 @@ void OnTick()
                   break;
                }
             }
-                        if(!is_tracked)
-             {
-                string symbol = OrderGetString(ORDER_SYMBOL);
-                if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-                {
-                   SendOrderOpenSignal(ticket);
-                   AddTrackedOrder(ticket);
-                }
-             }
+            // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
+            if(!is_tracked)
+            {
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               SendOrderOpenSignal(ticket);
+               AddTrackedOrder(ticket);
+               Print("[ORDER] New: #", ticket, " ", symbol);
+            }
          }
       }
       
@@ -348,29 +446,35 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                        const MqlTradeRequest &request,
                        const MqlTradeResult &result)
 {
+   // Master detects ALL positions - prefix/suffix is only used for symbol name cleaning
    if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
    {
       if(PositionSelectByTicket(trans.position))
       {
          string symbol = PositionGetString(POSITION_SYMBOL);
-         if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-         {
-            SendPositionOpenSignal(trans.position);
-            AddTrackedPosition(trans.position);
-         }
+         SendPositionOpenSignal(trans.position);
+         AddTrackedPosition(trans.position);
+         Print("[POSITION] New: #", trans.position, " ", symbol);
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
    {
-      // Position was closed
+      // Deal added to history (could be partial or full close)
       if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
-         SendPositionCloseSignal(trans.position);
-         RemoveTrackedPosition(trans.position);
+         // Check if position still exists (partial close) or not (full close)
+         if(!PositionSelectByTicket(trans.position))
+         {
+            // Position no longer exists - full close
+            SendPositionCloseSignal(trans.position, 0.0);
+            RemoveTrackedPosition(trans.position);
+         }
+         // If position still exists, it's a partial close - handled by CheckForPartialCloses
       }
    }
    
    //--- Order Transactions (Pending Orders) ---
+   // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
    if(trans.type == TRADE_TRANSACTION_ORDER_ADD)
    {
       ulong ticket = trans.order;
@@ -381,11 +485,9 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          if(type != ORDER_TYPE_BUY && type != ORDER_TYPE_SELL)
          {
             string symbol = OrderGetString(ORDER_SYMBOL);
-            if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-            {
-               SendOrderOpenSignal(ticket);
-               AddTrackedOrder(ticket);
-            }
+            SendOrderOpenSignal(ticket);
+            AddTrackedOrder(ticket);
+            Print("[ORDER] New: #", ticket, " ", symbol);
          }
       }
    }
@@ -504,6 +606,37 @@ void CheckForModifiedPositions()
 }
 
 //+------------------------------------------------------------------+
+//| Check for partial closes (volume reduction)                       |
+//+------------------------------------------------------------------+
+void CheckForPartialCloses()
+{
+   for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+   {
+      ulong ticket = g_tracked_positions[i].ticket;
+      if(PositionSelectByTicket(ticket))
+      {
+         double current_lots = PositionGetDouble(POSITION_VOLUME);
+         double tracked_lots = g_tracked_positions[i].lots;
+
+         // Check if volume has decreased (partial close)
+         if(current_lots < tracked_lots && tracked_lots > 0)
+         {
+            // Calculate close_ratio: portion that was closed
+            double close_ratio = (tracked_lots - current_lots) / tracked_lots;
+
+            Print("Partial close detected: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (close_ratio: ", close_ratio, ")");
+
+            // Send partial close signal
+            SendPositionCloseSignal(ticket, close_ratio);
+
+            // Update tracked volume (position still exists)
+            g_tracked_positions[i].lots = current_lots;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Check for closed positions                                        |
 //+------------------------------------------------------------------+
 void CheckForClosedPositions()
@@ -513,7 +646,8 @@ void CheckForClosedPositions()
       ulong ticket = g_tracked_positions[i].ticket;
       if(!PositionSelectByTicket(ticket))
       {
-         SendPositionCloseSignal(ticket);
+         // Full close (close_ratio = 1.0 or 0.0 for backward compat)
+         SendPositionCloseSignal(ticket, 0.0);
          RemoveTrackedPosition(ticket);
       }
    }
@@ -545,11 +679,12 @@ void SendPositionOpenSignal(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Send close signal                                                 |
+//| Send close signal with optional close_ratio                       |
+//| close_ratio: 0 = full close, 0 < ratio < 1.0 = partial close     |
 //+------------------------------------------------------------------+
-void SendPositionCloseSignal(ulong ticket)
+void SendPositionCloseSignal(ulong ticket, double close_ratio = 0.0)
 {
-   SendCloseSignal(g_zmq_socket, ticket, AccountID);
+   SendCloseSignal(g_zmq_socket, ticket, close_ratio, AccountID);
 }
 
 //+------------------------------------------------------------------+
@@ -575,7 +710,7 @@ bool IsPositionTracked(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Add position to tracking list with current SL/TP                 |
+//| Add position to tracking list with current SL/TP/Lots            |
 //+------------------------------------------------------------------+
 void AddTrackedPosition(ulong ticket)
 {
@@ -587,23 +722,25 @@ void AddTrackedPosition(ulong ticket)
    g_tracked_positions[size].ticket = ticket;
    g_tracked_positions[size].sl = PositionGetDouble(POSITION_SL);
    g_tracked_positions[size].tp = PositionGetDouble(POSITION_TP);
+   g_tracked_positions[size].lots = PositionGetDouble(POSITION_VOLUME);
 }
 
 //+------------------------------------------------------------------+
-//| Add order to tracking list                                       |
+//| Add order to tracking list with current volume                   |
 //+------------------------------------------------------------------+
 void AddTrackedOrder(ulong ticket)
 {
    if(!OrderSelect(ticket)) return;
    if(IsOrderTracked(ticket)) return;
-   
+
    int size = ArraySize(g_tracked_orders);
    ArrayResize(g_tracked_orders, size + 1);
-   
+
    g_tracked_orders[size].ticket = ticket;
    g_tracked_orders[size].price  = OrderGetDouble(ORDER_PRICE_OPEN);
    g_tracked_orders[size].sl     = OrderGetDouble(ORDER_SL);
    g_tracked_orders[size].tp     = OrderGetDouble(ORDER_TP);
+   g_tracked_orders[size].lots   = OrderGetDouble(ORDER_VOLUME_INITIAL);
 }
 
 //+------------------------------------------------------------------+
@@ -716,10 +853,11 @@ void SendOrderModifySignal(ulong ticket)
 
 //+------------------------------------------------------------------+
 //| Send order close signal (delete)                                 |
+//| Pending orders don't have partial close - always full close      |
 //+------------------------------------------------------------------+
 void SendOrderCloseSignal(ulong ticket)
 {
-   SendCloseSignal(g_zmq_socket, ticket, AccountID);
+   SendCloseSignal(g_zmq_socket, ticket, 0.0, AccountID);
 }
 
 //+------------------------------------------------------------------+

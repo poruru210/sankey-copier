@@ -44,6 +44,7 @@
 #define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
 #define STATUS_NO_CONFIGURATION 3 // No configuration received yet
+#define STATUS_REMOVED 4          // Configuration removed (deleted from UI)
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
@@ -70,7 +71,8 @@
                           string symbol_prefix, string symbol_suffix, string symbol_map);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
-                                 long magic_number, string comment, string timestamp, string source_account);
+                                 long magic_number, string comment, string timestamp, string source_account,
+                                 double close_ratio);
    // Note: get_serialized_buffer() uses pointer syntax not supported in MQL4/MQL5
    // Use copy_serialized_buffer() instead
    int    copy_serialized_buffer(uchar &dest[], int max_len);
@@ -88,6 +90,10 @@
    string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
    string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
 
+   // Slave config allowed magic numbers filter access
+   int         slave_config_get_allowed_magic_count(HANDLE_TYPE handle);
+   int         slave_config_get_allowed_magic_at(HANDLE_TYPE handle, int index);
+
    // Master config message parsing
    HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
    string      master_config_get_string(HANDLE_TYPE handle, string field_name);
@@ -100,6 +106,45 @@
    double      trade_signal_get_double(HANDLE_TYPE handle, string field_name);
    long        trade_signal_get_int(HANDLE_TYPE handle, string field_name);
    void        trade_signal_free(HANDLE_TYPE handle);
+
+   // Position snapshot parsing (Slave receives from Master)
+   HANDLE_TYPE parse_position_snapshot(uchar &data[], int data_len);
+   string      position_snapshot_get_string(HANDLE_TYPE handle, string field_name);
+   int         position_snapshot_get_positions_count(HANDLE_TYPE handle);
+   string      position_snapshot_get_position_string(HANDLE_TYPE handle, int index, string field_name);
+   double      position_snapshot_get_position_double(HANDLE_TYPE handle, int index, string field_name);
+   long        position_snapshot_get_position_int(HANDLE_TYPE handle, int index, string field_name);
+   void        position_snapshot_free(HANDLE_TYPE handle);
+
+   // SyncRequest creation (Slave sends to Master)
+   int         create_sync_request(string slave_account, string master_account, uchar &output[], int output_len);
+
+   // SyncRequest parsing (Master receives from Slave)
+   HANDLE_TYPE parse_sync_request(uchar &data[], int data_len);
+   string      sync_request_get_string(HANDLE_TYPE handle, string field_name);
+   void        sync_request_free(HANDLE_TYPE handle);
+
+   // Position snapshot builder (Master sends to Slave)
+   HANDLE_TYPE create_position_snapshot_builder(string source_account);
+   int         position_snapshot_builder_add_position(HANDLE_TYPE handle, long ticket, string symbol, string order_type,
+                                                       double lots, double open_price, double stop_loss, double take_profit,
+                                                       long magic_number, string open_time);
+   int         position_snapshot_builder_serialize(HANDLE_TYPE handle, uchar &output[], int output_len);
+   void        position_snapshot_builder_free(HANDLE_TYPE handle);
+
+   // VictoriaLogs direct HTTP logging functions
+   int         vlogs_configure(string endpoint, string source);
+   int         vlogs_add_entry(string level, string category, string message, string context_json);
+   int         vlogs_flush();
+   int         vlogs_disable();
+   int         vlogs_buffer_size();
+
+   // VictoriaLogs config message parsing (for Web-UI settings)
+   HANDLE_TYPE parse_vlogs_config(uchar &data[], int data_len);
+   int         vlogs_config_get_bool(HANDLE_TYPE handle, string field_name);
+   string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
+   int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        vlogs_config_free(HANDLE_TYPE handle);
 #import
 
 //--- Common structures
@@ -115,27 +160,7 @@ struct TradeFilters {
     int    blocked_magic_numbers[];
 };
 
-//--- Lot calculation mode constants
-#define LOT_CALC_MODE_MULTIPLIER    0  // Fixed multiplier
-#define LOT_CALC_MODE_MARGIN_RATIO  1  // Based on equity ratio (slave/master)
-
-struct CopyConfig {
-    string master_account;
-    string trade_group_id;
-    int    status;
-    int    lot_calculation_mode;  // 0=multiplier, 1=margin_ratio
-    double lot_multiplier;
-    bool   reverse_trade;
-    int    config_version;
-    string symbol_prefix;   // Master's symbol prefix
-    string symbol_suffix;   // Master's symbol suffix
-    SymbolMapping symbol_mappings[];
-    TradeFilters filters;
-    // Lot filtering
-    double source_lot_min;  // Min lot from master (0 = no filter)
-    double source_lot_max;  // Max lot from master (0 = no filter)
-    double master_equity;   // Master's equity for margin_ratio mode
-};
+// Note: Slave-specific types (CopyConfig, LOT_CALC_MODE_*) moved to SlaveTypes.mqh
 
 //+------------------------------------------------------------------+
 //| Generate AccountID from broker and account number                |
@@ -341,39 +366,41 @@ string GetServerName()
 
 //+------------------------------------------------------------------+
 //| Get string representation of order type                          |
+//| Returns PascalCase format matching relay-server's OrderType enum |
 //+------------------------------------------------------------------+
 string GetOrderTypeString(int type)
 {
    #ifdef IS_MT5
-      if(type == ORDER_TYPE_BUY) return "ORDER_TYPE_BUY";
-      if(type == ORDER_TYPE_SELL) return "ORDER_TYPE_SELL";
-      if(type == ORDER_TYPE_BUY_LIMIT) return "ORDER_TYPE_BUY_LIMIT";
-      if(type == ORDER_TYPE_SELL_LIMIT) return "ORDER_TYPE_SELL_LIMIT";
-      if(type == ORDER_TYPE_BUY_STOP) return "ORDER_TYPE_BUY_STOP";
-      if(type == ORDER_TYPE_SELL_STOP) return "ORDER_TYPE_SELL_STOP";
+      if(type == ORDER_TYPE_BUY) return "Buy";
+      if(type == ORDER_TYPE_SELL) return "Sell";
+      if(type == ORDER_TYPE_BUY_LIMIT) return "BuyLimit";
+      if(type == ORDER_TYPE_SELL_LIMIT) return "SellLimit";
+      if(type == ORDER_TYPE_BUY_STOP) return "BuyStop";
+      if(type == ORDER_TYPE_SELL_STOP) return "SellStop";
    #else
-      if(type == OP_BUY) return "ORDER_TYPE_BUY";
-      if(type == OP_SELL) return "ORDER_TYPE_SELL";
-      if(type == OP_BUYLIMIT) return "ORDER_TYPE_BUY_LIMIT";
-      if(type == OP_SELLLIMIT) return "ORDER_TYPE_SELL_LIMIT";
-      if(type == OP_BUYSTOP) return "ORDER_TYPE_BUY_STOP";
-      if(type == OP_SELLSTOP) return "ORDER_TYPE_SELL_STOP";
+      if(type == OP_BUY) return "Buy";
+      if(type == OP_SELL) return "Sell";
+      if(type == OP_BUYLIMIT) return "BuyLimit";
+      if(type == OP_SELLLIMIT) return "SellLimit";
+      if(type == OP_BUYSTOP) return "BuyStop";
+      if(type == OP_SELLSTOP) return "SellStop";
    #endif
-   return "UNKNOWN";
+   return "Unknown";
 }
 
 //+------------------------------------------------------------------+
 //| Get enum order type from string                                  |
+//| Accepts PascalCase format from relay-server's OrderType enum     |
 //+------------------------------------------------------------------+
 ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
 {
-   if(type_str == "ORDER_TYPE_BUY") return ORDER_TYPE_BUY;
-   if(type_str == "ORDER_TYPE_SELL") return ORDER_TYPE_SELL;
-   if(type_str == "ORDER_TYPE_BUY_LIMIT") return ORDER_TYPE_BUY_LIMIT;
-   if(type_str == "ORDER_TYPE_SELL_LIMIT") return ORDER_TYPE_SELL_LIMIT;
-   if(type_str == "ORDER_TYPE_BUY_STOP") return ORDER_TYPE_BUY_STOP;
-   if(type_str == "ORDER_TYPE_SELL_STOP") return ORDER_TYPE_SELL_STOP;
-   
+   if(type_str == "Buy") return ORDER_TYPE_BUY;
+   if(type_str == "Sell") return ORDER_TYPE_SELL;
+   if(type_str == "BuyLimit") return ORDER_TYPE_BUY_LIMIT;
+   if(type_str == "SellLimit") return ORDER_TYPE_SELL_LIMIT;
+   if(type_str == "BuyStop") return ORDER_TYPE_BUY_STOP;
+   if(type_str == "SellStop") return ORDER_TYPE_SELL_STOP;
+
    return (ENUM_ORDER_TYPE)-1;
 }
 

@@ -362,6 +362,95 @@ const settingsDialogContent = {
       en: 'e.g. 10.0',
       ja: '例: 10.0',
     }),
+    // Open Sync Policy
+    syncPolicyTitle: t({
+      en: 'Open Sync Policy',
+      ja: 'オープン同期ポリシー',
+    }),
+    syncPolicyDescription: t({
+      en: 'Configure how existing positions are synchronized when slave connects.',
+      ja: 'スレーブ接続時の既存ポジション同期の設定。',
+    }),
+    // Sync Mode
+    syncMode: t({
+      en: 'Existing Position Sync',
+      ja: '既存ポジション同期',
+    }),
+    syncModeDescription: t({
+      en: 'How to handle existing master positions when slave connects',
+      ja: 'スレーブ接続時のマスター既存ポジションの処理方法',
+    }),
+    syncModeSkip: t({
+      en: "Don't Sync",
+      ja: '同期しない',
+    }),
+    syncModeSkipDesc: t({
+      en: 'Only copy new trades, ignore existing positions',
+      ja: '新規トレードのみコピー、既存ポジションは無視',
+    }),
+    syncModeLimitOrder: t({
+      en: 'Limit Order',
+      ja: '指値で同期',
+    }),
+    syncModeLimitOrderDesc: t({
+      en: "Sync at Master's open price with time limit",
+      ja: 'マスターのオープン価格で指値注文（制限時間あり）',
+    }),
+    syncModeMarketOrder: t({
+      en: 'Market Order',
+      ja: '成行で同期',
+    }),
+    syncModeMarketOrderDesc: t({
+      en: 'Sync immediately if price deviation is within limit',
+      ja: '価格乖離が許容範囲内なら成行で即時同期',
+    }),
+    // Limit Order Expiry
+    limitOrderExpiry: t({
+      en: 'Limit Order Expiry (minutes)',
+      ja: '指値注文の有効期限（分）',
+    }),
+    limitOrderExpiryDescription: t({
+      en: 'Time limit for limit orders. 0 = Good Till Cancelled (GTC).',
+      ja: '指値注文の有効時間。0 = 取消まで有効（GTC）。',
+    }),
+    limitOrderExpiryPlaceholder: t({
+      en: 'e.g. 60 (0 = GTC)',
+      ja: '例: 60（0 = GTC）',
+    }),
+    // Market Sync Max Pips
+    marketSyncMaxPips: t({
+      en: 'Max Price Deviation (pips)',
+      ja: '最大価格乖離（pips）',
+    }),
+    marketSyncMaxPipsDescription: t({
+      en: 'Skip sync if current price differs from open price by more than this value.',
+      ja: '現在価格とオープン価格の乖離がこの値を超える場合、同期をスキップ。',
+    }),
+    marketSyncMaxPipsPlaceholder: t({
+      en: 'e.g. 10.0',
+      ja: '例: 10.0',
+    }),
+    // Max Slippage
+    maxSlippage: t({
+      en: 'Max Slippage (points)',
+      ja: '最大スリッページ（ポイント）',
+    }),
+    maxSlippageDescription: t({
+      en: 'Maximum allowed slippage when opening positions. Leave empty for default (30 points).',
+      ja: 'ポジション建て時の最大許容スリッページ。空欄でデフォルト（30ポイント）。',
+    }),
+    maxSlippagePlaceholder: t({
+      en: 'e.g. 30',
+      ja: '例: 30',
+    }),
+    copyPendingOrders: t({
+      en: 'Copy Pending Orders',
+      ja: '待機注文をコピー',
+    }),
+    copyPendingOrdersDesc: t({
+      en: 'Also copy limit and stop orders',
+      ja: '指値・逆指値注文もコピーする',
+    }),
     // Symbol Mapping Input
     sourceSymbol: t({
       en: 'Source',

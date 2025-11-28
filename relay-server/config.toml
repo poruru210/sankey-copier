@@ -50,3 +50,13 @@ max_age_days = 3                        # Maximum age of log files in days (0 = 
 cert_path = "certs/server.pem"          # Path to certificate file (relative to executable)
 key_path = "certs/server-key.pem"       # Path to private key file (relative to executable)
 validity_days = 3650                    # Certificate validity period in days (default: 10 years)
+
+[victoria_logs]
+# VictoriaLogs integration for centralized logging
+# Start VictoriaLogs with: docker compose up -d victoria-logs
+# Web UI: http://localhost:9428/select/vmui
+enabled = true                                          # VictoriaLogs enabled by default
+host = "http://localhost:9428"                          # VictoriaLogs host URL
+batch_size = 100                                        # Maximum entries to buffer before sending
+flush_interval_secs = 5                                 # Flush interval in seconds
+source = "relay-server"                                 # Source identifier for logs

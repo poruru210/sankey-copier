@@ -1,6 +1,9 @@
 // Lot calculation mode type
 export type LotCalculationMode = 'multiplier' | 'margin_ratio';
 
+// Sync mode for existing positions when slave connects
+export type SyncMode = 'skip' | 'limit_order' | 'market_order';
+
 export interface CopySettings {
   id: number;
   status: number; // 0=OFF (user disabled), 1=ON (user enabled)
@@ -16,6 +19,16 @@ export interface CopySettings {
   symbol_map?: string; // Comma-separated format for Slave EA
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy settings
+  sync_mode?: SyncMode;
+  limit_order_expiry_min?: number | null;  // minutes (0 = GTC)
+  market_sync_max_pips?: number | null;    // pips
+  max_slippage?: number | null;            // points
+  copy_pending_orders?: boolean;
+  // Trade Execution settings
+  max_retries?: number;                     // Max order retry count (default: 3)
+  max_signal_delay_ms?: number;             // Max signal delay in ms (default: 5000)
+  use_pending_order_for_delayed?: boolean;  // Use pending order for delayed signals
 }
 
 export interface SymbolMapping {
@@ -70,6 +83,16 @@ export interface CreateSettingsRequest {
   symbol_mappings?: string; // Comma-separated format: "XAUUSD=GOLD,EURUSD=EUR"
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy
+  sync_mode?: SyncMode;
+  limit_order_expiry_min?: number | null;
+  market_sync_max_pips?: number | null;
+  max_slippage?: number | null;
+  copy_pending_orders?: boolean;
+  // Trade Execution settings
+  max_retries?: number;
+  max_signal_delay_ms?: number;
+  use_pending_order_for_delayed?: boolean;
 }
 
 // ConnectionsView specific types
@@ -159,6 +182,16 @@ export interface SlaveSettings {
   // Lot filtering: min/max lot size from master to copy
   source_lot_min?: number | null;
   source_lot_max?: number | null;
+  // Open Sync Policy settings
+  sync_mode?: SyncMode;                  // Sync mode: skip, limit_order, market_order
+  limit_order_expiry_min?: number | null; // minutes (0 = GTC)
+  market_sync_max_pips?: number | null;   // max deviation in pips
+  max_slippage?: number | null;           // Max slippage in points (default: 30)
+  copy_pending_orders?: boolean;          // Copy pending orders (limit/stop)
+  // Trade Execution settings
+  max_retries?: number;                   // Max order retry count (default: 3)
+  max_signal_delay_ms?: number;           // Max signal delay in ms (default: 5000)
+  use_pending_order_for_delayed?: boolean; // Use pending order for delayed signals
 }
 
 export interface TradeGroupMember {

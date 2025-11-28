@@ -17,6 +17,8 @@ pub struct Config {
     pub installer: InstallerConfig,
     #[serde(default)]
     pub tls: TlsConfig,
+    #[serde(default)]
+    pub victoria_logs: VictoriaLogsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +152,68 @@ impl Default for TlsConfig {
     }
 }
 
+/// VictoriaLogs API endpoint path (fixed, appended to host)
+pub const VICTORIA_LOGS_ENDPOINT_PATH: &str = "/insert/jsonline?_stream_fields=source";
+
+/// VictoriaLogs configuration for centralized log shipping
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VictoriaLogsConfig {
+    /// Enable VictoriaLogs integration
+    #[serde(default)]
+    pub enabled: bool,
+    /// VictoriaLogs host URL (e.g., "http://localhost:9428")
+    #[serde(default = "default_vlogs_host")]
+    pub host: String,
+    /// Maximum entries to buffer before sending
+    #[serde(default = "default_vlogs_batch_size")]
+    pub batch_size: usize,
+    /// Flush interval in seconds
+    #[serde(default = "default_vlogs_flush_interval")]
+    pub flush_interval_secs: u64,
+    /// Source identifier for logs
+    #[serde(default = "default_vlogs_source")]
+    pub source: String,
+}
+
+impl VictoriaLogsConfig {
+    /// Get the full endpoint URL (host + fixed path)
+    pub fn endpoint(&self) -> String {
+        format!(
+            "{}{}",
+            self.host.trim_end_matches('/'),
+            VICTORIA_LOGS_ENDPOINT_PATH
+        )
+    }
+}
+
+fn default_vlogs_host() -> String {
+    "http://localhost:9428".to_string()
+}
+
+fn default_vlogs_batch_size() -> usize {
+    100
+}
+
+fn default_vlogs_flush_interval() -> u64 {
+    5
+}
+
+fn default_vlogs_source() -> String {
+    "relay-server".to_string()
+}
+
+impl Default for VictoriaLogsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: default_vlogs_host(),
+            batch_size: default_vlogs_batch_size(),
+            flush_interval_secs: default_vlogs_flush_interval(),
+            source: default_vlogs_source(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
@@ -262,6 +326,7 @@ impl Default for Config {
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
             tls: TlsConfig::default(),
+            victoria_logs: VictoriaLogsConfig::default(),
         }
     }
 }
@@ -315,6 +380,7 @@ mod tests {
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
             tls: TlsConfig::default(),
+            victoria_logs: VictoriaLogsConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");

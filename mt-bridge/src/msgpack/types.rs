@@ -35,13 +35,27 @@ pub enum LotCalculationMode {
     MarginRatio,
 }
 
+/// Sync mode for existing positions when slave connects
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncMode {
+    /// Do not sync existing positions (only copy new trades)
+    #[default]
+    Skip,
+    /// Sync using limit orders at Master's open price
+    LimitOrder,
+    /// Sync using market orders with max price deviation check
+    MarketOrder,
+}
+
 /// Slave EA configuration message
 /// Contains all configuration parameters for a Slave EA
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlaveConfigMessage {
     pub account_id: String,
     pub master_account: String,
-    pub timestamp: String, // ISO 8601 format
+    pub timestamp: String,      // ISO 8601 format
+    pub trade_group_id: String, // Used for ZMQ subscription
     pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
     pub lot_calculation_mode: LotCalculationMode,
@@ -64,6 +78,51 @@ pub struct SlaveConfigMessage {
     /// Master's current equity (for margin_ratio mode calculation)
     #[serde(default)]
     pub master_equity: Option<f64>,
+
+    // === Open Sync Policy Settings ===
+    /// Sync mode for existing positions when slave connects
+    #[serde(default)]
+    pub sync_mode: SyncMode,
+    /// Time limit for limit orders in minutes (0 = GTC, Good Till Cancelled)
+    /// Used when sync_mode = LimitOrder
+    #[serde(default)]
+    pub limit_order_expiry_min: Option<i32>,
+    /// Max price deviation in pips for market order sync (skip if exceeded)
+    /// Used when sync_mode = MarketOrder
+    #[serde(default)]
+    pub market_sync_max_pips: Option<f64>,
+    /// Maximum allowed slippage in points when opening positions (default: 30)
+    #[serde(default)]
+    pub max_slippage: Option<i32>,
+    /// Whether to copy pending orders (limit/stop orders) in addition to market orders
+    #[serde(default)]
+    pub copy_pending_orders: bool,
+
+    // === Trade Execution Settings ===
+    /// Maximum number of order retries on failure (default: 3)
+    #[serde(default = "default_max_retries")]
+    pub max_retries: i32,
+    /// Maximum allowed signal delay in milliseconds (default: 5000)
+    #[serde(default = "default_max_signal_delay_ms")]
+    pub max_signal_delay_ms: i32,
+    /// Use pending order for delayed signals instead of skipping
+    #[serde(default)]
+    pub use_pending_order_for_delayed: bool,
+    /// Allow opening new orders (derived from status: true when status > 0)
+    #[serde(default = "default_allow_new_orders")]
+    pub allow_new_orders: bool,
+}
+
+fn default_max_retries() -> i32 {
+    3
+}
+
+fn default_max_signal_delay_ms() -> i32 {
+    5000
+}
+
+fn default_allow_new_orders() -> bool {
+    true
 }
 
 /// Master EA configuration message
@@ -153,4 +212,74 @@ pub struct TradeSignalMessage {
     pub comment: Option<String>,
     pub timestamp: String,
     pub source_account: String,
+    /// Close ratio for partial close (0.0-1.0)
+    /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_ratio: Option<f64>,
+}
+
+// =============================================================================
+// Position Sync Protocol Messages
+// =============================================================================
+
+/// Position information for sync protocol
+/// Represents a single open position on Master EA
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionInfo {
+    pub ticket: i64,
+    pub symbol: String,
+    pub order_type: String, // "Buy", "Sell", "BuyLimit", etc.
+    pub lots: f64,
+    pub open_price: f64,
+    pub open_time: String, // ISO 8601 format
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_loss: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub take_profit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magic_number: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+/// Position snapshot message (Master → Slave via Relay)
+/// Sent when Master restarts or in response to SyncRequest
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionSnapshotMessage {
+    pub message_type: String, // "PositionSnapshot"
+    pub source_account: String,
+    pub positions: Vec<PositionInfo>,
+    pub timestamp: String, // ISO 8601 format
+}
+
+/// Sync request message (Slave → Master via Relay)
+/// Sent when Slave starts up and needs to sync with Master
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRequestMessage {
+    pub message_type: String, // "SyncRequest"
+    pub slave_account: String,
+    pub master_account: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_sync_time: Option<String>, // ISO 8601 format, if known
+    pub timestamp: String,
+}
+
+// =============================================================================
+// VictoriaLogs Configuration Message
+// =============================================================================
+
+/// VictoriaLogs configuration message
+/// Broadcasted to all EAs on "vlogs_config" topic
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VLogsConfigMessage {
+    /// Whether VictoriaLogs logging is enabled
+    pub enabled: bool,
+    /// VictoriaLogs endpoint URL
+    pub endpoint: String,
+    /// Number of log entries to batch before sending
+    pub batch_size: i32,
+    /// Interval in seconds between automatic flushes
+    pub flush_interval_secs: i32,
+    /// Timestamp when this config was sent (ISO 8601)
+    pub timestamp: String,
 }

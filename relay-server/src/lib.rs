@@ -11,4 +11,5 @@ pub mod message_handler;
 pub mod models;
 pub mod mt_detector;
 pub mod mt_installer;
+pub mod victoria_logs;
 pub mod zeromq;

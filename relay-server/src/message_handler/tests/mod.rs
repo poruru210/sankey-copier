@@ -1,11 +1,12 @@
 //! Shared test utilities for message handler tests
 //!
 //! Provides helper functions to create test instances and test data.
+//! Uses TestContext wrapper for proper ZeroMQ resource cleanup.
 
 use super::*;
 use crate::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
 use chrono::Utc;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::ops::Deref;
 
 // Test submodules
 mod config_tests;
@@ -13,27 +14,105 @@ mod heartbeat_tests;
 mod trade_signal_tests;
 mod unregister_tests;
 
-// Port counter for unique test ports
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(7000);
+/// Test context wrapper for MessageHandler with proper cleanup
+///
+/// This struct ensures ZeroMQ resources are properly released after each test.
+/// When dropped, it waits briefly for background ZMQ tasks to complete.
+pub(crate) struct TestContext {
+    pub handler: MessageHandler,
+    // Store Arc references to ensure proper drop order
+    _zmq_sender: Arc<ZmqSender>,
+    _config_sender: Arc<ZmqConfigPublisher>,
+}
+
+impl TestContext {
+    /// Create a new test context with in-memory database
+    /// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
+    pub async fn new() -> Self {
+        let connection_manager = Arc::new(ConnectionManager::new(30));
+        let copy_engine = Arc::new(CopyEngine::new());
+
+        // Use wildcard port - ZeroMQ will assign an available port automatically
+        let zmq_sender = Arc::new(ZmqSender::new("tcp://127.0.0.1:*").unwrap());
+
+        let (broadcast_tx, _) = broadcast::channel::<String>(100);
+
+        // Create test database (in-memory)
+        let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+
+        // Create ZmqConfigPublisher for tests with dynamic port
+        let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
+
+        let handler = MessageHandler::new(
+            connection_manager,
+            copy_engine,
+            zmq_sender.clone(),
+            broadcast_tx,
+            db,
+            config_sender.clone(),
+        );
+
+        Self {
+            handler,
+            _zmq_sender: zmq_sender,
+            _config_sender: config_sender,
+        }
+    }
+
+    /// Explicitly cleanup ZeroMQ resources
+    ///
+    /// Drops Arc references and waits for background tasks to complete.
+    /// Call this at the end of tests for clean shutdown.
+    #[allow(dead_code)]
+    pub async fn cleanup(self) {
+        // Drop self to release Arc references
+        drop(self);
+        // Brief wait for ZMQ background tasks to finish cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+}
+
+impl Deref for TestContext {
+    type Target = MessageHandler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        // Resources will be cleaned up when Arc references are dropped
+        // The ZmqPublisher/ZmqConfigPublisher tasks will exit when their
+        // channel senders are dropped, causing blocking_recv() to return None
+    }
+}
+
+/// Create a test context with MessageHandler and proper resource management
+/// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
+///
+/// Returns TestContext which derefs to MessageHandler for easy use.
+/// Resources are cleaned up when TestContext is dropped.
+pub(crate) async fn create_test_context() -> TestContext {
+    TestContext::new().await
+}
 
 /// Create a test MessageHandler instance with in-memory database
+/// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
+///
+/// DEPRECATED: Use create_test_context() for proper cleanup.
+/// This function returns only MessageHandler, losing ZMQ cleanup tracking.
+#[allow(dead_code)]
 pub(crate) async fn create_test_handler() -> MessageHandler {
+    // Note: This creates ZMQ resources that won't be tracked for cleanup.
+    // The resources will still be cleaned up when dropped, but without
+    // explicit lifecycle management.
     let connection_manager = Arc::new(ConnectionManager::new(30));
     let copy_engine = Arc::new(CopyEngine::new());
-
-    // Use unique port for each test to avoid "Address in use" errors
-    let port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let zmq_sender = Arc::new(ZmqSender::new(&format!("tcp://127.0.0.1:{}", port)).unwrap());
-
+    let zmq_sender = Arc::new(ZmqSender::new("tcp://127.0.0.1:*").unwrap());
     let (broadcast_tx, _) = broadcast::channel::<String>(100);
-
-    // Create test database (in-memory)
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
-
-    // Create ZmqConfigPublisher for tests
-    let config_port = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let config_sender =
-        Arc::new(ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", config_port)).unwrap());
+    let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
     MessageHandler::new(
         connection_manager,
@@ -50,15 +129,16 @@ pub(crate) fn create_test_trade_signal() -> TradeSignal {
     TradeSignal {
         action: TradeAction::Open,
         ticket: 12345,
-        symbol: "EURUSD".to_string(),
-        order_type: OrderType::Buy,
-        lots: 0.1,
-        open_price: 1.1000,
+        symbol: Some("EURUSD".to_string()),
+        order_type: Some(OrderType::Buy),
+        lots: Some(0.1),
+        open_price: Some(1.1000),
         stop_loss: Some(1.0950),
         take_profit: Some(1.1050),
-        magic_number: 0,
-        comment: "Test trade".to_string(),
+        magic_number: Some(0),
+        comment: Some("Test trade".to_string()),
         timestamp: Utc::now(),
         source_account: "MASTER_001".to_string(),
+        close_ratio: None,
     }
 }

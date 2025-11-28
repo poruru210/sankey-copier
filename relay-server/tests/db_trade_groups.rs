@@ -4,7 +4,9 @@
 // Following TDD principles: write tests first, then implement.
 
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings, SlaveSettings};
+use sankey_copier_relay_server::models::{
+    LotCalculationMode, MasterSettings, SlaveSettings, SyncMode,
+};
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 
 /// Helper to create an in-memory test database
@@ -128,9 +130,18 @@ async fn test_add_member() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
-    let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
+    let result = db.add_member("MASTER_001", "SLAVE_001", settings, 0).await;
 
     assert!(result.is_ok());
 }
@@ -141,7 +152,7 @@ async fn test_add_member_without_trade_group() {
 
     let settings = SlaveSettings::default();
     let result = db
-        .add_member("NONEXISTENT_MASTER", "SLAVE_001", settings)
+        .add_member("NONEXISTENT_MASTER", "SLAVE_001", settings, 0)
         .await;
 
     // Should fail due to foreign key constraint
@@ -155,10 +166,10 @@ async fn test_add_duplicate_member() {
     db.create_trade_group("MASTER_001").await.unwrap();
     let settings = SlaveSettings::default();
 
-    db.add_member("MASTER_001", "SLAVE_001", settings.clone())
+    db.add_member("MASTER_001", "SLAVE_001", settings.clone(), 0)
         .await
         .unwrap();
-    let result = db.add_member("MASTER_001", "SLAVE_001", settings).await;
+    let result = db.add_member("MASTER_001", "SLAVE_001", settings, 0).await;
 
     // Should fail due to PRIMARY KEY constraint
     assert!(result.is_err());
@@ -170,10 +181,10 @@ async fn test_get_members() {
 
     db.create_trade_group("MASTER_001").await.unwrap();
 
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -200,7 +211,7 @@ async fn test_get_member() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -227,7 +238,7 @@ async fn test_update_member_settings() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -242,6 +253,15 @@ async fn test_update_member_settings() {
         config_version: 1,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     db.update_member_settings("MASTER_001", "SLAVE_001", new_settings)
@@ -263,7 +283,7 @@ async fn test_update_member_status() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -284,7 +304,7 @@ async fn test_delete_member() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -299,10 +319,10 @@ async fn test_cascade_delete_members() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -365,6 +385,15 @@ async fn test_get_settings_for_slave() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
     let settings2 = SlaveSettings {
@@ -378,12 +407,21 @@ async fn test_get_settings_for_slave() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings1)
+    db.add_member("MASTER_001", "SLAVE_001", settings1, 0)
         .await
         .unwrap();
-    db.add_member("MASTER_002", "SLAVE_001", settings2)
+    db.add_member("MASTER_002", "SLAVE_001", settings2, 0)
         .await
         .unwrap();
 
@@ -403,7 +441,7 @@ async fn test_get_settings_for_slave_includes_disabled() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -423,13 +461,13 @@ async fn test_update_master_statuses_connected() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     // Add members with different statuses
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -481,13 +519,13 @@ async fn test_update_master_statuses_disconnected() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     // Add members with different statuses
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default(), 0)
         .await
         .unwrap();
-    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default())
+    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default(), 0)
         .await
         .unwrap();
 
@@ -562,9 +600,18 @@ async fn test_member_with_symbol_mappings() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings)
+    db.add_member("MASTER_001", "SLAVE_001", settings, 0)
         .await
         .unwrap();
 
@@ -602,9 +649,18 @@ async fn test_member_with_filters() {
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
     };
 
-    db.add_member("MASTER_001", "SLAVE_001", settings)
+    db.add_member("MASTER_001", "SLAVE_001", settings, 0)
         .await
         .unwrap();
 

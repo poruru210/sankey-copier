@@ -1,4 +1,6 @@
-use crate::msgpack::{HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, TradeFilters};
+use crate::msgpack::{
+    HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters,
+};
 
 /// Test that new symbol filter fields are correctly serialized and deserialized
 #[test]
@@ -55,6 +57,7 @@ fn test_config_message_none_symbol_filters() {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2,
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
@@ -72,6 +75,17 @@ fn test_config_message_none_symbol_filters() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -89,6 +103,7 @@ fn test_config_message_some_symbol_filters() {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2,
         lot_calculation_mode: LotCalculationMode::MarginRatio,
         lot_multiplier: Some(1.5),
@@ -106,6 +121,17 @@ fn test_config_message_some_symbol_filters() {
         source_lot_min: Some(0.01),
         source_lot_max: Some(10.0),
         master_equity: Some(50000.0),
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::MarketOrder,
+        limit_order_expiry_min: Some(60),
+        market_sync_max_pips: Some(50.0),
+        max_slippage: Some(30),
+        copy_pending_orders: true,
+        // Trade Execution settings
+        max_retries: 5,
+        max_signal_delay_ms: 10000,
+        use_pending_order_for_delayed: true,
+        allow_new_orders: false,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");

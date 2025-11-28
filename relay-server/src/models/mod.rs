@@ -1,9 +1,11 @@
 mod connection;
+mod global_settings;
 mod mt_installation;
 mod trade_group;
 mod trade_group_member;
 
 pub use connection::*;
+pub use global_settings::*;
 pub use mt_installation::*;
 pub use trade_group::*;
 pub use trade_group_member::*;
@@ -24,7 +26,7 @@ pub struct SlaveConfigWithMaster {
     pub slave_settings: SlaveSettings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OrderType {
     Buy,
     Sell,
@@ -34,27 +36,42 @@ pub enum OrderType {
     SellStop,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TradeAction {
     Open,
     Close,
     Modify,
 }
 
+/// Trade signal message structure
+/// Note: Some fields are optional because Close/Modify actions may not include all data.
+/// The mt-bridge serializer sends None for fields not applicable to the action type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeSignal {
     pub action: TradeAction,
     pub ticket: i64,
-    pub symbol: String,
-    pub order_type: OrderType,
-    pub lots: f64,
-    pub open_price: f64,
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub order_type: Option<OrderType>,
+    #[serde(default)]
+    pub lots: Option<f64>,
+    #[serde(default)]
+    pub open_price: Option<f64>,
+    #[serde(default)]
     pub stop_loss: Option<f64>,
+    #[serde(default)]
     pub take_profit: Option<f64>,
-    pub magic_number: i32,
-    pub comment: String,
+    #[serde(default)]
+    pub magic_number: Option<i32>,
+    #[serde(default)]
+    pub comment: Option<String>,
     pub timestamp: DateTime<Utc>,
     pub source_account: String,
+    /// Close ratio for partial close (0.0-1.0)
+    /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
+    #[serde(default)]
+    pub close_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,14 +97,9 @@ pub struct SymbolConverter {
 
 impl SymbolConverter {
     pub fn convert(&self, symbol: &str, mappings: &[SymbolMapping]) -> String {
-        // Check for exact mapping first
-        if let Some(mapping) = mappings.iter().find(|m| m.source_symbol == symbol) {
-            return mapping.target_symbol.clone();
-        }
-
-        // Apply prefix/suffix transformations
         let mut result = symbol.to_string();
 
+        // 1. Remove Master's prefix/suffix
         if let Some(prefix) = &self.prefix_remove {
             result = result
                 .strip_prefix(prefix.as_str())
@@ -102,6 +114,12 @@ impl SymbolConverter {
                 .to_string();
         }
 
+        // 2. Apply Mapping (on the clean symbol)
+        if let Some(mapping) = mappings.iter().find(|m| m.source_symbol == result) {
+            result = mapping.target_symbol.clone();
+        }
+
+        // 3. Add Slave's prefix/suffix
         if let Some(prefix) = &self.prefix_add {
             result = format!("{}{}", prefix, result);
         }
@@ -210,12 +228,14 @@ mod tests {
             suffix_add: None,
         };
 
+        // Mapping should match the CLEANED symbol
         let mappings = vec![SymbolMapping {
-            source_symbol: "MT5_EURUSD".to_string(),
+            source_symbol: "EURUSD".to_string(),
             target_symbol: "CUSTOM_EURUSD".to_string(),
         }];
 
-        // Exact mapping should take priority over prefix/suffix rules
+        // 1. Remove MT5_ -> EURUSD
+        // 2. Map EURUSD -> CUSTOM_EURUSD
         let result = converter.convert("MT5_EURUSD", &mappings);
         assert_eq!(result, "CUSTOM_EURUSD");
     }

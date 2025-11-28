@@ -111,6 +111,7 @@ fn test_trade_signal_message_serialization() {
         comment: Some("Test trade".to_string()),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         source_account: "master_account".to_string(),
+        close_ratio: None,
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -129,11 +130,12 @@ fn test_trade_signal_message_serialization() {
     assert_eq!(msg.comment, deserialized.comment);
     assert_eq!(msg.timestamp, deserialized.timestamp);
     assert_eq!(msg.source_account, deserialized.source_account);
+    assert_eq!(msg.close_ratio, deserialized.close_ratio);
 }
 
 #[test]
 fn test_trade_signal_close_action() {
-    // Close action should have minimal fields
+    // Close action should have minimal fields (full close)
     let msg = TradeSignalMessage {
         action: "Close".to_string(),
         ticket: 123456,
@@ -147,6 +149,7 @@ fn test_trade_signal_close_action() {
         comment: None,
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         source_account: "master_account".to_string(),
+        close_ratio: None, // None = full close
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -158,6 +161,36 @@ fn test_trade_signal_close_action() {
     assert!(deserialized.symbol.is_none());
     assert!(deserialized.order_type.is_none());
     assert!(deserialized.lots.is_none());
+    assert!(deserialized.close_ratio.is_none());
+}
+
+#[test]
+fn test_trade_signal_partial_close() {
+    // Partial close with close_ratio
+    let msg = TradeSignalMessage {
+        action: "Close".to_string(),
+        ticket: 123456,
+        symbol: None,
+        order_type: None,
+        lots: Some(0.5), // Closing 0.5 lots
+        open_price: None,
+        stop_loss: None,
+        take_profit: None,
+        magic_number: None,
+        comment: None,
+        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        source_account: "master_account".to_string(),
+        close_ratio: Some(0.5), // 50% partial close
+    };
+
+    let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
+    let deserialized: TradeSignalMessage =
+        rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
+
+    assert_eq!(msg.action, deserialized.action);
+    assert_eq!(msg.ticket, deserialized.ticket);
+    assert_eq!(deserialized.lots, Some(0.5));
+    assert_eq!(deserialized.close_ratio, Some(0.5));
 }
 
 #[test]
@@ -166,6 +199,7 @@ fn test_config_message_serialization() {
         account_id: "slave_account_123".to_string(),
         master_account: "master_account_456".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        trade_group_id: "master_account_456".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
@@ -186,6 +220,17 @@ fn test_config_message_serialization() {
         source_lot_min: None,
         source_lot_max: None,
         master_equity: Some(10000.0),
+        // Open Sync Policy defaults
+        sync_mode: SyncMode::default(),
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+        allow_new_orders: true,
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -220,6 +265,7 @@ fn test_messagepack_size_optimization() {
         comment: Some("Test".to_string()),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         source_account: "master".to_string(),
+        close_ratio: None,
     };
 
     let msg_minimal = TradeSignalMessage {
@@ -235,6 +281,7 @@ fn test_messagepack_size_optimization() {
         comment: None,
         timestamp: "2025-01-01T00:00:00Z".to_string(),
         source_account: "master".to_string(),
+        close_ratio: None,
     };
 
     let serialized_full = rmp_serde::to_vec_named(&msg_full).unwrap();

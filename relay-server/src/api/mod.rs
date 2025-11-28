@@ -14,6 +14,7 @@ mod trade_groups;
 mod connections;
 mod logs;
 mod middleware;
+mod victoria_logs_settings;
 mod websocket;
 
 #[cfg(test)]
@@ -36,7 +37,7 @@ use tower_http::LatencyUnit;
 
 use crate::{
     config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
-    zeromq::ZmqConfigPublisher,
+    victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
 };
 
 // Import handlers from submodules
@@ -54,6 +55,8 @@ pub struct AppState {
     pub allowed_origins: Vec<String>,
     pub cors_disabled: bool,
     pub config: Arc<Config>,
+    /// Controller for runtime VictoriaLogs toggle (None if not configured in config.toml)
+    pub vlogs_controller: Option<VLogsController>,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -146,6 +149,17 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/trade-groups/:id/members/:slave_id/toggle",
             post(trade_group_members::toggle_member_status),
+        )
+        // VictoriaLogs API
+        // GET /api/victoria-logs-config: Returns config.toml settings (read-only) + current enabled state
+        .route(
+            "/api/victoria-logs-config",
+            get(victoria_logs_settings::get_vlogs_config),
+        )
+        // PUT /api/victoria-logs-settings: Toggle enabled state only
+        .route(
+            "/api/victoria-logs-settings",
+            axum::routing::put(victoria_logs_settings::toggle_vlogs_enabled),
         )
         .layer(trace_layer)
         .layer(cors)

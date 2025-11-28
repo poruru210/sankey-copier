@@ -6,15 +6,17 @@
 use anyhow::Result;
 use sankey_copier_relay_server::{
     api::{create_router, AppState},
-    config::Config,
+    config::{Config, VictoriaLogsConfig},
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
     log_buffer::create_log_buffer,
     message_handler::MessageHandler,
+    victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer},
 };
 use std::net::TcpListener;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
@@ -96,6 +98,17 @@ impl TestServer {
         // Create log buffer
         let log_buffer = create_log_buffer();
 
+        // Create VLogsController for testing
+        let vlogs_enabled = Arc::new(AtomicBool::new(true));
+        let vlogs_config = VictoriaLogsConfig {
+            enabled: true,
+            host: "http://localhost:9428".to_string(),
+            batch_size: 100,
+            flush_interval_secs: 5,
+            source: "test-relay".to_string(),
+        };
+        let vlogs_controller = Some(VLogsController::new(vlogs_enabled, vlogs_config));
+
         // Create app state
         let state = AppState {
             db: db.clone(),
@@ -106,6 +119,7 @@ impl TestServer {
             allowed_origins: vec![],
             cors_disabled: true, // Disable CORS for tests
             config: Arc::new(Config::default()),
+            vlogs_controller,
         };
 
         // Create router
@@ -169,6 +183,7 @@ impl TestServer {
     ///
     /// This method should be called at the end of each test to ensure clean shutdown.
     /// Without calling this, background tasks may continue running and cause tests to hang.
+    #[allow(dead_code)]
     pub async fn shutdown(mut self) {
         tracing::info!("TestServer shutting down...");
 

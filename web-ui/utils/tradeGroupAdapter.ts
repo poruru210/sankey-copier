@@ -33,12 +33,27 @@ export function convertMembersToCopySettings(
         status: member.status,
         master_account: member.trade_group_id,
         slave_account: member.slave_account,
+        lot_calculation_mode: member.slave_settings.lot_calculation_mode,
         lot_multiplier: member.slave_settings.lot_multiplier,
         reverse_trade: member.slave_settings.reverse_trade,
         symbol_mappings: member.slave_settings.symbol_mappings,
         filters: member.slave_settings.filters,
-        symbol_prefix: member.slave_settings.symbol_prefix ?? tradeGroup.master_settings.symbol_prefix ?? undefined,
-        symbol_suffix: member.slave_settings.symbol_suffix ?? tradeGroup.master_settings.symbol_suffix ?? undefined,
+        // Use slave's own settings - do NOT fallback to master's values
+        // If slave's prefix/suffix is null/undefined, it should stay empty (not inherit from master)
+        symbol_prefix: member.slave_settings.symbol_prefix ?? undefined,
+        symbol_suffix: member.slave_settings.symbol_suffix ?? undefined,
+        source_lot_min: member.slave_settings.source_lot_min ?? undefined,
+        source_lot_max: member.slave_settings.source_lot_max ?? undefined,
+        // Open Sync Policy settings
+        sync_mode: member.slave_settings.sync_mode,
+        limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
+        market_sync_max_pips: member.slave_settings.market_sync_max_pips,
+        max_slippage: member.slave_settings.max_slippage,
+        copy_pending_orders: member.slave_settings.copy_pending_orders,
+        // Trade Execution settings
+        max_retries: member.slave_settings.max_retries,
+        max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
+        use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
       });
     }
   }
@@ -63,6 +78,16 @@ export function convertCopySettingsToSlaveSettings(settings: CopySettings): Slav
     config_version: 0, // Will be set by server
     source_lot_min: settings.source_lot_min ?? null,
     source_lot_max: settings.source_lot_max ?? null,
+    // Open Sync Policy settings
+    sync_mode: settings.sync_mode,
+    limit_order_expiry_min: settings.limit_order_expiry_min,
+    market_sync_max_pips: settings.market_sync_max_pips,
+    max_slippage: settings.max_slippage,
+    copy_pending_orders: settings.copy_pending_orders,
+    // Trade Execution settings
+    max_retries: settings.max_retries,
+    max_signal_delay_ms: settings.max_signal_delay_ms,
+    use_pending_order_for_delayed: settings.use_pending_order_for_delayed,
   };
 }
 
@@ -98,6 +123,16 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
       config_version: 0,
       source_lot_min: request.source_lot_min ?? null,
       source_lot_max: request.source_lot_max ?? null,
+      // Open Sync Policy settings
+      sync_mode: request.sync_mode,
+      limit_order_expiry_min: request.limit_order_expiry_min,
+      market_sync_max_pips: request.market_sync_max_pips,
+      max_slippage: request.max_slippage,
+      copy_pending_orders: request.copy_pending_orders,
+      // Trade Execution settings
+      max_retries: request.max_retries,
+      max_signal_delay_ms: request.max_signal_delay_ms,
+      use_pending_order_for_delayed: request.use_pending_order_for_delayed,
     },
     status: request.status,
   };

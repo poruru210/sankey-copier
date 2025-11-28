@@ -13,7 +13,7 @@
 
 mod test_server;
 
-use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings};
+use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use sankey_copier_zmq::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
@@ -659,7 +659,7 @@ async fn test_slave_config_distribution() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -744,7 +744,7 @@ async fn test_master_slave_config_distribution() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -854,11 +854,20 @@ async fn test_multiple_slaves_same_master() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
+            sync_mode: SyncMode::Skip,
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            // Trade Execution defaults
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
         };
 
         server
             .db
-            .add_member(master_account, slave_account, settings)
+            .add_member(master_account, slave_account, settings, 0)
             .await
             .expect("Failed to add member");
     }
@@ -954,7 +963,7 @@ async fn test_new_member_initial_status_disabled() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1020,7 +1029,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     // Add Slave member to TradeGroup (initial status = DISABLED)
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1128,7 +1137,7 @@ async fn test_delete_member_sends_disabled_config() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1186,18 +1195,17 @@ async fn test_delete_member_sends_disabled_config() {
     let disabled_config = simulator
         .try_receive_config(2000)
         .expect("Failed to receive disabled config after delete");
-
     assert!(
         disabled_config.is_some(),
         "Slave should receive config after member deletion"
     );
-    let disabled_config = disabled_config.unwrap();
+    let config = disabled_config.unwrap(); // Verify status is REMOVED (4)
     assert_eq!(
-        disabled_config.status, 0,
-        "Config status should be DISABLED (0) after member deletion"
+        config.status, 4,
+        "Config status should be REMOVED (4) after member deletion"
     );
 
-    println!("✅ Delete Member E2E test passed: Slave received status=0 config");
+    println!("✅ Delete Member E2E test passed: Slave received status=4 config");
 
     server.shutdown().await;
 }
@@ -1245,7 +1253,17 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave1 to master1");
@@ -1266,7 +1284,17 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave2 to master1");
@@ -1288,7 +1316,17 @@ async fn test_multiple_masters_multiple_slaves() {
                 config_version: 0,
                 source_lot_min: None,
                 source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave3 to master2");
@@ -1460,5 +1498,891 @@ async fn test_multiple_masters_multiple_slaves() {
     println!("   All configs correctly isolated and distributed");
 
     // Explicitly shutdown server and wait for all tasks to complete
+    server.shutdown().await;
+}
+
+/// Test sync policy fields are correctly distributed (SyncMode::Skip)
+#[tokio::test]
+async fn test_sync_policy_skip_mode() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_SYNC_SKIP";
+    let slave_account = "SLAVE_SYNC_SKIP";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave with SyncMode::Skip (default)
+    let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: Some(30),
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings, 0)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+    assert!(config.is_some(), "Should receive config");
+    let config = config.unwrap();
+
+    // Verify sync policy fields
+    assert_eq!(
+        config.sync_mode,
+        sankey_copier_zmq::SyncMode::Skip,
+        "sync_mode should be Skip"
+    );
+    assert_eq!(config.max_slippage, Some(30), "max_slippage should be 30");
+    assert!(
+        !config.copy_pending_orders,
+        "copy_pending_orders should be false"
+    );
+
+    println!("✅ Sync Policy Skip Mode E2E test passed");
+    println!("   sync_mode: {:?}", config.sync_mode);
+    println!("   max_slippage: {:?}", config.max_slippage);
+    println!("   copy_pending_orders: {}", config.copy_pending_orders);
+
+    server.shutdown().await;
+}
+
+/// Test sync policy fields with SyncMode::LimitOrder
+#[tokio::test]
+async fn test_sync_policy_limit_order_mode() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_SYNC_LIMIT";
+    let slave_account = "SLAVE_SYNC_LIMIT";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave with SyncMode::LimitOrder
+    let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.5),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::LimitOrder,
+        limit_order_expiry_min: Some(60), // 60 minutes
+        market_sync_max_pips: None,
+        max_slippage: Some(50),
+        copy_pending_orders: true,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings, 0)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+    assert!(config.is_some(), "Should receive config");
+    let config = config.unwrap();
+
+    // Verify sync policy fields
+    assert_eq!(
+        config.sync_mode,
+        sankey_copier_zmq::SyncMode::LimitOrder,
+        "sync_mode should be LimitOrder"
+    );
+    assert_eq!(
+        config.limit_order_expiry_min,
+        Some(60),
+        "limit_order_expiry_min should be 60"
+    );
+    assert_eq!(config.max_slippage, Some(50), "max_slippage should be 50");
+    assert!(
+        config.copy_pending_orders,
+        "copy_pending_orders should be true"
+    );
+
+    println!("✅ Sync Policy LimitOrder Mode E2E test passed");
+    println!("   sync_mode: {:?}", config.sync_mode);
+    println!(
+        "   limit_order_expiry_min: {:?}",
+        config.limit_order_expiry_min
+    );
+    println!("   max_slippage: {:?}", config.max_slippage);
+    println!("   copy_pending_orders: {}", config.copy_pending_orders);
+
+    server.shutdown().await;
+}
+
+/// Test sync policy fields with SyncMode::MarketOrder
+#[tokio::test]
+async fn test_sync_policy_market_order_mode() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_SYNC_MARKET";
+    let slave_account = "SLAVE_SYNC_MARKET";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave with SyncMode::MarketOrder
+    let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(2.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: Some(0.01),
+        source_lot_max: Some(10.0),
+        sync_mode: SyncMode::MarketOrder,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: Some(25.0), // 25 pips max deviation
+        max_slippage: Some(20),
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings, 0)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+    assert!(config.is_some(), "Should receive config");
+    let config = config.unwrap();
+
+    // Verify sync policy fields
+    assert_eq!(
+        config.sync_mode,
+        sankey_copier_zmq::SyncMode::MarketOrder,
+        "sync_mode should be MarketOrder"
+    );
+    assert_eq!(
+        config.market_sync_max_pips,
+        Some(25.0),
+        "market_sync_max_pips should be 25.0"
+    );
+    assert_eq!(config.max_slippage, Some(20), "max_slippage should be 20");
+    assert!(
+        !config.copy_pending_orders,
+        "copy_pending_orders should be false"
+    );
+
+    // Also verify other fields are preserved
+    assert_eq!(
+        config.lot_multiplier,
+        Some(2.0),
+        "lot_multiplier should be 2.0"
+    );
+    assert_eq!(
+        config.source_lot_min,
+        Some(0.01),
+        "source_lot_min should be 0.01"
+    );
+    assert_eq!(
+        config.source_lot_max,
+        Some(10.0),
+        "source_lot_max should be 10.0"
+    );
+
+    println!("✅ Sync Policy MarketOrder Mode E2E test passed");
+    println!("   sync_mode: {:?}", config.sync_mode);
+    println!("   market_sync_max_pips: {:?}", config.market_sync_max_pips);
+    println!("   max_slippage: {:?}", config.max_slippage);
+    println!("   copy_pending_orders: {}", config.copy_pending_orders);
+    println!(
+        "   source_lot_min: {:?}, source_lot_max: {:?}",
+        config.source_lot_min, config.source_lot_max
+    );
+
+    server.shutdown().await;
+}
+
+/// Test multiple slaves with different sync policies under the same master
+#[tokio::test]
+async fn test_multiple_slaves_different_sync_policies() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_MULTI_SYNC";
+    let slave_skip = "SLAVE_POLICY_SKIP";
+    let slave_limit = "SLAVE_POLICY_LIMIT";
+    let slave_market = "SLAVE_POLICY_MARKET";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Slave 1: Skip mode
+    server
+        .db
+        .add_member(
+            master_account,
+            slave_skip,
+            SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
+                lot_multiplier: Some(1.0),
+                reverse_trade: false,
+                symbol_prefix: None,
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
+                sync_mode: SyncMode::Skip,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: None,
+                max_slippage: None,
+                copy_pending_orders: false,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
+            },
+            0,
+        )
+        .await
+        .expect("Failed to add slave_skip");
+
+    // Slave 2: LimitOrder mode
+    server
+        .db
+        .add_member(
+            master_account,
+            slave_limit,
+            SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
+                lot_multiplier: Some(1.5),
+                reverse_trade: false,
+                symbol_prefix: None,
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
+                sync_mode: SyncMode::LimitOrder,
+                limit_order_expiry_min: Some(120),
+                market_sync_max_pips: None,
+                max_slippage: Some(40),
+                copy_pending_orders: true,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
+            },
+            0,
+        )
+        .await
+        .expect("Failed to add slave_limit");
+
+    // Slave 3: MarketOrder mode
+    server
+        .db
+        .add_member(
+            master_account,
+            slave_market,
+            SlaveSettings {
+                lot_calculation_mode: LotCalculationMode::default(),
+                lot_multiplier: Some(2.0),
+                reverse_trade: true,
+                symbol_prefix: None,
+                symbol_suffix: None,
+                symbol_mappings: vec![],
+                filters: Default::default(),
+                config_version: 0,
+                source_lot_min: None,
+                source_lot_max: None,
+                sync_mode: SyncMode::MarketOrder,
+                limit_order_expiry_min: None,
+                market_sync_max_pips: Some(50.0),
+                max_slippage: Some(30),
+                copy_pending_orders: false,
+                // Trade Execution defaults
+                max_retries: 3,
+                max_signal_delay_ms: 5000,
+                use_pending_order_for_delayed: false,
+            },
+            0,
+        )
+        .await
+        .expect("Failed to add slave_market");
+
+    // Create Slave simulators
+    let sim_skip = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_skip,
+    )
+    .expect("Failed to create sim_skip");
+
+    let sim_limit = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_limit,
+    )
+    .expect("Failed to create sim_limit");
+
+    let sim_market = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_market,
+    )
+    .expect("Failed to create sim_market");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // All slaves send heartbeat and request config
+    for sim in [&sim_skip, &sim_limit, &sim_market] {
+        sim.send_heartbeat().expect("Failed to send heartbeat");
+    }
+    sleep(Duration::from_millis(100)).await;
+
+    for sim in [&sim_skip, &sim_limit, &sim_market] {
+        sim.send_request_config()
+            .expect("Failed to send RequestConfig");
+    }
+    sleep(Duration::from_millis(300)).await;
+
+    // Verify Skip slave
+    let config_skip = sim_skip
+        .try_receive_config(2000)
+        .expect("Failed to receive skip config")
+        .expect("Should receive skip config");
+    assert_eq!(config_skip.sync_mode, sankey_copier_zmq::SyncMode::Skip);
+
+    // Verify LimitOrder slave
+    let config_limit = sim_limit
+        .try_receive_config(2000)
+        .expect("Failed to receive limit config")
+        .expect("Should receive limit config");
+    assert_eq!(
+        config_limit.sync_mode,
+        sankey_copier_zmq::SyncMode::LimitOrder
+    );
+    assert_eq!(config_limit.limit_order_expiry_min, Some(120));
+    assert!(config_limit.copy_pending_orders);
+
+    // Verify MarketOrder slave
+    let config_market = sim_market
+        .try_receive_config(2000)
+        .expect("Failed to receive market config")
+        .expect("Should receive market config");
+    assert_eq!(
+        config_market.sync_mode,
+        sankey_copier_zmq::SyncMode::MarketOrder
+    );
+    assert_eq!(config_market.market_sync_max_pips, Some(50.0));
+    assert!(config_market.reverse_trade);
+
+    println!("✅ Multiple Slaves Different Sync Policies E2E test passed");
+    println!("   Slave Skip: sync_mode={:?}", config_skip.sync_mode);
+    println!(
+        "   Slave Limit: sync_mode={:?}, expiry={:?}min, pending={}",
+        config_limit.sync_mode,
+        config_limit.limit_order_expiry_min,
+        config_limit.copy_pending_orders
+    );
+    println!(
+        "   Slave Market: sync_mode={:?}, max_pips={:?}, reverse={}",
+        config_market.sync_mode, config_market.market_sync_max_pips, config_market.reverse_trade
+    );
+
+    server.shutdown().await;
+}
+
+/// Test regression for symbol prefix issue:
+/// Ensure Slave receives its OWN prefix, not the Master's prefix.
+#[tokio::test]
+async fn test_slave_config_prefix_distribution() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_PREFIX_TEST";
+    let slave_account = "SLAVE_PREFIX_TEST";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Update Master settings to have a specific prefix
+    // This ensures we can distinguish if Slave receives Master's prefix
+    let master_settings = sankey_copier_relay_server::models::MasterSettings {
+        symbol_prefix: Some("MASTER_".to_string()),
+        ..Default::default()
+    };
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to update master settings");
+
+    // Add Slave member with a DIFFERENT prefix
+    let slave_settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: Some("SLAVE_".to_string()), // This is what we expect to receive
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Trade Execution defaults
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, slave_settings, 0)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+
+    assert!(config.is_some(), "Slave should receive config");
+    let config = config.unwrap();
+
+    // VERIFICATION: Check that we received the SLAVE's prefix, not the MASTER's
+    assert_eq!(
+        config.symbol_prefix,
+        Some("SLAVE_".to_string()),
+        "Regression Test Failed: Slave received wrong prefix. Expected 'SLAVE_', got {:?}",
+        config.symbol_prefix
+    );
+
+    // Also verify suffix is None (as set for Slave), just to be sure
+    assert!(config.symbol_suffix.is_none());
+
+    println!("✅ Regression Test Passed: Slave received correct prefix 'SLAVE_' (ignored Master's 'MASTER_')");
+
+    server.shutdown().await;
+}
+
+/// Test Trade Execution settings are correctly distributed to Slave EA
+/// Verifies: max_retries, max_signal_delay_ms, use_pending_order_for_delayed
+#[tokio::test]
+async fn test_trade_execution_settings_distribution() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_TRADE_EXEC";
+    let slave_account = "SLAVE_TRADE_EXEC";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add Slave with custom Trade Execution settings
+    let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        // Custom Trade Execution settings (non-default values)
+        max_retries: 5,                      // Custom: 5 retries
+        max_signal_delay_ms: 10000,          // Custom: 10 seconds
+        use_pending_order_for_delayed: true, // Custom: use pending orders
+    };
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings, 0)
+        .await
+        .expect("Failed to add member");
+
+    // Create Slave EA simulator
+    let simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .expect("Failed to create Slave EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Send Heartbeat and RequestConfig
+    simulator
+        .send_heartbeat()
+        .expect("Failed to send heartbeat");
+    sleep(Duration::from_millis(100)).await;
+
+    simulator
+        .send_request_config()
+        .expect("Failed to send RequestConfig");
+    sleep(Duration::from_millis(200)).await;
+
+    // Receive config
+    let config = simulator
+        .try_receive_config(2000)
+        .expect("Failed to receive config");
+    assert!(config.is_some(), "Should receive config");
+    let config = config.unwrap();
+
+    // Verify Trade Execution settings
+    assert_eq!(
+        config.max_retries, 5,
+        "max_retries should be 5, got {}",
+        config.max_retries
+    );
+    assert_eq!(
+        config.max_signal_delay_ms, 10000,
+        "max_signal_delay_ms should be 10000, got {}",
+        config.max_signal_delay_ms
+    );
+    assert!(
+        config.use_pending_order_for_delayed,
+        "use_pending_order_for_delayed should be true"
+    );
+
+    println!("✅ Trade Execution Settings Distribution E2E test passed");
+    println!("   max_retries: {}", config.max_retries);
+    println!("   max_signal_delay_ms: {}", config.max_signal_delay_ms);
+    println!(
+        "   use_pending_order_for_delayed: {}",
+        config.use_pending_order_for_delayed
+    );
+
+    server.shutdown().await;
+}
+
+/// Test allow_new_orders is correctly derived from member status
+/// - status=ON (STATUS_CONNECTED=2) → allow_new_orders=true
+/// - status=OFF (STATUS_DISABLED=0) → allow_new_orders=false
+#[tokio::test]
+async fn test_allow_new_orders_follows_status() {
+    // Start test server with dynamic ports
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_ALLOW_NEW";
+    let slave_enabled = "SLAVE_ENABLED";
+    let slave_disabled = "SLAVE_DISABLED";
+
+    // Create TradeGroup (Master)
+    server
+        .db
+        .create_trade_group(master_account)
+        .await
+        .expect("Failed to create trade group");
+
+    // Add two slaves with default settings
+    let settings = SlaveSettings {
+        lot_calculation_mode: LotCalculationMode::default(),
+        lot_multiplier: Some(1.0),
+        reverse_trade: false,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_mappings: vec![],
+        filters: Default::default(),
+        config_version: 0,
+        source_lot_min: None,
+        source_lot_max: None,
+        sync_mode: SyncMode::Skip,
+        limit_order_expiry_min: None,
+        market_sync_max_pips: None,
+        max_slippage: None,
+        copy_pending_orders: false,
+        max_retries: 3,
+        max_signal_delay_ms: 5000,
+        use_pending_order_for_delayed: false,
+    };
+
+    // Add enabled slave (status will be set to CONNECTED)
+    server
+        .db
+        .add_member(master_account, slave_enabled, settings.clone(), 0)
+        .await
+        .expect("Failed to add enabled slave");
+
+    // Set status to CONNECTED (2) - allow_new_orders should be true
+    server
+        .db
+        .update_member_status(master_account, slave_enabled, 2)
+        .await
+        .expect("Failed to set enabled status");
+
+    // Add disabled slave (status will be set to DISABLED)
+    server
+        .db
+        .add_member(master_account, slave_disabled, settings, 0)
+        .await
+        .expect("Failed to add disabled slave");
+
+    // Set status to DISABLED (0) - allow_new_orders should be false
+    server
+        .db
+        .update_member_status(master_account, slave_disabled, 0)
+        .await
+        .expect("Failed to set disabled status");
+
+    // Create Slave EA simulators
+    let sim_enabled = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_enabled,
+    )
+    .expect("Failed to create enabled slave simulator");
+
+    let sim_disabled = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_disabled,
+    )
+    .expect("Failed to create disabled slave simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(200)).await;
+
+    // Both send heartbeat
+    sim_enabled
+        .send_heartbeat()
+        .expect("Failed to send heartbeat (enabled)");
+    sim_disabled
+        .send_heartbeat()
+        .expect("Failed to send heartbeat (disabled)");
+    sleep(Duration::from_millis(100)).await;
+
+    // Both request config
+    sim_enabled
+        .send_request_config()
+        .expect("Failed to send RequestConfig (enabled)");
+    sim_disabled
+        .send_request_config()
+        .expect("Failed to send RequestConfig (disabled)");
+    sleep(Duration::from_millis(300)).await;
+
+    // Receive config for enabled slave
+    let config_enabled = sim_enabled
+        .try_receive_config(2000)
+        .expect("Failed to receive config (enabled)")
+        .expect("Should receive config for enabled slave");
+
+    // Receive config for disabled slave
+    let config_disabled = sim_disabled
+        .try_receive_config(2000)
+        .expect("Failed to receive config (disabled)")
+        .expect("Should receive config for disabled slave");
+
+    // Verify allow_new_orders follows status
+    assert!(
+        config_enabled.allow_new_orders,
+        "Enabled slave (status=2) should have allow_new_orders=true"
+    );
+    assert!(
+        !config_disabled.allow_new_orders,
+        "Disabled slave (status=0) should have allow_new_orders=false"
+    );
+
+    println!("✅ allow_new_orders Status Linkage E2E test passed");
+    println!(
+        "   Enabled slave (status=2): allow_new_orders={}",
+        config_enabled.allow_new_orders
+    );
+    println!(
+        "   Disabled slave (status=0): allow_new_orders={}",
+        config_disabled.allow_new_orders
+    );
+
     server.shutdown().await;
 }

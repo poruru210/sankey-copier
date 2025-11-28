@@ -38,11 +38,10 @@ HANDLE_TYPE InitializeZmqContext()
 
    if(context < 0)
    {
-      Print("ERROR: Failed to create ZMQ context");
+      Print("[ERROR] Failed to create ZMQ context");
       return -1;
    }
 
-   Print("ZMQ context created successfully (handle: ", context, ")");
    return context;
 }
 
@@ -60,7 +59,7 @@ HANDLE_TYPE CreateAndConnectZmqSocket(HANDLE_TYPE context, int socket_type, stri
    // Validate context
    if(context < 0)
    {
-      Print("ERROR: Invalid ZMQ context for ", socket_name);
+      Print("[ERROR] Invalid ZMQ context for ", socket_name);
       return -1;
    }
 
@@ -68,21 +67,18 @@ HANDLE_TYPE CreateAndConnectZmqSocket(HANDLE_TYPE context, int socket_type, stri
    HANDLE_TYPE socket = zmq_socket_create(context, socket_type);
    if(socket < 0)
    {
-      Print("ERROR: Failed to create ", socket_name, " socket (type: ", socket_type, ")");
+      Print("[ERROR] Failed to create ", socket_name, " socket");
       return -1;
    }
-
-   Print(socket_name, " socket created (handle: ", socket, ")");
 
    // Connect to address
    if(zmq_socket_connect(socket, address) == 0)
    {
-      Print("ERROR: Failed to connect ", socket_name, " to ", address);
+      Print("[ERROR] Failed to connect ", socket_name, " to ", address);
       zmq_socket_destroy(socket);
       return -1;
    }
 
-   Print(socket_name, " connected to ", address);
    return socket;
 }
 
@@ -97,17 +93,16 @@ bool SubscribeToTopic(HANDLE_TYPE socket, string topic)
 {
    if(socket < 0)
    {
-      Print("ERROR: Invalid socket handle for subscription");
+      Print("[ERROR] Invalid socket handle for subscription");
       return false;
    }
 
    if(zmq_socket_subscribe(socket, topic) == 0)
    {
-      Print("ERROR: Failed to subscribe to topic: ", (topic == "" ? "(all)" : topic));
+      Print("[ERROR] Failed to subscribe to topic: ", (topic == "" ? "(all)" : topic));
       return false;
    }
 
-   Print("Subscribed to topic: ", (topic == "" ? "(all messages)" : topic));
    return true;
 }
 
@@ -123,7 +118,6 @@ void CleanupZmqSocket(HANDLE_TYPE &socket, string socket_name = "Socket")
    if(socket >= 0)
    {
       zmq_socket_destroy(socket);
-      Print(socket_name, " destroyed");
       socket = -1;
    }
 }
@@ -133,7 +127,6 @@ void CleanupZmqContext(HANDLE_TYPE &context)
    if(context >= 0)
    {
       zmq_context_destroy(context);
-      Print("ZMQ context destroyed");
       context = -1;
    }
 }

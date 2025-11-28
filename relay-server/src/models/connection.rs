@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 // Re-export shared message types from DLL
-pub use sankey_copier_zmq::{HeartbeatMessage, RequestConfigMessage, UnregisterMessage};
+pub use sankey_copier_zmq::{
+    HeartbeatMessage, PositionSnapshotMessage, RequestConfigMessage, SyncRequestMessage,
+    UnregisterMessage,
+};
 
 /// EA接続情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +98,8 @@ mod tests {
         let config = SlaveConfigMessage {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            trade_group_id: "MASTER_001".to_string(),
             status: 2, // STATUS_CONNECTED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
@@ -113,6 +117,17 @@ mod tests {
             source_lot_min: None,
             source_lot_max: None,
             master_equity: None,
+            // Open Sync Policy defaults
+            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            // Trade Execution defaults
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
+            allow_new_orders: true,
         };
 
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();

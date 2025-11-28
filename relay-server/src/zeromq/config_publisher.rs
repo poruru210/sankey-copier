@@ -88,6 +88,52 @@ impl ZmqConfigPublisher {
 
         Ok(())
     }
+
+    /// Publish any serializable message to a specific topic
+    /// Used for sync protocol messages (SyncRequest, PositionSnapshot)
+    pub async fn publish_to_topic<T>(&self, topic: &str, message: &T) -> Result<()>
+    where
+        T: serde::Serialize,
+    {
+        let payload = rmp_serde::to_vec_named(message)
+            .context("Failed to serialize message to MessagePack")?;
+
+        let serialized = SerializedMessage {
+            topic: topic.to_string(),
+            payload,
+        };
+
+        self.tx
+            .send(serialized)
+            .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Broadcast VictoriaLogs configuration to all EAs
+    /// Uses fixed topic "vlogs_config" for global broadcast
+    pub async fn broadcast_vlogs_config(
+        &self,
+        settings: &crate::models::VLogsGlobalSettings,
+    ) -> Result<()> {
+        let message = sankey_copier_zmq::VLogsConfigMessage {
+            enabled: settings.enabled,
+            endpoint: settings.endpoint.clone(),
+            batch_size: settings.batch_size,
+            flush_interval_secs: settings.flush_interval_secs,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        self.publish_to_topic("vlogs_config", &message).await?;
+
+        tracing::info!(
+            enabled = settings.enabled,
+            endpoint = %settings.endpoint,
+            "Broadcasted VictoriaLogs config to all EAs on 'vlogs_config' topic"
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -123,11 +169,13 @@ mod tests {
 
         let publisher = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
+        let master_account = "MASTER456".to_string();
         let config = SlaveConfigMessage {
             account_id: "TEST123".to_string(),
-            master_account: "MASTER456".to_string(),
+            master_account: master_account.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
-            status: 1,
+            trade_group_id: master_account.clone(),
+            status: 0, // 0 = DISABLED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
@@ -139,6 +187,17 @@ mod tests {
             source_lot_min: None,
             source_lot_max: None,
             master_equity: Some(10000.0),
+            // Open Sync Policy defaults
+            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            // Trade Execution defaults
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
+            allow_new_orders: true,
         };
 
         // This should succeed (message is queued for sending)
@@ -184,11 +243,13 @@ mod tests {
         for i in 0..10 {
             let pub_clone = Arc::clone(&publisher);
             let handle = tokio::spawn(async move {
+                let master_account = "MASTER".to_string();
                 let config = SlaveConfigMessage {
                     account_id: format!("SLAVE{}", i),
-                    master_account: "MASTER".to_string(),
+                    master_account: master_account.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
-                    status: 1,
+                    trade_group_id: master_account.clone(),
+                    status: 0, // 0 = DISABLED
                     lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: Some(1.0),
                     reverse_trade: false,
@@ -200,6 +261,17 @@ mod tests {
                     source_lot_min: None,
                     source_lot_max: None,
                     master_equity: None,
+                    // Open Sync Policy defaults
+                    sync_mode: sankey_copier_zmq::SyncMode::default(),
+                    limit_order_expiry_min: None,
+                    market_sync_max_pips: None,
+                    max_slippage: None,
+                    copy_pending_orders: false,
+                    // Trade Execution defaults
+                    max_retries: 3,
+                    max_signal_delay_ms: 5000,
+                    use_pending_order_for_delayed: false,
+                    allow_new_orders: true,
                 };
                 pub_clone.send(&config).await
             });
