@@ -199,6 +199,7 @@ fn test_config_message_serialization() {
         account_id: "slave_account_123".to_string(),
         master_account: "master_account_456".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        trade_group_id: "master_account_456".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
