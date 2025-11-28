@@ -137,6 +137,13 @@
    int         vlogs_flush();
    int         vlogs_disable();
    int         vlogs_buffer_size();
+
+   // VictoriaLogs config message parsing (for Web-UI settings)
+   HANDLE_TYPE parse_vlogs_config(uchar &data[], int data_len);
+   int         vlogs_config_get_bool(HANDLE_TYPE handle, string field_name);
+   string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
+   int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
+   void        vlogs_config_free(HANDLE_TYPE handle);
 #import
 
 //--- Common structures

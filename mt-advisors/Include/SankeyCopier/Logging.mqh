@@ -208,4 +208,63 @@ string BuildSyncContext(string master_account, string slave_account = "", int po
    return json;
 }
 
+//+------------------------------------------------------------------+
+//| Apply VictoriaLogs configuration from server message              |
+//| Called when "vlogs_config" message is received from relay-server  |
+//| Parameters:                                                       |
+//|   config_handle - Handle from parse_vlogs_config()                |
+//|   ea_type       - "master" or "slave" for source identification   |
+//|   account_id    - Account identifier for source identification    |
+//| Returns: true if config was applied successfully                  |
+//+------------------------------------------------------------------+
+bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_id)
+{
+   if(config_handle == 0)
+   {
+      Print("[VLOGS] Invalid config handle");
+      return false;
+   }
+
+   // Get enabled flag
+   int enabled = vlogs_config_get_bool(config_handle, "enabled");
+
+   if(enabled == 1)
+   {
+      // Get configuration values
+      string endpoint = vlogs_config_get_string(config_handle, "endpoint");
+      int flush_interval = vlogs_config_get_int(config_handle, "flush_interval_secs");
+
+      // Build source identifier: "ea:master:IC_Markets_12345" or "ea:slave:..."
+      string source = "ea:" + ea_type + ":" + account_id;
+
+      // Configure VictoriaLogs
+      if(vlogs_configure(endpoint, source) == 1)
+      {
+         g_vlogs_enabled = true;
+         g_flush_interval_sec = flush_interval > 0 ? flush_interval : 5;
+         g_last_flush = TimeLocal();
+         Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
+               ", source=", source, ", flush_interval=", g_flush_interval_sec, "s");
+         return true;
+      }
+      else
+      {
+         Print("[VLOGS] Failed to configure VictoriaLogs from server settings");
+         g_vlogs_enabled = false;
+         return false;
+      }
+   }
+   else
+   {
+      // Disable VictoriaLogs
+      if(g_vlogs_enabled)
+      {
+         Print("[VLOGS] Disabled by server config");
+      }
+      g_vlogs_enabled = false;
+      vlogs_disable();
+      return true;
+   }
+}
+
 #endif // SANKEY_COPIER_LOGGING_MQH
