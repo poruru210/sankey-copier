@@ -11,6 +11,8 @@
 use crate::config::VictoriaLogsConfig;
 use chrono::Utc;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::Context;
@@ -45,16 +47,32 @@ enum LogMessage {
 ///
 /// Captures tracing events and sends them to a background task
 /// for batching and HTTP delivery.
+/// The layer can be dynamically enabled/disabled at runtime via the enabled flag.
 pub struct VictoriaLogsLayer {
     sender: mpsc::Sender<LogMessage>,
     source: String,
+    /// Runtime toggle for enabling/disabling log capture
+    enabled: Arc<AtomicBool>,
 }
 
 impl VictoriaLogsLayer {
     /// Create a new VictoriaLogs layer and spawn the background task
     ///
-    /// Returns the layer and a handle to the background task
+    /// Returns the layer and a handle to the background task.
+    /// The layer is enabled by default based on config.enabled.
     pub fn new(config: &VictoriaLogsConfig) -> (Self, tokio::task::JoinHandle<()>) {
+        let enabled = Arc::new(AtomicBool::new(config.enabled));
+        Self::new_with_enabled(config, enabled)
+    }
+
+    /// Create a new VictoriaLogs layer with a shared enabled flag
+    ///
+    /// This allows external control of the enabled state via the shared Arc<AtomicBool>.
+    /// Returns the layer and a handle to the background task.
+    pub fn new_with_enabled(
+        config: &VictoriaLogsConfig,
+        enabled: Arc<AtomicBool>,
+    ) -> (Self, tokio::task::JoinHandle<()>) {
         let (tx, rx) = mpsc::channel(1000);
 
         let task_config = config.clone();
@@ -65,6 +83,7 @@ impl VictoriaLogsLayer {
         let layer = Self {
             sender: tx,
             source: config.source.clone(),
+            enabled,
         };
 
         (layer, handle)
@@ -88,6 +107,11 @@ where
     S: Subscriber,
 {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+        // Early return if disabled at runtime
+        if !self.enabled.load(Ordering::Relaxed) {
+            return;
+        }
+
         // Extract event metadata
         let metadata = event.metadata();
         let level = match *metadata.level() {
@@ -183,6 +207,9 @@ async fn background_sender(mut rx: mpsc::Receiver<LogMessage>, config: VictoriaL
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
+    // Compute full endpoint URL once (host + fixed path)
+    let endpoint = config.endpoint();
+
     let mut buffer: Vec<LogEntry> = Vec::with_capacity(config.batch_size);
     let flush_interval = tokio::time::Duration::from_secs(config.flush_interval_secs);
     let mut flush_timer = tokio::time::interval(flush_interval);
@@ -194,22 +221,22 @@ async fn background_sender(mut rx: mpsc::Receiver<LogMessage>, config: VictoriaL
                     Some(LogMessage::Entry(entry)) => {
                         buffer.push(entry);
                         if buffer.len() >= config.batch_size {
-                            send_batch(&client, &config.endpoint, &mut buffer).await;
+                            send_batch(&client, &endpoint, &mut buffer).await;
                         }
                     }
                     Some(LogMessage::Flush) => {
-                        send_batch(&client, &config.endpoint, &mut buffer).await;
+                        send_batch(&client, &endpoint, &mut buffer).await;
                     }
                     Some(LogMessage::Shutdown) | None => {
                         // Final flush before shutdown
-                        send_batch(&client, &config.endpoint, &mut buffer).await;
+                        send_batch(&client, &endpoint, &mut buffer).await;
                         break;
                     }
                 }
             }
             _ = flush_timer.tick() => {
                 if !buffer.is_empty() {
-                    send_batch(&client, &config.endpoint, &mut buffer).await;
+                    send_batch(&client, &endpoint, &mut buffer).await;
                 }
             }
         }
@@ -260,6 +287,45 @@ async fn send_batch(client: &reqwest::Client, endpoint: &str, buffer: &mut Vec<L
     }
 }
 
+/// Controller for runtime VictoriaLogs toggle
+///
+/// This controller holds the shared enabled flag and config,
+/// allowing runtime enable/disable of VictoriaLogs without restart.
+#[derive(Clone)]
+pub struct VLogsController {
+    /// Runtime enabled flag - shared with VictoriaLogsLayer
+    enabled: Arc<AtomicBool>,
+    /// Config from config.toml (read-only)
+    config: VictoriaLogsConfig,
+}
+
+impl VLogsController {
+    /// Create a new VLogsController
+    pub fn new(enabled: Arc<AtomicBool>, config: VictoriaLogsConfig) -> Self {
+        Self { enabled, config }
+    }
+
+    /// Set the enabled state at runtime
+    pub fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Get the current enabled state
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Check if VictoriaLogs is configured (has a non-empty host)
+    pub fn is_configured(&self) -> bool {
+        !self.config.host.is_empty()
+    }
+
+    /// Get the config (read-only reference)
+    pub fn config(&self) -> &VictoriaLogsConfig {
+        &self.config
+    }
+}
+
 /// Shared handle for controlling the VictoriaLogs layer
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -297,10 +363,10 @@ mod tests {
     use super::*;
     use serial_test::serial;
 
-    fn create_test_config(endpoint: &str) -> VictoriaLogsConfig {
+    fn create_test_config(host: &str) -> VictoriaLogsConfig {
         VictoriaLogsConfig {
             enabled: true,
-            endpoint: endpoint.to_string(),
+            host: host.to_string(),
             batch_size: 10,
             flush_interval_secs: 1,
             source: "test-relay".to_string(),

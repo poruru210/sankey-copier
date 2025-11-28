@@ -106,6 +106,7 @@ impl TestServer {
             allowed_origins: vec![],
             cors_disabled: true, // Disable CORS for tests
             config: Arc::new(Config::default()),
+            vlogs_controller: None,
         };
 
         // Create router

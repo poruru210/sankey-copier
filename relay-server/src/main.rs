@@ -26,7 +26,9 @@ use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
 use models::EaType;
+use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -132,15 +134,24 @@ async fn main() -> Result<()> {
     // Create log buffer
     let log_buffer = create_log_buffer();
 
-    // Create VictoriaLogs layer if enabled
-    // _vlogs_handle can be used for graceful shutdown (flush remaining logs)
-    let (vlogs_layer, _vlogs_handle) = if config.victoria_logs.enabled {
-        let (layer, handle) = victoria_logs::VictoriaLogsLayer::new(&config.victoria_logs);
-        let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
-        (Some(layer), Some((vlogs_handle, handle)))
-    } else {
-        (None, None)
-    };
+    // Create VictoriaLogs layer if configured (endpoint is not empty)
+    // The layer is controlled by a shared Arc<AtomicBool> for runtime enable/disable.
+    // _vlogs_handle can be used for graceful shutdown (flush remaining logs).
+    // vlogs_enabled_flag is shared with VLogsController for runtime toggle.
+    let (vlogs_layer, _vlogs_handle, vlogs_enabled_flag) =
+        if !config.victoria_logs.host.is_empty() {
+            // Create shared enabled flag - initially from config.toml
+            // Will be updated from DB after DB initialization
+            let enabled_flag = Arc::new(AtomicBool::new(config.victoria_logs.enabled));
+            let (layer, handle) = victoria_logs::VictoriaLogsLayer::new_with_enabled(
+                &config.victoria_logs,
+                enabled_flag.clone(),
+            );
+            let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
+            (Some(layer), Some((vlogs_handle, handle)), Some(enabled_flag))
+        } else {
+            (None, None, None)
+        };
 
     // Initialize logging with log buffer layer and optional file output
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -205,12 +216,13 @@ async fn main() -> Result<()> {
         );
     }
 
-    if config.victoria_logs.enabled {
+    if vlogs_enabled_flag.is_some() {
         tracing::info!(
-            "VictoriaLogs enabled: endpoint={}, batch_size={}, flush_interval={}s",
-            config.victoria_logs.endpoint,
+            "VictoriaLogs configured: host={}, batch_size={}, flush_interval={}s, initial_enabled={}",
+            config.victoria_logs.host,
             config.victoria_logs.batch_size,
-            config.victoria_logs.flush_interval_secs
+            config.victoria_logs.flush_interval_secs,
+            config.victoria_logs.enabled
         );
     }
 
@@ -227,6 +239,37 @@ async fn main() -> Result<()> {
     // Initialize database
     let db = Arc::new(Database::new(&config.database.url).await?);
     tracing::info!("Database initialized");
+
+    // Create VLogsController if VictoriaLogs is configured
+    // Load enabled state from DB (overrides config.toml if saved)
+    let vlogs_controller = if let Some(enabled_flag) = vlogs_enabled_flag {
+        // Try to load saved enabled state from DB
+        match db.get_vlogs_settings().await {
+            Ok(saved_settings) => {
+                // Update runtime flag from DB
+                enabled_flag.store(saved_settings.enabled, Ordering::Relaxed);
+                tracing::info!(
+                    "VictoriaLogs enabled state loaded from DB: {}",
+                    saved_settings.enabled
+                );
+            }
+            Err(e) => {
+                // No saved settings in DB - use config.toml default
+                tracing::info!(
+                    "No VictoriaLogs settings in DB ({}), using config.toml default: {}",
+                    e,
+                    config.victoria_logs.enabled
+                );
+            }
+        }
+        Some(VLogsController::new(
+            enabled_flag,
+            config.victoria_logs.clone(),
+        ))
+    } else {
+        tracing::info!("VictoriaLogs not configured (host is empty)");
+        None
+    };
 
     // Initialize ConnectionManager
     let connection_manager = Arc::new(ConnectionManager::new(config.zeromq.timeout_seconds));
@@ -337,6 +380,7 @@ async fn main() -> Result<()> {
         allowed_origins: allowed_origins.clone(),
         cors_disabled,
         config: Arc::new(config.clone()),
+        vlogs_controller,
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");

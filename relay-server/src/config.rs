@@ -152,15 +152,18 @@ impl Default for TlsConfig {
     }
 }
 
+/// VictoriaLogs API endpoint path (fixed, appended to host)
+pub const VICTORIA_LOGS_ENDPOINT_PATH: &str = "/insert/jsonline?_stream_fields=source";
+
 /// VictoriaLogs configuration for centralized log shipping
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VictoriaLogsConfig {
     /// Enable VictoriaLogs integration
     #[serde(default)]
     pub enabled: bool,
-    /// VictoriaLogs endpoint URL (e.g., "http://localhost:9428/insert/jsonline")
-    #[serde(default = "default_vlogs_endpoint")]
-    pub endpoint: String,
+    /// VictoriaLogs host URL (e.g., "http://localhost:9428")
+    #[serde(default = "default_vlogs_host")]
+    pub host: String,
     /// Maximum entries to buffer before sending
     #[serde(default = "default_vlogs_batch_size")]
     pub batch_size: usize,
@@ -172,8 +175,15 @@ pub struct VictoriaLogsConfig {
     pub source: String,
 }
 
-fn default_vlogs_endpoint() -> String {
-    "http://localhost:9428/insert/jsonline?_stream_fields=source".to_string()
+impl VictoriaLogsConfig {
+    /// Get the full endpoint URL (host + fixed path)
+    pub fn endpoint(&self) -> String {
+        format!("{}{}", self.host.trim_end_matches('/'), VICTORIA_LOGS_ENDPOINT_PATH)
+    }
+}
+
+fn default_vlogs_host() -> String {
+    "http://localhost:9428".to_string()
 }
 
 fn default_vlogs_batch_size() -> usize {
@@ -192,7 +202,7 @@ impl Default for VictoriaLogsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            endpoint: default_vlogs_endpoint(),
+            host: default_vlogs_host(),
             batch_size: default_vlogs_batch_size(),
             flush_interval_secs: default_vlogs_flush_interval(),
             source: default_vlogs_source(),

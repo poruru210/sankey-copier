@@ -34,6 +34,7 @@ async fn create_test_app() -> axum::Router {
         allowed_origins: vec!["http://localhost:8080".to_string()],
         cors_disabled: false, // Use strict CORS for tests
         config: Arc::new(sankey_copier_relay_server::config::Config::default()),
+        vlogs_controller: None,
     };
 
     create_router(app_state)

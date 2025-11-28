@@ -1,7 +1,7 @@
 import { t, type DeclarationContent } from 'intlayer';
 
 // Internationalization content for the Settings page
-// Provides Japanese and English translations
+// VictoriaLogs config is read-only from config.toml, only enabled toggle is available
 const settingsPageContent = {
   key: 'settings-page',
   content: {
@@ -21,6 +21,21 @@ const settingsPageContent = {
       en: 'Error',
       ja: 'エラー',
     }),
+    // Not configured state
+    notConfigured: {
+      title: t({
+        en: 'VictoriaLogs Not Configured',
+        ja: 'VictoriaLogs未設定',
+      }),
+      description: t({
+        en: 'VictoriaLogs is not configured in config.toml. Add the [victoria_logs] section to enable this feature.',
+        ja: 'VictoriaLogsはconfig.tomlで設定されていません。この機能を有効にするには[victoria_logs]セクションを追加してください。',
+      }),
+      hint: t({
+        en: 'Add the following section to your config.toml file:',
+        ja: '以下のセクションをconfig.tomlファイルに追加してください:',
+      }),
+    },
     // VictoriaLogs section
     vlogs: {
       title: t({
@@ -28,60 +43,68 @@ const settingsPageContent = {
         ja: 'VictoriaLogs',
       }),
       description: t({
-        en: 'Configure logging to VictoriaLogs for centralized log management. Settings are automatically applied to all connected EAs.',
-        ja: 'VictoriaLogsへのログ出力を設定します。設定は接続中のすべてのEAに自動的に適用されます。',
+        en: 'VictoriaLogs configuration for centralized log management. Toggle enabled state to control log shipping.',
+        ja: 'VictoriaLogsによる集中ログ管理の設定。有効状態を切り替えてログ送信を制御できます。',
       }),
       enabled: t({
         en: 'Enable VictoriaLogs',
         ja: 'VictoriaLogsを有効化',
       }),
       enabledDescription: t({
-        en: 'Send logs from all EAs to VictoriaLogs server',
-        ja: 'すべてのEAからVictoriaLogsサーバーにログを送信',
+        en: 'Send logs from relay server and all EAs to VictoriaLogs',
+        ja: 'リレーサーバーとすべてのEAからVictoriaLogsにログを送信',
       }),
-      endpoint: t({
-        en: 'Endpoint URL',
-        ja: 'エンドポイントURL',
+      readOnlyTitle: t({
+        en: 'Configuration from config.toml',
+        ja: 'config.tomlからの設定',
       }),
-      endpointDescription: t({
-        en: 'VictoriaLogs insert endpoint (e.g., http://localhost:9428/insert/jsonline)',
-        ja: 'VictoriaLogsの挿入エンドポイント（例: http://localhost:9428/insert/jsonline）',
+      readOnlyDescription: t({
+        en: 'The following settings are read from config.toml and cannot be changed here. To modify these values, edit config.toml and restart the server.',
+        ja: '以下の設定はconfig.tomlから読み込まれ、ここでは変更できません。値を変更するにはconfig.tomlを編集してサーバーを再起動してください。',
+      }),
+      host: t({
+        en: 'Host URL',
+        ja: 'ホストURL',
+      }),
+      hostDescription: t({
+        en: 'VictoriaLogs server URL (configured in config.toml)',
+        ja: 'VictoriaLogsサーバーURL（config.tomlで設定）',
       }),
       batchSize: t({
         en: 'Batch Size',
         ja: 'バッチサイズ',
       }),
       batchSizeDescription: t({
-        en: 'Number of log entries to batch before sending (1-10000)',
-        ja: '送信前にバッチするログエントリ数（1-10000）',
+        en: 'Number of log entries to batch before sending (configured in config.toml)',
+        ja: '送信前にバッチするログエントリ数（config.tomlで設定）',
       }),
       flushInterval: t({
         en: 'Flush Interval (seconds)',
         ja: 'フラッシュ間隔（秒）',
       }),
       flushIntervalDescription: t({
-        en: 'Maximum time between log flushes (1-3600 seconds)',
-        ja: 'ログフラッシュの最大間隔（1-3600秒）',
+        en: 'Maximum time between log flushes (configured in config.toml)',
+        ja: 'ログフラッシュの最大間隔（config.tomlで設定）',
+      }),
+      source: t({
+        en: 'Source',
+        ja: 'ソース',
+      }),
+      sourceDescription: t({
+        en: 'Log source identifier (configured in config.toml)',
+        ja: 'ログソース識別子（config.tomlで設定）',
       }),
       statusActive: t({
         en: 'Logging Active',
         ja: 'ログ出力アクティブ',
       }),
       statusActiveDescription: t({
-        en: 'VictoriaLogs integration is configured and will be enabled on save',
-        ja: 'VictoriaLogs連携が設定されており、保存時に有効になります',
+        en: 'VictoriaLogs integration is enabled. Logs are being sent to the configured endpoint.',
+        ja: 'VictoriaLogs連携が有効です。ログは設定されたエンドポイントに送信されています。',
       }),
     },
     // Buttons
     buttons: {
-      save: t({
-        en: 'Save Changes',
-        ja: '変更を保存',
-      }),
-      saving: t({
-        en: 'Saving...',
-        ja: '保存中...',
-      }),
       refresh: t({
         en: 'Refresh',
         ja: '更新',
@@ -89,21 +112,25 @@ const settingsPageContent = {
     },
     // Toast messages
     toast: {
-      saveSuccess: t({
-        en: 'Settings saved',
-        ja: '設定を保存しました',
+      toggleSuccess: t({
+        en: 'Settings updated',
+        ja: '設定を更新しました',
       }),
-      saveSuccessDescription: t({
-        en: 'VictoriaLogs settings have been updated and broadcast to all EAs',
-        ja: 'VictoriaLogs設定が更新され、すべてのEAにブロードキャストされました',
+      enabledDescription: t({
+        en: 'VictoriaLogs has been enabled. Logs will be sent to the configured endpoint.',
+        ja: 'VictoriaLogsが有効になりました。ログは設定されたエンドポイントに送信されます。',
       }),
-      saveError: t({
-        en: 'Failed to save',
-        ja: '保存に失敗しました',
+      disabledDescription: t({
+        en: 'VictoriaLogs has been disabled. Logs will not be sent.',
+        ja: 'VictoriaLogsが無効になりました。ログは送信されません。',
       }),
-      saveErrorDescription: t({
-        en: 'Could not save settings. Please try again.',
-        ja: '設定を保存できませんでした。再試行してください。',
+      toggleError: t({
+        en: 'Failed to update',
+        ja: '更新に失敗しました',
+      }),
+      toggleErrorDescription: t({
+        en: 'Could not update VictoriaLogs settings. Please try again.',
+        ja: 'VictoriaLogs設定を更新できませんでした。再試行してください。',
       }),
     },
   },

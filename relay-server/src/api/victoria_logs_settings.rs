@@ -1,116 +1,143 @@
 // relay-server/src/api/victoria_logs_settings.rs
 //
-// REST API endpoints for VictoriaLogs global settings management.
-// Provides GET/PUT endpoints for Web UI configuration.
+// REST API endpoints for VictoriaLogs configuration and settings management.
+// - GET /api/victoria-logs-config: Returns config.toml settings (read-only) + current enabled state
+// - PUT /api/victoria-logs-settings: Toggle enabled state only
 
 use axum::{extract::State, http::StatusCode, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::models::VLogsGlobalSettings;
 
 use super::{AppState, ProblemDetails};
 
-/// Get VictoriaLogs global settings
-pub async fn get_vlogs_settings(
+/// Response for GET /api/victoria-logs-config
+/// Contains config.toml settings (read-only) and current enabled state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VLogsConfigResponse {
+    /// Whether VictoriaLogs is configured in config.toml (has non-empty host)
+    pub configured: bool,
+    /// Config from config.toml (None if not configured)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub config: Option<VLogsConfigInfo>,
+    /// Current runtime enabled state
+    pub enabled: bool,
+}
+
+/// Config information from config.toml (read-only)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VLogsConfigInfo {
+    /// VictoriaLogs host URL (e.g., "http://localhost:9428")
+    pub host: String,
+    pub batch_size: usize,
+    pub flush_interval_secs: u64,
+    pub source: String,
+}
+
+/// Request for PUT /api/victoria-logs-settings
+/// Only enabled state can be toggled
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VLogsToggleRequest {
+    pub enabled: bool,
+}
+
+/// GET /api/victoria-logs-config
+/// Returns config.toml settings (read-only) and current enabled state
+pub async fn get_vlogs_config(
     State(state): State<AppState>,
-) -> Result<Json<VLogsGlobalSettings>, ProblemDetails> {
-    let span = tracing::info_span!("get_vlogs_settings");
+) -> Result<Json<VLogsConfigResponse>, ProblemDetails> {
+    let span = tracing::info_span!("get_vlogs_config");
     let _enter = span.enter();
 
-    match state.db.get_vlogs_settings().await {
-        Ok(settings) => {
+    match &state.vlogs_controller {
+        Some(controller) => {
+            let config = controller.config();
+            let response = VLogsConfigResponse {
+                configured: true,
+                config: Some(VLogsConfigInfo {
+                    host: config.host.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_secs: config.flush_interval_secs,
+                    source: config.source.clone(),
+                }),
+                enabled: controller.is_enabled(),
+            };
+
             tracing::info!(
-                enabled = settings.enabled,
-                endpoint = %settings.endpoint,
-                batch_size = settings.batch_size,
-                flush_interval_secs = settings.flush_interval_secs,
-                "Retrieved VictoriaLogs settings"
+                configured = true,
+                enabled = response.enabled,
+                host = %config.host,
+                "Retrieved VictoriaLogs config"
             );
-            Ok(Json(settings))
+
+            Ok(Json(response))
         }
-        Err(e) => {
-            tracing::error!(
-                error = %e,
-                error_type = std::any::type_name_of_val(&e),
-                backtrace = ?std::backtrace::Backtrace::capture(),
-                "Failed to retrieve VictoriaLogs settings"
+        None => {
+            tracing::info!(
+                configured = false,
+                "VictoriaLogs not configured in config.toml"
             );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to retrieve VictoriaLogs settings: {}",
-                e
-            )))
+
+            Ok(Json(VLogsConfigResponse {
+                configured: false,
+                config: None,
+                enabled: false,
+            }))
         }
     }
 }
 
-/// Update VictoriaLogs global settings
-/// Also broadcasts the new settings to all connected EAs
-pub async fn update_vlogs_settings(
+/// PUT /api/victoria-logs-settings
+/// Toggle VictoriaLogs enabled state only
+/// Updates runtime state and broadcasts to all connected EAs
+pub async fn toggle_vlogs_enabled(
     State(state): State<AppState>,
-    Json(settings): Json<VLogsGlobalSettings>,
+    Json(request): Json<VLogsToggleRequest>,
 ) -> Result<StatusCode, ProblemDetails> {
-    let span = tracing::info_span!("update_vlogs_settings");
+    let span = tracing::info_span!("toggle_vlogs_enabled", enabled = request.enabled);
     let _enter = span.enter();
 
-    // Validate endpoint URL
-    if settings.enabled && settings.endpoint.is_empty() {
-        tracing::warn!("Attempted to enable VictoriaLogs with empty endpoint");
-        return Err(ProblemDetails::validation_error(
-            "Endpoint URL is required when VictoriaLogs is enabled",
-        ));
-    }
+    // Check if VictoriaLogs is configured
+    let controller = state.vlogs_controller.as_ref().ok_or_else(|| {
+        tracing::warn!("Attempted to toggle VictoriaLogs but it's not configured");
+        ProblemDetails::validation_error(
+            "VictoriaLogs is not configured in config.toml. Add [victoria_logs] section with endpoint to enable this feature.",
+        )
+    })?;
 
-    // Validate batch_size
-    if settings.batch_size < 1 || settings.batch_size > 10000 {
-        tracing::warn!(batch_size = settings.batch_size, "Invalid batch_size value");
-        return Err(ProblemDetails::validation_error(
-            "batch_size must be between 1 and 10000",
-        ));
-    }
+    // Update runtime state
+    controller.set_enabled(request.enabled);
+    tracing::info!(
+        enabled = request.enabled,
+        "Updated VictoriaLogs runtime enabled state"
+    );
 
-    // Validate flush_interval_secs
-    if settings.flush_interval_secs < 1 || settings.flush_interval_secs > 3600 {
-        tracing::warn!(
-            flush_interval_secs = settings.flush_interval_secs,
-            "Invalid flush_interval_secs value"
+    // Save enabled state to database for persistence across restarts
+    let config = controller.config();
+    let settings = VLogsGlobalSettings {
+        enabled: request.enabled,
+        endpoint: config.endpoint(), // Full URL (host + fixed path)
+        batch_size: config.batch_size as i32,
+        flush_interval_secs: config.flush_interval_secs as i32,
+    };
+
+    if let Err(e) = state.db.save_vlogs_settings(&settings).await {
+        tracing::error!(
+            error = %e,
+            "Failed to persist VictoriaLogs enabled state to database"
         );
-        return Err(ProblemDetails::validation_error(
-            "flush_interval_secs must be between 1 and 3600",
-        ));
+        // Continue even if DB save fails - runtime state is already updated
     }
 
-    match state.db.save_vlogs_settings(&settings).await {
-        Ok(_) => {
-            tracing::info!(
-                enabled = settings.enabled,
-                endpoint = %settings.endpoint,
-                batch_size = settings.batch_size,
-                flush_interval_secs = settings.flush_interval_secs,
-                "Successfully saved VictoriaLogs settings"
-            );
+    // Broadcast settings to all connected EAs
+    broadcast_vlogs_config(&state, &settings).await;
 
-            // Broadcast settings to all connected EAs
-            broadcast_vlogs_config(&state, &settings).await;
-
-            // Notify via WebSocket
-            if let Ok(json) = serde_json::to_string(&settings) {
-                let _ = state.tx.send(format!("vlogs_settings_updated:{}", json));
-            }
-
-            Ok(StatusCode::NO_CONTENT)
-        }
-        Err(e) => {
-            tracing::error!(
-                error = %e,
-                error_type = std::any::type_name_of_val(&e),
-                backtrace = ?std::backtrace::Backtrace::capture(),
-                "Failed to save VictoriaLogs settings"
-            );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to save VictoriaLogs settings: {}",
-                e
-            )))
-        }
+    // Notify via WebSocket
+    if let Ok(json) = serde_json::to_string(&settings) {
+        let _ = state.tx.send(format!("vlogs_settings_updated:{}", json));
     }
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Broadcast VictoriaLogs config to all connected EAs via ZMQ
@@ -126,5 +153,41 @@ async fn broadcast_vlogs_config(state: &AppState, settings: &VLogsGlobalSettings
             enabled = settings.enabled,
             "Successfully broadcasted VictoriaLogs config to all EAs"
         );
+    }
+}
+
+// ============================================================================
+// Legacy endpoints (kept for backward compatibility, will be removed later)
+// ============================================================================
+
+/// Get VictoriaLogs global settings (legacy - use get_vlogs_config instead)
+#[deprecated(note = "Use get_vlogs_config instead")]
+pub async fn get_vlogs_settings(
+    State(state): State<AppState>,
+) -> Result<Json<VLogsGlobalSettings>, ProblemDetails> {
+    let span = tracing::info_span!("get_vlogs_settings");
+    let _enter = span.enter();
+
+    match state.db.get_vlogs_settings().await {
+        Ok(settings) => {
+            tracing::info!(
+                enabled = settings.enabled,
+                endpoint = %settings.endpoint,
+                batch_size = settings.batch_size,
+                flush_interval_secs = settings.flush_interval_secs,
+                "Retrieved VictoriaLogs settings (legacy)"
+            );
+            Ok(Json(settings))
+        }
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                "Failed to retrieve VictoriaLogs settings"
+            );
+            Err(ProblemDetails::internal_error(format!(
+                "Failed to retrieve VictoriaLogs settings: {}",
+                e
+            )))
+        }
     }
 }

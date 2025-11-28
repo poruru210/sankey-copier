@@ -4,19 +4,29 @@
 //! like connections, app state, heartbeats, and settings.
 
 mod trade_group_members_tests;
+mod victoria_logs_config_tests;
 
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::api::AppState;
+use crate::victoria_logs::VLogsController;
 use crate::{
-    config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
+    config::{Config, VictoriaLogsConfig},
+    connection_manager::ConnectionManager,
+    db::Database,
+    log_buffer::LogBuffer,
     zeromq::ZmqConfigPublisher,
 };
 
-/// Create a test AppState with in-memory database
+/// Create a test AppState with in-memory database (VictoriaLogs not configured)
 pub(crate) async fn create_test_app_state() -> AppState {
+    create_test_app_state_with_vlogs(false).await
+}
+
+/// Create a test AppState with optional VictoriaLogs controller
+pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> AppState {
     static PORT_COUNTER: AtomicU16 = AtomicU16::new(15557);
 
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
@@ -32,6 +42,21 @@ pub(crate) async fn create_test_app_state() -> AppState {
     let log_buffer = LogBuffer::default();
     let config = Arc::new(Config::default());
 
+    // Create VLogsController if configured
+    let vlogs_controller = if vlogs_configured {
+        let enabled_flag = Arc::new(AtomicBool::new(true));
+        let vlogs_config = VictoriaLogsConfig {
+            enabled: true,
+            host: "http://localhost:9428".to_string(),
+            batch_size: 100,
+            flush_interval_secs: 5,
+            source: "test-relay".to_string(),
+        };
+        Some(VLogsController::new(enabled_flag, vlogs_config))
+    } else {
+        None
+    };
+
     AppState {
         db,
         tx,
@@ -41,5 +66,6 @@ pub(crate) async fn create_test_app_state() -> AppState {
         allowed_origins: vec![],
         cors_disabled: true,
         config,
+        vlogs_controller,
     }
 }

@@ -55,8 +55,8 @@ validity_days = 3650                    # Certificate validity period in days (d
 # VictoriaLogs integration for centralized logging
 # Start VictoriaLogs with: docker compose up -d victoria-logs
 # Web UI: http://localhost:9428/select/vmui
-enabled = false                                         # Set to true to enable VictoriaLogs
-endpoint = "http://localhost:9428/insert/jsonline?_stream_fields=source"  # VictoriaLogs HTTP endpoint
+enabled = true                                          # VictoriaLogs enabled by default
+host = "http://localhost:9428"                          # VictoriaLogs host URL
 batch_size = 100                                        # Maximum entries to buffer before sending
 flush_interval_secs = 5                                 # Flush interval in seconds
 source = "relay-server"                                 # Source identifier for logs
