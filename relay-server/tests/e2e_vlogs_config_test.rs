@@ -317,20 +317,18 @@ async fn test_vlogs_config_broadcast_on_api_update() {
         .is_some()
     {}
 
-    // Update VLogs settings via API
+    // Update VLogs enabled state via API (new API only toggles enabled)
     let client = reqwest::Client::new();
     let update_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
 
-    let new_settings = serde_json::json!({
-        "enabled": true,
-        "endpoint": "http://new-vlogs-server:9428/insert/jsonline?_stream_fields=source",
-        "batch_size": 200,
-        "flush_interval_secs": 15
+    // New API only accepts { enabled: bool }
+    let toggle_request = serde_json::json!({
+        "enabled": true
     });
 
     let response = client
         .put(&update_url)
-        .json(&new_settings)
+        .json(&toggle_request)
         .send()
         .await
         .expect("Failed to send update request");
@@ -354,16 +352,14 @@ async fn test_vlogs_config_broadcast_on_api_update() {
         .expect("Slave failed to receive config")
         .expect("Slave should receive VLogs config after update");
 
-    // Verify both received the same updated config
+    // Verify both received the same updated config (enabled=true, other values from config.toml)
     assert!(master_config.enabled);
-    assert_eq!(master_config.batch_size, 200);
-    assert_eq!(master_config.flush_interval_secs, 15);
-    assert!(master_config.endpoint.contains("new-vlogs-server"));
+    assert_eq!(master_config.batch_size, 100); // From test config
+    assert_eq!(master_config.flush_interval_secs, 5); // From test config
 
     assert!(slave_config.enabled);
-    assert_eq!(slave_config.batch_size, 200);
-    assert_eq!(slave_config.flush_interval_secs, 15);
-    assert!(slave_config.endpoint.contains("new-vlogs-server"));
+    assert_eq!(slave_config.batch_size, 100);
+    assert_eq!(slave_config.flush_interval_secs, 5);
 
     println!("✅ VLogs Config API Broadcast E2E test passed");
     println!("   Both Master and Slave received updated config");
@@ -414,20 +410,17 @@ async fn test_vlogs_config_disable() {
     // Drain registration message
     let _ = subscriber.try_receive_vlogs_config(100);
 
-    // Disable VLogs via API
+    // Disable VLogs via API (new API only accepts { enabled: bool })
     let client = reqwest::Client::new();
     let update_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
 
-    let disabled_settings = serde_json::json!({
-        "enabled": false,
-        "endpoint": "http://vlogs:9428/insert/jsonline",
-        "batch_size": 100,
-        "flush_interval_secs": 5
+    let disable_request = serde_json::json!({
+        "enabled": false
     });
 
     let response = client
         .put(&update_url)
-        .json(&disabled_settings)
+        .json(&disable_request)
         .send()
         .await
         .expect("Failed to send disable request");
@@ -450,29 +443,16 @@ async fn test_vlogs_config_disable() {
     server.shutdown().await;
 }
 
-/// Test VLogs config GET API returns saved settings
+/// Test VLogs config GET API returns config.toml settings (read-only) + runtime enabled state
 #[tokio::test]
 async fn test_vlogs_config_get_api() {
     let server = TestServer::start()
         .await
         .expect("Failed to start test server");
 
-    // Save settings to DB
-    let settings = sankey_copier_relay_server::models::VLogsGlobalSettings {
-        enabled: true,
-        endpoint: "http://custom-vlogs:9428/insert/jsonline?_stream_fields=source".to_string(),
-        batch_size: 250,
-        flush_interval_secs: 20,
-    };
-    server
-        .db
-        .save_vlogs_settings(&settings)
-        .await
-        .expect("Failed to save settings");
-
-    // GET via API
+    // GET via new API endpoint
     let client = reqwest::Client::new();
-    let get_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
+    let get_url = format!("{}/api/victoria-logs-config", server.http_base_url());
 
     let response = client
         .get(&get_url)
@@ -484,30 +464,46 @@ async fn test_vlogs_config_get_api() {
 
     let returned: serde_json::Value = response.json().await.expect("Failed to parse response");
 
-    assert_eq!(returned["enabled"], true);
+    // New API returns: { configured: bool, config: { host, batch_size, ... }, enabled: bool }
     assert_eq!(
-        returned["endpoint"],
-        "http://custom-vlogs:9428/insert/jsonline?_stream_fields=source"
+        returned["configured"], true,
+        "VictoriaLogs should be configured"
     );
-    assert_eq!(returned["batch_size"], 250);
-    assert_eq!(returned["flush_interval_secs"], 20);
+    assert_eq!(
+        returned["enabled"], true,
+        "enabled should be true (from test config)"
+    );
+
+    // Config fields from config.toml (test uses localhost:9428)
+    let config = &returned["config"];
+    assert!(
+        config["host"].as_str().unwrap().contains("localhost:9428"),
+        "host should contain localhost:9428"
+    );
+    assert_eq!(config["batch_size"], 100, "batch_size should be 100");
+    assert_eq!(
+        config["flush_interval_secs"], 5,
+        "flush_interval_secs should be 5"
+    );
 
     println!("✅ VLogs Config GET API E2E test passed");
-    println!("   Retrieved settings match saved values");
+    println!("   configured: {}", returned["configured"]);
+    println!("   enabled: {}", returned["enabled"]);
+    println!("   host: {}", config["host"]);
 
     server.shutdown().await;
 }
 
-/// Test VLogs config returns default when not set
+/// Test VLogs config returns test server's configured values
 #[tokio::test]
 async fn test_vlogs_config_default_values() {
     let server = TestServer::start()
         .await
         .expect("Failed to start test server");
 
-    // GET without any prior save (should return defaults)
+    // GET config (TestServer is always configured with VLogsController)
     let client = reqwest::Client::new();
-    let get_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
+    let get_url = format!("{}/api/victoria-logs-config", server.http_base_url());
 
     let response = client
         .get(&get_url)
@@ -519,39 +515,37 @@ async fn test_vlogs_config_default_values() {
 
     let returned: serde_json::Value = response.json().await.expect("Failed to parse response");
 
-    // Verify default values
+    // Verify test server configured values
     assert_eq!(
-        returned["enabled"], false,
-        "Default enabled should be false"
-    );
-    assert!(
-        returned["endpoint"]
-            .as_str()
-            .unwrap()
-            .contains("localhost:9428"),
-        "Default endpoint should be localhost"
+        returned["configured"], true,
+        "VictoriaLogs should be configured"
     );
     assert_eq!(
-        returned["batch_size"], 100,
-        "Default batch_size should be 100"
-    );
-    assert_eq!(
-        returned["flush_interval_secs"], 5,
-        "Default flush_interval_secs should be 5"
+        returned["enabled"], true,
+        "enabled should be true (test config)"
     );
 
-    println!("✅ VLogs Config Default Values E2E test passed");
-    println!("   enabled: {} (default)", returned["enabled"]);
-    println!("   batch_size: {} (default)", returned["batch_size"]);
-    println!(
-        "   flush_interval_secs: {} (default)",
-        returned["flush_interval_secs"]
+    let config = &returned["config"];
+    assert!(
+        config["host"].as_str().unwrap().contains("localhost:9428"),
+        "host should be localhost:9428"
     );
+    assert_eq!(config["batch_size"], 100, "batch_size should be 100");
+    assert_eq!(
+        config["flush_interval_secs"], 5,
+        "flush_interval_secs should be 5"
+    );
+
+    println!("✅ VLogs Config Values E2E test passed");
+    println!("   configured: {}", returned["configured"]);
+    println!("   enabled: {}", returned["enabled"]);
+    println!("   batch_size: {}", config["batch_size"]);
+    println!("   flush_interval_secs: {}", config["flush_interval_secs"]);
 
     server.shutdown().await;
 }
 
-/// Test VLogs config validation errors
+/// Test VLogs config validation errors (new API only accepts { enabled: bool })
 #[tokio::test]
 async fn test_vlogs_config_validation_errors() {
     let server = TestServer::start()
@@ -561,70 +555,66 @@ async fn test_vlogs_config_validation_errors() {
     let client = reqwest::Client::new();
     let update_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
 
-    // Test 1: enabled=true with empty endpoint
-    let invalid_endpoint = serde_json::json!({
+    // Test 1: Invalid request format (old format should be rejected)
+    let old_format = serde_json::json!({
         "enabled": true,
-        "endpoint": "",
+        "endpoint": "http://vlogs:9428",
         "batch_size": 100,
         "flush_interval_secs": 5
     });
 
     let response = client
         .put(&update_url)
-        .json(&invalid_endpoint)
+        .json(&old_format)
         .send()
         .await
         .expect("Failed to send request");
 
+    // Old format with extra fields should still work (extra fields ignored)
+    // because serde will deserialize only the 'enabled' field
     assert!(
-        response.status().is_client_error(),
-        "Empty endpoint with enabled=true should be rejected"
+        response.status().is_success(),
+        "Request with extra fields should succeed (fields ignored)"
     );
 
-    // Test 2: batch_size out of range
-    let invalid_batch = serde_json::json!({
-        "enabled": false,
-        "endpoint": "http://vlogs:9428",
-        "batch_size": 50000,  // Max is 10000
-        "flush_interval_secs": 5
+    // Test 2: Missing enabled field should fail
+    let missing_enabled = serde_json::json!({
+        "something_else": true
     });
 
     let response = client
         .put(&update_url)
-        .json(&invalid_batch)
+        .json(&missing_enabled)
         .send()
         .await
         .expect("Failed to send request");
 
     assert!(
         response.status().is_client_error(),
-        "batch_size > 10000 should be rejected"
+        "Request without 'enabled' field should be rejected"
     );
 
-    // Test 3: flush_interval_secs out of range
-    let invalid_interval = serde_json::json!({
-        "enabled": false,
-        "endpoint": "http://vlogs:9428",
-        "batch_size": 100,
-        "flush_interval_secs": 7200  // Max is 3600
+    // Test 3: Valid toggle request should work
+    let valid_toggle = serde_json::json!({
+        "enabled": false
     });
 
     let response = client
         .put(&update_url)
-        .json(&invalid_interval)
+        .json(&valid_toggle)
         .send()
         .await
         .expect("Failed to send request");
 
     assert!(
-        response.status().is_client_error(),
-        "flush_interval_secs > 3600 should be rejected"
+        response.status().is_success(),
+        "Valid toggle request should succeed"
     );
 
     println!("✅ VLogs Config Validation E2E test passed");
-    println!("   Empty endpoint rejected ✓");
-    println!("   Invalid batch_size rejected ✓");
-    println!("   Invalid flush_interval_secs rejected ✓");
+    println!("   Extra fields ignored ✓");
+    println!("   Missing enabled field rejected ✓");
+    println!("   Valid toggle accepted ✓");
 
     server.shutdown().await;
 }
