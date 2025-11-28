@@ -178,7 +178,11 @@ pub struct VictoriaLogsConfig {
 impl VictoriaLogsConfig {
     /// Get the full endpoint URL (host + fixed path)
     pub fn endpoint(&self) -> String {
-        format!("{}{}", self.host.trim_end_matches('/'), VICTORIA_LOGS_ENDPOINT_PATH)
+        format!(
+            "{}{}",
+            self.host.trim_end_matches('/'),
+            VICTORIA_LOGS_ENDPOINT_PATH
+        )
     }
 }
 

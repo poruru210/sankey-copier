@@ -26,9 +26,9 @@ use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
 use models::EaType;
+use std::sync::atomic::{AtomicBool, Ordering};
 use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -138,20 +138,24 @@ async fn main() -> Result<()> {
     // The layer is controlled by a shared Arc<AtomicBool> for runtime enable/disable.
     // _vlogs_handle can be used for graceful shutdown (flush remaining logs).
     // vlogs_enabled_flag is shared with VLogsController for runtime toggle.
-    let (vlogs_layer, _vlogs_handle, vlogs_enabled_flag) =
-        if !config.victoria_logs.host.is_empty() {
-            // Create shared enabled flag - initially from config.toml
-            // Will be updated from DB after DB initialization
-            let enabled_flag = Arc::new(AtomicBool::new(config.victoria_logs.enabled));
-            let (layer, handle) = victoria_logs::VictoriaLogsLayer::new_with_enabled(
-                &config.victoria_logs,
-                enabled_flag.clone(),
-            );
-            let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
-            (Some(layer), Some((vlogs_handle, handle)), Some(enabled_flag))
-        } else {
-            (None, None, None)
-        };
+    let (vlogs_layer, _vlogs_handle, vlogs_enabled_flag) = if !config.victoria_logs.host.is_empty()
+    {
+        // Create shared enabled flag - initially from config.toml
+        // Will be updated from DB after DB initialization
+        let enabled_flag = Arc::new(AtomicBool::new(config.victoria_logs.enabled));
+        let (layer, handle) = victoria_logs::VictoriaLogsLayer::new_with_enabled(
+            &config.victoria_logs,
+            enabled_flag.clone(),
+        );
+        let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
+        (
+            Some(layer),
+            Some((vlogs_handle, handle)),
+            Some(enabled_flag),
+        )
+    } else {
+        (None, None, None)
+    };
 
     // Initialize logging with log buffer layer and optional file output
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
