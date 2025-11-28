@@ -14,6 +14,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
@@ -55,6 +56,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_MODERATE_001".to_string(),
         master_account: "MASTER_MODERATE_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_MODERATE_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
@@ -113,6 +115,7 @@ async fn test_config_message_size_benchmark() {
         account_id: "SLAVE_MAXIMUM_CONFIGURATION_001".to_string(),
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(2.5),
@@ -241,6 +244,7 @@ async fn test_estimate_parsing_performance() {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),

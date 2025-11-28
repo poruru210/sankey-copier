@@ -13,6 +13,8 @@ pub const STATUS_DISABLED: i32 = 0;
 pub const STATUS_ENABLED: i32 = 1;
 #[allow(dead_code)]
 pub const STATUS_CONNECTED: i32 = 2;
+#[allow(dead_code)]
+pub const STATUS_REMOVED: i32 = 4;
 
 /// TradeGroupMember represents a Slave account connected to a TradeGroup (Master)
 #[derive(Debug, Clone, Serialize, Deserialize)]

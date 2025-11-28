@@ -44,6 +44,7 @@
 #define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
 #define STATUS_NO_CONFIGURATION 3 // No configuration received yet
+#define STATUS_REMOVED 4          // Configuration removed (deleted from UI)
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"

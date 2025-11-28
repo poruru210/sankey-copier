@@ -69,6 +69,24 @@ ENUM_ORDER_TYPE GetOrderTypeFromString(string type_str)
 }
 #endif
 
+//+------------------------------------------------------------------+
+//| Ensure symbol is active and selected in Market Watch              |
+//+------------------------------------------------------------------+
+bool EnsureSymbolActive(string symbol)
+{
+   // Check if symbol is selected in Market Watch
+   if(!SymbolInfoInteger(symbol, SYMBOL_SELECT))
+   {
+      // Try to select it
+      if(!SymbolSelect(symbol, true))
+      {
+         LogError(CAT_TRADE, StringFormat("Symbol not found or cannot be selected: %s", symbol));
+         return false;
+      }
+   }
+   return true;
+}
+
 // Note: NormalizeLotSize is provided by Trade.mqh
 
 // =============================================================================
@@ -91,6 +109,8 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
       LogDebug(CAT_TRADE, StringFormat("Already copied master #%d", master_ticket));
       return;
    }
+
+   if(!EnsureSymbolActive(symbol)) return;
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
@@ -252,6 +272,8 @@ void ExecutePendingOrder(CTrade &trade, PendingTicketMapping &pending_map[],
       return;
    }
 
+   if(!EnsureSymbolActive(symbol)) return;
+
    ENUM_ORDER_TYPE order_type = GetOrderTypeFromString(type_str);
    if((int)order_type == -1) return;
 
@@ -319,6 +341,8 @@ void SyncWithLimitOrder(CTrade &trade, PendingTicketMapping &pending_map[],
    ENUM_ORDER_TYPE base_type = GetOrderTypeFromString(type_str);
    if((int)base_type == -1) return;
 
+   if(!EnsureSymbolActive(symbol)) return;
+
    ENUM_ORDER_TYPE limit_type;
    double current_price;
 
@@ -380,6 +404,8 @@ bool SyncWithMarketOrder(CTrade &trade, TicketMapping &order_map[],
 {
    ENUM_ORDER_TYPE order_type = GetOrderTypeFromString(type_str);
    if((int)order_type == -1) return false;
+
+   if(!EnsureSymbolActive(symbol)) return false;
 
    double current_price;
    if(order_type == ORDER_TYPE_BUY)
@@ -458,6 +484,8 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
       LogDebug(CAT_TRADE, StringFormat("Order already copied: master #%d -> slave #%d", master_ticket, slave_ticket));
       return;
    }
+
+   if(!EnsureSymbolActive(symbol)) return;
 
    // Check signal delay
    datetime signal_time = ParseISO8601(timestamp);
@@ -648,6 +676,8 @@ void ExecutePendingOrder(PendingTicketMapping &pending_map[],
       return;
    }
 
+   if(!EnsureSymbolActive(symbol)) return;
+
    int base_order_type = GetOrderTypeFromString(type_str);
    if(base_order_type == -1)
    {
@@ -725,6 +755,8 @@ void SyncWithLimitOrder(PendingTicketMapping &pending_map[],
    int base_type = GetOrderTypeFromString(type_str);
    if(base_type == -1) return;
 
+   if(!EnsureSymbolActive(symbol)) return;
+
    int limit_type;
    double current_price;
 
@@ -782,6 +814,8 @@ bool SyncWithMarketOrder(TicketMapping &order_map[],
    int order_type = GetOrderTypeFromString(type_str);
    if(order_type == -1 || (order_type != OP_BUY && order_type != OP_SELL))
       return false;
+
+   if(!EnsureSymbolActive(symbol)) return false;
 
    double current_price;
    if(order_type == OP_BUY)

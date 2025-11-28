@@ -98,7 +98,8 @@ mod tests {
         let config = SlaveConfigMessage {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            trade_group_id: "MASTER_001".to_string(),
             status: 2, // STATUS_CONNECTED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),

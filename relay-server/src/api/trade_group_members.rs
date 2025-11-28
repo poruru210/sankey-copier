@@ -516,7 +516,7 @@ async fn send_disabled_config_to_slave(
     let config = SlaveConfigMessage {
         account_id: slave_account.to_string(),
         master_account: master_account.to_string(),
-        status: 0, // STATUS_DISABLED
+        status: 4, // STATUS_REMOVED
         lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
         lot_multiplier: None,
         reverse_trade: false,
@@ -529,6 +529,7 @@ async fn send_disabled_config_to_slave(
         source_lot_max: None,
         master_equity: None,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        trade_group_id: master_account.to_string(),
         // Open Sync Policy defaults
         sync_mode: sankey_copier_zmq::SyncMode::default(),
         limit_order_expiry_min: None,
@@ -571,6 +572,7 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
     let config = SlaveConfigMessage {
         account_id: member.slave_account.clone(),
         master_account: master_account.to_string(),
+        trade_group_id: master_account.to_string(),
         status: member.status,
         lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
         lot_multiplier: member.slave_settings.lot_multiplier,

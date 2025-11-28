@@ -66,6 +66,7 @@ impl MessageHandler {
                                     account_id: member.slave_account.clone(),
                                     master_account: account_id.clone(),
                                     timestamp: chrono::Utc::now().to_rfc3339(),
+                                    trade_group_id: account_id.clone(),
                                     status: effective_status,
                                     lot_calculation_mode: member
                                         .slave_settings

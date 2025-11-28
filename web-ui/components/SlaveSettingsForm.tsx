@@ -191,6 +191,18 @@ export function SlaveSettingsForm({
           description={content.symbolFiltersDescription?.value || "Configure symbol name transformations for this connection."}
         />
         <DrawerSectionContent>
+          {/* Symbol Mappings */}
+          <DrawerFormField
+            label={content.symbolMappings?.value || "Symbol Mappings"}
+            htmlFor="symbol_mappings"
+          >
+            <SymbolMappingInput
+              value={formData.symbol_mappings}
+              onChange={(value) => handleChange('symbol_mappings', value)}
+              disabled={disabled}
+            />
+          </DrawerFormField>
+
           {/* Symbol Prefix */}
           <DrawerFormField
             label={content.symbolPrefix?.value || "Symbol Prefix"}
@@ -219,18 +231,6 @@ export function SlaveSettingsForm({
               placeholder={content.symbolSuffixPlaceholder?.value || "e.g. '.m' or '-ECN'"}
               value={formData.symbol_suffix}
               onChange={(e) => handleChange('symbol_suffix', e.target.value)}
-              disabled={disabled}
-            />
-          </DrawerFormField>
-
-          {/* Symbol Mappings */}
-          <DrawerFormField
-            label={content.symbolMappings?.value || "Symbol Mappings"}
-            htmlFor="symbol_mappings"
-          >
-            <SymbolMappingInput
-              value={formData.symbol_mappings}
-              onChange={(value) => handleChange('symbol_mappings', value)}
               disabled={disabled}
             />
           </DrawerFormField>

@@ -169,11 +169,13 @@ mod tests {
 
         let publisher = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
+        let master_account = "MASTER456".to_string();
         let config = SlaveConfigMessage {
             account_id: "TEST123".to_string(),
-            master_account: "MASTER456".to_string(),
+            master_account: master_account.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
-            status: 1,
+            trade_group_id: master_account.clone(),
+            status: 0, // 0 = DISABLED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
@@ -241,11 +243,13 @@ mod tests {
         for i in 0..10 {
             let pub_clone = Arc::clone(&publisher);
             let handle = tokio::spawn(async move {
+                let master_account = "MASTER".to_string();
                 let config = SlaveConfigMessage {
                     account_id: format!("SLAVE{}", i),
-                    master_account: "MASTER".to_string(),
+                    master_account: master_account.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
-                    status: 1,
+                    trade_group_id: master_account.clone(),
+                    status: 0, // 0 = DISABLED
                     lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: Some(1.0),
                     reverse_trade: false,

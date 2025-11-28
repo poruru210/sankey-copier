@@ -187,9 +187,9 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    LogDebug(CAT_CONFIG, StringFormat("Found index: %d", index));
 
-   if(new_status == STATUS_DISABLED)
+   if(new_status == STATUS_REMOVED)
    {
-      // Remove configuration if disabled
+      // Remove configuration ONLY if status is REMOVED (4)
       if(index >= 0)
       {
          LogDebug(CAT_CONFIG, StringFormat("Removing configuration for master %s at index %d", new_master, index));
@@ -213,7 +213,8 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    }
    else
    {
-      // Track if this is a new config (for sync request triggering)
+      // For STATUS_DISABLED (0), ENABLED (1), CONNECTED (2):
+      // Add or Update configuration so it remains visible in the list
       bool is_new_config = (index == -1);
 
       // Add or Update configuration

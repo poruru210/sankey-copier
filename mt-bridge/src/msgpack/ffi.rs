@@ -7,8 +7,8 @@ use super::helpers::{
     MAX_STRING_LEN, STRING_BUFFER_1, STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
 };
 use super::types::{
-    MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SlaveConfigMessage, SyncMode,
-    SyncRequestMessage, TradeSignalMessage, VLogsConfigMessage,
+    LotCalculationMode, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
+    SlaveConfigMessage, SyncMode, SyncRequestMessage, TradeSignalMessage, VLogsConfigMessage,
 };
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -96,13 +96,20 @@ pub unsafe extern "C" fn slave_config_get_string(
     static SYNC_MODE_SKIP: LazyLock<String> = LazyLock::new(|| "skip".to_string());
     static SYNC_MODE_LIMIT_ORDER: LazyLock<String> = LazyLock::new(|| "limit_order".to_string());
     static SYNC_MODE_MARKET_ORDER: LazyLock<String> = LazyLock::new(|| "market_order".to_string());
+    static LOT_CALC_MODE_MULTIPLIER: LazyLock<String> = LazyLock::new(|| "multiplier".to_string());
+    static LOT_CALC_MODE_MARGIN_RATIO: LazyLock<String> = LazyLock::new(|| "margin_ratio".to_string());
 
     let value = match field.as_str() {
         "account_id" => &config.account_id,
         "master_account" => &config.master_account,
+        "trade_group_id" => &config.trade_group_id,
         "timestamp" => &config.timestamp,
         "symbol_prefix" => config.symbol_prefix.as_ref().unwrap_or(&EMPTY_STRING),
         "symbol_suffix" => config.symbol_suffix.as_ref().unwrap_or(&EMPTY_STRING),
+        "lot_calculation_mode" => match config.lot_calculation_mode {
+            LotCalculationMode::Multiplier => &*LOT_CALC_MODE_MULTIPLIER,
+            LotCalculationMode::MarginRatio => &*LOT_CALC_MODE_MARGIN_RATIO,
+        },
         "sync_mode" => match config.sync_mode {
             SyncMode::Skip => &*SYNC_MODE_SKIP,
             SyncMode::LimitOrder => &*SYNC_MODE_LIMIT_ORDER,

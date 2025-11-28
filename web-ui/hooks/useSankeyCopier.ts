@@ -161,7 +161,7 @@ export function useSankeyCopier() {
         }
       }
     };
-     
+
   }, [selectedSite?.siteUrl, fetchSettings]);
 
   // Initial load and periodic connection refresh
@@ -213,11 +213,11 @@ export function useSankeyCopier() {
     // Note: We don't need to worry about stale apiClient here because we clear the map
     // when apiClient changes (in the useEffect above), forcing recreation.
     if (!debouncedFn) {
-      debouncedFn = debounce(async (masterAccount: string, slaveAccount: string) => {
+      debouncedFn = debounce(async (masterAccount: string, slaveAccount: string, enabled: boolean) => {
         try {
           await apiClient.post<void>(
             `/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`,
-            {}
+            { enabled }
           );
         } catch (err) {
           console.error(`Failed to toggle setting for ${slaveAccount}`, err);
@@ -228,7 +228,7 @@ export function useSankeyCopier() {
     }
 
     // Call the debounced function for this ID (using slave_account for API)
-    debouncedFn(setting.master_account, setting.slave_account);
+    debouncedFn(setting.master_account, setting.slave_account, newStatus === 1);
   }, [apiClient, fetchSettings, setSettings, settings]);
 
   // Create new setting

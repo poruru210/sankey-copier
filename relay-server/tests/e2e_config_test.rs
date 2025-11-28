@@ -1195,18 +1195,17 @@ async fn test_delete_member_sends_disabled_config() {
     let disabled_config = simulator
         .try_receive_config(2000)
         .expect("Failed to receive disabled config after delete");
-
     assert!(
         disabled_config.is_some(),
         "Slave should receive config after member deletion"
     );
-    let disabled_config = disabled_config.unwrap();
+    let config = disabled_config.unwrap(); // Verify status is REMOVED (4)
     assert_eq!(
-        disabled_config.status, 0,
-        "Config status should be DISABLED (0) after member deletion"
+        config.status, 4,
+        "Config status should be REMOVED (4) after member deletion"
     );
 
-    println!("✅ Delete Member E2E test passed: Slave received status=0 config");
+    println!("✅ Delete Member E2E test passed: Slave received status=4 config");
 
     server.shutdown().await;
 }
