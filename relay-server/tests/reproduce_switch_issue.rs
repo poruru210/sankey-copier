@@ -6,7 +6,6 @@ mod test_server;
 
 use sankey_copier_relay_server::models::SlaveSettings;
 use test_server::TestServer;
-use tokio::time::{sleep, Duration};
 
 #[tokio::test]
 async fn test_switch_persistence() {
