@@ -85,7 +85,7 @@ async fn test_handle_request_config_slave() {
         use_pending_order_for_delayed: false,
     };
     ctx.db
-        .add_member(&master_account, &slave_account, slave_settings)
+        .add_member(&master_account, &slave_account, slave_settings, 0)
         .await
         .unwrap();
 

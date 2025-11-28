@@ -396,11 +396,16 @@ async fn test_delete_trade_group_cascade_deletes_members() {
         use_pending_order_for_delayed: false,
     };
 
-    db.add_member("MASTER_CASCADE_TEST", "SLAVE_001", slave_settings.clone())
-        .await
-        .unwrap();
+    db.add_member(
+        "MASTER_CASCADE_TEST",
+        "SLAVE_001",
+        slave_settings.clone(),
+        0,
+    )
+    .await
+    .unwrap();
 
-    db.add_member("MASTER_CASCADE_TEST", "SLAVE_002", slave_settings)
+    db.add_member("MASTER_CASCADE_TEST", "SLAVE_002", slave_settings, 0)
         .await
         .unwrap();
 

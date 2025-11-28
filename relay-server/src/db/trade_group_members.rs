@@ -15,21 +15,29 @@ impl Database {
     // ============================================================================
 
     /// Add a member (Slave) to a TradeGroup
+    ///
+    /// # Arguments
+    /// * `trade_group_id` - The master account ID (TradeGroup ID)
+    /// * `slave_account` - The slave account ID
+    /// * `settings` - Slave-specific settings for this connection
+    /// * `status` - Initial status (0 = DISABLED, 2 = CONNECTED/enabled)
     pub async fn add_member(
         &self,
         trade_group_id: &str,
         slave_account: &str,
         settings: SlaveSettings,
+        status: i32,
     ) -> Result<()> {
         let settings_json = serde_json::to_string(&settings)?;
 
         sqlx::query(
             "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
-             VALUES (?, ?, ?, 0)" // default status = DISABLED (user must explicitly enable)
+             VALUES (?, ?, ?, ?)",
         )
         .bind(trade_group_id)
         .bind(slave_account)
         .bind(&settings_json)
+        .bind(status)
         .execute(&self.pool)
         .await?;
 

@@ -476,7 +476,7 @@ async fn setup_test_scenario(
         let settings = default_test_slave_settings();
         server
             .db
-            .add_member(master_account, slave_account, settings)
+            .add_member(master_account, slave_account, settings, 0)
             .await?;
 
         // Enable slave (set status to CONNECTED for trade copying)

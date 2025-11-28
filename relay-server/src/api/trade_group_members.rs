@@ -21,6 +21,10 @@ pub struct AddMemberRequest {
     pub slave_account: String,
     #[serde(default)]
     pub slave_settings: SlaveSettings,
+    /// Initial status for the member (0 = DISABLED, 2 = CONNECTED/enabled)
+    /// Defaults to 0 (disabled) if not specified
+    #[serde(default)]
+    pub status: i32,
 }
 
 /// Request body for toggling member status
@@ -123,13 +127,14 @@ pub async fn add_member(
         }
     }
 
-    // Add member to database
+    // Add member to database with the requested status
     match state
         .db
         .add_member(
             &trade_group_id,
             &request.slave_account,
             request.slave_settings.clone(),
+            request.status,
         )
         .await
     {

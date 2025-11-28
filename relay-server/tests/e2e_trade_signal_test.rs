@@ -577,7 +577,7 @@ async fn setup_test_scenario(
         let settings = slave_settings_fn(i);
         server
             .db
-            .add_member(master_account, slave_account, settings)
+            .add_member(master_account, slave_account, settings, 0)
             .await?;
 
         // Enable slave (set status to CONNECTED for trade copying)
@@ -2159,7 +2159,7 @@ async fn test_symbol_prefix_suffix_transformation() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .unwrap();
     server
@@ -2248,7 +2248,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .unwrap();
     server
@@ -3130,7 +3130,12 @@ async fn test_disabled_slave_receives_signals() {
     // Add enabled slave (status = CONNECTED)
     server
         .db
-        .add_member(master_account, slave_enabled, default_test_slave_settings())
+        .add_member(
+            master_account,
+            slave_enabled,
+            default_test_slave_settings(),
+            0,
+        )
         .await
         .unwrap();
     server
@@ -3146,6 +3151,7 @@ async fn test_disabled_slave_receives_signals() {
             master_account,
             slave_disabled,
             default_test_slave_settings(),
+            0,
         )
         .await
         .unwrap();

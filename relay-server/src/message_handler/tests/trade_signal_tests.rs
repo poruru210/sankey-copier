@@ -39,7 +39,7 @@ async fn test_handle_trade_signal_with_matching_setting() {
         use_pending_order_for_delayed: false,
     };
     ctx.db
-        .add_member("MASTER_001", "SLAVE_001", slave_settings)
+        .add_member("MASTER_001", "SLAVE_001", slave_settings, 0)
         .await
         .unwrap();
 
@@ -86,7 +86,7 @@ async fn test_handle_trade_signal_no_matching_master() {
         use_pending_order_for_delayed: false,
     };
     ctx.db
-        .add_member("MASTER_001", "SLAVE_001", slave_settings)
+        .add_member("MASTER_001", "SLAVE_001", slave_settings, 0)
         .await
         .unwrap();
 
@@ -132,7 +132,7 @@ async fn test_handle_trade_signal_disabled_setting() {
     };
     // Add member and then disable it
     ctx.db
-        .add_member("MASTER_001", "SLAVE_001", slave_settings)
+        .add_member("MASTER_001", "SLAVE_001", slave_settings, 0)
         .await
         .unwrap();
     ctx.db

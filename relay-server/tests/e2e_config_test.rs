@@ -659,7 +659,7 @@ async fn test_slave_config_distribution() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -744,7 +744,7 @@ async fn test_master_slave_config_distribution() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -867,7 +867,7 @@ async fn test_multiple_slaves_same_master() {
 
         server
             .db
-            .add_member(master_account, slave_account, settings)
+            .add_member(master_account, slave_account, settings, 0)
             .await
             .expect("Failed to add member");
     }
@@ -963,7 +963,7 @@ async fn test_new_member_initial_status_disabled() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1029,7 +1029,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     // Add Slave member to TradeGroup (initial status = DISABLED)
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1137,7 +1137,7 @@ async fn test_delete_member_sends_disabled_config() {
     // Add Slave member to TradeGroup with default settings
     server
         .db
-        .add_member(master_account, slave_account, SlaveSettings::default())
+        .add_member(master_account, slave_account, SlaveSettings::default(), 0)
         .await
         .expect("Failed to add member");
 
@@ -1264,6 +1264,7 @@ async fn test_multiple_masters_multiple_slaves() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave1 to master1");
@@ -1294,6 +1295,7 @@ async fn test_multiple_masters_multiple_slaves() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave2 to master1");
@@ -1325,6 +1327,7 @@ async fn test_multiple_masters_multiple_slaves() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave3 to master2");
@@ -1542,7 +1545,7 @@ async fn test_sync_policy_skip_mode() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .expect("Failed to add member");
 
@@ -1639,7 +1642,7 @@ async fn test_sync_policy_limit_order_mode() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .expect("Failed to add member");
 
@@ -1745,7 +1748,7 @@ async fn test_sync_policy_market_order_mode() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .expect("Failed to add member");
 
@@ -1873,6 +1876,7 @@ async fn test_multiple_slaves_different_sync_policies() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave_skip");
@@ -1904,6 +1908,7 @@ async fn test_multiple_slaves_different_sync_policies() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave_limit");
@@ -1935,6 +1940,7 @@ async fn test_multiple_slaves_different_sync_policies() {
                 max_signal_delay_ms: 5000,
                 use_pending_order_for_delayed: false,
             },
+            0,
         )
         .await
         .expect("Failed to add slave_market");
@@ -2082,7 +2088,7 @@ async fn test_slave_config_prefix_distribution() {
 
     server
         .db
-        .add_member(master_account, slave_account, slave_settings)
+        .add_member(master_account, slave_account, slave_settings, 0)
         .await
         .expect("Failed to add member");
 
@@ -2177,7 +2183,7 @@ async fn test_trade_execution_settings_distribution() {
 
     server
         .db
-        .add_member(master_account, slave_account, settings)
+        .add_member(master_account, slave_account, settings, 0)
         .await
         .expect("Failed to add member");
 
@@ -2284,7 +2290,7 @@ async fn test_allow_new_orders_follows_status() {
     // Add enabled slave (status will be set to CONNECTED)
     server
         .db
-        .add_member(master_account, slave_enabled, settings.clone())
+        .add_member(master_account, slave_enabled, settings.clone(), 0)
         .await
         .expect("Failed to add enabled slave");
 
@@ -2298,7 +2304,7 @@ async fn test_allow_new_orders_follows_status() {
     // Add disabled slave (status will be set to DISABLED)
     server
         .db
-        .add_member(master_account, slave_disabled, settings)
+        .add_member(master_account, slave_disabled, settings, 0)
         .await
         .expect("Failed to add disabled slave");
 
