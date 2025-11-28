@@ -155,39 +155,3 @@ async fn broadcast_vlogs_config(state: &AppState, settings: &VLogsGlobalSettings
         );
     }
 }
-
-// ============================================================================
-// Legacy endpoints (kept for backward compatibility, will be removed later)
-// ============================================================================
-
-/// Get VictoriaLogs global settings (legacy - use get_vlogs_config instead)
-#[deprecated(note = "Use get_vlogs_config instead")]
-pub async fn get_vlogs_settings(
-    State(state): State<AppState>,
-) -> Result<Json<VLogsGlobalSettings>, ProblemDetails> {
-    let span = tracing::info_span!("get_vlogs_settings");
-    let _enter = span.enter();
-
-    match state.db.get_vlogs_settings().await {
-        Ok(settings) => {
-            tracing::info!(
-                enabled = settings.enabled,
-                endpoint = %settings.endpoint,
-                batch_size = settings.batch_size,
-                flush_interval_secs = settings.flush_interval_secs,
-                "Retrieved VictoriaLogs settings (legacy)"
-            );
-            Ok(Json(settings))
-        }
-        Err(e) => {
-            tracing::error!(
-                error = %e,
-                "Failed to retrieve VictoriaLogs settings"
-            );
-            Err(ProblemDetails::internal_error(format!(
-                "Failed to retrieve VictoriaLogs settings: {}",
-                e
-            )))
-        }
-    }
-}

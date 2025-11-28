@@ -60,6 +60,7 @@ impl VictoriaLogsLayer {
     ///
     /// Returns the layer and a handle to the background task.
     /// The layer is enabled by default based on config.enabled.
+    #[allow(dead_code)]
     pub fn new(config: &VictoriaLogsConfig) -> (Self, tokio::task::JoinHandle<()>) {
         let enabled = Arc::new(AtomicBool::new(config.enabled));
         Self::new_with_enabled(config, enabled)
@@ -316,6 +317,7 @@ impl VLogsController {
     }
 
     /// Check if VictoriaLogs is configured (has a non-empty host)
+    #[allow(dead_code)]
     pub fn is_configured(&self) -> bool {
         !self.config.host.is_empty()
     }
