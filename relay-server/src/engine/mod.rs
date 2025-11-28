@@ -98,6 +98,7 @@ impl CopyEngine {
     }
 
     /// Transform trade signal for slave account
+    /// Relay Server handles all symbol transformations (prefix/suffix/mapping)
     pub fn transform_signal(
         &self,
         signal: TradeSignal,
@@ -107,7 +108,7 @@ impl CopyEngine {
     ) -> Result<TradeSignal> {
         let mut transformed = signal.clone();
 
-        // Convert symbol using member's symbol mappings (if present)
+        // Apply symbol transformation (Master prefix/suffix removal + Slave mapping/prefix/suffix)
         if let Some(ref symbol) = signal.symbol {
             transformed.symbol =
                 Some(converter.convert(symbol, &member.slave_settings.symbol_mappings));

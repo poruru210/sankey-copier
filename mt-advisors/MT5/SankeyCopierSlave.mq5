@@ -44,7 +44,7 @@ HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 CTrade      g_trade;
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
-SymbolMapping g_local_mappings[];
+// g_local_mappings removed - all symbol transformation now handled by Relay Server
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
@@ -69,8 +69,8 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Symbol mappings are now received from config via Web-UI
-   ArrayResize(g_local_mappings, 0);
+   // Symbol transformation is now handled by Relay Server
+   // Slave EA receives pre-transformed symbols
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -567,13 +567,8 @@ void ProcessTradeSignal(uchar &data[], int data_len)
          return;
       }
 
-      // Apply transformations
-      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
-      // Symbol prefix/suffix now from config (per-Master)
-      string transformed_symbol = GetLocalSymbol(mapped_symbol,
-                                    g_configs[config_index].symbol_prefix,
-                                    g_configs[config_index].symbol_suffix);
+      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+      string transformed_symbol = symbol;
 
       // Transform lot size based on calculation mode
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
@@ -699,12 +694,8 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
          continue;
       }
 
-      // Apply symbol transformations (prefix/suffix from config per-Master)
-      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings);
-      string transformed_symbol = GetLocalSymbol(mapped_symbol,
-                                    g_configs[config_index].symbol_prefix,
-                                    g_configs[config_index].symbol_suffix);
+      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+      string transformed_symbol = symbol;
 
       // Transform lot size
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);

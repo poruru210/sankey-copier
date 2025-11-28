@@ -97,14 +97,9 @@ pub struct SymbolConverter {
 
 impl SymbolConverter {
     pub fn convert(&self, symbol: &str, mappings: &[SymbolMapping]) -> String {
-        // Check for exact mapping first
-        if let Some(mapping) = mappings.iter().find(|m| m.source_symbol == symbol) {
-            return mapping.target_symbol.clone();
-        }
-
-        // Apply prefix/suffix transformations
         let mut result = symbol.to_string();
 
+        // 1. Remove Master's prefix/suffix
         if let Some(prefix) = &self.prefix_remove {
             result = result
                 .strip_prefix(prefix.as_str())
@@ -119,6 +114,12 @@ impl SymbolConverter {
                 .to_string();
         }
 
+        // 2. Apply Mapping (on the clean symbol)
+        if let Some(mapping) = mappings.iter().find(|m| m.source_symbol == result) {
+            result = mapping.target_symbol.clone();
+        }
+
+        // 3. Add Slave's prefix/suffix
         if let Some(prefix) = &self.prefix_add {
             result = format!("{}{}", prefix, result);
         }
@@ -227,12 +228,14 @@ mod tests {
             suffix_add: None,
         };
 
+        // Mapping should match the CLEANED symbol
         let mappings = vec![SymbolMapping {
-            source_symbol: "MT5_EURUSD".to_string(),
+            source_symbol: "EURUSD".to_string(),
             target_symbol: "CUSTOM_EURUSD".to_string(),
         }];
 
-        // Exact mapping should take priority over prefix/suffix rules
+        // 1. Remove MT5_ -> EURUSD
+        // 2. Map EURUSD -> CUSTOM_EURUSD
         let result = converter.convert("MT5_EURUSD", &mappings);
         assert_eq!(result, "CUSTOM_EURUSD");
     }
