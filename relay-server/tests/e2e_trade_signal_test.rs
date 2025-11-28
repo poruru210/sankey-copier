@@ -1658,8 +1658,8 @@ async fn test_signal_broadcast_to_all_slaves() {
     server.shutdown().await;
 }
 
-/// Test lot multiplier application
-/// Note: Tests single slave lot multiplier transformation
+/// Test lot multiplier passthrough
+/// Note: Lot multiplier is handled by Slave EA, Relay Server passes through original lots
 #[tokio::test]
 async fn test_slave_individual_lot_multiplier() {
     let server = TestServer::start()
@@ -1669,7 +1669,7 @@ async fn test_slave_individual_lot_multiplier() {
     let master_account = "MASTER_LOT_MULT_001";
     let slave_account = "SLAVE_LOT_MULT_001";
 
-    // Setup with 2x lot multiplier
+    // Setup with 2x lot multiplier (handled by Slave EA, not Relay Server)
     setup_test_scenario(&server, master_account, &[slave_account], |_| {
         SlaveSettings {
             lot_calculation_mode: LotCalculationMode::Multiplier,
@@ -1725,11 +1725,11 @@ async fn test_slave_individual_lot_multiplier() {
 
     assert_eq!(signals.len(), 1, "Should receive 1 signal");
 
-    // Verify lot multiplier applied: 0.1 * 2.0 = 0.2
+    // Verify lots are passed through unchanged (Slave EA handles lot calculation)
     let lots = signals[0].1.lots.expect("lots should be present");
     assert!(
-        (lots - 0.2).abs() < 0.001,
-        "Lots should be 0.2 (0.1 * 2.0), got {}",
+        (lots - 0.1).abs() < 0.001,
+        "Lots should be 0.1 (passed through unchanged), got {}",
         lots
     );
 
@@ -1991,7 +1991,7 @@ async fn test_stale_signal_too_old() {
 /// Test partial close signal with close_ratio
 /// Verifies:
 /// 1. close_ratio is preserved through the relay
-/// 2. Lot multiplier is NOT applied to Close signals (only Open)
+/// 2. Lots are passed through unchanged (Slave EA handles lot calculation)
 #[tokio::test]
 async fn test_partial_close_signal() {
     let server = TestServer::start()
@@ -2001,10 +2001,10 @@ async fn test_partial_close_signal() {
     let master_account = "MASTER_PARTIAL_001";
     let slave_account = "SLAVE_PARTIAL_001";
 
-    // Set up slave with 2x lot multiplier to verify it's not applied to Close
+    // Set up slave with 2x lot multiplier (handled by Slave EA, not Relay Server)
     setup_test_scenario(&server, master_account, &[slave_account], |_| {
         let mut settings = default_test_slave_settings();
-        settings.lot_multiplier = Some(2.0); // 2x multiplier
+        settings.lot_multiplier = Some(2.0); // 2x multiplier (Slave EA handles this)
         settings
     })
     .await
@@ -2028,7 +2028,7 @@ async fn test_partial_close_signal() {
     slave.subscribe_to_master(master_account).unwrap();
     register_all_eas(&master, &[&slave]).await.unwrap();
 
-    // Step 1: Open a position (lot multiplier should apply: 1.0 * 2.0 = 2.0)
+    // Step 1: Open a position (lots passed through unchanged, Slave EA applies multiplier)
     let open_signal =
         master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
     master.send_trade_signal(&open_signal).unwrap();
@@ -2038,13 +2038,12 @@ async fn test_partial_close_signal() {
     assert_eq!(open_signals.len(), 1, "Should receive Open signal");
     assert_eq!(
         open_signals[0].1.lots,
-        Some(2.0),
-        "Lot multiplier should be applied to Open: 1.0 * 2.0 = 2.0"
+        Some(1.0),
+        "Lots should be passed through unchanged (Slave EA handles calculation)"
     );
 
     // Step 2: Partial close with 50% close_ratio
     // Note: Master's lots=1.0 (original), close_ratio=0.5 means 50% closed
-    // Lot multiplier should NOT be applied to Close signal
     let partial_close_signal = master.create_partial_close_signal(12345, "EURUSD", 1.0, 0.5); // 50% partial close
     master.send_trade_signal(&partial_close_signal).unwrap();
 
@@ -2062,7 +2061,7 @@ async fn test_partial_close_signal() {
     assert_eq!(
         received_signal.lots,
         Some(1.0),
-        "Lot multiplier should NOT be applied to Close signal"
+        "Lots should be passed through unchanged"
     );
 
     println!("✅ test_partial_close_signal passed");
@@ -2770,7 +2769,7 @@ async fn test_blocked_magic_numbers_filter() {
 // Reverse Trade Tests
 // =============================================================================
 
-/// Test reverse trade mode - Buy becomes Sell
+/// Test reverse trade mode passthrough - order type passed unchanged (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_buy_to_sell() {
     let server = TestServer::start()
@@ -2782,7 +2781,7 @@ async fn test_reverse_trade_buy_to_sell() {
 
     setup_test_scenario(&server, master_account, &[slave_account], |_| {
         let mut settings = default_test_slave_settings();
-        settings.reverse_trade = true;
+        settings.reverse_trade = true; // Slave EA handles this, not Relay Server
         settings
     })
     .await
@@ -2806,7 +2805,7 @@ async fn test_reverse_trade_buy_to_sell() {
     slave.subscribe_to_master(master_account).unwrap();
     register_all_eas(&master, &[&slave]).await.unwrap();
 
-    // Send Buy signal - should become Sell
+    // Send Buy signal - passed through unchanged (Slave EA handles reversal)
     let signal =
         master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master.send_trade_signal(&signal).unwrap();
@@ -2817,8 +2816,8 @@ async fn test_reverse_trade_buy_to_sell() {
 
     assert_eq!(
         signals[0].1.order_type,
-        Some(OrderType::Sell),
-        "Buy should be reversed to Sell"
+        Some(OrderType::Buy),
+        "Order type should be passed through unchanged (Slave EA handles reversal)"
     );
 
     println!("✅ test_reverse_trade_buy_to_sell passed");
@@ -2826,7 +2825,7 @@ async fn test_reverse_trade_buy_to_sell() {
     server.shutdown().await;
 }
 
-/// Test reverse trade mode with pending orders
+/// Test reverse trade mode passthrough with pending orders (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_pending_orders() {
     let server = TestServer::start()
@@ -2838,7 +2837,7 @@ async fn test_reverse_trade_pending_orders() {
 
     setup_test_scenario(&server, master_account, &[slave_account], |_| {
         let mut settings = default_test_slave_settings();
-        settings.reverse_trade = true;
+        settings.reverse_trade = true; // Slave EA handles this, not Relay Server
         settings.copy_pending_orders = true;
         settings
     })
@@ -2863,7 +2862,7 @@ async fn test_reverse_trade_pending_orders() {
     slave.subscribe_to_master(master_account).unwrap();
     register_all_eas(&master, &[&slave]).await.unwrap();
 
-    // Send BuyLimit - should become SellLimit
+    // Send BuyLimit - passed through unchanged (Slave EA handles reversal)
     let signal = master.create_open_signal(
         12345,
         "EURUSD",
@@ -2882,8 +2881,8 @@ async fn test_reverse_trade_pending_orders() {
 
     assert_eq!(
         signals[0].1.order_type,
-        Some(OrderType::SellLimit),
-        "BuyLimit should be reversed to SellLimit"
+        Some(OrderType::BuyLimit),
+        "Order type should be passed through unchanged (Slave EA handles reversal)"
     );
 
     println!("✅ test_reverse_trade_pending_orders passed");

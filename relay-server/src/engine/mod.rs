@@ -1,6 +1,4 @@
-use crate::models::{
-    MasterSettings, OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal,
-};
+use crate::models::{OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal};
 use anyhow::Result;
 
 #[cfg(test)]
@@ -104,7 +102,6 @@ impl CopyEngine {
         &self,
         signal: TradeSignal,
         member: &TradeGroupMember,
-        _master_settings: &MasterSettings,
         converter: &SymbolConverter,
     ) -> Result<TradeSignal> {
         let mut transformed = signal.clone();

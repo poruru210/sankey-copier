@@ -86,7 +86,7 @@ impl MessageHandler {
 
         match self
             .copy_engine
-            .transform_signal(signal.clone(), member, master_settings, &converter)
+            .transform_signal(signal.clone(), member, &converter)
         {
             Ok(transformed) => {
                 tracing::info!(

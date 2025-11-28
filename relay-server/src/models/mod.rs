@@ -75,19 +75,6 @@ pub struct TradeSignal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct ConnectionSettings {
-    pub lot_multiplier: Option<f64>,
-    pub reverse_trade: bool,
-    #[serde(default)]
-    pub symbol_prefix: Option<String>,
-    #[serde(default)]
-    pub symbol_suffix: Option<String>,
-    pub symbol_mappings: Vec<SymbolMapping>,
-    pub filters: TradeFilters,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolConverter {
     pub prefix_remove: Option<String>,
     pub suffix_remove: Option<String>,
