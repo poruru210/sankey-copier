@@ -9,12 +9,12 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-//--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
 #include "../Include/SankeyCopier/Zmq.mqh"
 #include "../Include/SankeyCopier/Messages.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Logging.mqh"
 
 //--- Input parameters
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
@@ -23,6 +23,7 @@ input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to rece
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
+input string   VLogsEndpoint = "";                      // VictoriaLogs endpoint (empty=disabled)
 
 //--- Position tracking structure
 struct PositionInfo
@@ -131,6 +132,11 @@ int OnInit()
    }
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+
+   // Initialize VictoriaLogs (empty endpoint = disabled)
+   string vlogs_source = "ea:master:" + AccountID;
+   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+
    ChartRedraw();
    return INIT_SUCCEEDED;
 }
@@ -140,6 +146,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Flush VictoriaLogs before shutdown
+   VLogsFlush();
+
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
 
@@ -274,6 +283,9 @@ void OnTimer()
          }
       }
    }
+
+   // Flush VictoriaLogs periodically
+   VLogsFlushIfNeeded();
 }
 
 //+------------------------------------------------------------------+

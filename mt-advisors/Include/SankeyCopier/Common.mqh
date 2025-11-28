@@ -130,6 +130,13 @@
                                                        long magic_number, string open_time);
    int         position_snapshot_builder_serialize(HANDLE_TYPE handle, uchar &output[], int output_len);
    void        position_snapshot_builder_free(HANDLE_TYPE handle);
+
+   // VictoriaLogs direct HTTP logging functions
+   int         vlogs_configure(string endpoint, string source);
+   int         vlogs_add_entry(string level, string category, string message, string context_json);
+   int         vlogs_flush();
+   int         vlogs_disable();
+   int         vlogs_buffer_size();
 #import
 
 //--- Common structures

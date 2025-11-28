@@ -18,6 +18,7 @@
 #include <SankeyCopier/Trade.mqh>
 #include <SankeyCopier/SlaveTrade.mqh>
 #include <SankeyCopier/MessageParsing.mqh>
+#include <SankeyCopier/Logging.mqh>
 
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
@@ -28,6 +29,7 @@ input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to 
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
+input string   VLogsEndpoint = "";                           // VictoriaLogs endpoint (empty=disabled)
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -131,6 +133,10 @@ int OnInit()
 
    Print("=== SankeyCopier Slave EA Initialized ===");
 
+   // Initialize VictoriaLogs (empty endpoint = disabled)
+   string vlogs_source = "ea:slave:" + AccountID;
+   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+
    ChartRedraw();
    return INIT_SUCCEEDED;
 }
@@ -141,6 +147,9 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    Print("=== SankeyCopier Slave EA (MT4) Stopping ===");
+
+   // Flush VictoriaLogs before shutdown
+   VLogsFlush();
 
    // Send unregister message to server
    SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
@@ -398,6 +407,9 @@ void OnTick()
          ProcessTradeSignal(msgpack_payload, payload_len);
       }
    }
+
+   // Flush VictoriaLogs periodically
+   VLogsFlushIfNeeded();
 }
 
 //+------------------------------------------------------------------+

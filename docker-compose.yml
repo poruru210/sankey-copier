@@ -1,0 +1,29 @@
+# Docker Compose for SANKEY Copier development services
+# This file defines optional infrastructure services for local development.
+#
+# Usage:
+#   docker compose up -d              # Start all services
+#   docker compose up -d victoria-logs # Start VictoriaLogs only
+#   docker compose down               # Stop all services
+#   docker compose logs -f            # View logs
+
+services:
+  # VictoriaLogs - Centralized logging
+  # Used to aggregate logs from EA (via mt-bridge) and relay-server
+  # Web UI: http://localhost:9428/select/vmui
+  # Insert endpoint: http://localhost:9428/insert/jsonline?_stream_fields=source
+  victoria-logs:
+    image: victoriametrics/victoria-logs:latest
+    container_name: sankey-victoria-logs
+    ports:
+      - "9428:9428"
+    volumes:
+      - vlogs-data:/vlogs-data
+    command:
+      - "-storageDataPath=/vlogs-data"
+      - "-retentionPeriod=7d"
+    restart: unless-stopped
+
+volumes:
+  vlogs-data:
+    name: sankey-vlogs-data

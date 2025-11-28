@@ -15,6 +15,7 @@
 #include <SankeyCopier/Messages.mqh>
 #include <SankeyCopier/Trade.mqh>
 #include <SankeyCopier/GridPanel.mqh>
+#include <SankeyCopier/Logging.mqh>
 
 //--- Input parameters
 // Note: MagicFilter moved to Slave side (allowed_magic_numbers)
@@ -24,6 +25,7 @@ input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to rece
 input int      ScanInterval = 100;                            // Scan interval in milliseconds
 input bool     ShowConfigPanel = true;                        // Show configuration panel on chart
 input int      PanelWidth = 280;                              // Configuration panel width (pixels)
+input string   VLogsEndpoint = "";                            // VictoriaLogs endpoint (empty=disabled)
 
 //--- Global config variables (populated from Web-UI config)
 string g_symbol_prefix = "";       // Symbol prefix from config
@@ -120,6 +122,10 @@ int OnInit()
    g_initialized = true;
    Print("=== SankeyCopier Master EA (MT4) Initialized ===");
 
+   // Initialize VictoriaLogs (empty endpoint = disabled)
+   string vlogs_source = "ea:master:" + AccountID;
+   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+
    ChartRedraw();
    return INIT_SUCCEEDED;
 }
@@ -130,6 +136,9 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    Print("=== SankeyCopier Master EA (MT4) Stopping ===");
+
+   // Flush VictoriaLogs before shutdown
+   VLogsFlush();
 
    // Send unregister message
    SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
@@ -234,6 +243,9 @@ void OnTimer()
          }
       }
    }
+
+   // Flush VictoriaLogs periodically
+   VLogsFlushIfNeeded();
 }
 
 //+------------------------------------------------------------------+

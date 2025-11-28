@@ -1,4 +1,5 @@
 pub mod msgpack;
+pub mod victoria_logs;
 
 #[cfg(test)]
 mod symbol_filter_tests;

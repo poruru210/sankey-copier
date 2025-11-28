@@ -9,6 +9,7 @@ mod message_handler;
 mod models;
 mod mt_detector;
 mod mt_installer;
+mod victoria_logs;
 mod zeromq;
 
 use anyhow::Result;
@@ -131,6 +132,16 @@ async fn main() -> Result<()> {
     // Create log buffer
     let log_buffer = create_log_buffer();
 
+    // Create VictoriaLogs layer if enabled
+    // _vlogs_handle can be used for graceful shutdown (flush remaining logs)
+    let (vlogs_layer, _vlogs_handle) = if config.victoria_logs.enabled {
+        let (layer, handle) = victoria_logs::VictoriaLogsLayer::new(&config.victoria_logs);
+        let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
+        (Some(layer), Some((vlogs_handle, handle)))
+    } else {
+        (None, None)
+    };
+
     // Initialize logging with log buffer layer and optional file output
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "sankey_copier_relay_server=debug,tower_http=debug".into());
@@ -138,7 +149,8 @@ async fn main() -> Result<()> {
     let subscriber = tracing_subscriber::registry()
         .with(env_filter)
         .with(tracing_subscriber::fmt::layer())
-        .with(LogBufferLayer::new(log_buffer.clone()));
+        .with(LogBufferLayer::new(log_buffer.clone()))
+        .with(vlogs_layer);
 
     // Add file logging layer if enabled in config
     if config.logging.enabled {
@@ -190,6 +202,15 @@ async fn main() -> Result<()> {
             config.logging.directory,
             config.logging.file_prefix,
             config.logging.rotation
+        );
+    }
+
+    if config.victoria_logs.enabled {
+        tracing::info!(
+            "VictoriaLogs enabled: endpoint={}, batch_size={}, flush_interval={}s",
+            config.victoria_logs.endpoint,
+            config.victoria_logs.batch_size,
+            config.victoria_logs.flush_interval_secs
         );
     }
 

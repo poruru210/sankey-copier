@@ -37,6 +37,9 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = { version = "1.0", features = ["backtrace"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 
+# HTTP Client (for VictoriaLogs integration)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
 # TLS/HTTPS
 # Use tls-rustls-no-provider to avoid aws-lc-sys dependency, then use ring provider
 axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
@@ -53,7 +56,9 @@ winapi = { version = "0.3", features = ["winver"] }
 [dev-dependencies]
 tempfile = "3.8"
 tower = { version = "0.5", features = ["util"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+mockito = "1.6"
+serial_test = "3.2"
 
 [build-dependencies]
 winres = "0.1"
