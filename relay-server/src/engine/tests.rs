@@ -145,11 +145,13 @@ fn test_should_copy_trade_blocked_magic_numbers() {
 }
 
 #[test]
-fn test_transform_signal_lot_multiplier() {
+fn test_transform_signal_lots_passed_through() {
+    // Lot multiplier is now handled by Slave EA, not Relay Server
+    // Relay Server should pass lots through unchanged
     let engine = CopyEngine::new();
-    let signal = create_test_signal();
+    let signal = create_test_signal(); // lots = 0.1
     let mut member = create_test_member();
-    member.slave_settings.lot_multiplier = Some(2.0);
+    member.slave_settings.lot_multiplier = Some(2.0); // This should be ignored by Relay Server
     let master_settings = create_test_master_settings();
 
     let converter = SymbolConverter {
@@ -162,16 +164,19 @@ fn test_transform_signal_lot_multiplier() {
     let result = engine
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
-    assert_eq!(result.lots, Some(0.2));
+    // Lots should be unchanged (Slave EA handles lot calculation)
+    assert_eq!(result.lots, Some(0.1));
     assert_eq!(result.symbol.as_deref(), Some("EURUSD"));
 }
 
 #[test]
-fn test_transform_signal_reverse_trade() {
+fn test_transform_signal_order_type_passed_through() {
+    // Trade reversal is now handled by Slave EA, not Relay Server
+    // Relay Server should pass order_type through unchanged
     let engine = CopyEngine::new();
-    let signal = create_test_signal();
+    let signal = create_test_signal(); // order_type = Buy
     let mut member = create_test_member();
-    member.slave_settings.reverse_trade = true;
+    member.slave_settings.reverse_trade = true; // This should be ignored by Relay Server
     let master_settings = create_test_master_settings();
 
     let converter = SymbolConverter {
@@ -184,35 +189,8 @@ fn test_transform_signal_reverse_trade() {
     let result = engine
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
-    assert!(matches!(result.order_type, Some(OrderType::Sell)));
-}
-
-#[test]
-fn test_reverse_order_type() {
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::Buy),
-        OrderType::Sell
-    ));
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::Sell),
-        OrderType::Buy
-    ));
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::BuyLimit),
-        OrderType::SellLimit
-    ));
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::SellLimit),
-        OrderType::BuyLimit
-    ));
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::BuyStop),
-        OrderType::SellStop
-    ));
-    assert!(matches!(
-        CopyEngine::reverse_order_type(&OrderType::SellStop),
-        OrderType::BuyStop
-    ));
+    // Order type should be unchanged (Slave EA handles reversal)
+    assert!(matches!(result.order_type, Some(OrderType::Buy)));
 }
 
 #[test]
@@ -241,9 +219,9 @@ fn test_partial_close_signal_preserves_ratio() {
 }
 
 #[test]
-fn test_lot_multiplier_not_applied_to_close_signal() {
-    // Test that lot multiplier is NOT applied to Close signals
-    // (Close uses ratio-based calculation, not lot multiplier)
+fn test_close_signal_lots_passed_through() {
+    // Lot calculation is handled by Slave EA for all signal types
+    // Relay Server passes lots through unchanged
     let engine = CopyEngine::new();
     let mut signal = create_test_signal();
     signal.action = TradeAction::Close;
@@ -252,7 +230,7 @@ fn test_lot_multiplier_not_applied_to_close_signal() {
 
     let master_settings = create_test_master_settings();
     let mut member = create_test_member();
-    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    member.slave_settings.lot_multiplier = Some(2.0); // Ignored by Relay Server
     let converter = SymbolConverter {
         prefix_remove: None,
         suffix_remove: None,
@@ -264,20 +242,22 @@ fn test_lot_multiplier_not_applied_to_close_signal() {
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
 
-    // Lots should NOT be multiplied for Close signals
-    assert_eq!(transformed.lots, Some(1.0)); // Unchanged
-    assert_eq!(transformed.close_ratio, Some(0.5)); // Preserved
+    // Lots unchanged (Slave EA handles lot calculation)
+    assert_eq!(transformed.lots, Some(1.0));
+    // close_ratio preserved for Slave EA to use
+    assert_eq!(transformed.close_ratio, Some(0.5));
 }
 
 #[test]
-fn test_lot_multiplier_applied_to_open_signal() {
-    // Verify lot multiplier IS applied to Open signals (using existing test pattern)
+fn test_open_signal_lots_passed_through() {
+    // Lot calculation is handled by Slave EA, not Relay Server
+    // This ensures no double-multiplication occurs
     let engine = CopyEngine::new();
     let signal = create_test_signal(); // action = Open, lots = 0.1
 
     let master_settings = create_test_master_settings();
     let mut member = create_test_member();
-    member.slave_settings.lot_multiplier = Some(2.0); // 2x multiplier
+    member.slave_settings.lot_multiplier = Some(2.0); // Ignored by Relay Server
     let converter = SymbolConverter {
         prefix_remove: None,
         suffix_remove: None,
@@ -289,6 +269,6 @@ fn test_lot_multiplier_applied_to_open_signal() {
         .transform_signal(signal.clone(), &member, &master_settings, &converter)
         .unwrap();
 
-    // Lots should be multiplied for Open signals: 0.1 * 2.0 = 0.2
-    assert_eq!(transformed.lots, Some(0.2));
+    // Lots should be unchanged (Slave EA will apply multiplier/margin_ratio)
+    assert_eq!(transformed.lots, Some(0.1));
 }
