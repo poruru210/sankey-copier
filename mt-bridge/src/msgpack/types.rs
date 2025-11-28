@@ -54,7 +54,7 @@ pub enum SyncMode {
 pub struct SlaveConfigMessage {
     pub account_id: String,
     pub master_account: String,
-    pub timestamp: String, // ISO 8601 format
+    pub timestamp: String,      // ISO 8601 format
     pub trade_group_id: String, // Used for ZMQ subscription
     pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]

@@ -97,7 +97,8 @@ pub unsafe extern "C" fn slave_config_get_string(
     static SYNC_MODE_LIMIT_ORDER: LazyLock<String> = LazyLock::new(|| "limit_order".to_string());
     static SYNC_MODE_MARKET_ORDER: LazyLock<String> = LazyLock::new(|| "market_order".to_string());
     static LOT_CALC_MODE_MULTIPLIER: LazyLock<String> = LazyLock::new(|| "multiplier".to_string());
-    static LOT_CALC_MODE_MARGIN_RATIO: LazyLock<String> = LazyLock::new(|| "margin_ratio".to_string());
+    static LOT_CALC_MODE_MARGIN_RATIO: LazyLock<String> =
+        LazyLock::new(|| "margin_ratio".to_string());
 
     let value = match field.as_str() {
         "account_id" => &config.account_id,
