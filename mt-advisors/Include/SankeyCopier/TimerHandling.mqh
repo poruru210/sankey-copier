@@ -148,17 +148,14 @@ bool HandleConfigRequest(bool &config_requested, HANDLE_TYPE zmq_context,
       return false;
    }
 
-   Print("[INFO] Requesting configuration...");
-
    if(SendRequestConfigMessage(zmq_context, server_addr, account_id, ea_type))
    {
       config_requested = true;
-      Print("[INFO] Configuration request sent successfully");
       return true;
    }
    else
    {
-      Print("[ERROR] Failed to send configuration request, will retry later");
+      Print("[ERROR] Failed to send configuration request");
       return false;
    }
 }

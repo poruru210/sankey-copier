@@ -30,7 +30,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize open signal message");
+      Print("[ERROR] Failed to serialize open signal message");
       return false;
    }
 
@@ -41,7 +41,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy open signal message buffer");
+      Print("[ERROR] Failed to copy open signal message buffer");
       return false;
    }
 
@@ -63,7 +63,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ra
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize close signal message");
+      Print("[ERROR] Failed to serialize close signal message");
       return false;
    }
 
@@ -74,7 +74,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ra
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy close signal message buffer");
+      Print("[ERROR] Failed to copy close signal message buffer");
       return false;
    }
 
@@ -96,7 +96,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize modify signal message");
+      Print("[ERROR] Failed to serialize modify signal message");
       return false;
    }
 
@@ -107,7 +107,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy modify signal message buffer");
+      Print("[ERROR] Failed to copy modify signal message buffer");
       return false;
    }
 
@@ -122,13 +122,11 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 //+------------------------------------------------------------------+
 bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symbol_prefix, string symbol_suffix)
 {
-   Print("=== Building Position Snapshot ===");
-
    // Create snapshot builder
    HANDLE_TYPE builder = create_position_snapshot_builder(account_id);
    if(builder == 0 || builder == -1)
    {
-      Print("ERROR: Failed to create position snapshot builder");
+      Print("[ERROR] Failed to create position snapshot builder");
       return false;
    }
 
@@ -143,11 +141,8 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
          {
             string raw_symbol = PositionGetString(POSITION_SYMBOL);
 
-            // Apply symbol filter
-            if(!MatchesSymbolFilter(raw_symbol, symbol_prefix, symbol_suffix))
-               continue;
-
-            // Clean symbol (remove prefix/suffix)
+            // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
+            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             long type = PositionGetInteger(POSITION_TYPE);
@@ -164,10 +159,7 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
             if(result == 1)
-            {
                position_count++;
-               Print("Added position: #", ticket, " ", symbol, " ", order_type, " ", lots, " lots");
-            }
          }
       }
    #else
@@ -184,11 +176,8 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
             int ticket = OrderTicket();
             string raw_symbol = OrderSymbol();
 
-            // Apply symbol filter
-            if(!MatchesSymbolFilter(raw_symbol, symbol_prefix, symbol_suffix))
-               continue;
-
-            // Clean symbol (remove prefix/suffix)
+            // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
+            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             double lots = OrderLots();
@@ -204,15 +193,10 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
             if(result == 1)
-            {
                position_count++;
-               Print("Added position: #", ticket, " ", symbol, " ", order_type, " ", lots, " lots");
-            }
          }
       }
    #endif
-
-   Print("Total positions in snapshot: ", position_count);
 
    // Serialize the snapshot
    uchar buffer[];
@@ -224,7 +208,7 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize position snapshot");
+      Print("[ERROR] Failed to serialize position snapshot");
       return false;
    }
 
@@ -235,9 +219,9 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
    bool success = (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 
    if(success)
-      Print("Position snapshot sent successfully (", len, " bytes, ", position_count, " positions)");
+      Print("[SYNC] Snapshot sent: ", position_count, " positions (", len, " bytes)");
    else
-      Print("ERROR: Failed to send position snapshot");
+      Print("[ERROR] Failed to send position snapshot");
 
    return success;
 }

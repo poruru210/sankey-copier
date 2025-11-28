@@ -26,13 +26,13 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
-      Print("ERROR: Failed to create request config socket");
+      Print("[ERROR] Failed to create request config socket");
       return false;
    }
 
    if(zmq_socket_connect(push_socket, server_address) == 0)
    {
-      Print("ERROR: Failed to connect to request config server: ", server_address);
+      Print("[ERROR] Failed to connect to request config server: ", server_address);
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -43,7 +43,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize request config message");
+      Print("[ERROR] Failed to serialize request config message");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -55,7 +55,7 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy request config message buffer");
+      Print("[ERROR] Failed to copy request config message buffer");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -63,10 +63,8 @@ bool SendRequestConfigMessage(HANDLE_TYPE zmq_context, string server_address, st
    // Send binary MessagePack data
    bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
-   if(success)
-      Print("RequestConfig message sent successfully");
-   else
-      Print("ERROR: Failed to send request config message");
+   if(!success)
+      Print("[ERROR] Failed to send request config message");
 
    zmq_socket_destroy(push_socket);
    return success;
@@ -82,13 +80,13 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
-      Print("ERROR: Failed to create unregistration socket");
+      Print("[ERROR] Failed to create unregistration socket");
       return false;
    }
 
    if(zmq_socket_connect(push_socket, server_address) == 0)
    {
-      Print("ERROR: Failed to connect to unregistration server: ", server_address);
+      Print("[ERROR] Failed to connect to unregistration server: ", server_address);
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -99,7 +97,7 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize unregistration message");
+      Print("[ERROR] Failed to serialize unregistration message");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -111,7 +109,7 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy unregistration message buffer");
+      Print("[ERROR] Failed to copy unregistration message buffer");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -119,10 +117,8 @@ bool SendUnregistrationMessage(HANDLE_TYPE zmq_context, string server_address, s
    // Send binary MessagePack data
    bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
-   if(success)
-      Print("Unregistration message sent successfully");
-   else
-      Print("ERROR: Failed to send unregistration message");
+   if(!success)
+      Print("[ERROR] Failed to send unregistration message");
 
    zmq_socket_destroy(push_socket);
    return success;
@@ -165,7 +161,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to serialize heartbeat message");
+      Print("[ERROR] Failed to serialize heartbeat message");
       zmq_socket_destroy(socket);
       return false;
    }
@@ -177,7 +173,7 @@ bool SendHeartbeatMessage(HANDLE_TYPE context, string address, string account_id
 
    if(copied != len)
    {
-      Print("ERROR: Failed to copy heartbeat message buffer");
+      Print("[ERROR] Failed to copy heartbeat message buffer");
       zmq_socket_destroy(socket);
       return false;
    }
@@ -200,13 +196,13 @@ bool SendSyncRequestMessage(HANDLE_TYPE zmq_context, string server_address,
    HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
    if(push_socket < 0)
    {
-      Print("ERROR: Failed to create sync request socket");
+      Print("[ERROR] Failed to create sync request socket");
       return false;
    }
 
    if(zmq_socket_connect(push_socket, server_address) == 0)
    {
-      Print("ERROR: Failed to connect for sync request: ", server_address);
+      Print("[ERROR] Failed to connect for sync request: ", server_address);
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -218,7 +214,7 @@ bool SendSyncRequestMessage(HANDLE_TYPE zmq_context, string server_address,
 
    if(len <= 0)
    {
-      Print("ERROR: Failed to create sync request message");
+      Print("[ERROR] Failed to create sync request message");
       zmq_socket_destroy(push_socket);
       return false;
    }
@@ -230,9 +226,9 @@ bool SendSyncRequestMessage(HANDLE_TYPE zmq_context, string server_address,
    bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
 
    if(success)
-      Print("SyncRequest sent to master: ", master_account);
+      Print("[SYNC] Request sent to master: ", master_account);
    else
-      Print("ERROR: Failed to send sync request message");
+      Print("[ERROR] Failed to send sync request message");
 
    zmq_socket_destroy(push_socket);
    return success;

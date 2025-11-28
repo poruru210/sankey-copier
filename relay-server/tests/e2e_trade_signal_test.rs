@@ -2215,6 +2215,164 @@ async fn test_symbol_prefix_suffix_transformation() {
     server.shutdown().await;
 }
 
+/// Test that Master sends ALL orders regardless of prefix/suffix matching
+/// This verifies the behavior change: Master no longer filters by prefix/suffix
+/// - Orders with matching prefix/suffix: transformed (prefix/suffix stripped)
+/// - Orders WITHOUT matching prefix/suffix: passed through as-is
+#[tokio::test]
+async fn test_master_sends_all_symbols_no_filtering() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+
+    let master_account = "MASTER_NO_FILTER_001";
+    let slave_account = "SLAVE_NO_FILTER_001";
+
+    // Create trade group with prefix/suffix settings on Master
+    server.db.create_trade_group(master_account).await.unwrap();
+    let master_settings = MasterSettings {
+        symbol_prefix: Some("PRO.".to_string()),  // Master configured with PRO. prefix
+        symbol_suffix: Some(".m".to_string()),     // and .m suffix
+        config_version: 0,
+    };
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .unwrap();
+
+    // Slave has no prefix/suffix (receives clean symbols)
+    let mut settings = default_test_slave_settings();
+    settings.symbol_prefix = None;
+    settings.symbol_suffix = None;
+
+    server
+        .db
+        .add_member(master_account, slave_account, settings)
+        .await
+        .unwrap();
+    server
+        .db
+        .update_member_status(master_account, slave_account, STATUS_CONNECTED)
+        .await
+        .unwrap();
+
+    let master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .unwrap();
+
+    let slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        &server.zmq_pub_trade_address(),
+        slave_account,
+    )
+    .unwrap();
+
+    slave.subscribe_to_master(master_account).unwrap();
+    register_all_eas(&master, &[&slave]).await.unwrap();
+
+    // Test 1: Symbol WITH matching prefix/suffix - should be transformed
+    let signal1 = master.create_open_signal(
+        10001,
+        "PRO.EURUSD.m",  // Matches prefix/suffix
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal1).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals1.len(), 1, "Symbol with prefix/suffix should be received");
+    assert_eq!(
+        signals1[0].1.symbol.as_deref(),
+        Some("EURUSD"),
+        "PRO.EURUSD.m should be transformed to EURUSD"
+    );
+
+    // Test 2: Symbol WITHOUT prefix but with suffix - should NOT be transformed
+    // (partial match is NOT transformed, passed as-is with suffix stripped if present)
+    let signal2 = master.create_open_signal(
+        10002,
+        "USDJPY.m",  // Only suffix matches, no prefix
+        OrderType::Sell,
+        0.2,
+        150.0,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal2).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals2 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals2.len(), 1, "Symbol with only suffix should be received");
+    assert_eq!(
+        signals2[0].1.symbol.as_deref(),
+        Some("USDJPY"),
+        "USDJPY.m should have suffix stripped to USDJPY"
+    );
+
+    // Test 3: Symbol with NO prefix/suffix match - should be passed through as-is
+    let signal3 = master.create_open_signal(
+        10003,
+        "GBPUSD",  // No prefix/suffix at all
+        OrderType::Buy,
+        0.15,
+        1.2500,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal3).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals3 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals3.len(), 1, "Symbol without prefix/suffix should be received");
+    assert_eq!(
+        signals3[0].1.symbol.as_deref(),
+        Some("GBPUSD"),
+        "GBPUSD should be passed through unchanged"
+    );
+
+    // Test 4: Different broker symbol format - should be passed through
+    let signal4 = master.create_open_signal(
+        10004,
+        "XAUUSD#",  // Different format (e.g., hashtag suffix)
+        OrderType::Buy,
+        0.5,
+        2000.0,
+        None,
+        None,
+        0,
+    );
+    master.send_trade_signal(&signal4).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+    let signals4 = slave.collect_trade_signals(3000, 1).unwrap();
+    assert_eq!(signals4.len(), 1, "Symbol with different format should be received");
+    assert_eq!(
+        signals4[0].1.symbol.as_deref(),
+        Some("XAUUSD#"),
+        "XAUUSD# should be passed through unchanged (no matching prefix/suffix)"
+    );
+
+    println!("✅ test_master_sends_all_symbols_no_filtering passed");
+    println!("  - PRO.EURUSD.m -> EURUSD (full match transformed)");
+    println!("  - USDJPY.m -> USDJPY (suffix stripped)");
+    println!("  - GBPUSD -> GBPUSD (no match, passed through)");
+    println!("  - XAUUSD# -> XAUUSD# (different format, passed through)");
+
+    server.shutdown().await;
+}
+
 /// Test symbol mapping (XAUUSD -> GOLD)
 #[tokio::test]
 async fn test_symbol_mapping() {

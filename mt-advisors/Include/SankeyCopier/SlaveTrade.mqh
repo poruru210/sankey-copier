@@ -846,10 +846,7 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
          RemovePendingTicketMapping(pending_map, master_ticket);
          AddTicketMapping(order_map, master_ticket, pending_ticket);
 
-         Print("=== Pending Order Filled ===");
-         Print("  Pending #", pending_ticket, " -> Position #", pending_ticket);
-         Print("  Master ticket: #", master_ticket);
-         Print("  Mapping moved to active order map");
+         Print("[PENDING FILL] Order #", pending_ticket, " filled (master:#", master_ticket, ")");
       }
       else
       {
