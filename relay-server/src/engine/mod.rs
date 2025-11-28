@@ -1,6 +1,4 @@
-use crate::models::{
-    MasterSettings, OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal,
-};
+use crate::models::{OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal};
 use anyhow::Result;
 
 #[cfg(test)]
@@ -98,12 +96,12 @@ impl CopyEngine {
     }
 
     /// Transform trade signal for slave account
-    /// Relay Server handles all symbol transformations (prefix/suffix/mapping)
+    /// Relay Server handles symbol transformations only
+    /// Lot calculation and trade reversal are handled by Slave EA
     pub fn transform_signal(
         &self,
         signal: TradeSignal,
         member: &TradeGroupMember,
-        _master_settings: &MasterSettings,
         converter: &SymbolConverter,
     ) -> Result<TradeSignal> {
         let mut transformed = signal.clone();
@@ -114,38 +112,7 @@ impl CopyEngine {
                 Some(converter.convert(symbol, &member.slave_settings.symbol_mappings));
         }
 
-        // Apply lot multiplier only for Open signals (not Close)
-        // For Close signals, close_ratio is used on slave side
-        if signal.action == TradeAction::Open {
-            if let (Some(lots), Some(multiplier)) =
-                (signal.lots, member.slave_settings.lot_multiplier)
-            {
-                let new_lots = lots * multiplier;
-                // Round to 2 decimal places
-                transformed.lots = Some((new_lots * 100.0).round() / 100.0);
-            }
-        }
-        // For Close signals, close_ratio is passed through unchanged (cloned)
-
-        // Reverse trade if enabled (if order_type present)
-        if member.slave_settings.reverse_trade {
-            if let Some(ref order_type) = signal.order_type {
-                transformed.order_type = Some(Self::reverse_order_type(order_type));
-            }
-        }
-
         Ok(transformed)
-    }
-
-    fn reverse_order_type(order_type: &OrderType) -> OrderType {
-        match order_type {
-            OrderType::Buy => OrderType::Sell,
-            OrderType::Sell => OrderType::Buy,
-            OrderType::BuyLimit => OrderType::SellLimit,
-            OrderType::SellLimit => OrderType::BuyLimit,
-            OrderType::BuyStop => OrderType::SellStop,
-            OrderType::SellStop => OrderType::BuyStop,
-        }
     }
 }
 
