@@ -13,6 +13,7 @@
 #define SANKEY_COPIER_MASTER_SIGNALS_MQH
 
 #include "Common.mqh"
+#include "Logging.mqh"
 
 //+------------------------------------------------------------------+
 //| Send open position signal message (Master)                       |
@@ -30,7 +31,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 
    if(len <= 0)
    {
-      Print("[ERROR] Failed to serialize open signal message");
+      LogError(CAT_SYNC, "Failed to serialize open signal message");
       return false;
    }
 
@@ -41,7 +42,7 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 
    if(copied != len)
    {
-      Print("[ERROR] Failed to copy open signal message buffer");
+      LogError(CAT_SYNC, "Failed to copy open signal message buffer");
       return false;
    }
 
@@ -63,7 +64,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ra
 
    if(len <= 0)
    {
-      Print("[ERROR] Failed to serialize close signal message");
+      LogError(CAT_SYNC, "Failed to serialize close signal message");
       return false;
    }
 
@@ -74,7 +75,7 @@ bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ra
 
    if(copied != len)
    {
-      Print("[ERROR] Failed to copy close signal message buffer");
+      LogError(CAT_SYNC, "Failed to copy close signal message buffer");
       return false;
    }
 
@@ -96,7 +97,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 
    if(len <= 0)
    {
-      Print("[ERROR] Failed to serialize modify signal message");
+      LogError(CAT_SYNC, "Failed to serialize modify signal message");
       return false;
    }
 
@@ -107,7 +108,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 
    if(copied != len)
    {
-      Print("[ERROR] Failed to copy modify signal message buffer");
+      LogError(CAT_SYNC, "Failed to copy modify signal message buffer");
       return false;
    }
 
@@ -126,7 +127,7 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
    HANDLE_TYPE builder = create_position_snapshot_builder(account_id);
    if(builder == 0 || builder == -1)
    {
-      Print("[ERROR] Failed to create position snapshot builder");
+      LogError(CAT_SYNC, "Failed to create position snapshot builder");
       return false;
    }
 
@@ -208,7 +209,7 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
 
    if(len <= 0)
    {
-      Print("[ERROR] Failed to serialize position snapshot");
+      LogError(CAT_SYNC, "Failed to serialize position snapshot");
       return false;
    }
 
@@ -219,9 +220,9 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
    bool success = (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
 
    if(success)
-      Print("[SYNC] Snapshot sent: ", position_count, " positions (", len, " bytes)");
+      LogInfo(CAT_SYNC, StringFormat("Snapshot sent: %d positions (%d bytes)", position_count, len));
    else
-      Print("[ERROR] Failed to send position snapshot");
+      LogError(CAT_SYNC, "Failed to send position snapshot");
 
    return success;
 }

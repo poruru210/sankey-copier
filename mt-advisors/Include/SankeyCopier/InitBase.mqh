@@ -13,6 +13,7 @@
 
 #include "Common.mqh"
 #include "Zmq.mqh"
+#include "Logging.mqh"
 
 // =============================================================================
 // Account ID Initialization
@@ -62,14 +63,14 @@ bool InitializeMasterZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socke
    // Initialize context
    if(!InitializeZmqContext(zmq_context))
    {
-      Print("[ERROR] Failed to initialize ZMQ context");
+      LogError(CAT_SYSTEM, "Failed to initialize ZMQ context");
       return false;
    }
 
    // Create and connect PUSH socket for heartbeat/signals
    if(!CreateAndConnectZmqSocket(zmq_context, zmq_socket, ZMQ_PUSH, relay_addr, "Master PUSH"))
    {
-      Print("[ERROR] Failed to create PUSH socket");
+      LogError(CAT_SYSTEM, "Failed to create PUSH socket");
       CleanupZmqContext(zmq_context);
       return false;
    }
@@ -77,7 +78,7 @@ bool InitializeMasterZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socke
    // Create and connect SUB socket for config
    if(!CreateAndConnectZmqSocket(zmq_context, zmq_config_socket, ZMQ_SUB, config_addr, "Master CONFIG SUB"))
    {
-      Print("[ERROR] Failed to create CONFIG SUB socket");
+      LogError(CAT_SYSTEM, "Failed to create CONFIG SUB socket");
       CleanupZmqSocket(zmq_socket, "Master PUSH");
       CleanupZmqContext(zmq_context);
       return false;
@@ -86,12 +87,12 @@ bool InitializeMasterZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socke
    // Subscribe to account-specific topic
    if(!SubscribeToTopic(zmq_config_socket, account_id, "Master"))
    {
-      Print("[ERROR] Failed to subscribe to config topic");
+      LogError(CAT_SYSTEM, "Failed to subscribe to config topic");
       CleanupZmqMultiSocket(zmq_socket, zmq_config_socket, zmq_context, "Master PUSH", "Master CONFIG SUB");
       return false;
    }
 
-   Print("[INFO] Master ZMQ sockets initialized successfully");
+   LogInfo(CAT_SYSTEM, "Master ZMQ sockets initialized successfully");
    return true;
 }
 
@@ -120,14 +121,14 @@ bool InitializeSlaveZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket
    // Initialize context
    if(!InitializeZmqContext(zmq_context))
    {
-      Print("[ERROR] Failed to initialize ZMQ context");
+      LogError(CAT_SYSTEM, "Failed to initialize ZMQ context");
       return false;
    }
 
    // Create and connect PUSH socket for heartbeat
    if(!CreateAndConnectZmqSocket(zmq_context, zmq_socket, ZMQ_PUSH, relay_addr, "Slave PUSH"))
    {
-      Print("[ERROR] Failed to create PUSH socket");
+      LogError(CAT_SYSTEM, "Failed to create PUSH socket");
       CleanupZmqContext(zmq_context);
       return false;
    }
@@ -135,7 +136,7 @@ bool InitializeSlaveZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket
    // Create and connect SUB socket for trades
    if(!CreateAndConnectZmqSocket(zmq_context, zmq_trade_socket, ZMQ_SUB, trade_addr, "Slave TRADE SUB"))
    {
-      Print("[ERROR] Failed to create TRADE SUB socket");
+      LogError(CAT_SYSTEM, "Failed to create TRADE SUB socket");
       CleanupZmqSocket(zmq_socket, "Slave PUSH");
       CleanupZmqContext(zmq_context);
       return false;
@@ -144,7 +145,7 @@ bool InitializeSlaveZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket
    // Create and connect SUB socket for config
    if(!CreateAndConnectZmqSocket(zmq_context, zmq_config_socket, ZMQ_SUB, config_addr, "Slave CONFIG SUB"))
    {
-      Print("[ERROR] Failed to create CONFIG SUB socket");
+      LogError(CAT_SYSTEM, "Failed to create CONFIG SUB socket");
       CleanupZmqSocket(zmq_socket, "Slave PUSH");
       CleanupZmqSocket(zmq_trade_socket, "Slave TRADE SUB");
       CleanupZmqContext(zmq_context);
@@ -154,7 +155,7 @@ bool InitializeSlaveZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket
    // Subscribe to account-specific topic on config socket
    if(!SubscribeToTopic(zmq_config_socket, account_id, "Slave CONFIG"))
    {
-      Print("[ERROR] Failed to subscribe to config topic");
+      LogError(CAT_SYSTEM, "Failed to subscribe to config topic");
       CleanupZmqSocket(zmq_socket, "Slave PUSH");
       CleanupZmqSocket(zmq_trade_socket, "Slave TRADE SUB");
       CleanupZmqSocket(zmq_config_socket, "Slave CONFIG SUB");
@@ -165,7 +166,7 @@ bool InitializeSlaveZmqSockets(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket
    // Note: Trade socket subscription is done dynamically when config is received
    // (subscribes to trade_group_id from each master config)
 
-   Print("[INFO] Slave ZMQ sockets initialized successfully");
+   LogInfo(CAT_SYSTEM, "Slave ZMQ sockets initialized successfully");
    return true;
 }
 

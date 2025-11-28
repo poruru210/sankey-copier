@@ -14,6 +14,7 @@
 #define SANKEY_COPIER_MAPPING_MQH
 
 #include "Common.mqh"
+#include "Logging.mqh"
 
 // Platform detection
 #ifndef IS_MT4
@@ -290,7 +291,7 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
    ArrayResize(map, 0);
    ArrayResize(pending_map, 0);
 
-   Print("=== Recovering ticket mappings from existing positions ===");
+   LogInfo(CAT_SYNC, "Recovering ticket mappings from existing positions");
 
    // Scan all open positions
    int pos_total = PositionsTotal();
@@ -310,7 +311,7 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
          // This is a position we copied from master
          AddTicketMapping(map, master_ticket, ticket);
          recovered_count++;
-         Print("Recovered mapping: master #", master_ticket, " -> slave #", ticket, " (comment: ", comment, ")");
+         LogDebug(CAT_SYNC, StringFormat("Recovered mapping: master #%d -> slave #%d (comment: %s)", master_ticket, ticket, comment));
       }
    }
 
@@ -332,11 +333,11 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
          // This is a pending order we created for delayed signal
          AddPendingTicketMapping(pending_map, master_ticket, ticket);
          recovered_count++;
-         Print("Recovered pending mapping: master #", master_ticket, " -> pending #", ticket, " (comment: ", comment, ")");
+         LogDebug(CAT_SYNC, StringFormat("Recovered pending mapping: master #%d -> pending #%d (comment: %s)", master_ticket, ticket, comment));
       }
    }
 
-   Print("=== Recovery complete: ", recovered_count, " mappings restored ===");
+   LogInfo(CAT_SYNC, StringFormat("Recovery complete: %d mappings restored", recovered_count));
    return recovered_count;
 }
 #endif
@@ -358,7 +359,7 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
    ArrayResize(map, 0);
    ArrayResize(pending_map, 0);
 
-   Print("=== Recovering ticket mappings from existing positions ===");
+   LogInfo(CAT_SYNC, "Recovering ticket mappings from existing positions");
 
    // In MT4, both positions and pending orders are in OrdersTotal()
    int total = OrdersTotal();
@@ -382,7 +383,7 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
             {
                AddTicketMapping(map, master_ticket, ticket);
                recovered_count++;
-               Print("Recovered mapping: master #", master_ticket, " -> slave #", ticket);
+               LogDebug(CAT_SYNC, StringFormat("Recovered mapping: master #%d -> slave #%d", master_ticket, ticket));
             }
          }
          else
@@ -392,13 +393,13 @@ int RecoverMappingsFromPositions(TicketMapping &map[], PendingTicketMapping &pen
             {
                AddPendingTicketMapping(pending_map, master_ticket, ticket);
                recovered_count++;
-               Print("Recovered pending mapping: master #", master_ticket, " -> pending #", ticket);
+               LogDebug(CAT_SYNC, StringFormat("Recovered pending mapping: master #%d -> pending #%d", master_ticket, ticket));
             }
          }
       }
    }
 
-   Print("=== Recovery complete: ", recovered_count, " mappings restored ===");
+   LogInfo(CAT_SYNC, StringFormat("Recovery complete: %d mappings restored", recovered_count));
    return recovered_count;
 }
 #endif

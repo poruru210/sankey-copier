@@ -14,6 +14,7 @@
 #include "Common.mqh"
 #include "SlaveTypes.mqh"
 #include "Messages.mqh"
+#include "Logging.mqh"
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
@@ -27,7 +28,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
    // STATUS_CONNECTED (2) means both Slave is enabled AND Master is connected
    if(config.status != STATUS_CONNECTED)
    {
-      Print("Trade filtering: Status is ", config.status, " (need STATUS_CONNECTED=2)");
+      LogDebug(CAT_TRADE, StringFormat("Trade filtering: Status is %d (need STATUS_CONNECTED=2)", config.status));
       return false;
    }
 
@@ -46,7 +47,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 
       if(!symbol_found)
       {
-         Print("Trade filtering: Symbol ", symbol, " not in allowed list");
+         LogDebug(CAT_TRADE, StringFormat("Trade filtering: Symbol %s not in allowed list", symbol));
          return false;
       }
    }
@@ -58,7 +59,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
       {
          if(config.filters.blocked_symbols[i] == symbol)
          {
-            Print("Trade filtering: Symbol ", symbol, " is blocked");
+            LogDebug(CAT_TRADE, StringFormat("Trade filtering: Symbol %s is blocked", symbol));
             return false;
          }
       }
@@ -79,7 +80,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 
       if(!magic_found)
       {
-         Print("Trade filtering: Magic number ", magic_number, " not in allowed list");
+         LogDebug(CAT_TRADE, StringFormat("Trade filtering: Magic number %d not in allowed list", magic_number));
          return false;
       }
    }
@@ -91,7 +92,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
       {
          if(config.filters.blocked_magic_numbers[i] == magic_number)
          {
-            Print("Trade filtering: Magic number ", magic_number, " is blocked");
+            LogDebug(CAT_TRADE, StringFormat("Trade filtering: Magic number %d is blocked", magic_number));
             return false;
          }
       }
@@ -112,13 +113,13 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
                           string server_address = "",
                           string slave_account = "")
 {
-   Print("=== Processing Configuration Message ===");
+   LogInfo(CAT_CONFIG, "Processing configuration message");
 
    // Parse MessagePack once and get a handle to the Slave config structure
    HANDLE_TYPE config_handle = parse_slave_config(msgpack_data, data_len);
    if(config_handle == 0)
    {
-      Print("ERROR: Failed to parse MessagePack Slave config");
+      LogError(CAT_CONFIG, "Failed to parse MessagePack Slave config");
       return;
    }
 
@@ -128,7 +129,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    if(new_master == "" || new_group == "")
    {
-      Print("ERROR: Invalid config message received");
+      LogError(CAT_CONFIG, "Invalid config message received");
       slave_config_free(config_handle);
       return;
    }
@@ -164,29 +165,14 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    bool new_use_pending_order_for_delayed = (slave_config_get_bool(config_handle, "use_pending_order_for_delayed") == 1);
    bool new_allow_new_orders = (slave_config_get_bool(config_handle, "allow_new_orders") == 1);
 
-   // Log configuration values
-   Print("Master Account: ", new_master);
-   Print("Trade Group ID: ", new_group);
-   Print("Status: ", new_status, " (0=DISABLED, 1=ENABLED, 2=CONNECTED)");
-   Print("Lot Calculation Mode: ", lot_calc_mode_str, " (", new_lot_calc_mode, ")");
-   Print("Lot Multiplier: ", new_lot_mult);
-   Print("Reverse Trade: ", new_reverse);
-   Print("Config Version: ", new_version);
-   Print("Source Lot Min: ", new_source_lot_min);
-   Print("Source Lot Max: ", new_source_lot_max);
-   Print("Master Equity: ", new_master_equity);
-   Print("Sync Mode: ", sync_mode_str, " (", new_sync_mode, ")");
-   Print("Limit Order Expiry: ", new_limit_order_expiry, " min");
-   Print("Market Sync Max Pips: ", new_market_sync_max_pips);
-   Print("Max Slippage: ", new_max_slippage, " points");
-   Print("Copy Pending Orders: ", new_copy_pending_orders);
-   Print("Max Retries: ", new_max_retries);
-   Print("Max Signal Delay: ", new_max_signal_delay_ms, " ms");
-   Print("Use Pending Order for Delayed: ", new_use_pending_order_for_delayed);
-   Print("Allow New Orders: ", new_allow_new_orders);
-
-   Print("DEBUG: Current configs count: ", ArraySize(configs));
-   for(int i=0; i<ArraySize(configs); i++) Print("DEBUG: Config[", i, "]: ", configs[i].master_account);
+   // Log configuration values (compact format)
+   LogInfo(CAT_CONFIG, StringFormat("Master: %s, Group: %s, Status: %d", new_master, new_group, new_status));
+   LogDebug(CAT_CONFIG, StringFormat("Lot mode: %s, multiplier: %.2f, reverse: %d", lot_calc_mode_str, new_lot_mult, new_reverse));
+   LogDebug(CAT_CONFIG, StringFormat("Source lot: %.2f-%.2f, master_equity: %.2f", new_source_lot_min, new_source_lot_max, new_master_equity));
+   LogDebug(CAT_CONFIG, StringFormat("Sync mode: %s, limit_expiry: %d min, max_pips: %.1f", sync_mode_str, new_limit_order_expiry, new_market_sync_max_pips));
+   LogDebug(CAT_CONFIG, StringFormat("Execution: slippage=%d, retries=%d, delay=%dms, pending=%d, new_orders=%d",
+         new_max_slippage, new_max_retries, new_max_signal_delay_ms, new_use_pending_order_for_delayed, new_allow_new_orders));
+   LogDebug(CAT_CONFIG, StringFormat("Current configs count: %d", ArraySize(configs)));
 
    // Find existing config
    int index = -1;
@@ -198,29 +184,29 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          break;
       }
    }
-   
-   Print("DEBUG: Found index: ", index);
+
+   LogDebug(CAT_CONFIG, StringFormat("Found index: %d", index));
 
    if(new_status == STATUS_DISABLED)
    {
       // Remove configuration if disabled
       if(index >= 0)
       {
-         Print("DEBUG: Removing configuration for master ", new_master, " at index ", index);
-         
+         LogDebug(CAT_CONFIG, StringFormat("Removing configuration for master %s at index %d", new_master, index));
+
          // Shift remaining elements
          for(int i = index; i < ArraySize(configs) - 1; i++)
          {
             configs[i] = configs[i + 1];
          }
          ArrayResize(configs, ArraySize(configs) - 1);
-         Print("DEBUG: Configuration removed. New count: ", ArraySize(configs));
+         LogInfo(CAT_CONFIG, StringFormat("Configuration removed for %s. New count: %d", new_master, ArraySize(configs)));
       }
       else
       {
-         Print("DEBUG: Removal requested but config not found for ", new_master);
+         LogDebug(CAT_CONFIG, StringFormat("Removal requested but config not found for %s", new_master));
       }
-      
+
       // Free the config handle before returning
       slave_config_free(config_handle);
       return;
@@ -234,7 +220,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       if(index == -1)
       {
          // Add new
-         Print("DEBUG: Adding new configuration for ", new_master);
+         LogDebug(CAT_CONFIG, StringFormat("Adding new configuration for %s", new_master));
          index = ArraySize(configs);
          ArrayResize(configs, index + 1);
          configs[index].master_account = new_master;
@@ -242,26 +228,26 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          // Subscribe to new trade group
          if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
          {
-            Print("ERROR: Failed to subscribe to trade group: ", new_group);
+            LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade group: %s", new_group));
          }
          else
          {
-            Print("Successfully subscribed to trade group: ", new_group);
+            LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade group: %s", new_group));
          }
       }
       else
       {
-         Print("DEBUG: Updating existing configuration for ", new_master, " at index ", index);
+         LogDebug(CAT_CONFIG, StringFormat("Updating existing configuration for %s at index %d", new_master, index));
          if(configs[index].trade_group_id != new_group)
          {
             // Group changed, subscribe to new one
             if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
             {
-                Print("ERROR: Failed to subscribe to trade group: ", new_group);
+                LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade group: %s", new_group));
             }
             else
             {
-                Print("Successfully subscribed to trade group: ", new_group);
+                LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade group: %s", new_group));
             }
          }
       }
@@ -306,11 +292,12 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       // Log symbol mappings if any
       if(mapping_count > 0)
       {
-         Print("Symbol Mappings (", mapping_count, "):");
+         LogDebug(CAT_CONFIG, StringFormat("Symbol Mappings (%d):", mapping_count));
          for(int m = 0; m < mapping_count; m++)
          {
-            Print("  ", configs[index].symbol_mappings[m].source_symbol, " -> ",
-                  configs[index].symbol_mappings[m].target_symbol);
+            LogDebug(CAT_CONFIG, StringFormat("  %s -> %s",
+                  configs[index].symbol_mappings[m].source_symbol,
+                  configs[index].symbol_mappings[m].target_symbol));
          }
       }
 
@@ -328,11 +315,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       }
       if(magic_count > 0)
       {
-         Print("Allowed Magic Numbers (", magic_count, "):");
-         for(int m = 0; m < magic_count; m++)
-         {
-            Print("  ", configs[index].filters.allowed_magic_numbers[m]);
-         }
+         LogDebug(CAT_CONFIG, StringFormat("Allowed Magic Numbers (%d)", magic_count));
       }
 
       // Send SyncRequest when:
@@ -347,17 +330,16 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          server_address != "" &&
          slave_account != "")
       {
-         Print("=== Triggering Position Sync Request ===");
-         Print("Sync mode: ", (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
-         Print("Requesting position snapshot from master: ", new_master);
+         LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
+               (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
 
          if(SendSyncRequestMessage(zmq_context, server_address, slave_account, new_master))
          {
-            Print("SyncRequest sent successfully to master: ", new_master);
+            LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
          }
          else
          {
-            Print("ERROR: Failed to send SyncRequest to master: ", new_master);
+            LogError(CAT_SYNC, StringFormat("Failed to send SyncRequest to master: %s", new_master));
          }
       }
    }
@@ -365,7 +347,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    // Free the config handle
    slave_config_free(config_handle);
 
-   Print("=== Configuration Updated ===");
+   LogInfo(CAT_CONFIG, "Configuration updated");
 }
 
 //+------------------------------------------------------------------+
@@ -526,14 +508,14 @@ bool IsLotWithinFilter(double lots, double lot_min, double lot_max)
    // If min filter is set and lots is below it, reject
    if(lot_min > 0 && lots < lot_min)
    {
-      Print("Lot filter: ", lots, " is below minimum ", lot_min);
+      LogDebug(CAT_TRADE, StringFormat("Lot filter: %.2f is below minimum %.2f", lots, lot_min));
       return false;
    }
 
    // If max filter is set and lots is above it, reject
    if(lot_max > 0 && lots > lot_max)
    {
-      Print("Lot filter: ", lots, " is above maximum ", lot_max);
+      LogDebug(CAT_TRADE, StringFormat("Lot filter: %.2f is above maximum %.2f", lots, lot_max));
       return false;
    }
 
@@ -557,14 +539,12 @@ double TransformLotSize(double lots, CopyConfig &config, string symbol)
       {
          double ratio = slave_equity / master_equity;
          new_lots = lots * ratio;
-         Print("Margin ratio mode: slave_equity=", slave_equity,
-               ", master_equity=", master_equity,
-               ", ratio=", ratio,
-               ", lots=", lots, " -> ", new_lots);
+         LogDebug(CAT_TRADE, StringFormat("Margin ratio mode: slave_equity=%.2f, master_equity=%.2f, ratio=%.4f, lots=%.2f -> %.2f",
+               slave_equity, master_equity, ratio, lots, new_lots));
       }
       else
       {
-         Print("WARNING: Master equity is 0 or not available, using 1:1 ratio");
+         LogWarn(CAT_TRADE, "Master equity is 0 or not available, using 1:1 ratio");
          new_lots = lots;
       }
    }

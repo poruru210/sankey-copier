@@ -14,6 +14,7 @@
 
 #include "Common.mqh"
 #include "Messages.mqh"
+#include "Logging.mqh"
 
 // =============================================================================
 // Trade State Detection
@@ -107,7 +108,7 @@ bool HandleHeartbeatTimer(datetime &last_heartbeat, bool &last_trade_allowed,
       if(trade_state_changed)
       {
          bool current_trade_allowed = IsAutoTradingAllowed();
-         Print("[INFO] Auto-trading state changed: ", last_trade_allowed, " -> ", current_trade_allowed);
+         LogInfo(CAT_SYSTEM, StringFormat("Auto-trading state changed: %d -> %d", last_trade_allowed, current_trade_allowed));
          last_trade_allowed = current_trade_allowed;
       }
    }
@@ -155,7 +156,7 @@ bool HandleConfigRequest(bool &config_requested, HANDLE_TYPE zmq_context,
    }
    else
    {
-      Print("[ERROR] Failed to send configuration request");
+      LogError(CAT_SYSTEM, "Failed to send configuration request");
       return false;
    }
 }

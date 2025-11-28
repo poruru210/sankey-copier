@@ -15,6 +15,7 @@
 #include "Zmq.mqh"
 #include "Messages.mqh"
 #include "TimerHandling.mqh"
+#include "Logging.mqh"
 
 // =============================================================================
 // EA Cleanup Functions
@@ -44,7 +45,7 @@ void CleanupMasterEA(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket,
    CleanupZmqMultiSocket(zmq_socket, zmq_config_socket, zmq_context,
                          "Master PUSH", "Master CONFIG SUB");
 
-   Print("[INFO] Master EA cleanup completed");
+   LogInfo(CAT_SYSTEM, "Master EA cleanup completed");
 }
 
 //+------------------------------------------------------------------+
@@ -76,7 +77,7 @@ void CleanupSlaveEA(HANDLE_TYPE &zmq_context, HANDLE_TYPE &zmq_socket,
    // Cleanup context
    CleanupZmqContext(zmq_context);
 
-   Print("[INFO] Slave EA cleanup completed");
+   LogInfo(CAT_SYSTEM, "Slave EA cleanup completed");
 }
 
 //+------------------------------------------------------------------+

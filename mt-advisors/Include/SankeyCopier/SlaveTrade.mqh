@@ -14,6 +14,7 @@
 
 #include "Common.mqh"
 #include "Mapping.mqh"
+#include "Logging.mqh"
 
 // =============================================================================
 // External References
@@ -87,7 +88,7 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 {
    if(GetSlaveTicketFromMapping(order_map, master_ticket) > 0)
    {
-      Print("Already copied master #", master_ticket);
+      LogDebug(CAT_TRADE, StringFormat("Already copied master #%d", master_ticket));
       return;
    }
 
@@ -100,12 +101,12 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
    {
       if(!use_pending_for_delayed)
       {
-         Print("Signal too old (", delay_ms, "ms > ", max_signal_delay_ms, "ms). Skipping master #", master_ticket);
+         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
          return;
       }
       else
       {
-         Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
+         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
          ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
                             source_account, delay_ms, magic);
          return;
@@ -138,14 +139,14 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
       if(result)
       {
          ulong ticket = trade.ResultOrder();
-         Print("Position opened: #", ticket, " from master #", master_ticket,
-               " (delay: ", delay_ms, "ms, slippage: ", effective_slippage, " pts)");
+         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (delay: %dms, slippage: %d pts)",
+               ticket, master_ticket, delay_ms, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
       else
       {
-         Print("Failed to open position, attempt ", i+1, "/", max_retries);
+         LogError(CAT_TRADE, StringFormat("Failed to open position, attempt %d/%d", i+1, max_retries));
          Sleep(1000);
       }
    }
@@ -162,13 +163,13 @@ void ExecuteCloseTrade(CTrade &trade, TicketMapping &order_map[],
    ulong slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket == 0)
    {
-      Print("No slave position for master #", master_ticket);
+      LogWarn(CAT_TRADE, StringFormat("No slave position for master #%d", master_ticket));
       return;
    }
 
    if(!PositionSelectByTicket(slave_ticket))
    {
-      Print("Position #", slave_ticket, " not found");
+      LogWarn(CAT_TRADE, StringFormat("Position #%d not found", slave_ticket));
       RemoveTicketMapping(order_map, master_ticket);
       return;
    }
@@ -190,19 +191,19 @@ void ExecuteCloseTrade(CTrade &trade, TicketMapping &order_map[],
       // Ensure close_lots is valid (at least minimum lot size)
       if(close_lots <= 0.0)
       {
-         Print("Partial close lots too small, skipping. Ratio: ", close_ratio, " Current: ", current_lots);
+         LogWarn(CAT_TRADE, StringFormat("Partial close lots too small, skipping. Ratio: %.2f Current: %.2f", close_ratio, current_lots));
          return;
       }
 
       if(trade.PositionClosePartial(slave_ticket, close_lots))
       {
-         Print("Partial close: #", slave_ticket, " closed ", close_lots, " lots (",
-               (close_ratio * 100.0), "%), remaining: ", (current_lots - close_lots), " lots");
+         LogInfo(CAT_TRADE, StringFormat("Partial close: #%d closed %.2f lots (%.1f%%), remaining: %.2f lots",
+               slave_ticket, close_lots, close_ratio * 100.0, current_lots - close_lots));
          // Keep mapping - position still open with remaining lots
       }
       else
       {
-         Print("Failed to partial close position #", slave_ticket, ", lots: ", close_lots);
+         LogError(CAT_TRADE, StringFormat("Failed to partial close position #%d, lots: %.2f", slave_ticket, close_lots));
       }
    }
    else
@@ -210,12 +211,12 @@ void ExecuteCloseTrade(CTrade &trade, TicketMapping &order_map[],
       // Full close
       if(trade.PositionClose(slave_ticket))
       {
-         Print("Position closed: #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
+         LogInfo(CAT_TRADE, StringFormat("Position closed: #%d (slippage: %d pts)", slave_ticket, effective_slippage));
          RemoveTicketMapping(order_map, master_ticket);
       }
       else
       {
-         Print("Failed to close position #", slave_ticket);
+         LogError(CAT_TRADE, StringFormat("Failed to close position #%d", slave_ticket));
       }
    }
 }
@@ -233,7 +234,7 @@ void ExecuteModifyTrade(CTrade &trade, TicketMapping &order_map[],
 
    if(trade.PositionModify(slave_ticket, sl, tp))
    {
-      Print("Position modified: #", slave_ticket);
+      LogInfo(CAT_TRADE, StringFormat("Position modified: #%d", slave_ticket));
    }
 }
 
@@ -247,7 +248,7 @@ void ExecutePendingOrder(CTrade &trade, PendingTicketMapping &pending_map[],
 {
    if(GetPendingTicketFromMapping(pending_map, master_ticket) > 0)
    {
-      Print("Pending order already exists for master #", master_ticket);
+      LogDebug(CAT_TRADE, StringFormat("Pending order already exists for master #%d", master_ticket));
       return;
    }
 
@@ -279,12 +280,12 @@ void ExecutePendingOrder(CTrade &trade, PendingTicketMapping &pending_map[],
    if(result)
    {
       ulong ticket = trade.ResultOrder();
-      Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
+      LogInfo(CAT_TRADE, StringFormat("Pending order placed: #%d for master #%d at price %.5f", ticket, master_ticket, price));
       AddPendingTicketMapping(pending_map, master_ticket, ticket);
    }
    else
    {
-      Print("Failed to place pending order for master #", master_ticket);
+      LogError(CAT_TRADE, StringFormat("Failed to place pending order for master #%d", master_ticket));
    }
 }
 
@@ -298,12 +299,12 @@ void ExecuteCancelPendingOrder(CTrade &trade, PendingTicketMapping &pending_map[
 
    if(trade.OrderDelete(pending_ticket))
    {
-      Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
+      LogInfo(CAT_TRADE, StringFormat("Pending order cancelled: #%d for master #%d", pending_ticket, master_ticket));
       RemovePendingTicketMapping(pending_map, master_ticket);
    }
    else
    {
-      Print("Failed to cancel pending order #", pending_ticket);
+      LogError(CAT_TRADE, StringFormat("Failed to cancel pending order #%d", pending_ticket));
    }
 }
 
@@ -333,7 +334,7 @@ void SyncWithLimitOrder(CTrade &trade, PendingTicketMapping &pending_map[],
    }
    else
    {
-      Print("ERROR: Cannot sync pending order type: ", type_str);
+      LogError(CAT_TRADE, StringFormat("Cannot sync pending order type: %s", type_str));
       return;
    }
 
@@ -356,14 +357,14 @@ void SyncWithLimitOrder(CTrade &trade, PendingTicketMapping &pending_map[],
    if(result)
    {
       ulong ticket = trade.ResultOrder();
-      Print("Sync limit order placed: #", ticket, " for master #", master_ticket,
-            " ", EnumToString(limit_type), " @ ", price);
+      LogInfo(CAT_SYNC, StringFormat("Sync limit order placed: #%d for master #%d %s @ %.5f",
+            ticket, master_ticket, EnumToString(limit_type), price));
       AddPendingTicketMapping(pending_map, master_ticket, ticket);
    }
    else
    {
-      Print("ERROR: Failed to place sync limit order for master #", master_ticket,
-            " Error: ", GetLastError());
+      LogError(CAT_SYNC, StringFormat("Failed to place sync limit order for master #%d Error: %d",
+            master_ticket, GetLastError()));
    }
 }
 
@@ -393,11 +394,11 @@ bool SyncWithMarketOrder(CTrade &trade, TicketMapping &order_map[],
    double pip_size = (digits == 3 || digits == 5) ? point * 10 : point;
    double deviation_pips = MathAbs(current_price - master_price) / pip_size;
 
-   Print("  Price deviation: ", DoubleToString(deviation_pips, 1), " pips (max: ", max_pips, ")");
+   LogDebug(CAT_SYNC, StringFormat("Price deviation: %.1f pips (max: %.1f)", deviation_pips, max_pips));
 
    if(deviation_pips > max_pips)
    {
-      Print("  -> Price deviation ", deviation_pips, " exceeds max ", max_pips, " pips");
+      LogWarn(CAT_SYNC, StringFormat("Price deviation %.1f exceeds max %.1f pips", deviation_pips, max_pips));
       return false;
    }
 
@@ -417,13 +418,13 @@ bool SyncWithMarketOrder(CTrade &trade, TicketMapping &order_map[],
    if(result)
    {
       ulong ticket = trade.ResultOrder();
-      Print("  -> Market sync executed: #", ticket, " (deviation: ", deviation_pips, " pips)");
+      LogInfo(CAT_SYNC, StringFormat("Market sync executed: #%d (deviation: %.1f pips)", ticket, deviation_pips));
       AddTicketMapping(order_map, master_ticket, ticket);
       return true;
    }
    else
    {
-      Print("  -> Market sync failed, Error: ", GetLastError());
+      LogError(CAT_SYNC, StringFormat("Market sync failed, Error: %d", GetLastError()));
       return false;
    }
 }
@@ -454,7 +455,7 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
    int slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket > 0)
    {
-      Print("Order already copied: master #", master_ticket, " -> slave #", slave_ticket);
+      LogDebug(CAT_TRADE, StringFormat("Order already copied: master #%d -> slave #%d", master_ticket, slave_ticket));
       return;
    }
 
@@ -467,12 +468,12 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
    {
       if(!use_pending_for_delayed)
       {
-         Print("Signal too old (", delay_ms, "ms > ", max_signal_delay_ms, "ms). Skipping master #", master_ticket);
+         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
          return;
       }
       else
       {
-         Print("Signal delayed (", delay_ms, "ms). Using pending order at original price ", price);
+         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
          ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
                             source_account, delay_ms, magic, default_slippage);
          return;
@@ -482,7 +483,7 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
    int order_type = GetOrderTypeFromString(type_str);
    if(order_type == -1)
    {
-      Print("ERROR: Invalid order type: ", type_str);
+      LogError(CAT_TRADE, StringFormat("Invalid order type: %s", type_str));
       return;
    }
 
@@ -513,15 +514,15 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
       if(ticket > 0)
       {
-         Print("Order opened successfully: slave #", ticket, " from master #", master_ticket,
-               " (delay: ", delay_ms, "ms, slippage: ", effective_slippage, " pts)");
+         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (delay: %dms, slippage: %d pts)",
+               ticket, master_ticket, delay_ms, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
       else
       {
-         Print("ERROR: Failed to open order, attempt ", attempt + 1, "/", max_retries,
-               ", Error: ", GetLastError());
+         LogError(CAT_TRADE, StringFormat("Failed to open order, attempt %d/%d, Error: %d",
+               attempt + 1, max_retries, GetLastError()));
          Sleep(1000);
       }
    }
@@ -538,13 +539,13 @@ void ExecuteCloseTrade(TicketMapping &order_map[],
    int slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket <= 0)
    {
-      Print("No slave order found for master #", master_ticket);
+      LogWarn(CAT_TRADE, StringFormat("No slave order found for master #%d", master_ticket));
       return;
    }
 
    if(!OrderSelect(slave_ticket, SELECT_BY_TICKET))
    {
-      Print("ERROR: Cannot select slave order #", slave_ticket);
+      LogError(CAT_TRADE, StringFormat("Cannot select slave order #%d", slave_ticket));
       return;
    }
 
@@ -566,7 +567,7 @@ void ExecuteCloseTrade(TicketMapping &order_map[],
       // Ensure close_lots is valid (at least minimum lot size)
       if(close_lots <= 0.0)
       {
-         Print("Partial close lots too small, skipping. Ratio: ", close_ratio, " Current: ", current_lots);
+         LogWarn(CAT_TRADE, StringFormat("Partial close lots too small, skipping. Ratio: %.2f Current: %.2f", close_ratio, current_lots));
          return;
       }
    }
@@ -582,20 +583,20 @@ void ExecuteCloseTrade(TicketMapping &order_map[],
    {
       if(is_partial_close)
       {
-         Print("Partial close: #", slave_ticket, " closed ", close_lots, " lots (",
-               (close_ratio * 100.0), "%), remaining: ", (current_lots - close_lots), " lots");
+         LogInfo(CAT_TRADE, StringFormat("Partial close: #%d closed %.2f lots (%.1f%%), remaining: %.2f lots",
+               slave_ticket, close_lots, close_ratio * 100.0, current_lots - close_lots));
          // Keep mapping - order still open with remaining lots (MT4 may create new ticket)
          // Note: MT4 may create a new order ticket for remaining lots, mapping may need update
       }
       else
       {
-         Print("Order closed successfully: slave #", slave_ticket, " (slippage: ", effective_slippage, " pts)");
+         LogInfo(CAT_TRADE, StringFormat("Order closed: slave #%d (slippage: %d pts)", slave_ticket, effective_slippage));
          RemoveTicketMapping(order_map, master_ticket);
       }
    }
    else
    {
-      Print("ERROR: Failed to close order #", slave_ticket, ", Error: ", GetLastError());
+      LogError(CAT_TRADE, StringFormat("Failed to close order #%d, Error: %d", slave_ticket, GetLastError()));
    }
 }
 
@@ -608,13 +609,13 @@ void ExecuteModifyTrade(TicketMapping &order_map[],
    int slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket <= 0)
    {
-      Print("No slave order found for master #", master_ticket);
+      LogWarn(CAT_TRADE, StringFormat("No slave order found for master #%d", master_ticket));
       return;
    }
 
    if(!OrderSelect(slave_ticket, SELECT_BY_TICKET))
    {
-      Print("ERROR: Cannot select slave order #", slave_ticket);
+      LogError(CAT_TRADE, StringFormat("Cannot select slave order #%d", slave_ticket));
       return;
    }
 
@@ -625,11 +626,11 @@ void ExecuteModifyTrade(TicketMapping &order_map[],
 
    if(result)
    {
-      Print("Order modified successfully: slave #", slave_ticket);
+      LogInfo(CAT_TRADE, StringFormat("Order modified: slave #%d", slave_ticket));
    }
    else
    {
-      Print("ERROR: Failed to modify order #", slave_ticket, ", Error: ", GetLastError());
+      LogError(CAT_TRADE, StringFormat("Failed to modify order #%d, Error: %d", slave_ticket, GetLastError()));
    }
 }
 
@@ -643,14 +644,14 @@ void ExecutePendingOrder(PendingTicketMapping &pending_map[],
 {
    if(GetPendingTicketFromMapping(pending_map, master_ticket) > 0)
    {
-      Print("Pending order already exists for master #", master_ticket);
+      LogDebug(CAT_TRADE, StringFormat("Pending order already exists for master #%d", master_ticket));
       return;
    }
 
    int base_order_type = GetOrderTypeFromString(type_str);
    if(base_order_type == -1)
    {
-      Print("ERROR: Invalid order type: ", type_str);
+      LogError(CAT_TRADE, StringFormat("Invalid order type: %s", type_str));
       return;
    }
 
@@ -669,7 +670,7 @@ void ExecutePendingOrder(PendingTicketMapping &pending_map[],
    }
    else
    {
-      Print("ERROR: Cannot create pending order for type: ", type_str);
+      LogError(CAT_TRADE, StringFormat("Cannot create pending order for type: %s", type_str));
       return;
    }
 
@@ -685,12 +686,12 @@ void ExecutePendingOrder(PendingTicketMapping &pending_map[],
 
    if(ticket > 0)
    {
-      Print("Pending order placed: #", ticket, " for master #", master_ticket, " at price ", price);
+      LogInfo(CAT_TRADE, StringFormat("Pending order placed: #%d for master #%d at price %.5f", ticket, master_ticket, price));
       AddPendingTicketMapping(pending_map, master_ticket, ticket);
    }
    else
    {
-      Print("Failed to place pending order for master #", master_ticket, " Error: ", GetLastError());
+      LogError(CAT_TRADE, StringFormat("Failed to place pending order for master #%d, Error: %d", master_ticket, GetLastError()));
    }
 }
 
@@ -704,12 +705,12 @@ void ExecuteCancelPendingOrder(PendingTicketMapping &pending_map[], int master_t
 
    if(OrderDelete(pending_ticket))
    {
-      Print("Pending order cancelled: #", pending_ticket, " for master #", master_ticket);
+      LogInfo(CAT_TRADE, StringFormat("Pending order cancelled: #%d for master #%d", pending_ticket, master_ticket));
       RemovePendingTicketMapping(pending_map, master_ticket);
    }
    else
    {
-      Print("Failed to cancel pending order #", pending_ticket, " Error: ", GetLastError());
+      LogError(CAT_TRADE, StringFormat("Failed to cancel pending order #%d, Error: %d", pending_ticket, GetLastError()));
    }
 }
 
@@ -739,7 +740,7 @@ void SyncWithLimitOrder(PendingTicketMapping &pending_map[],
    }
    else
    {
-      Print("ERROR: Cannot sync pending order type: ", type_str);
+      LogError(CAT_TRADE, StringFormat("Cannot sync pending order type: %s", type_str));
       return;
    }
 
@@ -757,14 +758,14 @@ void SyncWithLimitOrder(PendingTicketMapping &pending_map[],
 
    if(ticket > 0)
    {
-      Print("Sync limit order placed: #", ticket, " for master #", master_ticket,
-            " type=", limit_type, " @ ", price);
+      LogInfo(CAT_SYNC, StringFormat("Sync limit order placed: #%d for master #%d type=%d @ %.5f",
+            ticket, master_ticket, limit_type, price));
       AddPendingTicketMapping(pending_map, master_ticket, ticket);
    }
    else
    {
-      Print("ERROR: Failed to place sync limit order for master #", master_ticket,
-            " Error: ", GetLastError());
+      LogError(CAT_SYNC, StringFormat("Failed to place sync limit order for master #%d, Error: %d",
+            master_ticket, GetLastError()));
    }
 }
 
@@ -793,11 +794,11 @@ bool SyncWithMarketOrder(TicketMapping &order_map[],
    double pip_size = (digits == 3 || digits == 5) ? point * 10 : point;
    double deviation_pips = MathAbs(current_price - master_price) / pip_size;
 
-   Print("  Price deviation: ", DoubleToString(deviation_pips, 1), " pips (max: ", max_pips, ")");
+   LogDebug(CAT_SYNC, StringFormat("Price deviation: %.1f pips (max: %.1f)", deviation_pips, max_pips));
 
    if(deviation_pips > max_pips)
    {
-      Print("  -> Price deviation ", deviation_pips, " exceeds max ", max_pips, " pips");
+      LogWarn(CAT_SYNC, StringFormat("Price deviation %.1f exceeds max %.1f pips", deviation_pips, max_pips));
       return false;
    }
 
@@ -810,13 +811,13 @@ bool SyncWithMarketOrder(TicketMapping &order_map[],
 
    if(ticket > 0)
    {
-      Print("  -> Market sync executed: #", ticket, " (deviation: ", deviation_pips, " pips)");
+      LogInfo(CAT_SYNC, StringFormat("Market sync executed: #%d (deviation: %.1f pips)", ticket, deviation_pips));
       AddTicketMapping(order_map, master_ticket, ticket);
       return true;
    }
    else
    {
-      Print("  -> Market sync failed, Error: ", GetLastError());
+      LogError(CAT_SYNC, StringFormat("Market sync failed, Error: %d", GetLastError()));
       return false;
    }
 }
@@ -846,7 +847,7 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
          RemovePendingTicketMapping(pending_map, master_ticket);
          AddTicketMapping(order_map, master_ticket, pending_ticket);
 
-         Print("[PENDING FILL] Order #", pending_ticket, " filled (master:#", master_ticket, ")");
+         LogInfo(CAT_ORDER, StringFormat("Pending order #%d filled (master #%d)", pending_ticket, master_ticket));
       }
       else
       {
@@ -856,13 +857,13 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
             int close_time = (int)OrderCloseTime();
             if(close_time > 0)
             {
-               Print("Pending order #", pending_ticket, " was cancelled/deleted for master #", master_ticket);
+               LogInfo(CAT_ORDER, StringFormat("Pending order #%d was cancelled/deleted for master #%d", pending_ticket, master_ticket));
                RemovePendingTicketMapping(pending_map, master_ticket);
             }
          }
          else
          {
-            Print("Pending order #", pending_ticket, " not found, removing mapping for master #", master_ticket);
+            LogWarn(CAT_ORDER, StringFormat("Pending order #%d not found, removing mapping for master #%d", pending_ticket, master_ticket));
             RemovePendingTicketMapping(pending_map, master_ticket);
          }
       }

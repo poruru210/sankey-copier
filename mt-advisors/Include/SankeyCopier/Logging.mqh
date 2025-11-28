@@ -87,33 +87,33 @@ void VLog(string level, string category, string message, string context = "")
 }
 
 //+------------------------------------------------------------------+
-//| Convenience function: Log debug message                          |
+//| Log debug message                                                 |
 //+------------------------------------------------------------------+
-void VLogDebug(string category, string message, string context = "")
+void LogDebug(string category, string message, string context = "")
 {
    VLog(LOG_DEBUG, category, message, context);
 }
 
 //+------------------------------------------------------------------+
-//| Convenience function: Log info message                           |
+//| Log info message                                                  |
 //+------------------------------------------------------------------+
-void VLogInfo(string category, string message, string context = "")
+void LogInfo(string category, string message, string context = "")
 {
    VLog(LOG_INFO, category, message, context);
 }
 
 //+------------------------------------------------------------------+
-//| Convenience function: Log warning message                        |
+//| Log warning message                                               |
 //+------------------------------------------------------------------+
-void VLogWarn(string category, string message, string context = "")
+void LogWarn(string category, string message, string context = "")
 {
    VLog(LOG_WARN, category, message, context);
 }
 
 //+------------------------------------------------------------------+
-//| Convenience function: Log error message                          |
+//| Log error message                                                 |
 //+------------------------------------------------------------------+
-void VLogError(string category, string message, string context = "")
+void LogError(string category, string message, string context = "")
 {
    VLog(LOG_ERROR, category, message, context);
 }
