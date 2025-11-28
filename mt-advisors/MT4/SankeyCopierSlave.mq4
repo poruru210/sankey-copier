@@ -281,8 +281,6 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack message on config socket for topic '", topic, "' (", payload_len, " bytes)");
-
          // Try to parse as SlaveConfig first
          HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
          if(config_handle > 0)
@@ -311,7 +309,6 @@ void OnTimer()
          
          if(ArraySize(g_configs) != g_last_config_count)
          {
-            Print("DEBUG: Config count changed: ", g_last_config_count, " -> ", ArraySize(g_configs));
             g_last_config_count = ArraySize(g_configs);
          }
 
@@ -396,8 +393,6 @@ void OnTick()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack trade signal for topic '", topic, "' (", payload_len, " bytes)");
-
          // Trade socket only handles TradeSignal messages
          // PositionSnapshot is received via config socket in OnTimer
          ProcessTradeSignal(msgpack_payload, payload_len);
@@ -433,7 +428,8 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    string timestamp = trade_signal_get_string(handle, "timestamp");
    string source_account = trade_signal_get_string(handle, "source_account");
 
-   Print("Processing ", action, " for master ticket #", master_ticket, " from ", source_account);
+   // Log trade signal receipt with key details for traceability
+   Print("[SIGNAL] ", action, " master:#", master_ticket, " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price, " from ", source_account);
 
    // Find matching config for this master
    int config_index = -1;

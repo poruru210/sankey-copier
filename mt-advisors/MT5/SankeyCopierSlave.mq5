@@ -285,8 +285,6 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack message on config socket for topic '", topic, "' (", payload_len, " bytes)");
-
          // Try to parse as SlaveConfig first
          HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
          if(config_handle > 0)
@@ -315,7 +313,6 @@ void OnTimer()
          
          if(ArraySize(g_configs) != g_last_config_count)
          {
-            Print("DEBUG: Config count changed: ", g_last_config_count, " -> ", ArraySize(g_configs));
             g_last_config_count = ArraySize(g_configs);
          }
 
@@ -395,7 +392,6 @@ void OnTick()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack trade signal for topic '", topic, "' (", payload_len, " bytes)");
          // Trade socket only handles TradeSignal messages
          // PositionSnapshot is received via config socket in OnTimer
          ProcessTradeSignal(msgpack_payload, payload_len);
@@ -442,10 +438,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    RemovePendingTicketMapping(g_pending_order_map, master_ticket);
    AddTicketMapping(g_order_map, master_ticket, position_ticket);
 
-   Print("=== Pending Order Filled ===");
-   Print("  Order #", order_ticket, " -> Position #", position_ticket);
-   Print("  Master ticket: #", master_ticket);
-   Print("  Mapping moved to active order map");
+   Print("[PENDING FILL] Order #", order_ticket, " -> Position #", position_ticket, " (master:#", master_ticket, ")");
 }
 
 //+------------------------------------------------------------------+
@@ -475,6 +468,9 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    int magic_number = (int)magic_long;
    string timestamp = trade_signal_get_string(handle, "timestamp");
    string source_account = trade_signal_get_string(handle, "source_account");
+
+   // Log trade signal receipt with key details for traceability
+   Print("[SIGNAL] ", action, " master:#", master_ticket, " ", symbol, " ", order_type_str, " ", lots, " lots @ ", price, " from ", source_account);
 
    // Find matching config for this master
    int config_index = -1;

@@ -220,8 +220,6 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack message for topic '", topic, "' (", payload_len, " bytes)");
-
          // Try to parse as MasterConfig first
          HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
          if(config_handle != 0 && config_handle != -1)
@@ -243,8 +241,6 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 {
-   Print("=== Processing Master Configuration Message ===");
-
    // Parse MessagePack once and get a handle to the Master config structure
    HANDLE_TYPE config_handle = parse_master_config(msgpack_data, data_len);
    if(config_handle == 0 || config_handle == -1)
@@ -274,11 +270,9 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
       return;
    }
 
-   // Log configuration values
-   Print("Account ID: ", config_account_id);
-   Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
-   Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
-   Print("Config Version: ", version);
+   // Log configuration update
+   Print("[CONFIG] Received: prefix=", (prefix == "" ? "(none)" : prefix),
+         " suffix=", (suffix == "" ? "(none)" : suffix), " version=", version);
 
    // Update global configuration variables
    g_symbol_prefix = prefix;
@@ -304,8 +298,6 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
    // Free the config handle
    master_config_free(config_handle);
-
-   Print("=== Master Configuration Updated ===");
 }
 
 //+------------------------------------------------------------------+
@@ -340,19 +332,17 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
       return;
    }
 
-   Print("=== Received SyncRequest from Slave: ", slave_account, " ===");
-
    // Free the handle before sending response
    sync_request_free(handle);
 
    // Send position snapshot
    if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
    {
-      Print("Position snapshot sent to slave: ", slave_account);
+      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
    }
    else
    {
-      Print("ERROR: Failed to send position snapshot to slave: ", slave_account);
+      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
    }
 }
 
@@ -389,19 +379,16 @@ void ScanExistingOrders()
 {
    ArrayResize(g_tracked_orders, 0);
 
+   // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
+   // Magic number filtering is done on Slave side via allowed_magic_numbers
    for(int i = 0; i < OrdersTotal(); i++)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         // Magic number filtering is now done on Slave side via allowed_magic_numbers
-         string symbol = OrderSymbol();
-         if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-         {
-            int ticket = OrderTicket();
-            AddTrackedOrder(ticket);
-            SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
-            Print("Tracking existing order: #", ticket);
-         }
+         int ticket = OrderTicket();
+         AddTrackedOrder(ticket);
+         SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
+         Print("[ORDER] Tracking existing: #", ticket, " ", OrderSymbol(), " ", GetOrderTypeString(OrderType()), " ", OrderLots(), " lots");
       }
    }
 
@@ -413,23 +400,20 @@ void ScanExistingOrders()
 //+------------------------------------------------------------------+
 void CheckForNewOrders()
 {
+   // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
+   // Magic number filtering is done on Slave side via allowed_magic_numbers
    for(int i = 0; i < OrdersTotal(); i++)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
          int ticket = OrderTicket();
 
-         // Magic number filtering is now done on Slave side via allowed_magic_numbers
-
          if(!IsOrderTracked(ticket))
          {
             string symbol = OrderSymbol();
-            if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-            {
-               AddTrackedOrder(ticket);
-               SendOpenSignalFromOrder(ticket);
-               Print("New order detected: #", ticket, " ", symbol, " ", OrderLots(), " lots");
-            }
+            AddTrackedOrder(ticket);
+            SendOpenSignalFromOrder(ticket);
+            Print("[ORDER] New: #", ticket, " ", symbol, " ", GetOrderTypeString(OrderType()), " ", OrderLots(), " lots @ ", OrderOpenPrice());
          }
       }
    }
@@ -453,6 +437,7 @@ void CheckForModifiedOrders()
          {
             // Send modify signal
             SendOrderModifySignal(ticket, current_sl, current_tp);
+            Print("[ORDER] Modified: #", ticket, " SL=", current_sl, " TP=", current_tp);
 
             // Update tracked values
             g_tracked_orders[i].sl = current_sl;
@@ -481,7 +466,7 @@ void CheckForPartialCloses()
             // Calculate close_ratio: portion that was closed
             double close_ratio = (tracked_lots - current_lots) / tracked_lots;
 
-            Print("Partial close detected: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (close_ratio: ", close_ratio, ")");
+            Print("[ORDER] Partial close: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (ratio: ", DoubleToString(close_ratio * 100, 1), "%)");
 
             // Send partial close signal
             SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, close_ratio, AccountID);
@@ -523,7 +508,7 @@ void CheckForClosedOrders()
          {
             SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, 0.0, AccountID);
             RemoveTrackedOrder(ticket);
-            Print("Order closed: #", ticket);
+            Print("[ORDER] Closed: #", ticket);
          }
       }
    }

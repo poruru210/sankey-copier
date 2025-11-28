@@ -249,8 +249,6 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         Print("Received MessagePack message for topic '", topic, "' (", payload_len, " bytes)");
-
          // Try to parse as MasterConfig first
          HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
          if(config_handle > 0)
@@ -310,19 +308,17 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
       return;
    }
 
-   Print("=== Received SyncRequest from Slave: ", slave_account, " ===");
-
    // Free the handle before sending response
    sync_request_free(handle);
 
    // Send position snapshot
    if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
    {
-      Print("Position snapshot sent to slave: ", slave_account);
+      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
    }
    else
    {
-      Print("ERROR: Failed to send position snapshot to slave: ", slave_account);
+      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
    }
 }
 
@@ -385,15 +381,14 @@ void OnTick()
                   break;
                }
             }
-                        if(!is_tracked)
-             {
-                string symbol = OrderGetString(ORDER_SYMBOL);
-                if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-                {
-                   SendOrderOpenSignal(ticket);
-                   AddTrackedOrder(ticket);
-                }
-             }
+            // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
+            if(!is_tracked)
+            {
+               string symbol = OrderGetString(ORDER_SYMBOL);
+               SendOrderOpenSignal(ticket);
+               AddTrackedOrder(ticket);
+               Print("[ORDER] New: #", ticket, " ", symbol);
+            }
          }
       }
       
@@ -422,16 +417,15 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                        const MqlTradeRequest &request,
                        const MqlTradeResult &result)
 {
+   // Master detects ALL positions - prefix/suffix is only used for symbol name cleaning
    if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
    {
       if(PositionSelectByTicket(trans.position))
       {
          string symbol = PositionGetString(POSITION_SYMBOL);
-         if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-         {
-            SendPositionOpenSignal(trans.position);
-            AddTrackedPosition(trans.position);
-         }
+         SendPositionOpenSignal(trans.position);
+         AddTrackedPosition(trans.position);
+         Print("[POSITION] New: #", trans.position, " ", symbol);
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
@@ -451,6 +445,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    }
    
    //--- Order Transactions (Pending Orders) ---
+   // Master detects ALL orders - prefix/suffix is only used for symbol name cleaning
    if(trans.type == TRADE_TRANSACTION_ORDER_ADD)
    {
       ulong ticket = trans.order;
@@ -461,11 +456,9 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          if(type != ORDER_TYPE_BUY && type != ORDER_TYPE_SELL)
          {
             string symbol = OrderGetString(ORDER_SYMBOL);
-            if(MatchesSymbolFilter(symbol, g_symbol_prefix, g_symbol_suffix))
-            {
-               SendOrderOpenSignal(ticket);
-               AddTrackedOrder(ticket);
-            }
+            SendOrderOpenSignal(ticket);
+            AddTrackedOrder(ticket);
+            Print("[ORDER] New: #", ticket, " ", symbol);
          }
       }
    }
