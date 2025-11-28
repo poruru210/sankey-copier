@@ -42,7 +42,7 @@ HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
-SymbolMapping g_local_mappings[];
+// g_local_mappings removed - all symbol transformation now handled by Relay Server
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
@@ -64,8 +64,8 @@ int OnInit()
 {
    Print("=== SankeyCopier Slave EA (MT4) Starting ===");
 
-   // Symbol mappings are now received from config via Web-UI
-   ArrayResize(g_local_mappings, 0);
+   // Symbol transformation is now handled by Relay Server
+   // Slave EA receives pre-transformed symbols
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
@@ -504,31 +504,11 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    {
       if(allow_new_orders)
       {
-         // Apply filtering
-         if(!ShouldProcessTrade(symbol, magic, g_configs[config_index]))
-         {
-            Print("Trade filtered out: ", symbol, " magic=", magic);
-            trade_signal_free(handle);
-            return; // Do not proceed if filtered
-         }
+         // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
+         // We process all signals received here
 
-         // Check source lot filter
-         if(!IsLotWithinFilter(lots, g_configs[config_index].source_lot_min, g_configs[config_index].source_lot_max))
-         {
-            Print("Trade filtered out by source lot filter: lots=", lots,
-                  " min=", g_configs[config_index].source_lot_min,
-                  " max=", g_configs[config_index].source_lot_max);
-            trade_signal_free(handle);
-            return;
-         }
-
-         // Apply transformations
-         string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-         mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings); // Apply local mapping
-         // Symbol prefix/suffix now from config (per-Master)
-         string transformed_symbol = GetLocalSymbol(mapped_symbol,
-                                       g_configs[config_index].symbol_prefix,
-                                       g_configs[config_index].symbol_suffix);
+         // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+         string transformed_symbol = symbol;
 
          // Transform lot size (supports multiplier and margin_ratio modes)
          double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
@@ -653,12 +633,8 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
          continue;
       }
 
-      // Apply symbol transformations (prefix/suffix from config per-Master)
-      string mapped_symbol = TransformSymbol(symbol, g_configs[config_index].symbol_mappings);
-      mapped_symbol = TransformSymbol(mapped_symbol, g_local_mappings);
-      string transformed_symbol = GetLocalSymbol(mapped_symbol,
-                                    g_configs[config_index].symbol_prefix,
-                                    g_configs[config_index].symbol_suffix);
+      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+      string transformed_symbol = symbol;
 
       // Transform lot size
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);

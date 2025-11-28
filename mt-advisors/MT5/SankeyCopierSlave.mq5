@@ -549,23 +549,8 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 
    if(action == "Open" && allow_new_orders)
    {
-      // Apply filtering
-      if(!ShouldProcessTrade(symbol, magic_number, g_configs[config_index]))
-      {
-         Print("Trade filtered out: ", symbol, " magic=", magic_number);
-         trade_signal_free(handle);
-         return;
-      }
-
-      // Apply lot filtering (check source lot before transformation)
-      if(!IsLotWithinFilter(lots, g_configs[config_index].source_lot_min, g_configs[config_index].source_lot_max))
-      {
-         Print("Trade filtered out by lot filter: source_lots=", lots,
-               ", min=", g_configs[config_index].source_lot_min,
-               ", max=", g_configs[config_index].source_lot_max);
-         trade_signal_free(handle);
-         return;
-      }
+      // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
+      // We process all signals received here
 
       // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
       string transformed_symbol = symbol;
