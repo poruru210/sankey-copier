@@ -29,6 +29,18 @@ pub use msgpack::{
     TradeFilters,
     TradeSignalMessage,
     UnregisterMessage,
+    // VictoriaLogs config
+    VLogsConfigMessage,
+};
+
+// Re-export FFI functions for MQL integration (DLL exports)
+pub use msgpack::{
+    // VLogs config FFI functions
+    parse_vlogs_config,
+    vlogs_config_free,
+    vlogs_config_get_bool,
+    vlogs_config_get_int,
+    vlogs_config_get_string,
 };
 
 // ZeroMQ socket types

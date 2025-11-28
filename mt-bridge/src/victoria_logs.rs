@@ -73,6 +73,10 @@ unsafe fn utf16_to_string(ptr: *const u16) -> Option<String> {
 ///
 /// # Returns
 /// 1 on success, 0 on failure
+///
+/// # Safety
+/// - `endpoint` must be a valid null-terminated UTF-16 string pointer
+/// - `source` must be a valid null-terminated UTF-16 string pointer
 #[no_mangle]
 pub unsafe extern "C" fn vlogs_configure(endpoint: *const u16, source: *const u16) -> i32 {
     let endpoint_str = match utf16_to_string(endpoint) {
@@ -133,6 +137,12 @@ pub extern "C" fn vlogs_disable() -> i32 {
 ///
 /// # Returns
 /// Current buffer size, or -1 on failure
+///
+/// # Safety
+/// - `level` must be a valid null-terminated UTF-16 string pointer
+/// - `category` must be a valid null-terminated UTF-16 string pointer
+/// - `message` must be a valid null-terminated UTF-16 string pointer
+/// - `context_json` must be a valid null-terminated UTF-16 string pointer (can be empty string)
 #[no_mangle]
 pub unsafe extern "C" fn vlogs_add_entry(
     level: *const u16,

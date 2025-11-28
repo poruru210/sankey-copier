@@ -8,6 +8,7 @@ use sqlx::sqlite::SqlitePool;
 
 // Submodule declarations
 mod config_distribution;
+mod global_settings;
 mod trade_group_members;
 mod trade_groups;
 
@@ -80,6 +81,19 @@ impl Database {
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_trade_group_members_status
              ON trade_group_members(status)",
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create global_settings table for system-wide configuration
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS global_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
         )
         .execute(&pool)
         .await?;

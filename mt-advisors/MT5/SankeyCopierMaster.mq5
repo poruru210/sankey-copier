@@ -23,7 +23,6 @@ input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to rece
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
-input string   VLogsEndpoint = "";                      // VictoriaLogs endpoint (empty=disabled)
 
 //--- Position tracking structure
 struct PositionInfo
@@ -109,6 +108,12 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Subscribe to VictoriaLogs config (global broadcast)
+   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   {
+      Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
    // Scan existing positions and orders
    ScanExistingPositions();
    ScanExistingOrders();
@@ -133,9 +138,8 @@ int OnInit()
 
    Print("=== SankeyCopier Master EA (MT5) Initialized ===");
 
-   // Initialize VictoriaLogs (empty endpoint = disabled)
-   string vlogs_source = "ea:master:" + AccountID;
-   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+   // VictoriaLogs is configured via server-pushed vlogs_config message
+   // (no local endpoint parameter needed)
 
    ChartRedraw();
    return INIT_SUCCEEDED;
@@ -258,28 +262,41 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Try to parse as MasterConfig first
-         HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
-         if(config_handle > 0)
+         // Check for VLogs config message first (global broadcast)
+         if(topic == "vlogs_config")
          {
-            string account_id = master_config_get_string(config_handle, "account_id");
-            if(account_id != "")
+            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
+            if(vlogs_handle != 0 && vlogs_handle != -1)
             {
-               // Valid MasterConfig
-               master_config_free(config_handle);
-               ProcessMasterConfigMessage(msgpack_payload, payload_len);
+               VLogsApplyConfig(vlogs_handle, "master", AccountID);
+               vlogs_config_free(vlogs_handle);
+            }
+         }
+         // Try to parse as MasterConfig
+         else if(topic == AccountID)
+         {
+            HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
+            if(config_handle > 0)
+            {
+               string account_id = master_config_get_string(config_handle, "account_id");
+               if(account_id != "")
+               {
+                  // Valid MasterConfig
+                  master_config_free(config_handle);
+                  ProcessMasterConfigMessage(msgpack_payload, payload_len);
+               }
+               else
+               {
+                  // No account_id - try SyncRequest
+                  master_config_free(config_handle);
+                  ProcessSyncRequest(msgpack_payload, payload_len);
+               }
             }
             else
             {
-               // No account_id - try SyncRequest
-               master_config_free(config_handle);
+               // Failed to parse as MasterConfig - try SyncRequest
                ProcessSyncRequest(msgpack_payload, payload_len);
             }
-         }
-         else
-         {
-            // Failed to parse as MasterConfig - try SyncRequest
-            ProcessSyncRequest(msgpack_payload, payload_len);
          }
       }
    }

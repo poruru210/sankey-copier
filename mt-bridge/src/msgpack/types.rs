@@ -262,3 +262,23 @@ pub struct SyncRequestMessage {
     pub last_sync_time: Option<String>, // ISO 8601 format, if known
     pub timestamp: String,
 }
+
+// =============================================================================
+// VictoriaLogs Configuration Message
+// =============================================================================
+
+/// VictoriaLogs configuration message
+/// Broadcasted to all EAs on "vlogs_config" topic
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VLogsConfigMessage {
+    /// Whether VictoriaLogs logging is enabled
+    pub enabled: bool,
+    /// VictoriaLogs endpoint URL
+    pub endpoint: String,
+    /// Number of log entries to batch before sending
+    pub batch_size: i32,
+    /// Interval in seconds between automatic flushes
+    pub flush_interval_secs: i32,
+    /// Timestamp when this config was sent (ISO 8601)
+    pub timestamp: String,
+}

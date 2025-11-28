@@ -1,9 +1,11 @@
 mod connection;
+mod global_settings;
 mod mt_installation;
 mod trade_group;
 mod trade_group_member;
 
 pub use connection::*;
+pub use global_settings::*;
 pub use mt_installation::*;
 pub use trade_group::*;
 pub use trade_group_member::*;

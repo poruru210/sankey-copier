@@ -14,6 +14,7 @@ mod trade_groups;
 mod connections;
 mod logs;
 mod middleware;
+mod victoria_logs_settings;
 mod websocket;
 
 #[cfg(test)]
@@ -146,6 +147,12 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/trade-groups/:id/members/:slave_id/toggle",
             post(trade_group_members::toggle_member_status),
+        )
+        // VictoriaLogs global settings API
+        .route(
+            "/api/victoria-logs-settings",
+            get(victoria_logs_settings::get_vlogs_settings)
+                .put(victoria_logs_settings::update_vlogs_settings),
         )
         .layer(trace_layer)
         .layer(cors)

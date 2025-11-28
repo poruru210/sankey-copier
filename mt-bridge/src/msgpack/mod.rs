@@ -16,7 +16,7 @@ mod tests;
 pub use types::{
     HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RequestConfigMessage, SlaveConfigMessage, SymbolMapping, SyncMode,
-    SyncRequestMessage, TradeFilters, TradeSignalMessage, UnregisterMessage,
+    SyncRequestMessage, TradeFilters, TradeSignalMessage, UnregisterMessage, VLogsConfigMessage,
 };
 
 // Re-export traits for polymorphic config handling
@@ -40,6 +40,8 @@ pub use ffi::{
     parse_sync_request,
     // Trade signal functions
     parse_trade_signal,
+    // VLogs config functions
+    parse_vlogs_config,
     position_snapshot_builder_add_position,
     position_snapshot_builder_free,
     position_snapshot_builder_serialize,
@@ -63,6 +65,10 @@ pub use ffi::{
     trade_signal_get_double,
     trade_signal_get_int,
     trade_signal_get_string,
+    vlogs_config_free,
+    vlogs_config_get_bool,
+    vlogs_config_get_int,
+    vlogs_config_get_string,
 };
 
 // Re-export serialization FFI functions

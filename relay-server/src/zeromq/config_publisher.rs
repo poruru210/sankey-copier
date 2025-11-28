@@ -109,6 +109,31 @@ impl ZmqConfigPublisher {
 
         Ok(())
     }
+
+    /// Broadcast VictoriaLogs configuration to all EAs
+    /// Uses fixed topic "vlogs_config" for global broadcast
+    pub async fn broadcast_vlogs_config(
+        &self,
+        settings: &crate::models::VLogsGlobalSettings,
+    ) -> Result<()> {
+        let message = sankey_copier_zmq::VLogsConfigMessage {
+            enabled: settings.enabled,
+            endpoint: settings.endpoint.clone(),
+            batch_size: settings.batch_size,
+            flush_interval_secs: settings.flush_interval_secs,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        self.publish_to_topic("vlogs_config", &message).await?;
+
+        tracing::info!(
+            enabled = settings.enabled,
+            endpoint = %settings.endpoint,
+            "Broadcasted VictoriaLogs config to all EAs on 'vlogs_config' topic"
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

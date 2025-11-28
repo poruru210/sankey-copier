@@ -2231,8 +2231,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Create trade group with prefix/suffix settings on Master
     server.db.create_trade_group(master_account).await.unwrap();
     let master_settings = MasterSettings {
-        symbol_prefix: Some("PRO.".to_string()),  // Master configured with PRO. prefix
-        symbol_suffix: Some(".m".to_string()),     // and .m suffix
+        symbol_prefix: Some("PRO.".to_string()), // Master configured with PRO. prefix
+        symbol_suffix: Some(".m".to_string()),   // and .m suffix
         config_version: 0,
     };
     server
@@ -2278,7 +2278,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Test 1: Symbol WITH matching prefix/suffix - should be transformed
     let signal1 = master.create_open_signal(
         10001,
-        "PRO.EURUSD.m",  // Matches prefix/suffix
+        "PRO.EURUSD.m", // Matches prefix/suffix
         OrderType::Buy,
         0.1,
         1.0850,
@@ -2290,7 +2290,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     sleep(Duration::from_millis(200)).await;
     let signals1 = slave.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(signals1.len(), 1, "Symbol with prefix/suffix should be received");
+    assert_eq!(
+        signals1.len(),
+        1,
+        "Symbol with prefix/suffix should be received"
+    );
     assert_eq!(
         signals1[0].1.symbol.as_deref(),
         Some("EURUSD"),
@@ -2301,7 +2305,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // (partial match is NOT transformed, passed as-is with suffix stripped if present)
     let signal2 = master.create_open_signal(
         10002,
-        "USDJPY.m",  // Only suffix matches, no prefix
+        "USDJPY.m", // Only suffix matches, no prefix
         OrderType::Sell,
         0.2,
         150.0,
@@ -2313,7 +2317,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     sleep(Duration::from_millis(200)).await;
     let signals2 = slave.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(signals2.len(), 1, "Symbol with only suffix should be received");
+    assert_eq!(
+        signals2.len(),
+        1,
+        "Symbol with only suffix should be received"
+    );
     assert_eq!(
         signals2[0].1.symbol.as_deref(),
         Some("USDJPY"),
@@ -2323,7 +2331,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Test 3: Symbol with NO prefix/suffix match - should be passed through as-is
     let signal3 = master.create_open_signal(
         10003,
-        "GBPUSD",  // No prefix/suffix at all
+        "GBPUSD", // No prefix/suffix at all
         OrderType::Buy,
         0.15,
         1.2500,
@@ -2335,7 +2343,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     sleep(Duration::from_millis(200)).await;
     let signals3 = slave.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(signals3.len(), 1, "Symbol without prefix/suffix should be received");
+    assert_eq!(
+        signals3.len(),
+        1,
+        "Symbol without prefix/suffix should be received"
+    );
     assert_eq!(
         signals3[0].1.symbol.as_deref(),
         Some("GBPUSD"),
@@ -2345,7 +2357,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Test 4: Different broker symbol format - should be passed through
     let signal4 = master.create_open_signal(
         10004,
-        "XAUUSD#",  // Different format (e.g., hashtag suffix)
+        "XAUUSD#", // Different format (e.g., hashtag suffix)
         OrderType::Buy,
         0.5,
         2000.0,
@@ -2357,7 +2369,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     sleep(Duration::from_millis(200)).await;
     let signals4 = slave.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(signals4.len(), 1, "Symbol with different format should be received");
+    assert_eq!(
+        signals4.len(),
+        1,
+        "Symbol with different format should be received"
+    );
     assert_eq!(
         signals4[0].1.symbol.as_deref(),
         Some("XAUUSD#"),

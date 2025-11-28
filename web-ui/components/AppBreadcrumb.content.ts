@@ -24,6 +24,10 @@ const breadcrumbContent = {
       en: 'Trade Groups',
       ja: 'トレードグループ',
     }),
+    settings: t({
+      en: 'Settings',
+      ja: '設定',
+    }),
   },
 } satisfies DeclarationContent;
 

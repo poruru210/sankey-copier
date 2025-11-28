@@ -25,7 +25,6 @@ input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to rece
 input int      ScanInterval = 100;                            // Scan interval in milliseconds
 input bool     ShowConfigPanel = true;                        // Show configuration panel on chart
 input int      PanelWidth = 280;                              // Configuration panel width (pixels)
-input string   VLogsEndpoint = "";                            // VictoriaLogs endpoint (empty=disabled)
 
 //--- Global config variables (populated from Web-UI config)
 string g_symbol_prefix = "";       // Symbol prefix from config
@@ -98,6 +97,12 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Subscribe to VictoriaLogs config (global broadcast)
+   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   {
+      Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
    // Scan existing orders
    ScanExistingOrders();
 
@@ -122,9 +127,8 @@ int OnInit()
    g_initialized = true;
    Print("=== SankeyCopier Master EA (MT4) Initialized ===");
 
-   // Initialize VictoriaLogs (empty endpoint = disabled)
-   string vlogs_source = "ea:master:" + AccountID;
-   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+   // VictoriaLogs is configured via server-pushed vlogs_config message
+   // (no local endpoint parameter needed)
 
    ChartRedraw();
    return INIT_SUCCEEDED;
@@ -229,17 +233,30 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Try to parse as MasterConfig first
-         HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
-         if(config_handle != 0 && config_handle != -1)
+         // Check for VLogs config message first (global broadcast)
+         if(topic == "vlogs_config")
          {
-            // Valid MasterConfig
-            ProcessMasterConfigMessage(msgpack_payload, payload_len);
+            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
+            if(vlogs_handle != 0 && vlogs_handle != -1)
+            {
+               VLogsApplyConfig(vlogs_handle, "master", AccountID);
+               vlogs_config_free(vlogs_handle);
+            }
          }
-         else
+         // Try to parse as MasterConfig
+         else if(topic == AccountID)
          {
-            // Not MasterConfig - try SyncRequest
-            ProcessSyncRequest(msgpack_payload, payload_len);
+            HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
+            if(config_handle != 0 && config_handle != -1)
+            {
+               // Valid MasterConfig
+               ProcessMasterConfigMessage(msgpack_payload, payload_len);
+            }
+            else
+            {
+               // Not MasterConfig - try SyncRequest
+               ProcessSyncRequest(msgpack_payload, payload_len);
+            }
          }
       }
    }

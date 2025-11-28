@@ -8,7 +8,7 @@ use super::helpers::{
 };
 use super::types::{
     MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SlaveConfigMessage, SyncMode,
-    SyncRequestMessage, TradeSignalMessage,
+    SyncRequestMessage, TradeSignalMessage, VLogsConfigMessage,
 };
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -1027,4 +1027,119 @@ pub unsafe extern "C" fn position_snapshot_builder_serialize(
 #[no_mangle]
 pub unsafe extern "C" fn position_snapshot_builder_free(handle: *mut PositionSnapshotMessage) {
     free_handle(handle)
+}
+
+// ===========================================================================
+// VLogsConfigMessage FFI Functions
+// ===========================================================================
+
+/// Parse MessagePack data as VLogsConfigMessage and return an opaque handle
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
+/// The returned handle must be freed with `vlogs_config_free()`.
+#[no_mangle]
+pub unsafe extern "C" fn parse_vlogs_config(
+    data: *const u8,
+    data_len: i32,
+) -> *mut VLogsConfigMessage {
+    parse_msgpack(data, data_len)
+}
+
+/// Free a VLogsConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer created by parse_vlogs_config or null
+/// - handle must not be used after calling this function
+#[no_mangle]
+pub unsafe extern "C" fn vlogs_config_free(handle: *mut VLogsConfigMessage) {
+    free_handle(handle)
+}
+
+/// Get a string field from VLogsConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to VLogsConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn vlogs_config_get_string(
+    handle: *const VLogsConfigMessage,
+    field_name: *const u16,
+) -> *const u16 {
+    if handle.is_null() || field_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let config = &*handle;
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return std::ptr::null(),
+    };
+
+    let value = match field.as_str() {
+        "endpoint" => &config.endpoint,
+        "timestamp" => &config.timestamp,
+        _ => return std::ptr::null(),
+    };
+
+    string_to_utf16_buffer(value)
+}
+
+/// Get a boolean field from VLogsConfigMessage handle (returns 1 for true, 0 for false)
+///
+/// # Safety
+/// - handle must be a valid pointer to VLogsConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn vlogs_config_get_bool(
+    handle: *const VLogsConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    if handle.is_null() || field_name.is_null() {
+        return 0;
+    }
+
+    let config = &*handle;
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    let result = match field.as_str() {
+        "enabled" => config.enabled,
+        _ => false,
+    };
+
+    if result {
+        1
+    } else {
+        0
+    }
+}
+
+/// Get an integer field from VLogsConfigMessage handle
+///
+/// # Safety
+/// - handle must be a valid pointer to VLogsConfigMessage
+/// - field_name must be a valid null-terminated UTF-16 string pointer
+#[no_mangle]
+pub unsafe extern "C" fn vlogs_config_get_int(
+    handle: *const VLogsConfigMessage,
+    field_name: *const u16,
+) -> i32 {
+    if handle.is_null() || field_name.is_null() {
+        return 0;
+    }
+
+    let config = &*handle;
+    let field = match utf16_to_string(field_name) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    match field.as_str() {
+        "batch_size" => config.batch_size,
+        "flush_interval_secs" => config.flush_interval_secs,
+        _ => 0,
+    }
 }

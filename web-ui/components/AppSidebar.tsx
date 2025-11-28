@@ -9,7 +9,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
-import { Network, Settings, Globe } from 'lucide-react';
+import { Network, Settings, Globe, Cog } from 'lucide-react';
 
 import {
   Sidebar,
@@ -51,6 +51,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: Globe,
       label: content.sites,
       active: pathname.includes('/sites'),
+    },
+    {
+      href: `/${locale}/settings`,
+      icon: Cog,
+      label: content.settings,
+      active: pathname.includes('/settings'),
     },
   ];
 

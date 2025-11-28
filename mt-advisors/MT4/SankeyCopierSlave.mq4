@@ -29,7 +29,6 @@ input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to 
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
-input string   VLogsEndpoint = "";                           // VictoriaLogs endpoint (empty=disabled)
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -101,6 +100,12 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Subscribe to VictoriaLogs config (global broadcast)
+   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   {
+      Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
    // Recover ticket mappings from existing positions (restart recovery)
    int recovered = RecoverMappingsFromPositions(g_order_map, g_pending_order_map);
    if(recovered > 0)
@@ -133,9 +138,8 @@ int OnInit()
 
    Print("=== SankeyCopier Slave EA Initialized ===");
 
-   // Initialize VictoriaLogs (empty endpoint = disabled)
-   string vlogs_source = "ea:slave:" + AccountID;
-   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+   // VictoriaLogs is configured via server-pushed vlogs_config message
+   // (no local endpoint parameter needed)
 
    ChartRedraw();
    return INIT_SUCCEEDED;
@@ -290,30 +294,43 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Try to parse as SlaveConfig first
-         HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
-         if(config_handle > 0)
+         // Check for VLogs config message first (global broadcast)
+         if(topic == "vlogs_config")
          {
-            string master_account = slave_config_get_string(config_handle, "master_account");
-            if(master_account != "")
+            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
+            if(vlogs_handle != 0 && vlogs_handle != -1)
             {
-               // Valid SlaveConfig - process it
-               slave_config_free(config_handle);
-               ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
-                                    g_zmq_context, RelayServerAddress, AccountID);
-               g_has_received_config = true;
+               VLogsApplyConfig(vlogs_handle, "slave", AccountID);
+               vlogs_config_free(vlogs_handle);
+            }
+         }
+         // Try to parse as SlaveConfig first
+         else
+         {
+            HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
+            if(config_handle > 0)
+            {
+               string master_account = slave_config_get_string(config_handle, "master_account");
+               if(master_account != "")
+               {
+                  // Valid SlaveConfig - process it
+                  slave_config_free(config_handle);
+                  ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
+                                       g_zmq_context, RelayServerAddress, AccountID);
+                  g_has_received_config = true;
+               }
+               else
+               {
+                  // Not a SlaveConfig - try PositionSnapshot
+                  slave_config_free(config_handle);
+                  ProcessPositionSnapshot(msgpack_payload, payload_len);
+               }
             }
             else
             {
-               // Not a SlaveConfig - try PositionSnapshot
-               slave_config_free(config_handle);
+               // Failed to parse as SlaveConfig - try PositionSnapshot
                ProcessPositionSnapshot(msgpack_payload, payload_len);
             }
-         }
-         else
-         {
-            // Failed to parse as SlaveConfig - try PositionSnapshot
-            ProcessPositionSnapshot(msgpack_payload, payload_len);
          }
          
          if(ArraySize(g_configs) != g_last_config_count)

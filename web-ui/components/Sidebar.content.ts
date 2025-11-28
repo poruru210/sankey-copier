@@ -16,6 +16,10 @@ const sidebarContent = {
       en: 'Sites',
       ja: 'サイト',
     }),
+    settings: t({
+      en: 'Settings',
+      ja: '設定',
+    }),
     // Mobile menu
     menu: t({
       en: 'Menu',

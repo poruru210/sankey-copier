@@ -30,7 +30,6 @@ input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to 
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
-input string   VLogsEndpoint = "";                           // VictoriaLogs endpoint (empty=disabled)
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -102,6 +101,13 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Subscribe to VictoriaLogs configuration messages (broadcast from relay-server)
+   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   {
+      CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
+      return INIT_FAILED;
+   }
+
    g_trade.SetExpertMagicNumber(0);
    g_trade.SetDeviationInPoints(DEFAULT_SLIPPAGE);  // Will be updated per-trade from config
    g_trade.SetTypeFilling(ORDER_FILLING_IOC);
@@ -136,9 +142,8 @@ int OnInit()
       g_config_panel.UpdateSymbolConfig("", "", "");
    }
 
-   // Initialize VictoriaLogs (empty endpoint = disabled)
-   string vlogs_source = "ea:slave:" + AccountID;
-   VLogsInit(VLogsEndpoint, vlogs_source, 5);
+   // VictoriaLogs is now configured via Web-UI settings received from relay-server
+   // (vlogs_config message will be received after registration)
 
    ChartRedraw();
    return INIT_SUCCEEDED;
@@ -294,6 +299,23 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
+         // Handle VictoriaLogs configuration message
+         if(topic == "vlogs_config")
+         {
+            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
+            if(vlogs_handle > 0)
+            {
+               VLogsApplyConfig(vlogs_handle, "slave", AccountID);
+               vlogs_config_free(vlogs_handle);
+            }
+            else
+            {
+               Print("[ERROR] Failed to parse vlogs_config message");
+            }
+            // Continue to next message (don't process as SlaveConfig)
+         }
+         else
+         {
          // Try to parse as SlaveConfig first
          HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
          if(config_handle > 0)
@@ -360,6 +382,7 @@ void OnTimer()
             // Update carousel display with detailed copy settings
             g_config_panel.UpdateCarouselConfigs(g_configs);
          }
+         } // end else (non-vlogs_config topic)
       }
    }
 }

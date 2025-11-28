@@ -22,8 +22,16 @@ impl MessageHandler {
             .await
             .map(|conn| conn.is_trade_allowed);
 
+        // Check if this is a new EA registration (not seen before)
+        let is_new_registration = old_is_trade_allowed.is_none();
+
         // Update heartbeat (performs auto-registration if needed)
         self.connection_manager.update_heartbeat(msg).await;
+
+        // Send VictoriaLogs config to newly registered EAs
+        if is_new_registration {
+            self.send_vlogs_config_to_ea(&account_id).await;
+        }
 
         // If this is a Master EA, check for is_trade_allowed changes
         if ea_type == "Master" {
@@ -157,5 +165,33 @@ impl MessageHandler {
             "ea_heartbeat:{}:{:.2}:{:.2}",
             account_id, balance, equity
         ));
+    }
+
+    /// Send VictoriaLogs configuration to a specific EA on registration
+    async fn send_vlogs_config_to_ea(&self, account_id: &str) {
+        match self.db.get_vlogs_settings().await {
+            Ok(settings) => {
+                if let Err(e) = self.config_sender.broadcast_vlogs_config(&settings).await {
+                    tracing::error!(
+                        account_id = %account_id,
+                        error = %e,
+                        "Failed to send VictoriaLogs config to newly registered EA"
+                    );
+                } else {
+                    tracing::info!(
+                        account_id = %account_id,
+                        enabled = settings.enabled,
+                        "Sent VictoriaLogs config to newly registered EA"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    account_id = %account_id,
+                    error = %e,
+                    "Failed to get VictoriaLogs settings for EA registration"
+                );
+            }
+        }
     }
 }
