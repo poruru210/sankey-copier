@@ -130,7 +130,7 @@ jobs:
           # Output to dist/ structure - binary name is now sankey-copier-server.exe (from Cargo.toml)
           mkdir -p dist
           copy target\release\sankey-copier-server.exe dist\
-          copy config.toml dist\
+          copy relay-server\config.toml dist\
 
       - name: Upload server artifacts
         uses: actions/upload-artifact@v4
