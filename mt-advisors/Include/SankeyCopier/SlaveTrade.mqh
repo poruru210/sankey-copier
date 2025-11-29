@@ -31,7 +31,13 @@
 //   - g_trade                 : CTrade object for trade operations
 
 // External variable for latency tracing (defined in EA)
+// MT5 uses extern keyword, MT4 doesn't support true extern (creates input var)
+#ifdef IS_MT5
 extern bool g_received_via_timer;
+#else
+// MT4: variable must be defined in EA before including this header
+// We reference it here without declaration (MQL4 allows this for globals)
+#endif
 
 // =============================================================================
 // Platform-Specific Order Type Conversion

@@ -8,6 +8,9 @@
 #property version   "1.00"  // VERSION_PLACEHOLDER
 #property icon      "app.ico"
 
+//--- Forward declaration for SlaveTrade.mqh (must be before include)
+bool g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
+
 #include "../Include/Trade/Trade.mqh"
 
 //--- Include common headers
@@ -50,7 +53,7 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
-bool        g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
+// g_received_via_timer is defined before includes (required for SlaveTrade.mqh)
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
