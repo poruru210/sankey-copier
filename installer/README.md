@@ -88,14 +88,43 @@ GitHub UIから手動でビルドを実行できます：
 
 ## インストーラーの内容
 
+### ビルド成果物（dist/構造）
+
+GitHub Actionsまたはローカルビルドで生成される`dist/`ディレクトリの構造：
+
+```
+dist/
+├── sankey-copier-server.exe    # relay-server
+├── sankey-copier-desktop.exe   # Desktop App（web-ui内蔵）
+├── sankey-copier-tray.exe      # トレイアプリ
+├── config.toml                 # 設定ファイル
+├── app.ico                     # アイコン
+├── nssm.exe                    # Windowsサービス管理ツール
+└── mt-advisors/                # MT4/MT5コンポーネント
+    ├── MT4/
+    │   ├── Experts/
+    │   │   ├── SankeyCopierMaster.ex4
+    │   │   └── SankeyCopierSlave.ex4
+    │   └── Libraries/
+    │       └── sankey_copier_zmq.dll
+    └── MT5/
+        ├── Experts/
+        │   ├── SankeyCopierMaster.ex5
+        │   └── SankeyCopierSlave.ex5
+        └── Libraries/
+            └── sankey_copier_zmq.dll
+```
+
 ### インストールされるファイル
 
 ```
 C:\Program Files\SANKEY Copier\
-├── sankey-copier-desktop.exe  # Desktop App（web-ui内蔵）
-├── relay-server.exe             # relay-server（Windowsサービス）
+├── sankey-copier-desktop.exe   # Desktop App（web-ui内蔵）
+├── sankey-copier-server.exe    # relay-server（Windowsサービス）
+├── sankey-copier-tray.exe      # トレイアプリ
 ├── config.toml                 # relay-server設定ファイル
 ├── app.ico                     # アイコン
+├── nssm.exe                    # サービス管理ツール
 └── mt-advisors/                # MT4/MT5コンポーネント（オプション）
     ├── MT4/
     │   ├── Experts/

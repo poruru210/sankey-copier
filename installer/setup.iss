@@ -99,28 +99,30 @@ japanese.MergingConfig=設定を更新しています...
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Desktop App (Tauri - includes web-ui embedded as static files)
-Source: "..\desktop-app\src-tauri\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; All files are read from unified dist/ directory
 
-; relay-server
-Source: "..\relay-server\target\release\sankey-copier-relay-server.exe"; DestDir: "{app}"; DestName: "{#MyServerExeName}"; Flags: ignoreversion
+; Desktop App (Tauri - includes web-ui embedded as static files)
+Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; relay-server (binary name is already sankey-copier-server.exe)
+Source: "..\dist\{#MyServerExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; Configuration file (will be merged with existing config in code)
-Source: "..\relay-server\config.toml"; DestDir: "{app}"; DestName: "config.toml.new"; Flags: ignoreversion
+Source: "..\dist\config.toml"; DestDir: "{app}"; DestName: "config.toml.new"; Flags: ignoreversion
 
 ; Tray App (System tray for service management)
-Source: "..\tray-app\target\release\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\{#MyTrayExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; NSSM (Windows Service Manager for Tray App)
-Source: "resources\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; MT4/MT5 Components (if built)
-Source: "..\mt-advisors\MT4\Experts\*.ex4"; DestDir: "{app}\mt-advisors\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\MT4\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\MT5\Experts\*.ex5"; DestDir: "{app}\mt-advisors\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\mt-advisors\MT5\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\mt-advisors\MT4\Experts\*.ex4"; DestDir: "{app}\mt-advisors\MT4\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\mt-advisors\MT4\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT4\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\mt-advisors\MT5\Experts\*.ex5"; DestDir: "{app}\mt-advisors\MT5\Experts"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\mt-advisors\MT5\Libraries\*.dll"; DestDir: "{app}\mt-advisors\MT5\Libraries"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Icon
-Source: "..\app.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
