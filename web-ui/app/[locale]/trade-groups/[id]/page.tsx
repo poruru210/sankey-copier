@@ -3,6 +3,7 @@
 // TradeGroup detail page - edit Master account configuration settings
 // Displays a form to update symbol_prefix and symbol_suffix for a specific Master account
 // Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
+// Note: generateStaticParams is defined in layout.tsx for static export support
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
