@@ -153,6 +153,7 @@ fn find_available_ports(count: usize) -> Result<Vec<u16>> {
 
 /// Reset ports by deleting runtime.toml
 /// Next startup will re-assign ports
+#[allow(dead_code)]
 pub fn reset_ports<P: AsRef<Path>>(runtime_path: P) -> Result<()> {
     RuntimeConfig::delete(runtime_path)?;
     tracing::info!("Runtime config deleted, ports will be re-assigned on next startup");

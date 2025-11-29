@@ -275,6 +275,7 @@ impl RuntimeConfig {
     }
 
     /// Delete runtime config file
+    #[allow(dead_code)]
     pub fn delete<P: AsRef<Path>>(path: P) -> Result<()> {
         if path.as_ref().exists() {
             std::fs::remove_file(path.as_ref()).context("Failed to delete runtime config file")?;
@@ -337,16 +338,19 @@ impl Config {
     }
 
     /// Get ZMQ receiver address
+    #[allow(dead_code)]
     pub fn zmq_receiver_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.receiver_port)
     }
 
     /// Get ZMQ sender address
+    #[allow(dead_code)]
     pub fn zmq_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.sender_port)
     }
 
     /// Get ZMQ config sender address
+    #[allow(dead_code)]
     pub fn zmq_config_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.config_sender_port)
     }
