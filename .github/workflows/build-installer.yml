@@ -94,9 +94,9 @@ jobs:
           $packageJson | ConvertTo-Json -Depth 100 | Set-Content "web-ui/package.json"
           Write-Host "✓ Updated web-ui/package.json" -ForegroundColor Green
 
-      - name: Organize artifacts for installer
+      - name: Merge artifacts into dist/
         run: |
-          Write-Host "Organizing build artifacts for installer..." -ForegroundColor Cyan
+          Write-Host "Merging build artifacts into dist/..." -ForegroundColor Cyan
 
           # List downloaded artifacts
           Write-Host "Downloaded artifacts structure:"
@@ -104,105 +104,55 @@ jobs:
             Write-Host "  $($_.FullName)"
           }
 
-          # Copy DLLs to installer structure
-          New-Item -ItemType Directory -Force -Path "mt-bridge/target/release"
-          New-Item -ItemType Directory -Force -Path "mt-bridge/target/i686-pc-windows-msvc/release"
-          New-Item -ItemType Directory -Force -Path "mt-advisors/MT4/Libraries"
-          New-Item -ItemType Directory -Force -Path "mt-advisors/MT5/Libraries"
+          # Create dist directory
+          New-Item -ItemType Directory -Force -Path "dist"
 
-          if (Test-Path "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-bridge/target/release/"
-            Copy-Item "build-artifacts/sankey-copier-dll/MT5/sankey_copier_zmq.dll" -Destination "mt-advisors/MT5/Libraries/"
-            Write-Host "✓ Copied MT5 DLL"
-          } else {
-            Write-Host "❌ MT5 DLL not found"
-            exit 1
-          }
+          # Merge all artifacts (each artifact outputs to dist/ structure)
+          $artifactDirs = @(
+            "build-artifacts/sankey-copier-server",
+            "build-artifacts/sankey-copier-desktop",
+            "build-artifacts/sankey-copier-tray",
+            "build-artifacts/sankey-copier-dll",
+            "build-artifacts/sankey-copier-mql-MT4",
+            "build-artifacts/sankey-copier-mql-MT5"
+          )
 
-          if (Test-Path "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll") {
-            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-bridge/target/i686-pc-windows-msvc/release/"
-            Copy-Item "build-artifacts/sankey-copier-dll/MT4/sankey_copier_zmq.dll" -Destination "mt-advisors/MT4/Libraries/"
-            Write-Host "✓ Copied MT4 DLL"
-          } else {
-            Write-Host "❌ MT4 DLL not found"
-            exit 1
-          }
-
-          # Copy server exe
-          New-Item -ItemType Directory -Force -Path "relay-server/target/release"
-          if (Test-Path "build-artifacts/sankey-copier-server/sankey-copier-server.exe") {
-            Copy-Item "build-artifacts/sankey-copier-server/sankey-copier-server.exe" -Destination "relay-server/target/release/sankey-copier-relay-server.exe"
-            Write-Host "✓ Copied server exe"
-          } else {
-            Write-Host "❌ Server exe not found"
-            exit 1
-          }
-
-          # Copy Desktop App exe (with embedded web-ui)
-          New-Item -ItemType Directory -Force -Path "desktop-app/src-tauri/target/release"
-          if (Test-Path "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe") {
-            Copy-Item "build-artifacts/sankey-copier-desktop/sankey-copier-desktop.exe" -Destination "desktop-app/src-tauri/target/release/"
-            Write-Host "✓ Copied Desktop App exe"
-          } else {
-            Write-Host "❌ Desktop App exe not found"
-            Write-Host "Listing build-artifacts/sankey-copier-desktop:"
-            if (Test-Path "build-artifacts/sankey-copier-desktop") {
-              Get-ChildItem "build-artifacts/sankey-copier-desktop" -Force | ForEach-Object { Write-Host "  $($_.Name)" }
+          foreach ($dir in $artifactDirs) {
+            if (Test-Path $dir) {
+              Write-Host "Merging: $dir"
+              Copy-Item "$dir\*" -Destination "dist\" -Recurse -Force
             } else {
-              Write-Host "  Directory does not exist"
+              Write-Host "⚠️ Not found: $dir"
             }
-            exit 1
           }
 
-          # Copy Tray App exe
-          New-Item -ItemType Directory -Force -Path "tray-app/target/release"
-          if (Test-Path "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe") {
-            Copy-Item "build-artifacts/sankey-copier-tray/sankey-copier-tray.exe" -Destination "tray-app/target/release/"
-            Write-Host "✓ Copied Tray App exe"
-          } else {
-            Write-Host "❌ Tray App exe not found"
-            exit 1
+          # Copy app.ico to dist/
+          Copy-Item "app.ico" -Destination "dist\" -Force
+          Write-Host "✓ Copied app.ico"
+
+          # Copy NSSM to dist/
+          Copy-Item "installer/resources/nssm.exe" -Destination "dist\" -Force
+          Write-Host "✓ Copied nssm.exe"
+
+          Write-Host ""
+          Write-Host "Final dist/ structure:"
+          Get-ChildItem "dist" -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName)"
           }
 
-          # Copy MQL compiled files
-          New-Item -ItemType Directory -Force -Path "mt-advisors/MT4/Experts"
-          New-Item -ItemType Directory -Force -Path "mt-advisors/MT5/Experts"
-
-          if (Test-Path "build-artifacts/sankey-copier-mql-MT4") {
-            $mt4Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT4/*.ex4" -ErrorAction SilentlyContinue
-            if ($mt4Files) {
-              Copy-Item "build-artifacts/sankey-copier-mql-MT4/*.ex4" -Destination "mt-advisors/MT4/Experts/"
-              Write-Host "✓ Copied MT4 MQL files: $($mt4Files.Count) files"
-            } else {
-              Write-Host "⚠️ No MT4 .ex4 files found"
-            }
-          } else {
-            Write-Host "⚠️ MT4 MQL artifacts directory not found"
-          }
-
-          if (Test-Path "build-artifacts/sankey-copier-mql-MT5") {
-            $mt5Files = Get-ChildItem "build-artifacts/sankey-copier-mql-MT5/*.ex5" -ErrorAction SilentlyContinue
-            if ($mt5Files) {
-              Copy-Item "build-artifacts/sankey-copier-mql-MT5/*.ex5" -Destination "mt-advisors/MT5/Experts/"
-              Write-Host "✓ Copied MT5 MQL files: $($mt5Files.Count) files"
-            } else {
-              Write-Host "⚠️ No MT5 .ex5 files found"
-            }
-          } else {
-            Write-Host "⚠️ MT5 MQL artifacts directory not found"
-          }
-
-          Write-Host "✓ Artifacts organized" -ForegroundColor Green
+          Write-Host "✓ Artifacts merged" -ForegroundColor Green
 
       - name: Verify build artifacts
         run: |
           $artifacts = @(
-            "relay-server/target/release/sankey-copier-relay-server.exe",
-            "mt-bridge/target/release/sankey_copier_zmq.dll",
-            "mt-bridge/target/i686-pc-windows-msvc/release/sankey_copier_zmq.dll",
-            "desktop-app/src-tauri/target/release/sankey-copier-desktop.exe",
-            "tray-app/target/release/sankey-copier-tray.exe",
-            "installer/resources/nssm.exe"
+            "dist/sankey-copier-server.exe",
+            "dist/sankey-copier-desktop.exe",
+            "dist/sankey-copier-tray.exe",
+            "dist/config.toml",
+            "dist/app.ico",
+            "dist/nssm.exe",
+            "dist/mt-advisors/MT4/Libraries/sankey_copier_zmq.dll",
+            "dist/mt-advisors/MT5/Libraries/sankey_copier_zmq.dll"
           )
 
           foreach ($artifact in $artifacts) {
@@ -211,6 +161,19 @@ jobs:
               exit 1
             }
             Write-Host "✓ Found: $artifact" -ForegroundColor Green
+          }
+
+          # Optional: MQL compiled files
+          if (Test-Path "dist/mt-advisors/MT4/Experts/*.ex4") {
+            Write-Host "✓ Found: MT4 Expert Advisors" -ForegroundColor Green
+          } else {
+            Write-Host "⚠️ MT4 Expert Advisors not found (optional)"
+          }
+
+          if (Test-Path "dist/mt-advisors/MT5/Experts/*.ex5") {
+            Write-Host "✓ Found: MT5 Expert Advisors" -ForegroundColor Green
+          } else {
+            Write-Host "⚠️ MT5 Expert Advisors not found (optional)"
           }
 
       - name: Compile installer with Inno Setup

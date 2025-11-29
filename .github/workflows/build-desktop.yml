@@ -125,11 +125,19 @@ jobs:
           projectPath: desktop-app
           args: "--no-bundle"
 
+      # Prepare artifacts for dist/ structure
+      - name: Prepare Desktop App artifacts
+        run: |
+          # Output to dist/ structure
+          mkdir -p dist
+          copy desktop-app\src-tauri\target\release\sankey-copier-desktop.exe dist\
+        shell: pwsh
+
       # Upload artifacts
       - name: Upload Desktop App artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-desktop
-          path: desktop-app/src-tauri/target/release/sankey-copier-desktop.exe
+          path: dist/
           retention-days: 7
           if-no-files-found: error
