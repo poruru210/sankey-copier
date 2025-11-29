@@ -2,10 +2,15 @@
 # This file defines optional infrastructure services for local development.
 #
 # Usage:
-#   docker compose up -d              # Start all services
-#   docker compose up -d victoria-logs # Start VictoriaLogs only
-#   docker compose down               # Stop all services
-#   docker compose logs -f            # View logs
+#   docker compose up -d                        # Start all services
+#   docker compose up -d victoria-logs          # Start VictoriaLogs only
+#   docker compose up -d grafana                # Start Grafana only
+#   docker compose down                         # Stop all services
+#   docker compose logs -f                      # View logs
+#
+# Service URLs:
+#   - VictoriaLogs Web UI: http://localhost:9428/select/vmui
+#   - Grafana Dashboard:   http://localhost:3001 (admin/admin)
 
 services:
   # VictoriaLogs - Centralized logging
@@ -24,6 +29,31 @@ services:
       - "-retentionPeriod=7d"
     restart: unless-stopped
 
+  # Grafana - Monitoring dashboards
+  # Used to visualize trade copy metrics and logs from VictoriaLogs
+  # Web UI: http://localhost:3001 (admin/admin)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sankey-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=victoriametrics-victorialogs-datasource
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - victoria-logs
+    restart: unless-stopped
+
 volumes:
   vlogs-data:
     name: sankey-vlogs-data
+  grafana-data:
+    name: sankey-grafana-data
