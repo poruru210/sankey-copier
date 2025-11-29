@@ -5,12 +5,19 @@
 //!
 //! Architecture:
 //! - EA calls vlogs_add_entry() to buffer log entries
-//! - EA calls vlogs_flush() periodically to send buffered entries
-//! - Logs are sent as JSON Lines to VictoriaLogs /insert/jsonline endpoint
+//! - EA calls vlogs_flush() periodically to send buffered entries to background thread
+//! - Background thread sends logs as JSON Lines to VictoriaLogs /insert/jsonline endpoint
+//! - vlogs_flush() returns immediately (non-blocking) for minimal EA impact
+//!
+//! Buffer Management:
+//! - Maximum buffer size: 1000 entries (oldest entries dropped when full)
+//! - HTTP timeout: 500ms (fails fast if VictoriaLogs is unavailable)
 
 use chrono::Utc;
 use serde::Serialize;
-use std::sync::{LazyLock, Mutex};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{LazyLock, Mutex, Once};
+use std::thread;
 
 /// Log entry structure matching VictoriaLogs JSON Line format
 #[derive(Debug, Clone, Serialize)]
@@ -26,25 +33,66 @@ struct LogEntry {
     context: Option<serde_json::Value>,
 }
 
+/// Maximum buffer size before oldest entries are dropped
+const MAX_BUFFER_SIZE: usize = 1000;
+
+/// HTTP timeout for VictoriaLogs requests (fails fast)
+const HTTP_TIMEOUT_MS: u64 = 500;
+
+/// HTTP connection timeout
+const HTTP_CONNECT_TIMEOUT_MS: u64 = 200;
+
 /// VictoriaLogs configuration
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct VLogsConfig {
     enabled: bool,
     endpoint: String,
     source: String,
 }
 
+/// Message sent to background sender thread
+struct FlushMessage {
+    endpoint: String,
+    entries: Vec<LogEntry>,
+}
+
 // Global state for configuration and log buffer
 static CONFIG: LazyLock<Mutex<VLogsConfig>> = LazyLock::new(|| Mutex::new(VLogsConfig::default()));
 static BUFFER: LazyLock<Mutex<Vec<LogEntry>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-// HTTP client (created lazily on first flush)
+// Background sender channel (initialized once)
+static SENDER: LazyLock<Mutex<Option<Sender<FlushMessage>>>> = LazyLock::new(|| Mutex::new(None));
+static SENDER_INIT: Once = Once::new();
+
+// HTTP client with short timeout (used by background thread only)
 static CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
     reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_millis(HTTP_TIMEOUT_MS))
+        .connect_timeout(std::time::Duration::from_millis(HTTP_CONNECT_TIMEOUT_MS))
         .build()
         .unwrap_or_else(|_| reqwest::blocking::Client::new())
 });
+
+/// Initialize background sender thread (called once)
+fn init_background_sender() {
+    SENDER_INIT.call_once(|| {
+        let (tx, rx) = mpsc::channel::<FlushMessage>();
+
+        // Store sender for use by vlogs_flush()
+        if let Ok(mut sender) = SENDER.lock() {
+            *sender = Some(tx);
+        }
+
+        // Spawn background thread for HTTP sending
+        thread::spawn(move || {
+            while let Ok(msg) = rx.recv() {
+                // Send entries (ignore failures - logs are best-effort)
+                let _ = send_entries_internal(&msg.endpoint, &msg.entries);
+            }
+            // Channel closed when sender is dropped
+        });
+    });
+}
 
 /// Convert UTF-16 pointer (from MQL) to Rust String
 ///
@@ -183,6 +231,10 @@ pub unsafe extern "C" fn vlogs_add_entry(
 
     match BUFFER.lock() {
         Ok(mut buffer) => {
+            // Enforce buffer size limit - drop oldest entry if full
+            if buffer.len() >= MAX_BUFFER_SIZE {
+                buffer.remove(0);
+            }
             buffer.push(entry);
             buffer.len() as i32
         }
@@ -193,15 +245,19 @@ pub unsafe extern "C" fn vlogs_add_entry(
     }
 }
 
-/// Flush buffered log entries to VictoriaLogs
+/// Flush buffered log entries to VictoriaLogs (non-blocking)
 ///
-/// Sends all buffered entries as JSON Lines to the configured endpoint.
-/// Clears the buffer after successful send.
+/// Sends all buffered entries to background thread for async HTTP delivery.
+/// Returns immediately without waiting for HTTP response.
+/// Buffer is cleared on successful handoff to background thread.
 ///
 /// # Returns
-/// 1 on success, 0 on failure or if disabled, -1 on error
+/// 1 on success (handoff to background), 0 if disabled or buffer empty, -1 on error
 #[no_mangle]
 pub extern "C" fn vlogs_flush() -> i32 {
+    // Initialize background sender if not done
+    init_background_sender();
+
     // Get config
     let endpoint = match CONFIG.lock() {
         Ok(config) => {
@@ -224,19 +280,26 @@ pub extern "C" fn vlogs_flush() -> i32 {
         Err(_) => return -1,
     };
 
-    // Send to VictoriaLogs
-    match send_entries(&endpoint, &entries) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("vlogs_flush: failed to send: {}", e);
-            // Put entries back in buffer for retry
-            if let Ok(mut buffer) = BUFFER.lock() {
-                for entry in entries {
-                    buffer.push(entry);
+    // Send to background thread (non-blocking)
+    let msg = FlushMessage { endpoint, entries };
+
+    match SENDER.lock() {
+        Ok(sender_guard) => {
+            if let Some(sender) = sender_guard.as_ref() {
+                match sender.send(msg) {
+                    Ok(_) => 1,
+                    Err(e) => {
+                        eprintln!("vlogs_flush: failed to send to background: {}", e);
+                        // Lost entries - acceptable for best-effort logging
+                        0
+                    }
                 }
+            } else {
+                eprintln!("vlogs_flush: background sender not initialized");
+                0
             }
-            0
         }
+        Err(_) => -1,
     }
 }
 
@@ -252,8 +315,8 @@ pub extern "C" fn vlogs_buffer_size() -> i32 {
     }
 }
 
-/// Internal function to send entries to VictoriaLogs
-fn send_entries(endpoint: &str, entries: &[LogEntry]) -> Result<(), String> {
+/// Internal function to send entries to VictoriaLogs (called by background thread)
+fn send_entries_internal(endpoint: &str, entries: &[LogEntry]) -> Result<(), String> {
     // Build JSON Lines body
     let body = entries
         .iter()
@@ -322,8 +385,20 @@ pub(crate) fn add_entry(
     };
 
     match BUFFER.lock() {
-        Ok(mut buffer) => buffer.push(entry),
-        Err(e) => e.into_inner().push(entry),
+        Ok(mut buffer) => {
+            // Enforce buffer size limit - drop oldest entry if full
+            if buffer.len() >= MAX_BUFFER_SIZE {
+                buffer.remove(0);
+            }
+            buffer.push(entry);
+        }
+        Err(e) => {
+            let mut buffer = e.into_inner();
+            if buffer.len() >= MAX_BUFFER_SIZE {
+                buffer.remove(0);
+            }
+            buffer.push(entry);
+        }
     }
 }
 
@@ -349,8 +424,8 @@ pub(crate) fn flush() -> i32 {
         std::mem::take(&mut *buffer)
     };
 
-    // Send to VictoriaLogs
-    match send_entries(&endpoint, &entries) {
+    // Send to VictoriaLogs (synchronous for tests)
+    match send_entries_internal(&endpoint, &entries) {
         Ok(_) => 1,
         Err(e) => {
             eprintln!("vlogs_flush: failed to send: {}", e);
@@ -522,5 +597,30 @@ mod tests {
         assert!(json.contains("\"source\":\"ea:IC_12345\""));
         assert!(json.contains("\"category\":\"System\""));
         assert!(json.contains("\"ticket\":99"));
+    }
+
+    #[test]
+    #[serial]
+    fn test_buffer_size_limit() {
+        setup();
+
+        configure("http://localhost:9428/insert/jsonline", "test-source");
+
+        // Add more than MAX_BUFFER_SIZE entries
+        for i in 0..(MAX_BUFFER_SIZE + 10) {
+            add_entry("INFO", "Trade", &format!("Message {}", i), None);
+        }
+
+        // Buffer should be capped at MAX_BUFFER_SIZE
+        let buffer = BUFFER.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(buffer.len(), MAX_BUFFER_SIZE);
+
+        // Oldest entries should have been dropped - check first message is "Message 10"
+        assert_eq!(buffer[0].msg, "Message 10");
+        // Last message should be the newest one
+        assert_eq!(
+            buffer[buffer.len() - 1].msg,
+            format!("Message {}", MAX_BUFFER_SIZE + 9)
+        );
     }
 }

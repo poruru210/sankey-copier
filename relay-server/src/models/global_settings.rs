@@ -23,6 +23,17 @@ pub struct VLogsGlobalSettings {
     /// Interval in seconds between automatic flushes
     /// Default: 5
     pub flush_interval_secs: i32,
+
+    /// Minimum log level to output: "DEBUG", "INFO", "WARN", "ERROR"
+    /// Logs below this level will be ignored by EAs
+    /// Default: "DEBUG" (all logs)
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+}
+
+/// Default log level (DEBUG = all logs)
+fn default_log_level() -> String {
+    "DEBUG".to_string()
 }
 
 impl Default for VLogsGlobalSettings {
@@ -32,6 +43,7 @@ impl Default for VLogsGlobalSettings {
             endpoint: "http://localhost:9428/insert/jsonline?_stream_fields=source".to_string(),
             batch_size: 100,
             flush_interval_secs: 5,
+            log_level: default_log_level(),
         }
     }
 }
@@ -49,6 +61,7 @@ mod tests {
         assert!(settings.endpoint.contains("_stream_fields=source"));
         assert_eq!(settings.batch_size, 100);
         assert_eq!(settings.flush_interval_secs, 5);
+        assert_eq!(settings.log_level, "DEBUG");
     }
 
     #[test]
@@ -58,6 +71,7 @@ mod tests {
             endpoint: "http://vlogs.example.com:9428/insert/jsonline".to_string(),
             batch_size: 50,
             flush_interval_secs: 10,
+            log_level: "INFO".to_string(),
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -67,5 +81,6 @@ mod tests {
         assert_eq!(deserialized.endpoint, settings.endpoint);
         assert_eq!(deserialized.batch_size, 50);
         assert_eq!(deserialized.flush_interval_secs, 10);
+        assert_eq!(deserialized.log_level, "INFO");
     }
 }

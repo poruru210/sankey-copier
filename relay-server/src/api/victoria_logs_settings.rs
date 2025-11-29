@@ -32,13 +32,18 @@ pub struct VLogsConfigInfo {
     pub batch_size: usize,
     pub flush_interval_secs: u64,
     pub source: String,
+    /// Current log level ("DEBUG", "INFO", "WARN", "ERROR")
+    pub log_level: String,
 }
 
 /// Request for PUT /api/victoria-logs-settings
-/// Only enabled state can be toggled
+/// Enabled state and log level can be toggled
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VLogsToggleRequest {
     pub enabled: bool,
+    /// Optional log level update ("DEBUG", "INFO", "WARN", "ERROR")
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub log_level: Option<String>,
 }
 
 /// GET /api/victoria-logs-config
@@ -52,6 +57,13 @@ pub async fn get_vlogs_config(
     match &state.vlogs_controller {
         Some(controller) => {
             let config = controller.config();
+
+            // Get current log level from DB, default to DEBUG
+            let log_level = match state.db.get_vlogs_settings().await {
+                Ok(settings) => settings.log_level,
+                _ => "DEBUG".to_string(),
+            };
+
             let response = VLogsConfigResponse {
                 configured: true,
                 config: Some(VLogsConfigInfo {
@@ -59,6 +71,7 @@ pub async fn get_vlogs_config(
                     batch_size: config.batch_size,
                     flush_interval_secs: config.flush_interval_secs,
                     source: config.source.clone(),
+                    log_level: log_level.clone(),
                 }),
                 enabled: controller.is_enabled(),
             };
@@ -67,6 +80,7 @@ pub async fn get_vlogs_config(
                 configured = true,
                 enabled = response.enabled,
                 host = %config.host,
+                log_level = %log_level,
                 "Retrieved VictoriaLogs config"
             );
 
@@ -88,7 +102,7 @@ pub async fn get_vlogs_config(
 }
 
 /// PUT /api/victoria-logs-settings
-/// Toggle VictoriaLogs enabled state only
+/// Update VictoriaLogs enabled state and/or log level
 /// Updates runtime state and broadcasts to all connected EAs
 pub async fn toggle_vlogs_enabled(
     State(state): State<AppState>,
@@ -107,9 +121,28 @@ pub async fn toggle_vlogs_enabled(
 
     // Update runtime state
     controller.set_enabled(request.enabled);
+
+    // Get current log_level from DB or use provided value
+    let current_settings = state.db.get_vlogs_settings().await.ok();
+    let log_level = request.log_level.unwrap_or_else(|| {
+        current_settings
+            .map(|s| s.log_level)
+            .unwrap_or_else(|| "DEBUG".to_string())
+    });
+
+    // Validate log level
+    let valid_levels = ["DEBUG", "INFO", "WARN", "ERROR"];
+    if !valid_levels.contains(&log_level.as_str()) {
+        return Err(ProblemDetails::validation_error(format!(
+            "Invalid log_level '{}'. Must be one of: DEBUG, INFO, WARN, ERROR",
+            log_level
+        )));
+    }
+
     tracing::info!(
         enabled = request.enabled,
-        "Updated VictoriaLogs runtime enabled state"
+        log_level = %log_level,
+        "Updated VictoriaLogs runtime state"
     );
 
     // Save enabled state to database for persistence across restarts
@@ -119,12 +152,13 @@ pub async fn toggle_vlogs_enabled(
         endpoint: config.endpoint(), // Full URL (host + fixed path)
         batch_size: config.batch_size as i32,
         flush_interval_secs: config.flush_interval_secs as i32,
+        log_level: log_level.clone(),
     };
 
     if let Err(e) = state.db.save_vlogs_settings(&settings).await {
         tracing::error!(
             error = %e,
-            "Failed to persist VictoriaLogs enabled state to database"
+            "Failed to persist VictoriaLogs settings to database"
         );
         // Continue even if DB save fails - runtime state is already updated
     }

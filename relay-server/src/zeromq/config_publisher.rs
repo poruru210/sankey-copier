@@ -121,6 +121,7 @@ impl ZmqConfigPublisher {
             endpoint: settings.endpoint.clone(),
             batch_size: settings.batch_size,
             flush_interval_secs: settings.flush_interval_secs,
+            log_level: settings.log_level.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
@@ -129,6 +130,7 @@ impl ZmqConfigPublisher {
         tracing::info!(
             enabled = settings.enabled,
             endpoint = %settings.endpoint,
+            log_level = %settings.log_level,
             "Broadcasted VictoriaLogs config to all EAs on 'vlogs_config' topic"
         );
 
