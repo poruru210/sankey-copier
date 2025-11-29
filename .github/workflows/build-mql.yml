@@ -578,12 +578,13 @@ jobs:
 
       - name: Prepare MQL artifacts
         run: |
-          mkdir -p artifacts/mt-advisors/${{ matrix.platform }}
-          copy "mt-advisors\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mt-advisors\${{ matrix.platform }}\" 2>nul || echo "No compiled files found"
+          # Match installer expected structure: mt-advisors/{MT4,MT5}/Experts/
+          mkdir -p artifacts/mt-advisors/${{ matrix.platform }}/Experts
+          copy "mt-advisors\${{ matrix.platform }}\*.ex${{ matrix.version }}" "artifacts\mt-advisors\${{ matrix.platform }}\Experts\" 2>nul || echo "No compiled files found"
 
       - name: Upload MQL artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-mql-${{ matrix.platform }}
-          path: artifacts/mt-advisors/${{ matrix.platform }}/
+          path: artifacts/mt-advisors/
           retention-days: 30

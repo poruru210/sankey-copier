@@ -81,16 +81,17 @@ jobs:
 
       - name: Prepare DLL artifacts
         run: |
-          mkdir -p artifacts/dll/MT4
-          mkdir -p artifacts/dll/MT5
-          copy target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT4\
-          copy target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\dll\MT5\
+          # Match installer expected structure: mt-advisors/{MT4,MT5}/Libraries/
+          mkdir -p artifacts/mt-advisors/MT4/Libraries
+          mkdir -p artifacts/mt-advisors/MT5/Libraries
+          copy target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\mt-advisors\MT4\Libraries\
+          copy target\x86_64-pc-windows-msvc\release\sankey_copier_zmq.dll artifacts\mt-advisors\MT5\Libraries\
 
       - name: Upload DLL artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-dll
-          path: artifacts/dll/
+          path: artifacts/mt-advisors/
           retention-days: 1
 
   build-relay-server:
@@ -126,14 +127,15 @@ jobs:
 
       - name: Prepare server artifacts
         run: |
-          mkdir -p artifacts/server
-          copy target\release\sankey-copier-relay-server.exe artifacts\server\sankey-copier-server.exe
+          # Match installer expected structure: relay-server/target/release/
+          mkdir -p artifacts/relay-server/target/release
+          copy target\release\sankey-copier-relay-server.exe artifacts\relay-server\target\release\
 
       - name: Upload server artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-server
-          path: artifacts/server/
+          path: artifacts/relay-server/
           retention-days: 1
 
   build-tray-app:
@@ -162,12 +164,13 @@ jobs:
 
       - name: Prepare Tray Application artifacts
         run: |
-          mkdir -p artifacts/tray
-          copy tray-app\target\release\sankey-copier-tray.exe artifacts\tray\
+          # Match installer expected structure: tray-app/target/release/
+          mkdir -p artifacts/tray-app/target/release
+          copy tray-app\target\release\sankey-copier-tray.exe artifacts\tray-app\target\release\
 
       - name: Upload Tray Application artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sankey-copier-tray
-          path: artifacts/tray/
+          path: artifacts/tray-app/
           retention-days: 1
