@@ -582,24 +582,48 @@ volumes:
 
 ---
 
-## Implementation Priority
+## Implementation Status
 
-### Phase 1: Basic Monitoring (Week 1)
-1. Grafana + VictoriaLogs datasource setup
-2. Overview dashboard with basic stats
-3. Error log table
+### Implemented Dashboards
 
-### Phase 2: Trade Tracking (Week 2)
-1. Trade flow dashboard
-2. Account health dashboard
-3. Basic alerting
+| Dashboard | JSON File | Status |
+|-----------|-----------|--------|
+| Overview | `grafana/dashboards/trade-copy-overview.json` | Implemented |
+| Trade Flow | `grafana/dashboards/trade-copy-flow.json` | Implemented |
+| Performance | `grafana/dashboards/trade-copy-performance.json` | Implemented |
+| Errors | `grafana/dashboards/trade-copy-errors.json` | Implemented |
+| Account Health | `grafana/dashboards/trade-copy-account-health.json` | Implemented |
 
-### Phase 3: Performance Metrics (Week 3)
-1. Logging improvements (structured fields)
-2. Latency tracking with spans
-3. Performance dashboard
+### Quick Start
 
-### Phase 4: Advanced Features (Week 4)
-1. Custom visualizations
+```bash
+# Start VictoriaLogs and Grafana
+docker compose up -d
+
+# Access URLs
+# - Grafana: http://localhost:3001 (admin/admin)
+# - VictoriaLogs: http://localhost:9428/select/vmui
+```
+
+### Current Limitations
+
+The following features require logging improvements (see "Recommended Logging Improvements" section):
+
+1. **Latency Metrics**: P50/P95/P99 percentiles require `duration_ms` field
+2. **Symbol-based Filtering**: Requires structured `symbol` field
+3. **Ticket Tracking**: Requires structured `ticket` field for end-to-end tracing
+4. **Success Rate Calculation**: More accurate with structured event types
+
+---
+
+## Next Steps
+
+### Phase 1: Logging Improvements (Required for Full Dashboard Functionality)
+1. Add structured fields to tracing calls
+2. Implement span instrumentation for latency
+3. Extend LogEntry structure
+
+### Phase 2: Advanced Features
+1. Custom visualizations (trade flow diagrams)
 2. Advanced alerting rules
 3. Dashboard refinement based on usage
