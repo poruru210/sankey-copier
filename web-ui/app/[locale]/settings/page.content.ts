@@ -133,6 +133,69 @@ const settingsPageContent = {
         ja: 'VictoriaLogs設定を更新できませんでした。再試行してください。',
       }),
     },
+    // ZeroMQ section
+    zeromq: {
+      title: t({
+        en: 'ZeroMQ Ports',
+        ja: 'ZeroMQポート',
+      }),
+      description: t({
+        en: 'ZeroMQ port configuration for EA communication. Ports are read-only and managed by the server.',
+        ja: 'EA通信用のZeroMQポート設定。ポートは読み取り専用でサーバーによって管理されます。',
+      }),
+      receiverPort: t({
+        en: 'Receiver Port (PULL)',
+        ja: 'レシーバーポート (PULL)',
+      }),
+      receiverPortDescription: t({
+        en: 'Port for receiving messages from EAs (EA → Server)',
+        ja: 'EAからのメッセージ受信用ポート（EA → Server）',
+      }),
+      senderPort: t({
+        en: 'Sender Port (PUB)',
+        ja: 'センダーポート (PUB)',
+      }),
+      senderPortDescription: t({
+        en: 'Port for publishing trade signals to Slave EAs',
+        ja: 'Slave EAへのトレードシグナル配信用ポート',
+      }),
+      configSenderPort: t({
+        en: 'Config Sender Port (PUB)',
+        ja: '設定センダーポート (PUB)',
+      }),
+      configSenderPortDescription: t({
+        en: 'Port for publishing configuration to EAs',
+        ja: 'EAへの設定配信用ポート',
+      }),
+      isDynamic: t({
+        en: 'Dynamic Ports',
+        ja: '動的ポート',
+      }),
+      isDynamicDescription: t({
+        en: 'Ports are dynamically assigned by the server at startup',
+        ja: 'ポートはサーバー起動時に動的に割り当てられます',
+      }),
+      isFixed: t({
+        en: 'Fixed Ports',
+        ja: '固定ポート',
+      }),
+      isFixedDescription: t({
+        en: 'Ports are configured in config.toml',
+        ja: 'ポートはconfig.tomlで設定されています',
+      }),
+      generatedAt: t({
+        en: 'Generated At',
+        ja: '生成日時',
+      }),
+      readOnlyTitle: t({
+        en: 'Port Configuration',
+        ja: 'ポート設定',
+      }),
+      readOnlyDescription: t({
+        en: 'Ports are configured by the server and cannot be changed from the web UI. To use fixed ports, configure them in config.toml.',
+        ja: 'ポートはサーバーによって設定され、Web UIからは変更できません。固定ポートを使用するにはconfig.tomlで設定してください。',
+      }),
+    },
   },
 } satisfies DeclarationContent;
 
