@@ -60,44 +60,44 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Master Accounts"
-        M1[Master 1<br/>IC Markets #123]
-        M2[Master 2<br/>OANDA #456]
+    subgraph master_accounts["Master Accounts"]
+        M1["Master 1 - IC Markets"]
+        M2["Master 2 - OANDA"]
     end
 
-    subgraph "Master EAs"
-        MEA1[Master EA 1]
-        MEA2[Master EA 2]
+    subgraph master_eas["Master EAs"]
+        MEA1["Master EA 1"]
+        MEA2["Master EA 2"]
     end
 
-    subgraph "mt-bridge DLL"
-        DLL1[DLL Instance 1]
-        DLL2[DLL Instance 2]
-        DLL3[DLL Instance 3]
-        DLL4[DLL Instance 4]
+    subgraph dll["mt-bridge DLL"]
+        DLL1["DLL Instance 1"]
+        DLL2["DLL Instance 2"]
+        DLL3["DLL Instance 3"]
+        DLL4["DLL Instance 4"]
     end
 
-    subgraph "relay-server"
+    subgraph relay["relay-server"]
         direction TB
-        PULL[ZMQ PULL :5555]
-        MH[MessageHandler]
-        CE[CopyEngine]
-        CM[ConnectionManager]
-        DB[(SQLite)]
-        PUB_T[ZMQ PUB :5556<br/>Trade Signals]
-        PUB_C[ZMQ PUB :5557<br/>Config]
+        PULL["ZMQ PULL 5555"]
+        MH["MessageHandler"]
+        CE["CopyEngine"]
+        CM["ConnectionManager"]
+        DB[("SQLite")]
+        PUB_T["ZMQ PUB 5556 Trade"]
+        PUB_C["ZMQ PUB 5557 Config"]
     end
 
-    subgraph "Slave EAs"
-        SEA1[Slave EA 1]
-        SEA2[Slave EA 2]
-        SEA3[Slave EA 3]
+    subgraph slave_eas["Slave EAs"]
+        SEA1["Slave EA 1"]
+        SEA2["Slave EA 2"]
+        SEA3["Slave EA 3"]
     end
 
-    subgraph "Slave Accounts"
-        S1[Slave 1<br/>XM #789]
-        S2[Slave 2<br/>FXCM #012]
-        S3[Slave 3<br/>Exness #345]
+    subgraph slave_accounts["Slave Accounts"]
+        S1["Slave 1 - XM"]
+        S2["Slave 2 - FXCM"]
+        S3["Slave 3 - Exness"]
     end
 
     M1 --> MEA1
@@ -118,9 +118,8 @@ graph TB
     CE --> PUB_T
     MH --> PUB_C
 
-    PUB_T -->|SUB topic:M1| DLL3
-    PUB_T -->|SUB topic:M1| DLL4
-    PUB_T -->|SUB topic:M2| DLL3
+    PUB_T -->|SUB| DLL3
+    PUB_T -->|SUB| DLL4
     PUB_C --> DLL3
     PUB_C --> DLL4
 
@@ -232,40 +231,40 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "relay-server"
-        subgraph "API Layer"
-            AXUM[Axum HTTP Server]
-            REST[REST Handlers]
-            WS[WebSocket Handler]
-            MW[Middleware<br/>CORS / PNA]
+    subgraph relay["relay-server"]
+        subgraph api_layer["API Layer"]
+            AXUM["Axum HTTP Server"]
+            REST["REST Handlers"]
+            WS["WebSocket Handler"]
+            MW["Middleware CORS, PNA"]
         end
 
-        subgraph "Business Logic"
-            MH[MessageHandler]
-            CE[CopyEngine]
-            CM[ConnectionManager]
-            CP[ConfigPublisher]
+        subgraph business["Business Logic"]
+            MH["MessageHandler"]
+            CE["CopyEngine"]
+            CM["ConnectionManager"]
+            CP["ConfigPublisher"]
         end
 
-        subgraph "Message Handlers"
-            HB[HeartbeatHandler]
-            TS[TradeSignalHandler]
-            CR[ConfigRequestHandler]
-            PS[PositionSnapshotHandler]
-            UR[UnregisterHandler]
+        subgraph msg_handlers["Message Handlers"]
+            HB["HeartbeatHandler"]
+            TS["TradeSignalHandler"]
+            CR["ConfigRequestHandler"]
+            PS["PositionSnapshotHandler"]
+            UR["UnregisterHandler"]
         end
 
-        subgraph "Data Layer"
-            DB[(SQLite)]
-            TG[TradeGroups DAO]
-            TGM[TradeGroupMembers DAO]
-            CD[ConfigDistribution]
+        subgraph data_layer["Data Layer"]
+            DB[("SQLite")]
+            TG["TradeGroups DAO"]
+            TGM["TradeGroupMembers DAO"]
+            CD["ConfigDistribution"]
         end
 
-        subgraph "ZeroMQ Layer"
-            PULL[ZMQ PULL :5555]
-            PUB_T[ZMQ PUB :5556]
-            PUB_C[ZMQ PUB :5557]
+        subgraph zmq_layer["ZeroMQ Layer"]
+            PULL["ZMQ PULL 5555"]
+            PUB_T["ZMQ PUB 5556"]
+            PUB_C["ZMQ PUB 5557"]
         end
 
         AXUM --> REST
@@ -298,37 +297,37 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "mt-bridge DLL"
-        subgraph "FFI Layer"
-            ZMQ_FFI[ZMQ FFI<br/>context/socket ops]
-            MP_FFI[MessagePack FFI<br/>serialize/parse]
-            VL_FFI[VictoriaLogs FFI]
+    subgraph mt_bridge["mt-bridge DLL"]
+        subgraph ffi_layer["FFI Layer"]
+            ZMQ_FFI["ZMQ FFI"]
+            MP_FFI["MessagePack FFI"]
+            VL_FFI["VictoriaLogs FFI"]
         end
 
-        subgraph "ZeroMQ Module"
-            CTX[Context Manager]
-            SOCK[Socket Manager]
-            SEND[Send Functions]
-            RECV[Receive Functions]
+        subgraph zmq_mod["ZeroMQ Module"]
+            CTX["Context Manager"]
+            SOCK["Socket Manager"]
+            SEND["Send Functions"]
+            RECV["Receive Functions"]
         end
 
-        subgraph "MessagePack Module"
-            SER[Serializers<br/>Heartbeat/Signal/Config]
-            PAR[Parsers<br/>SlaveConfig/TradeSignal]
-            ACC[Field Accessors]
-            BUF[Buffer Management]
+        subgraph msgpack_mod["MessagePack Module"]
+            SER["Serializers"]
+            PAR["Parsers"]
+            ACC["Field Accessors"]
+            BUF["Buffer Management"]
         end
 
-        subgraph "VictoriaLogs Module"
-            CFG[Config]
-            BUFFER[Log Buffer]
-            HTTP[HTTP Client]
-            FLUSH[Flush Thread]
+        subgraph vlogs_mod["VictoriaLogs Module"]
+            CFG["Config"]
+            BUFFER["Log Buffer"]
+            HTTP["HTTP Client"]
+            FLUSH["Flush Thread"]
         end
 
-        subgraph "Helpers"
-            UTF16[UTF-16 Converter]
-            HANDLE[Handle Manager]
+        subgraph helpers["Helpers"]
+            UTF16["UTF-16 Converter"]
+            HANDLE["Handle Manager"]
         end
 
         ZMQ_FFI --> CTX
@@ -357,31 +356,31 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Master EA"
-        subgraph "Event Handlers"
-            M_INIT[OnInit]
-            M_TICK[OnTick]
-            M_TIMER[OnTimer]
-            M_DEINIT[OnDeinit]
+    subgraph master_ea["Master EA"]
+        subgraph m_events["Event Handlers"]
+            M_INIT["OnInit"]
+            M_TICK["OnTick"]
+            M_TIMER["OnTimer"]
+            M_DEINIT["OnDeinit"]
         end
 
-        subgraph "Order Detection"
-            SCAN[ScanExistingOrders]
-            NEW[CheckForNewOrders]
-            MOD[CheckForModifiedOrders]
-            CLOSE[CheckForClosedOrders]
+        subgraph m_detection["Order Detection"]
+            SCAN["ScanExistingOrders"]
+            NEW["CheckForNewOrders"]
+            MOD["CheckForModifiedOrders"]
+            CLOSE["CheckForClosedOrders"]
         end
 
-        subgraph "Signal Sending"
-            OPEN_SIG[SendOpenSignal]
-            CLOSE_SIG[SendCloseSignal]
-            MOD_SIG[SendModifySignal]
-            SNAP[SendPositionSnapshot]
+        subgraph m_signals["Signal Sending"]
+            OPEN_SIG["SendOpenSignal"]
+            CLOSE_SIG["SendCloseSignal"]
+            MOD_SIG["SendModifySignal"]
+            SNAP["SendPositionSnapshot"]
         end
 
-        subgraph "Communication"
-            M_ZMQ[ZMQ PUSH Socket]
-            M_HB[Heartbeat Sender]
+        subgraph m_comm["Communication"]
+            M_ZMQ["ZMQ PUSH Socket"]
+            M_HB["Heartbeat Sender"]
         end
 
         M_INIT --> SCAN
@@ -400,37 +399,37 @@ graph TB
         M_HB --> M_ZMQ
     end
 
-    subgraph "Slave EA"
-        subgraph "Event Handlers "
-            S_INIT[OnInit]
-            S_TICK[OnTick]
-            S_TIMER[OnTimer]
-            S_DEINIT[OnDeinit]
+    subgraph slave_ea["Slave EA"]
+        subgraph s_events["Event Handlers"]
+            S_INIT["OnInit"]
+            S_TICK["OnTick"]
+            S_TIMER["OnTimer"]
+            S_DEINIT["OnDeinit"]
         end
 
-        subgraph "Signal Processing"
-            PROC[ProcessTradeSignals]
-            PARSE[ParseTradeSignal]
-            FILTER[ShouldProcessTrade]
+        subgraph s_processing["Signal Processing"]
+            PROC["ProcessTradeSignals"]
+            PARSE["ParseTradeSignal"]
+            FILTER["ShouldProcessTrade"]
         end
 
-        subgraph "Trade Execution"
-            EXEC_O[ExecuteOpenTrade]
-            EXEC_C[ExecuteCloseTrade]
-            EXEC_M[ExecuteModifyTrade]
-            LOT[TransformLotSize]
+        subgraph s_execution["Trade Execution"]
+            EXEC_O["ExecuteOpenTrade"]
+            EXEC_C["ExecuteCloseTrade"]
+            EXEC_M["ExecuteModifyTrade"]
+            LOT["TransformLotSize"]
         end
 
-        subgraph "Mapping"
-            ADD_MAP[AddTicketMapping]
-            GET_MAP[GetSlaveTicket]
-            RECOVER[RecoverMappings]
+        subgraph s_mapping["Mapping"]
+            ADD_MAP["AddTicketMapping"]
+            GET_MAP["GetSlaveTicket"]
+            RECOVER["RecoverMappings"]
         end
 
-        subgraph "Communication "
-            S_SUB_T[ZMQ SUB :5556]
-            S_SUB_C[ZMQ SUB :5557]
-            S_PUSH[ZMQ PUSH :5555]
+        subgraph s_comm["Communication"]
+            S_SUB_T["ZMQ SUB 5556"]
+            S_SUB_C["ZMQ SUB 5557"]
+            S_PUSH["ZMQ PUSH 5555"]
         end
 
         S_TIMER --> PROC
@@ -456,44 +455,44 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "web-ui"
-        subgraph "Pages (App Router)"
-            CONN[/connections]
-            TG[/trade-groups]
-            TGD[/trade-groups/id]
-            INST[/installations]
-            SITES[/sites]
-            SET[/settings]
+    subgraph web_ui["web-ui"]
+        subgraph pages["Pages (App Router)"]
+            CONN["connections"]
+            TG["trade-groups"]
+            TGD["trade-groups/:id"]
+            INST["installations"]
+            SITES["sites"]
+            SET["settings"]
         end
 
-        subgraph "Components"
-            FLOW[ConnectionsViewReactFlow]
-            NODE[AccountNode]
-            EDGE[SettingsEdge]
-            CREATE[CreateConnectionDialog]
-            EDIT[EditConnectionDrawer]
-            MASTER[MasterSettingsDrawer]
-            SLAVE[SlaveSettingsForm]
+        subgraph components["Components"]
+            FLOW["ConnectionsViewReactFlow"]
+            NODE["AccountNode"]
+            EDGE["SettingsEdge"]
+            CREATE["CreateConnectionDialog"]
+            EDIT["EditConnectionDrawer"]
+            MASTER["MasterSettingsDrawer"]
+            SLAVE["SlaveSettingsForm"]
         end
 
-        subgraph "Hooks"
-            USC[useSankeyCopier]
-            UFD[useFlowData]
-            UTG[useTradeGroups]
-            UMC[useMasterConfig]
-            USV[useSettingsValidation]
+        subgraph hooks["Hooks"]
+            USC["useSankeyCopier"]
+            UFD["useFlowData"]
+            UTG["useTradeGroups"]
+            UMC["useMasterConfig"]
+            USV["useSettingsValidation"]
         end
 
-        subgraph "State (Jotai)"
-            SITE_A[sitesAtom]
-            CONN_A[connectionsAtom]
-            SET_A[settingsAtom]
-            UI_A[UI Atoms]
+        subgraph state["State - Jotai"]
+            SITE_A["sitesAtom"]
+            CONN_A["connectionsAtom"]
+            SET_A["settingsAtom"]
+            UI_A["UI Atoms"]
         end
 
-        subgraph "API Layer"
-            CLIENT[ApiClient]
-            WS_C[WebSocket Client]
+        subgraph api["API Layer"]
+            CLIENT["ApiClient"]
+            WS_C["WebSocket Client"]
         end
 
         CONN --> FLOW
@@ -622,29 +621,29 @@ struct SlaveSettings {
 
 ```mermaid
 graph TB
-    subgraph "User PC (Windows)"
-        subgraph "MetaTrader Instances"
-            MT1[MT4/MT5 #1<br/>Master Account]
-            MT2[MT4/MT5 #2<br/>Slave Account 1]
-            MT3[MT4/MT5 #3<br/>Slave Account 2]
+    subgraph user_pc["User PC - Windows"]
+        subgraph mt_instances["MetaTrader Instances"]
+            MT1["MT4 or MT5 - Master"]
+            MT2["MT4 or MT5 - Slave 1"]
+            MT3["MT4 or MT5 - Slave 2"]
         end
 
-        subgraph "EAs & DLL"
-            EA1[Master EA]
-            EA2[Slave EA]
-            EA3[Slave EA]
-            DLL[sankey_copier_zmq.dll<br/>MQL5/Libraries/]
+        subgraph eas_dll["EAs and DLL"]
+            EA1["Master EA"]
+            EA2["Slave EA"]
+            EA3["Slave EA"]
+            DLL["sankey_copier_zmq.dll"]
         end
 
-        subgraph "relay-server Process"
-            RS[relay-server.exe]
-            DB[(sankey_copier.db)]
-            CERTS[certs/<br/>server.pem]
-            LOGS[logs/]
+        subgraph relay_process["relay-server Process"]
+            RS["relay-server.exe"]
+            DB[("sankey_copier.db")]
+            CERTS["certs"]
+            LOGS["logs"]
         end
 
-        subgraph "Browser"
-            WEB[web-ui<br/>https://localhost:3000]
+        subgraph browser["Browser"]
+            WEB["web-ui localhost 3000"]
         end
 
         MT1 --> EA1
@@ -654,16 +653,16 @@ graph TB
         EA2 --> DLL
         EA3 --> DLL
 
-        DLL <-->|TCP :5555-5557| RS
+        DLL <-->|TCP 5555-5557| RS
         RS --> DB
         RS --> CERTS
         RS --> LOGS
 
-        WEB <-->|HTTPS :3000| RS
+        WEB <-->|HTTPS| RS
     end
 
-    subgraph "Optional: VictoriaLogs Server"
-        VL[VictoriaLogs<br/>:9428]
+    subgraph vlogs["VictoriaLogs - Optional"]
+        VL["VictoriaLogs 9428"]
     end
 
     RS -->|HTTP POST| VL
@@ -674,21 +673,21 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph "relay-server"
-        P3000[":3000<br/>HTTPS REST API<br/>WebSocket /ws"]
-        P5555[":5555<br/>ZMQ PULL<br/>EA→Server"]
-        P5556[":5556<br/>ZMQ PUB<br/>Trade Signals"]
-        P5557[":5557<br/>ZMQ PUB<br/>Config Distribution"]
+    subgraph relay_ports["relay-server"]
+        P3000["3000 - HTTPS REST, WebSocket"]
+        P5555["5555 - ZMQ PULL"]
+        P5556["5556 - ZMQ PUB Trade"]
+        P5557["5557 - ZMQ PUB Config"]
     end
 
-    subgraph "External"
-        P9428[":9428<br/>VictoriaLogs<br/>(optional)"]
+    subgraph external["External"]
+        P9428["9428 - VictoriaLogs"]
     end
 
-    subgraph "Clients"
-        BROWSER[Browser]
-        EA_M[Master EA]
-        EA_S[Slave EA]
+    subgraph clients["Clients"]
+        BROWSER["Browser"]
+        EA_M["Master EA"]
+        EA_S["Slave EA"]
     end
 
     BROWSER <-->|HTTPS| P3000
