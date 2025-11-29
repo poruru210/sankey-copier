@@ -206,6 +206,7 @@ async fn test_vlogs_config_sent_on_ea_registration() {
         endpoint: "http://test-vlogs:9428/insert/jsonline".to_string(),
         batch_size: 50,
         flush_interval_secs: 10,
+        log_level: "DEBUG".to_string(),
     };
     server
         .db
@@ -385,6 +386,7 @@ async fn test_vlogs_config_disable() {
         endpoint: "http://vlogs:9428/insert/jsonline".to_string(),
         batch_size: 100,
         flush_interval_secs: 5,
+        log_level: "DEBUG".to_string(),
     };
     server
         .db
@@ -628,6 +630,7 @@ async fn test_vlogs_config_ffi_parsing() {
         endpoint: "http://ffi-test:9428/insert/jsonline".to_string(),
         batch_size: 75,
         flush_interval_secs: 8,
+        log_level: "INFO".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
 

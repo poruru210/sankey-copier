@@ -280,6 +280,10 @@ pub struct VLogsConfigMessage {
     pub batch_size: i32,
     /// Interval in seconds between automatic flushes
     pub flush_interval_secs: i32,
+    /// Minimum log level to output: "DEBUG", "INFO", "WARN", "ERROR"
+    /// Logs below this level will be ignored by EAs
+    #[serde(default)]
+    pub log_level: String,
     /// Timestamp when this config was sent (ISO 8601)
     pub timestamp: String,
 }

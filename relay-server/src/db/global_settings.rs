@@ -82,6 +82,7 @@ mod tests {
             endpoint: "http://vlogs.example.com:9428/insert/jsonline".to_string(),
             batch_size: 50,
             flush_interval_secs: 10,
+            log_level: "INFO".to_string(),
         };
 
         db.save_vlogs_settings(&settings).await.unwrap();
@@ -92,6 +93,7 @@ mod tests {
         assert_eq!(retrieved.endpoint, settings.endpoint);
         assert_eq!(retrieved.batch_size, 50);
         assert_eq!(retrieved.flush_interval_secs, 10);
+        assert_eq!(retrieved.log_level, "INFO");
     }
 
     #[tokio::test]
@@ -104,6 +106,7 @@ mod tests {
             endpoint: "http://first.example.com".to_string(),
             batch_size: 100,
             flush_interval_secs: 5,
+            log_level: "DEBUG".to_string(),
         };
         db.save_vlogs_settings(&settings1).await.unwrap();
 
@@ -113,6 +116,7 @@ mod tests {
             endpoint: "http://second.example.com".to_string(),
             batch_size: 200,
             flush_interval_secs: 15,
+            log_level: "WARN".to_string(),
         };
         db.save_vlogs_settings(&settings2).await.unwrap();
 
@@ -122,5 +126,6 @@ mod tests {
         assert_eq!(retrieved.endpoint, settings2.endpoint);
         assert_eq!(retrieved.batch_size, 200);
         assert_eq!(retrieved.flush_interval_secs, 15);
+        assert_eq!(retrieved.log_level, "WARN");
     }
 }

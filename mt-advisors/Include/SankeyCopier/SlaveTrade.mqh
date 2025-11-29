@@ -26,8 +26,18 @@
 //   - MaxRetries              : Max retry attempts for order operations
 //   - MaxSignalDelayMs        : Max acceptable signal delay in milliseconds
 //   - UsePendingOrderForDelayed: Use pending order for delayed signals
+//   - g_received_via_timer    : bool tracking whether signal was received via OnTimer
 // For MT5 only:
 //   - g_trade                 : CTrade object for trade operations
+
+// External variable for latency tracing (defined in EA)
+// MT5 uses extern keyword, MT4 doesn't support true extern (creates input var)
+#ifdef IS_MT5
+extern bool g_received_via_timer;
+#else
+// MT4: variable must be defined in EA before including this header
+// We reference it here without declaration (MQL4 allows this for globals)
+#endif
 
 // =============================================================================
 // Platform-Specific Order Type Conversion
@@ -148,25 +158,32 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
    trade.SetDeviationInPoints(effective_slippage);
 
    bool result = false;
+   string received_via = g_received_via_timer ? "OnTimer" : "OnTick";
 
    for(int i = 0; i < max_retries; i++)
    {
+      // Measure broker response time
+      datetime order_start = TimeGMT();
+
       if(order_type == ORDER_TYPE_BUY)
          result = trade.Buy(lots, symbol, 0, sl, tp, comment);
       else if(order_type == ORDER_TYPE_SELL)
          result = trade.Sell(lots, symbol, 0, sl, tp, comment);
 
+      int broker_time_ms = (int)((TimeGMT() - order_start) * 1000);
+
       if(result)
       {
          ulong ticket = trade.ResultOrder();
-         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (delay: %dms, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, effective_slippage));
+         // Enhanced log with queue_time (delay_ms), broker_time, and received_via
+         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
       else
       {
-         LogError(CAT_TRADE, StringFormat("Failed to open position, attempt %d/%d", i+1, max_retries));
+         LogError(CAT_TRADE, StringFormat("Failed to open position, attempt %d/%d (broker: %dms)", i+1, max_retries, broker_time_ms));
          Sleep(1000);
       }
    }
@@ -522,11 +539,15 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
    string comment = BuildMarketComment(master_ticket);
    int effective_slippage = (slippage_points > 0) ? slippage_points : default_slippage;
+   string received_via = g_received_via_timer ? "OnTimer" : "OnTick";
 
    int ticket = -1;
    for(int attempt = 0; attempt < max_retries; attempt++)
    {
       RefreshRates();
+
+      // Measure broker response time
+      datetime order_start = TimeGMT();
 
       if(order_type == OP_BUY || order_type == OP_SELL)
       {
@@ -540,17 +561,20 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
                            comment, magic, 0, clrBlue);
       }
 
+      int broker_time_ms = (int)((TimeGMT() - order_start) * 1000);
+
       if(ticket > 0)
       {
-         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (delay: %dms, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, effective_slippage));
+         // Enhanced log with queue_time (delay_ms), broker_time, and received_via
+         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
       else
       {
-         LogError(CAT_TRADE, StringFormat("Failed to open order, attempt %d/%d, Error: %d",
-               attempt + 1, max_retries, GetLastError()));
+         LogError(CAT_TRADE, StringFormat("Failed to open order, attempt %d/%d (broker: %dms), Error: %d",
+               attempt + 1, max_retries, broker_time_ms, GetLastError()));
          Sleep(1000);
       }
    }

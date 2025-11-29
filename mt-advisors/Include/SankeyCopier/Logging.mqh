@@ -21,6 +21,12 @@
 #define LOG_WARN  "WARN"
 #define LOG_ERROR "ERROR"
 
+//--- Log level numeric values for filtering (higher = more severe)
+#define LOG_LEVEL_DEBUG 0
+#define LOG_LEVEL_INFO  1
+#define LOG_LEVEL_WARN  2
+#define LOG_LEVEL_ERROR 3
+
 //--- Log categories (used for filtering in VictoriaLogs)
 #define CAT_TRADE  "Trade"
 #define CAT_CONFIG "Config"
@@ -32,6 +38,32 @@
 bool g_vlogs_enabled = false;
 datetime g_last_flush = 0;
 int g_flush_interval_sec = 5;
+int g_log_level = LOG_LEVEL_DEBUG;  // Current log level (default: output all)
+
+//+------------------------------------------------------------------+
+//| Convert log level string to numeric value                        |
+//| Returns: LOG_LEVEL_* constant                                     |
+//+------------------------------------------------------------------+
+int GetLogLevelNum(string level)
+{
+   if(level == LOG_DEBUG) return LOG_LEVEL_DEBUG;
+   if(level == LOG_INFO)  return LOG_LEVEL_INFO;
+   if(level == LOG_WARN)  return LOG_LEVEL_WARN;
+   if(level == LOG_ERROR) return LOG_LEVEL_ERROR;
+   return LOG_LEVEL_DEBUG;  // Default to DEBUG (most verbose)
+}
+
+//+------------------------------------------------------------------+
+//| Set the minimum log level                                        |
+//| Messages below this level will be silently ignored                |
+//| Parameters:                                                       |
+//|   level - LOG_DEBUG, LOG_INFO, LOG_WARN, or LOG_ERROR            |
+//+------------------------------------------------------------------+
+void VLogsSetLevel(string level)
+{
+   g_log_level = GetLogLevelNum(level);
+   Print("[VLOGS] Log level set to: ", level);
+}
 
 //+------------------------------------------------------------------+
 //| Initialize VictoriaLogs logging                                   |
@@ -70,6 +102,8 @@ void VLogsInit(string endpoint, string source, int flush_interval_sec = 5)
 
 //+------------------------------------------------------------------+
 //| Add log entry (also prints locally)                               |
+//| Filters based on current g_log_level - messages below the level   |
+//| will be silently ignored for performance.                         |
 //| Parameters:                                                       |
 //|   level    - LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR            |
 //|   category - CAT_TRADE, CAT_CONFIG, CAT_SYNC, CAT_SYSTEM, etc.   |
@@ -78,7 +112,11 @@ void VLogsInit(string endpoint, string source, int flush_interval_sec = 5)
 //+------------------------------------------------------------------+
 void VLog(string level, string category, string message, string context = "")
 {
-   // Always print locally with prefix (consistent with existing log format)
+   // Filter by log level (early return for performance)
+   int level_num = GetLogLevelNum(level);
+   if(level_num < g_log_level) return;
+
+   // Print locally with prefix (consistent with existing log format)
    Print("[", level, "] [", category, "] ", message);
 
    // Send to VictoriaLogs if enabled
@@ -233,6 +271,7 @@ bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_
       // Get configuration values
       string endpoint = vlogs_config_get_string(config_handle, "endpoint");
       int flush_interval = vlogs_config_get_int(config_handle, "flush_interval_secs");
+      string log_level = vlogs_config_get_string(config_handle, "log_level");
 
       // Build source identifier: "ea:master:IC_Markets_12345" or "ea:slave:..."
       string source = "ea:" + ea_type + ":" + account_id;
@@ -243,8 +282,20 @@ bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_
          g_vlogs_enabled = true;
          g_flush_interval_sec = flush_interval > 0 ? flush_interval : 5;
          g_last_flush = TimeLocal();
-         Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
-               ", source=", source, ", flush_interval=", g_flush_interval_sec, "s");
+
+         // Apply log level if provided (empty = keep current, default DEBUG)
+         if(log_level != "")
+         {
+            g_log_level = GetLogLevelNum(log_level);
+            Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
+                  ", source=", source, ", flush_interval=", g_flush_interval_sec, "s",
+                  ", log_level=", log_level);
+         }
+         else
+         {
+            Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
+                  ", source=", source, ", flush_interval=", g_flush_interval_sec, "s");
+         }
          return true;
       }
       else

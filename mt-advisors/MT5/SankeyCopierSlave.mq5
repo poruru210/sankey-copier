@@ -8,6 +8,9 @@
 #property version   "1.00"  // VERSION_PLACEHOLDER
 #property icon      "app.ico"
 
+//--- Forward declaration for SlaveTrade.mqh (must be before include)
+bool g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
+
 #include "../Include/Trade/Trade.mqh"
 
 //--- Include common headers
@@ -30,6 +33,7 @@ input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to 
 input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
 input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
 input int      PanelWidth = 280;                             // Configuration panel width (pixels)
+input int      SignalPollingIntervalMs = 100;                // Signal polling interval in ms [100-5000]
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -49,6 +53,7 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
+// g_received_via_timer is defined before includes (required for SlaveTrade.mqh)
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
@@ -128,8 +133,11 @@ int OnInit()
 
    g_initialized = true;
 
-   // Set up timer for heartbeat and config messages (1 second interval)
-   EventSetTimer(1);
+   // Set up millisecond timer for signal polling
+   // Also handles heartbeat (every HEARTBEAT_INTERVAL_SECONDS) and config messages
+   int interval_ms = MathMax(100, MathMin(5000, SignalPollingIntervalMs));
+   EventSetMillisecondTimer(interval_ms);
+   Print("Signal polling interval: ", interval_ms, "ms");
 
    // Initialize configuration panel (Grid Panel)
    if(ShowConfigPanel)
@@ -172,12 +180,18 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
+//| Timer function (called at SignalPollingIntervalMs interval)       |
+//| Handles: signal polling, heartbeat, config messages               |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
    if(!g_initialized)
       return;
+
+   // Poll for trade signals (ensures reception even without ticks)
+   // This is the key improvement for reducing latency on low-activity symbols
+   g_received_via_timer = true;  // Mark that signal will be received via OnTimer
+   ProcessTradeSignals();
 
    // Check for auto-trading state change (IsTradeAllowed)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
@@ -388,12 +402,11 @@ void OnTimer()
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                              |
+//| Process trade signals from ZeroMQ socket                          |
+//| Called from both OnTick() and OnTimer() for low-latency reception |
 //+------------------------------------------------------------------+
-void OnTick()
+void ProcessTradeSignals()
 {
-   if(!g_initialized) return;
-
    // Check for trade signal messages (MessagePack format)
    uchar trade_buffer[];
    ArrayResize(trade_buffer, MESSAGE_BUFFER_SIZE);
@@ -429,6 +442,18 @@ void OnTick()
          ProcessTradeSignal(msgpack_payload, payload_len);
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   if(!g_initialized) return;
+
+   // Process trade signals (also called from OnTimer for polling)
+   g_received_via_timer = false;  // Mark that signal will be received via OnTick
+   ProcessTradeSignals();
 
    // Flush VictoriaLogs periodically
    VLogsFlushIfNeeded();
