@@ -156,16 +156,8 @@ const settingsPageContent = {
         ja: 'センダーポート (PUB)',
       }),
       senderPortDescription: t({
-        en: 'Port for publishing trade signals to Slave EAs',
-        ja: 'Slave EAへのトレードシグナル配信用ポート',
-      }),
-      configSenderPort: t({
-        en: 'Config Sender Port (PUB)',
-        ja: '設定センダーポート (PUB)',
-      }),
-      configSenderPortDescription: t({
-        en: 'Port for publishing configuration to EAs',
-        ja: 'EAへの設定配信用ポート',
+        en: 'Port for publishing trade signals and configuration to EAs (unified)',
+        ja: 'EAへのトレードシグナルおよび設定配信用ポート（統合）',
       }),
       isDynamic: t({
         en: 'Dynamic Ports',

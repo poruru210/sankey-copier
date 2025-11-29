@@ -17,10 +17,11 @@ url = "http://localhost:8080"
 url = "sqlite://sankey_copier.db?mode=rwc"
 
 [zeromq]
-# ZeroMQ port configuration
+# ZeroMQ port configuration - 2-port architecture
+# receiver: PULL socket for EA → Server messages
+# sender: unified PUB socket for all outgoing messages (trade signals + config)
 receiver_port = 5555      # Port for receiving trade signals from MT4/MT5 EAs
-sender_port = 5556        # Port for sending trade signals to slave accounts
-config_sender_port = 5557 # Port for sending configuration updates
+sender_port = 5556        # Port for unified publishing (trade signals + configuration)
 timeout_seconds = 30      # Connection timeout in seconds
 
 [cors]

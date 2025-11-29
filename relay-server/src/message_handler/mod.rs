@@ -10,7 +10,7 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
-    zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender},
+    zeromq::{ZmqConfigPublisher, ZmqMessage},
 };
 
 // Handler submodules
@@ -28,28 +28,26 @@ mod tests;
 pub struct MessageHandler {
     connection_manager: Arc<ConnectionManager>,
     copy_engine: Arc<CopyEngine>,
-    zmq_sender: Arc<ZmqSender>,
     broadcast_tx: broadcast::Sender<String>,
     db: Arc<Database>,
-    config_sender: Arc<ZmqConfigPublisher>,
+    /// Unified ZMQ publisher for all outgoing messages (trade signals + config)
+    publisher: Arc<ZmqConfigPublisher>,
 }
 
 impl MessageHandler {
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
         copy_engine: Arc<CopyEngine>,
-        zmq_sender: Arc<ZmqSender>,
         broadcast_tx: broadcast::Sender<String>,
         db: Arc<Database>,
-        config_sender: Arc<ZmqConfigPublisher>,
+        publisher: Arc<ZmqConfigPublisher>,
     ) -> Self {
         Self {
             connection_manager,
             copy_engine,
-            zmq_sender,
             broadcast_tx,
             db,
-            config_sender,
+            publisher,
         }
     }
 

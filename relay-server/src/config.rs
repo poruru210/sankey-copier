@@ -225,19 +225,17 @@ pub struct ZeroMqConfig {
     /// Port for receiving messages from EAs (PULL socket)
     /// Set to 0 for dynamic port assignment
     pub receiver_port: u16,
-    /// Port for sending trade signals to EAs (PUB socket)
+    /// Port for sending all messages to EAs (PUB socket)
+    /// Includes trade signals and configuration updates, distinguished by topic
     /// Set to 0 for dynamic port assignment
     pub sender_port: u16,
-    /// Port for sending config updates to EAs (PUB socket)
-    /// Set to 0 for dynamic port assignment
-    pub config_sender_port: u16,
     pub timeout_seconds: i64,
 }
 
 impl ZeroMqConfig {
     /// Check if any port is configured for dynamic assignment
     pub fn has_dynamic_ports(&self) -> bool {
-        self.receiver_port == 0 || self.sender_port == 0 || self.config_sender_port == 0
+        self.receiver_port == 0 || self.sender_port == 0
     }
 }
 
@@ -252,7 +250,6 @@ pub struct RuntimeConfig {
 pub struct RuntimeZeromqConfig {
     pub receiver_port: u16,
     pub sender_port: u16,
-    pub config_sender_port: u16,
     pub generated_at: DateTime<Utc>,
 }
 
@@ -343,16 +340,10 @@ impl Config {
         format!("tcp://*:{}", self.zeromq.receiver_port)
     }
 
-    /// Get ZMQ sender address
+    /// Get ZMQ sender address (unified publisher for all outgoing messages)
     #[allow(dead_code)]
     pub fn zmq_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.sender_port)
-    }
-
-    /// Get ZMQ config sender address
-    #[allow(dead_code)]
-    pub fn zmq_config_sender_address(&self) -> String {
-        format!("tcp://*:{}", self.zeromq.config_sender_port)
     }
 
     /// Get all allowed CORS origins
@@ -384,7 +375,6 @@ impl Default for Config {
             zeromq: ZeroMqConfig {
                 receiver_port: 5555,
                 sender_port: 5556,
-                config_sender_port: 5557,
                 timeout_seconds: 30,
             },
             cors: CorsConfig::default(),
@@ -407,7 +397,6 @@ mod tests {
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.zeromq.receiver_port, 5555);
         assert_eq!(config.zeromq.sender_port, 5556);
-        assert_eq!(config.zeromq.config_sender_port, 5557);
     }
 
     #[test]
@@ -421,7 +410,6 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.zmq_receiver_address(), "tcp://*:5555");
         assert_eq!(config.zmq_sender_address(), "tcp://*:5556");
-        assert_eq!(config.zmq_config_sender_address(), "tcp://*:5557");
     }
 
     #[test]
@@ -438,7 +426,6 @@ mod tests {
             zeromq: ZeroMqConfig {
                 receiver_port: 6666,
                 sender_port: 6667,
-                config_sender_port: 6668,
                 timeout_seconds: 60,
             },
             cors: CorsConfig::default(),
@@ -451,7 +438,6 @@ mod tests {
         assert_eq!(config.server_address(), "127.0.0.1:9090");
         assert_eq!(config.zmq_receiver_address(), "tcp://*:6666");
         assert_eq!(config.zmq_sender_address(), "tcp://*:6667");
-        assert_eq!(config.zmq_config_sender_address(), "tcp://*:6668");
     }
 
     #[test]
@@ -467,6 +453,7 @@ mod tests {
 
     #[test]
     fn test_toml_deserialization() {
+        // 2-port architecture: only receiver_port and sender_port
         let toml_str = r#"
 [server]
 host = "127.0.0.1"
@@ -478,7 +465,6 @@ url = "sqlite://custom.db"
 [zeromq]
 receiver_port = 7777
 sender_port = 7778
-config_sender_port = 7779
 timeout_seconds = 45
 "#;
 
@@ -487,6 +473,7 @@ timeout_seconds = 45
         assert_eq!(config.server.port, 9000);
         assert_eq!(config.database.url, "sqlite://custom.db");
         assert_eq!(config.zeromq.receiver_port, 7777);
+        assert_eq!(config.zeromq.sender_port, 7778);
         assert_eq!(config.zeromq.timeout_seconds, 45);
     }
 }

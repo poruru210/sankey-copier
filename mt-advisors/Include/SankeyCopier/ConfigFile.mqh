@@ -12,14 +12,13 @@
 #define CONFIG_FILENAME "sankey_copier.ini"
 
 //--- Default ports (fallback if config file not found)
+//--- 2-port architecture: Receiver (PULL) and Publisher (unified PUB)
 #define DEFAULT_RECEIVER_PORT    5555
 #define DEFAULT_PUBLISHER_PORT   5556
-#define DEFAULT_CONFIG_PORT      5557
 
 //--- Global port variables (initialized from config file)
 int g_ReceiverPort = DEFAULT_RECEIVER_PORT;
 int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
-int g_ConfigSenderPort = DEFAULT_CONFIG_PORT;
 bool g_ConfigLoaded = false;
 
 //+------------------------------------------------------------------+
@@ -37,8 +36,8 @@ bool LoadConfig()
       // Try without FILE_COMMON flag (local terminal folder)
       if(!FileIsExist(CONFIG_FILENAME))
       {
-         PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d, Config=%d",
-                     CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort, g_ConfigSenderPort);
+         PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d",
+                     CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
          g_ConfigLoaded = true;
          return false;
       }
@@ -96,12 +95,11 @@ bool LoadConfig()
             StringTrimLeft(value);
             StringTrimRight(value);
 
+            // 2-port architecture: only ReceiverPort and PublisherPort
             if(key == "ReceiverPort")
                g_ReceiverPort = (int)StringToInteger(value);
             else if(key == "PublisherPort")
                g_PublisherPort = (int)StringToInteger(value);
-            else if(key == "ConfigSenderPort")
-               g_ConfigSenderPort = (int)StringToInteger(value);
          }
       }
    }
@@ -109,8 +107,8 @@ bool LoadConfig()
    FileClose(file_handle);
    g_ConfigLoaded = true;
 
-   PrintFormat("[ConfigFile] Loaded from '%s': Receiver=%d, Publisher=%d, Config=%d",
-               CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort, g_ConfigSenderPort);
+   PrintFormat("[ConfigFile] Loaded from '%s': Receiver=%d, Publisher=%d (unified)",
+               CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
 
    return true;
 }
@@ -137,12 +135,14 @@ string GetTradeSubAddress()
 
 //+------------------------------------------------------------------+
 //| Get Config SUB socket address (Server -> EA)                     |
+//| 2-port architecture: same as Trade SUB (unified PUB socket)      |
 //+------------------------------------------------------------------+
 string GetConfigSubAddress()
 {
    if(!g_ConfigLoaded)
       LoadConfig();
-   return StringFormat("tcp://localhost:%d", g_ConfigSenderPort);
+   // Both trade signals and configs come from the same unified PUB socket
+   return StringFormat("tcp://localhost:%d", g_PublisherPort);
 }
 
 //+------------------------------------------------------------------+
@@ -166,16 +166,6 @@ int GetPublisherPort()
 }
 
 //+------------------------------------------------------------------+
-//| Get config sender port                                            |
-//+------------------------------------------------------------------+
-int GetConfigSenderPort()
-{
-   if(!g_ConfigLoaded)
-      LoadConfig();
-   return g_ConfigSenderPort;
-}
-
-//+------------------------------------------------------------------+
 //| Check if config file exists                                       |
 //+------------------------------------------------------------------+
 bool ConfigFileExists()
@@ -191,7 +181,6 @@ void ReloadConfig()
    g_ConfigLoaded = false;
    g_ReceiverPort = DEFAULT_RECEIVER_PORT;
    g_PublisherPort = DEFAULT_PUBLISHER_PORT;
-   g_ConfigSenderPort = DEFAULT_CONFIG_PORT;
    LoadConfig();
 }
 

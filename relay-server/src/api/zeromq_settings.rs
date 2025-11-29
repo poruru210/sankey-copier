@@ -10,14 +10,13 @@ use super::{AppState, ProblemDetails};
 
 /// Response for GET /api/zeromq-config
 /// Contains ZeroMQ port configuration (read-only, managed by runtime.toml)
+/// 2-port architecture: receiver (PULL) and sender (unified PUB for all outgoing messages)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZeromqConfigResponse {
     /// PULL socket port (EA → Server)
     pub receiver_port: u16,
-    /// PUB socket port (Trade signals)
+    /// PUB socket port (unified for trade signals and config messages)
     pub sender_port: u16,
-    /// PUB socket port (Config messages)
-    pub config_sender_port: u16,
     /// Whether ports are dynamically assigned (from runtime.toml) or fixed (from config.toml)
     pub is_dynamic: bool,
     /// When dynamic ports were generated (ISO 8601 format)
@@ -38,7 +37,6 @@ pub async fn get_zeromq_config(
     let response = ZeromqConfigResponse {
         receiver_port: ports.receiver_port,
         sender_port: ports.sender_port,
-        config_sender_port: ports.config_sender_port,
         is_dynamic: ports.is_dynamic,
         generated_at: ports.generated_at.map(|dt| dt.to_rfc3339()),
     };
@@ -46,9 +44,8 @@ pub async fn get_zeromq_config(
     tracing::info!(
         receiver_port = ports.receiver_port,
         sender_port = ports.sender_port,
-        config_sender_port = ports.config_sender_port,
         is_dynamic = ports.is_dynamic,
-        "Retrieved ZeroMQ config"
+        "Retrieved ZeroMQ config (2-port architecture)"
     );
 
     Ok(Json(response))
@@ -63,7 +60,6 @@ mod tests {
         let response = ZeromqConfigResponse {
             receiver_port: 5555,
             sender_port: 5556,
-            config_sender_port: 5557,
             is_dynamic: false,
             generated_at: None,
         };
@@ -71,9 +67,10 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("5555"));
         assert!(json.contains("5556"));
-        assert!(json.contains("5557"));
         // generated_at should be skipped when None
         assert!(!json.contains("generated_at"));
+        // 2-port architecture: no config_sender_port
+        assert!(!json.contains("config_sender_port"));
     }
 
     #[test]
@@ -81,7 +78,6 @@ mod tests {
         let response = ZeromqConfigResponse {
             receiver_port: 15555,
             sender_port: 15556,
-            config_sender_port: 15557,
             is_dynamic: true,
             generated_at: Some("2024-01-15T10:30:00Z".to_string()),
         };

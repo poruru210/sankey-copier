@@ -38,11 +38,10 @@ pub async fn list_mt_installations(
         }
     };
 
-    // サーバーの期待ポート設定
+    // サーバーの期待ポート設定 (2-port architecture)
     let server_ports = EaPortConfig {
         receiver_port: state.resolved_ports.receiver_port,
         publisher_port: state.resolved_ports.sender_port,
-        config_sender_port: state.resolved_ports.config_sender_port,
     };
 
     // 各インストールのポート設定をチェックし、ミスマッチを検出
@@ -55,10 +54,8 @@ pub async fn list_mt_installations(
                     installation_name = %installation.name,
                     ea_receiver = port_config.receiver_port,
                     ea_publisher = port_config.publisher_port,
-                    ea_config = port_config.config_sender_port,
                     server_receiver = server_ports.receiver_port,
                     server_publisher = server_ports.publisher_port,
-                    server_config = server_ports.config_sender_port,
                     "Port mismatch detected - EA needs reinstallation"
                 );
             }

@@ -26,10 +26,10 @@ async fn create_test_app() -> axum::Router {
     // Create a dummy ZMQ config sender
     let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:0").unwrap());
 
+    // 2-port architecture: receiver and unified publisher
     let resolved_ports = Arc::new(ResolvedPorts {
         receiver_port: 5555,
         sender_port: 5556,
-        config_sender_port: 5557,
         is_dynamic: false,
         generated_at: None,
     });

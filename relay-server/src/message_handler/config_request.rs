@@ -45,7 +45,7 @@ impl MessageHandler {
                 };
 
                 // Send Master CONFIG via MessagePack
-                if let Err(e) = self.config_sender.send(&config).await {
+                if let Err(e) = self.publisher.send(&config).await {
                     tracing::error!("Failed to send master config to {}: {}", account_id, e);
                 } else {
                     tracing::info!(
@@ -154,7 +154,7 @@ impl MessageHandler {
                     };
 
                     // Send CONFIG via MessagePack
-                    if let Err(e) = self.config_sender.send(&config).await {
+                    if let Err(e) = self.publisher.send(&config).await {
                         tracing::error!("Failed to send config to {}: {}", account_id, e);
                     } else {
                         tracing::info!(

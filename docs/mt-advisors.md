@@ -41,13 +41,11 @@ graph TB
     MT_M -->|Order Events| MEA
     MEA -->|TradeSignal| DLL
     DLL -->|PUSH 5555| RS
-    RS -->|PUB 5556| DLL
-    DLL -->|TradeSignal| SEA
+    RS -->|PUB 5556 unified| DLL
+    DLL -->|TradeSignal + Config| SEA
     SEA -->|Execute Trade| MT_S
 
-    RS -->|PUB 5557| DLL
     DLL -->|Config| MEA
-    DLL -->|Config| SEA
 ```
 
 ## ディレクトリ構造
@@ -252,7 +250,7 @@ sequenceDiagram
     RS->>RS: update DB
     RS->>RS: build SlaveConfigMessage
 
-    RS->>DLL: ZMQ PUB (5557)<br/>topic: master_account
+    RS->>DLL: ZMQ PUB (5556 unified)<br/>topic: master_account
     DLL->>SEA: zmq_socket_receive()
 
     SEA->>DLL: parse_slave_config(data, len)
@@ -358,10 +356,10 @@ sequenceDiagram
     participant MEA as Master EA
 
     SEA->>RS: SyncRequest
-    RS->>MEA: ZMQ PUB (5557)
+    RS->>MEA: ZMQ PUB (5556 unified)
     MEA->>MEA: BuildPositionSnapshot()
     MEA->>RS: PUSH PositionSnapshot
-    RS->>SEA: ZMQ PUB (5557)
+    RS->>SEA: ZMQ PUB (5556 unified)
 
     SEA->>SEA: ProcessPositionSnapshot()
 

@@ -103,7 +103,7 @@ impl MessageHandler {
                                     allow_new_orders: effective_status > 0,
                                 };
 
-                                if let Err(e) = self.config_sender.send(&config).await {
+                                if let Err(e) = self.publisher.send(&config).await {
                                     tracing::error!(
                                         "Failed to send config to {} due to Master is_trade_allowed change: {}",
                                         member.slave_account,
@@ -172,7 +172,7 @@ impl MessageHandler {
     async fn send_vlogs_config_to_ea(&self, account_id: &str) {
         match self.db.get_vlogs_settings().await {
             Ok(settings) => {
-                if let Err(e) = self.config_sender.broadcast_vlogs_config(&settings).await {
+                if let Err(e) = self.publisher.broadcast_vlogs_config(&settings).await {
                     tracing::error!(
                         account_id = %account_id,
                         error = %e,

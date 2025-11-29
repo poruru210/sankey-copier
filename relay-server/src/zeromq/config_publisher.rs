@@ -1,11 +1,14 @@
 // relay-server/src/zeromq/config_publisher.rs
 //
-// ZeroMQ configuration publisher using trait-based unified sending
+// ZeroMQ unified publisher for all outgoing messages (config + trade signals)
+// 2-port architecture: This single PUB socket handles all Server → EA messages
 
 use anyhow::{Context, Result};
 use sankey_copier_zmq::ConfigMessage; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+
+use crate::models::TradeSignal;
 
 /// Pre-serialized message ready for ZMQ transmission
 struct SerializedMessage {
@@ -13,12 +16,19 @@ struct SerializedMessage {
     payload: Vec<u8>, // MessagePack bytes
 }
 
-pub struct ZmqConfigPublisher {
+/// Unified ZeroMQ publisher for all outgoing messages
+/// - Trade signals (to Slave EAs via trade_group_id topic)
+/// - Config messages (to Master/Slave EAs via account_id topic)
+/// - VLogs config broadcasts (to all EAs via vlogs_config topic)
+pub struct ZmqPublisher {
     tx: mpsc::UnboundedSender<SerializedMessage>,
     _handle: JoinHandle<()>,
 }
 
-impl ZmqConfigPublisher {
+/// Type alias for backward compatibility
+pub type ZmqConfigPublisher = ZmqPublisher;
+
+impl ZmqPublisher {
     pub fn new(bind_address: &str) -> Result<Self> {
         let context = zmq::Context::new();
         let socket = context
@@ -30,7 +40,7 @@ impl ZmqConfigPublisher {
             .context(format!("Failed to bind to {}", bind_address))?;
 
         tracing::info!(
-            "ZeroMQ config publisher (MessagePack) bound to {}",
+            "ZeroMQ unified publisher (MessagePack) bound to {}",
             bind_address
         );
 
@@ -58,7 +68,7 @@ impl ZmqConfigPublisher {
             // Explicitly drop socket before context is destroyed
             drop(socket);
             drop(context);
-            tracing::info!("ZMQ config publisher shut down cleanly");
+            tracing::info!("ZMQ unified publisher shut down cleanly");
         });
 
         Ok(Self {
@@ -136,6 +146,30 @@ impl ZmqConfigPublisher {
 
         Ok(())
     }
+
+    /// Send trade signal to slaves subscribed to a trade group
+    /// Uses trade_group_id (= master_account) as the topic
+    /// This unifies the previous separate ZmqSender functionality
+    pub async fn send_trade_signal(
+        &self,
+        trade_group_id: &str,
+        signal: &TradeSignal,
+    ) -> Result<()> {
+        // Use rmp_serde::to_vec_named to match the previous ZmqSender serialization format
+        let payload = rmp_serde::to_vec_named(signal)
+            .context("Failed to serialize TradeSignal to MessagePack")?;
+
+        let serialized = SerializedMessage {
+            topic: trade_group_id.to_string(),
+            payload,
+        };
+
+        self.tx
+            .send(serialized)
+            .map_err(|e| anyhow::anyhow!("Failed to send trade signal: {}", e))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -151,14 +185,14 @@ mod tests {
         static PORT: AtomicU16 = AtomicU16::new(25557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
 
-        let result = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port));
+        let result = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port));
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_create_publisher_invalid_address() {
         // Test publisher creation with invalid bind address
-        let result = ZmqConfigPublisher::new("invalid://address");
+        let result = ZmqPublisher::new("invalid://address");
         assert!(result.is_err());
     }
 
@@ -169,7 +203,7 @@ mod tests {
         static PORT: AtomicU16 = AtomicU16::new(26557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
 
-        let publisher = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
+        let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
         let master_account = "MASTER456".to_string();
         let config = SlaveConfigMessage {
@@ -214,7 +248,7 @@ mod tests {
         static PORT: AtomicU16 = AtomicU16::new(27557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
 
-        let publisher = ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
+        let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
         let config = MasterConfigMessage {
             account_id: "MASTER123".to_string(),
@@ -236,8 +270,7 @@ mod tests {
         static PORT: AtomicU16 = AtomicU16::new(28557);
         let port = PORT.fetch_add(1, Ordering::SeqCst);
 
-        let publisher =
-            Arc::new(ZmqConfigPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap());
+        let publisher = Arc::new(ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap());
 
         let mut handles = vec![];
 

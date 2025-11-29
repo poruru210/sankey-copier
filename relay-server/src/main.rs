@@ -29,7 +29,7 @@ use message_handler::MessageHandler;
 use models::EaType;
 use std::sync::atomic::{AtomicBool, Ordering};
 use victoria_logs::VLogsController;
-use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
+use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -242,14 +242,9 @@ async fn main() -> Result<()> {
         resolved_ports.receiver_port
     );
     tracing::info!(
-        "ZMQ Sender: {} (port {})",
+        "ZMQ Sender (unified): {} (port {})",
         resolved_ports.sender_address(),
         resolved_ports.sender_port
-    );
-    tracing::info!(
-        "ZMQ Config Sender: {} (port {})",
-        resolved_ports.config_sender_address(),
-        resolved_ports.config_sender_port
     );
     if resolved_ports.is_dynamic {
         tracing::info!(
@@ -319,13 +314,13 @@ async fn main() -> Result<()> {
         resolved_ports.receiver_address()
     );
 
-    // Initialize ZeroMQ sender (PUB socket)
-    let zmq_sender = Arc::new(ZmqSender::new(&resolved_ports.sender_address())?);
-
-    // Initialize ZeroMQ config sender (PUB socket with MessagePack)
-    let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(
-        &resolved_ports.config_sender_address(),
-    )?);
+    // Initialize unified ZeroMQ publisher (PUB socket for all outgoing messages)
+    // 2-port architecture: single publisher handles both trade signals and config messages
+    let zmq_publisher = Arc::new(ZmqConfigPublisher::new(&resolved_ports.sender_address())?);
+    tracing::info!(
+        "ZeroMQ unified publisher started on {}",
+        resolved_ports.sender_address()
+    );
 
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
@@ -336,10 +331,9 @@ async fn main() -> Result<()> {
         let handler = MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
-            zmq_sender.clone(),
             broadcast_tx.clone(),
             db.clone(),
-            zmq_config_sender.clone(),
+            zmq_publisher.clone(),
         );
         tracing::info!("MessageHandler created, spawning message processing task...");
 
@@ -402,7 +396,7 @@ async fn main() -> Result<()> {
         db: db.clone(),
         tx: broadcast_tx,
         connection_manager: connection_manager.clone(),
-        config_sender: zmq_config_sender.clone(),
+        config_sender: zmq_publisher.clone(),
         log_buffer: log_buffer.clone(),
         allowed_origins: allowed_origins.clone(),
         cors_disabled,

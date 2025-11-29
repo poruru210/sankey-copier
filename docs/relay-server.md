@@ -25,8 +25,7 @@ graph TB
 
     subgraph "relay-server"
         ZMQ_PULL[ZMQ PULL :5555]
-        ZMQ_PUB_TRADE[ZMQ PUB :5556<br/>Trade Signals]
-        ZMQ_PUB_CONFIG[ZMQ PUB :5557<br/>Config]
+        ZMQ_PUB[ZMQ PUB :5556<br/>Unified - Trades & Config]
 
         MH[MessageHandler]
         CE[CopyEngine]
@@ -43,14 +42,13 @@ graph TB
     MEA --> DLL
     SEA --> DLL
     DLL -->|PUSH| ZMQ_PULL
-    ZMQ_PUB_TRADE -->|SUB| DLL
-    ZMQ_PUB_CONFIG -->|SUB| DLL
+    ZMQ_PUB -->|SUB| DLL
 
     ZMQ_PULL --> MH
     MH --> CE
     MH --> CM
-    CE --> ZMQ_PUB_TRADE
-    MH --> ZMQ_PUB_CONFIG
+    CE --> ZMQ_PUB
+    MH --> ZMQ_PUB
     CM --> DB
 
     API --> DB
@@ -208,11 +206,12 @@ classDiagram
 
 ### ポート構成
 
+2ポートアーキテクチャ: Receiver (PULL) と Publisher (統合PUB) のみ使用。
+
 | ポート | タイプ | 用途 |
 |-------|-------|------|
 | 5555 | PULL | EA→サーバー (Heartbeat, TradeSignal等) |
-| 5556 | PUB | サーバー→EA (TradeSignal配信) |
-| 5557 | PUB | サーバー→EA (Config配信) |
+| 5556 | PUB | サーバー→EA (TradeSignal + Config 統合配信) |
 
 ### メッセージフォーマット
 
@@ -247,7 +246,7 @@ sequenceDiagram
         CM->>CM: update last_heartbeat
     end
 
-    RS->>EA: send VLogsConfig (ZMQ PUB 5557)
+    RS->>EA: send VLogsConfig (ZMQ PUB 5556)
 ```
 
 ### トレードシグナル処理
@@ -294,7 +293,7 @@ sequenceDiagram
 
     ZMQ->>ZMQ: build SlaveConfigMessage
     Note right of ZMQ: effective_status計算<br/>Master接続状態確認
-    ZMQ->>EA: ZMQ PUB (5557)
+    ZMQ->>EA: ZMQ PUB (5556 unified)
 
     EA->>EA: 設定適用
 ```
@@ -338,10 +337,10 @@ port = 3000
 [database]
 url = "sqlite://sankey_copier.db?mode=rwc"
 
+# 2-port architecture: receiver (PULL) and sender (unified PUB)
 [zeromq]
 receiver_port = 5555
 sender_port = 5556
-config_sender_port = 5557
 timeout_seconds = 30
 
 [cors]

@@ -167,7 +167,7 @@ source = "sankey-copier"`}
                   </p>
                 </div>
 
-                {/* Sender Port - read-only */}
+                {/* Sender Port - read-only (unified PUB for trades and configs) */}
                 <div className="space-y-2">
                   <Label htmlFor="zmq-sender-port">{content.zeromq.senderPort}</Label>
                   <Input
@@ -179,21 +179,6 @@ source = "sankey-copier"`}
                   />
                   <p className="text-sm text-muted-foreground">
                     {content.zeromq.senderPortDescription}
-                  </p>
-                </div>
-
-                {/* Config Sender Port - read-only */}
-                <div className="space-y-2">
-                  <Label htmlFor="zmq-config-sender-port">{content.zeromq.configSenderPort}</Label>
-                  <Input
-                    id="zmq-config-sender-port"
-                    type="number"
-                    value={zmqConfig.config_sender_port}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {content.zeromq.configSenderPortDescription}
                   </p>
                 </div>
               </CardContent>
@@ -418,7 +403,7 @@ source = "sankey-copier"`}
                 </p>
               </div>
 
-              {/* Sender Port - read-only */}
+              {/* Sender Port - read-only (unified PUB for trades and configs) */}
               <div className="space-y-2">
                 <Label htmlFor="zmq-sender-port-main">{content.zeromq.senderPort}</Label>
                 <Input
@@ -430,21 +415,6 @@ source = "sankey-copier"`}
                 />
                 <p className="text-sm text-muted-foreground">
                   {content.zeromq.senderPortDescription}
-                </p>
-              </div>
-
-              {/* Config Sender Port - read-only */}
-              <div className="space-y-2">
-                <Label htmlFor="zmq-config-sender-port-main">{content.zeromq.configSenderPort}</Label>
-                <Input
-                  id="zmq-config-sender-port-main"
-                  type="number"
-                  value={zmqConfig.config_sender_port}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-sm text-muted-foreground">
-                  {content.zeromq.configSenderPortDescription}
                 </p>
               </div>
             </CardContent>

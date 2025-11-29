@@ -120,10 +120,10 @@ export interface InstalledComponents {
   slave_ea: boolean;
 }
 
+// 2-port architecture: receiver (PULL) and unified publisher (PUB)
 export interface EaPortConfig {
   receiver_port: number;
   publisher_port: number;
-  config_sender_port: number;
 }
 
 export interface MtInstallation {

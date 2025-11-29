@@ -58,11 +58,10 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         None
     };
 
-    // Create default resolved ports for testing
+    // Create default resolved ports for testing (2-port architecture)
     let resolved_ports = Arc::new(ResolvedPorts {
         receiver_port: 5555,
-        sender_port: 5556,
-        config_sender_port: port, // Use the same port as the config_sender
+        sender_port: port, // Use the same port as the config_sender/publisher
         is_dynamic: false,
         generated_at: None,
     });

@@ -83,6 +83,7 @@ int OnInit()
    g_symbol_suffix = "";
 
    // Load port configuration from sankey_copier.ini
+   // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
    if(!LoadConfig())
    {
       Print("WARNING: Failed to load config file, using default ports");
@@ -90,8 +91,7 @@ int OnInit()
    else
    {
       Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(),
-            ", ConfigSenderPort=", GetConfigSenderPort());
+            ", PublisherPort=", GetPublisherPort(), " (unified)");
    }
 
    // Resolve addresses: use input override if provided, otherwise use config file

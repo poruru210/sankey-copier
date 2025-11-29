@@ -884,11 +884,10 @@ mod tests {
 
         fs::create_dir_all(&files_path).unwrap();
 
-        // Create sankey_copier.ini
+        // Create sankey_copier.ini (2-port architecture)
         let ini_content = r#"[ZeroMQ]
 ReceiverPort=15555
 PublisherPort=15556
-ConfigSenderPort=15557
 "#;
         fs::write(files_path.join(EA_CONFIG_FILENAME), ini_content).unwrap();
 
@@ -900,7 +899,6 @@ ConfigSenderPort=15557
         let config = port_config.unwrap();
         assert_eq!(config.receiver_port, 15555);
         assert_eq!(config.publisher_port, 15556);
-        assert_eq!(config.config_sender_port, 15557);
     }
 
     #[test]

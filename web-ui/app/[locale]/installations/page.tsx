@@ -347,7 +347,7 @@ export default function InstallationsPage() {
                                       <p className="font-semibold">{content.portMismatchTitle || 'Port configuration mismatch'}</p>
                                       <p>{content.portMismatchDescription || 'EA ports do not match server. Reinstall to fix.'}</p>
                                       <div className="mt-2 font-mono text-[10px]">
-                                        <p>EA: {installation.port_config.receiver_port}, {installation.port_config.publisher_port}, {installation.port_config.config_sender_port}</p>
+                                        <p>EA: {installation.port_config.receiver_port}, {installation.port_config.publisher_port}</p>
                                       </div>
                                     </div>
                                   </TooltipContent>

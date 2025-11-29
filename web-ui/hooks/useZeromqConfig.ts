@@ -7,13 +7,12 @@ import { useAtomValue } from 'jotai';
 import { apiClientAtom } from '@/lib/atoms/site';
 
 // ZeroMQ config response from GET /api/zeromq-config
+// 2-port architecture: receiver (PULL) and unified sender (PUB)
 export interface ZeromqConfigResponse {
   /** PULL socket port (EA → Server) */
   receiver_port: number;
-  /** PUB socket port (Trade signals) */
+  /** PUB socket port (unified for trade signals and config messages) */
   sender_port: number;
-  /** PUB socket port (Config messages) */
-  config_sender_port: number;
   /** Whether ports are dynamically assigned (from runtime.toml) or fixed (from config.toml) */
   is_dynamic: boolean;
   /** When dynamic ports were generated (ISO 8601 format) */
@@ -24,7 +23,6 @@ export interface ZeromqConfigResponse {
 const DEFAULT_CONFIG: ZeromqConfigResponse = {
   receiver_port: 5555,
   sender_port: 5556,
-  config_sender_port: 5557,
   is_dynamic: false,
 };
 

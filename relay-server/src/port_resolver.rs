@@ -12,11 +12,11 @@ use std::path::Path;
 pub const RUNTIME_CONFIG_PATH: &str = "runtime.toml";
 
 /// Resolved ZeroMQ ports (actual ports to use)
+/// 2-port architecture: receiver (PULL) and sender (PUB for all outgoing messages)
 #[derive(Debug, Clone)]
 pub struct ResolvedPorts {
     pub receiver_port: u16,
     pub sender_port: u16,
-    pub config_sender_port: u16,
     /// Whether ports were dynamically assigned (true) or from config (false)
     pub is_dynamic: bool,
     /// When the ports were generated (only set if is_dynamic)
@@ -29,14 +29,9 @@ impl ResolvedPorts {
         format!("tcp://*:{}", self.receiver_port)
     }
 
-    /// Get ZMQ sender bind address
+    /// Get ZMQ sender bind address (unified publisher for trade signals and config)
     pub fn sender_address(&self) -> String {
         format!("tcp://*:{}", self.sender_port)
-    }
-
-    /// Get ZMQ config sender bind address
-    pub fn config_sender_address(&self) -> String {
-        format!("tcp://*:{}", self.config_sender_port)
     }
 }
 
@@ -62,7 +57,6 @@ pub fn resolve_ports<P: AsRef<Path>>(
         return Ok(ResolvedPorts {
             receiver_port: runtime.zeromq.receiver_port,
             sender_port: runtime.zeromq.sender_port,
-            config_sender_port: runtime.zeromq.config_sender_port,
             is_dynamic: true,
             generated_at: Some(runtime.zeromq.generated_at),
         });
@@ -71,7 +65,7 @@ pub fn resolve_ports<P: AsRef<Path>>(
     // 2. Check if dynamic port assignment is needed
     if config.has_dynamic_ports() {
         tracing::info!("Dynamic port assignment enabled, finding available ports...");
-        let ports = find_available_ports(3)?;
+        let ports = find_available_ports(2)?;
 
         let receiver_port = if config.receiver_port == 0 {
             ports[0]
@@ -83,34 +77,26 @@ pub fn resolve_ports<P: AsRef<Path>>(
         } else {
             config.sender_port
         };
-        let config_sender_port = if config.config_sender_port == 0 {
-            ports[2]
-        } else {
-            config.config_sender_port
-        };
 
         // Save to runtime.toml for persistence
         let runtime = RuntimeConfig {
             zeromq: RuntimeZeromqConfig {
                 receiver_port,
                 sender_port,
-                config_sender_port,
                 generated_at: Utc::now(),
             },
         };
         runtime.save(runtime_path)?;
         tracing::info!(
-            "Saved runtime config to {} with ports: receiver={}, sender={}, config_sender={}",
+            "Saved runtime config to {} with ports: receiver={}, sender={}",
             runtime_path.display(),
             receiver_port,
-            sender_port,
-            config_sender_port
+            sender_port
         );
 
         return Ok(ResolvedPorts {
             receiver_port,
             sender_port,
-            config_sender_port,
             is_dynamic: true,
             generated_at: Some(runtime.zeromq.generated_at),
         });
@@ -118,15 +104,13 @@ pub fn resolve_ports<P: AsRef<Path>>(
 
     // 3. Use fixed ports from config
     tracing::info!(
-        "Using fixed ports from config: receiver={}, sender={}, config_sender={}",
+        "Using fixed ports from config: receiver={}, sender={}",
         config.receiver_port,
-        config.sender_port,
-        config.config_sender_port
+        config.sender_port
     );
     Ok(ResolvedPorts {
         receiver_port: config.receiver_port,
         sender_port: config.sender_port,
-        config_sender_port: config.config_sender_port,
         is_dynamic: false,
         generated_at: None,
     })
@@ -167,12 +151,10 @@ mod tests {
 
     #[test]
     fn test_find_available_ports() {
-        let ports = find_available_ports(3).unwrap();
-        assert_eq!(ports.len(), 3);
+        let ports = find_available_ports(2).unwrap();
+        assert_eq!(ports.len(), 2);
         // All ports should be different
         assert_ne!(ports[0], ports[1]);
-        assert_ne!(ports[1], ports[2]);
-        assert_ne!(ports[0], ports[2]);
         // All ports should be > 0
         assert!(ports.iter().all(|&p| p > 0));
     }
@@ -185,14 +167,12 @@ mod tests {
         let config = ZeroMqConfig {
             receiver_port: 5555,
             sender_port: 5556,
-            config_sender_port: 5557,
             timeout_seconds: 30,
         };
 
         let resolved = resolve_ports(&config, &runtime_path).unwrap();
         assert_eq!(resolved.receiver_port, 5555);
         assert_eq!(resolved.sender_port, 5556);
-        assert_eq!(resolved.config_sender_port, 5557);
         assert!(!resolved.is_dynamic);
         assert!(resolved.generated_at.is_none());
         // runtime.toml should NOT be created for fixed ports
@@ -205,16 +185,14 @@ mod tests {
         let runtime_path = dir.path().join("runtime.toml");
 
         let config = ZeroMqConfig {
-            receiver_port: 0,      // dynamic
-            sender_port: 0,        // dynamic
-            config_sender_port: 0, // dynamic
+            receiver_port: 0, // dynamic
+            sender_port: 0,   // dynamic
             timeout_seconds: 30,
         };
 
         let resolved = resolve_ports(&config, &runtime_path).unwrap();
         assert!(resolved.receiver_port > 0);
         assert!(resolved.sender_port > 0);
-        assert!(resolved.config_sender_port > 0);
         assert!(resolved.is_dynamic);
         assert!(resolved.generated_at.is_some());
         // runtime.toml should be created
@@ -231,7 +209,6 @@ mod tests {
             zeromq: RuntimeZeromqConfig {
                 receiver_port: 12345,
                 sender_port: 12346,
-                config_sender_port: 12347,
                 generated_at: Utc::now(),
             },
         };
@@ -241,14 +218,12 @@ mod tests {
         let config = ZeroMqConfig {
             receiver_port: 5555,
             sender_port: 5556,
-            config_sender_port: 5557,
             timeout_seconds: 30,
         };
 
         let resolved = resolve_ports(&config, &runtime_path).unwrap();
         assert_eq!(resolved.receiver_port, 12345);
         assert_eq!(resolved.sender_port, 12346);
-        assert_eq!(resolved.config_sender_port, 12347);
         assert!(resolved.is_dynamic);
     }
 
@@ -262,7 +237,6 @@ mod tests {
             zeromq: RuntimeZeromqConfig {
                 receiver_port: 12345,
                 sender_port: 12346,
-                config_sender_port: 12347,
                 generated_at: Utc::now(),
             },
         };
@@ -279,13 +253,11 @@ mod tests {
         let resolved = ResolvedPorts {
             receiver_port: 5555,
             sender_port: 5556,
-            config_sender_port: 5557,
             is_dynamic: false,
             generated_at: None,
         };
 
         assert_eq!(resolved.receiver_address(), "tcp://*:5555");
         assert_eq!(resolved.sender_address(), "tcp://*:5556");
-        assert_eq!(resolved.config_sender_address(), "tcp://*:5557");
     }
 }
