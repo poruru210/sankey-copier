@@ -265,6 +265,7 @@ void OnTimer()
                   }
                   g_config_panel.UpdateStatusRow(status_to_show);
                }
+               ChartRedraw();
             }
 
             // If auto-trading was just enabled, request configuration
@@ -399,7 +400,7 @@ void OnTimer()
                      break;
                   }
                }
-               
+
                if(ArraySize(g_configs) == 0)
                   g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
                else if(any_connected)
@@ -407,9 +408,10 @@ void OnTimer()
                else
                   g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
             }
-            
+
             // Update carousel display with detailed copy settings
             g_config_panel.UpdateCarouselConfigs(g_configs);
+            ChartRedraw();
          }
       }
    }

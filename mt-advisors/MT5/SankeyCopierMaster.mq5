@@ -233,6 +233,7 @@ void OnTimer()
                {
                   g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
                }
+               ChartRedraw();
             }
          }
          else
@@ -945,6 +946,7 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
       {
          g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
       }
+      ChartRedraw();
    }
 
    // Free the config handle
