@@ -14,6 +14,7 @@ use tokio::task::JoinHandle;
 // Export the unified publisher with both names
 // ZmqPublisher is the primary name (2-port architecture)
 // ZmqConfigPublisher is kept for backward compatibility
+#[allow(unused_imports)]
 pub use config_publisher::{ZmqConfigPublisher, ZmqPublisher};
 
 pub enum ZmqMessage {

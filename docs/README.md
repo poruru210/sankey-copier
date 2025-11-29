@@ -567,9 +567,23 @@ flowchart LR
 | ポート | 用途 |
 |--------|------|
 | 3000 | relay-server REST API (HTTPS) |
-| 5555 | ZeroMQ PULL (EA→サーバー) |
-| 5556 | ZeroMQ PUB (トレードシグナル + 設定配布 統合) |
+| 5555 | ZeroMQ PULL (EA→サーバー) ※動的割り当て可 |
+| 5556 | ZeroMQ PUB (トレードシグナル + 設定配布 統合) ※動的割り当て可 |
 | 8080 | web-ui (開発時) |
+
+### 動的ポート割り当て
+
+ZeroMQポートを `0` に設定すると、OSが利用可能なポートを自動的に割り当てます。
+割り当てられたポートは `runtime.toml` に永続化され、次回起動時に再利用されます。
+
+```toml
+# config.toml - 動的ポート設定
+[zeromq]
+receiver_port = 0  # OS自動割り当て
+sender_port = 0    # OS自動割り当て
+```
+
+詳細は [relay-server.md](./relay-server.md#動的ポート割り当て) を参照。
 
 ## 主要な型定義
 

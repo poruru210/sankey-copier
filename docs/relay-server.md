@@ -362,6 +362,85 @@ key_path = "certs/server-key.pem"
 2. `config.{CONFIG_ENV}.toml` (環境別)
 3. `config.local.toml` (ローカル上書き)
 
+## 動的ポート割り当て
+
+ZeroMQポートを `0` に設定すると、OSが利用可能なポートを自動的に割り当てます。
+これにより、ポート競合を回避し、複数インスタンスの同時実行が可能になります。
+
+### 動作フロー
+
+```mermaid
+sequenceDiagram
+    participant Config as config.toml
+    participant Runtime as runtime.toml
+    participant Server as relay-server
+    participant EA as MT EA
+
+    Note over Config: receiver_port = 0<br/>sender_port = 0
+
+    Server->>Config: 設定読み込み
+    Server->>Server: ポート0検出 → 動的割り当て
+
+    alt runtime.toml存在
+        Server->>Runtime: 既存ポート読み込み
+        Server->>Server: 既存ポート再利用を試行
+        alt ポート使用可能
+            Server->>Server: 既存ポートでバインド
+        else ポート競合
+            Server->>Server: 新規ポート割り当て
+            Server->>Runtime: 新ポート保存
+        end
+    else runtime.toml不在
+        Server->>Server: 新規ポート割り当て
+        Server->>Runtime: ポート保存
+    end
+
+    Server->>EA: EAインストール時にINI生成
+    Note over EA: sankey_copier.ini<br/>ReceiverPort=xxxxx<br/>PublisherPort=xxxxx
+```
+
+### runtime.toml
+
+動的に割り当てられたポートは `runtime.toml` に永続化されます。
+次回起動時に同じポートを再利用し、EAとの設定整合性を維持します。
+
+```toml
+# Auto-generated - DO NOT EDIT
+# Dynamic port configuration for ZeroMQ
+
+[zeromq]
+receiver_port = 15555
+sender_port = 15556
+generated_at = "2024-01-15T10:30:00Z"
+```
+
+### 設定例
+
+**固定ポート（デフォルト）**:
+```toml
+[zeromq]
+receiver_port = 5555
+sender_port = 5556
+```
+
+**動的ポート（自動割り当て）**:
+```toml
+[zeromq]
+receiver_port = 0
+sender_port = 0
+```
+
+### Web-UIでのポート表示
+
+Settings画面のZeroMQ設定セクションで、現在使用中のポートと動的割り当て状態を確認できます。
+- `is_dynamic: true` - 動的に割り当てられたポート
+- `generated_at` - ポート生成日時（動的の場合のみ）
+
+### EAとの連携
+
+MTインストール時に `sankey_copier.ini` が生成され、EAはこのファイルからポート設定を読み込みます。
+ポート変更時はEAの再インストールが必要です（Web-UI Installationsページから実行）。
+
 ## 関連コンポーネント
 
 - [mt-bridge](./mt-bridge.md): EA↔サーバー通信用DLL
