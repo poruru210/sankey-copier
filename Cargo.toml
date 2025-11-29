@@ -3,7 +3,7 @@
 
 [workspace]
 members = ["mt-bridge", "relay-server"]
-exclude = ["tray-app"]
+exclude = ["tray-app", "desktop-app/src-tauri"]
 resolver = "2"
 
 [workspace.dependencies]
