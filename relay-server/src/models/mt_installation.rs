@@ -95,6 +95,9 @@ pub struct MtInstallation {
     /// EA設定ファイル（sankey_copier.ini）のポート設定
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port_config: Option<EaPortConfig>,
+    /// サーバーの設定とEAのポート設定が一致しない場合true
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port_mismatch: Option<bool>,
 }
 
 /// 検出サマリー
@@ -109,6 +112,9 @@ pub struct MtInstallationsResponse {
     pub success: bool,
     pub data: Vec<MtInstallation>,
     pub detection_summary: DetectionSummary,
+    /// サーバーが使用中のポート設定
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_ports: Option<EaPortConfig>,
 }
 
 impl MtInstallation {

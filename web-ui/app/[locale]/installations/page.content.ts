@@ -110,6 +110,23 @@ const installationsPageContent = {
       en: 'Completed with {successCount} success and {failCount} failure(s)',
       ja: '{successCount}個成功、{failCount}個失敗で完了しました',
     }),
+    // Port status
+    ports: t({
+      en: 'Ports',
+      ja: 'ポート',
+    }),
+    portMismatch: t({
+      en: 'Mismatch',
+      ja: '不一致',
+    }),
+    portMismatchTitle: t({
+      en: 'Port configuration mismatch',
+      ja: 'ポート設定の不一致',
+    }),
+    portMismatchDescription: t({
+      en: 'EA ports do not match server config. Click "Install" to update.',
+      ja: 'EAのポート設定がサーバーと一致しません。「インストール」で更新してください。',
+    }),
   },
 } satisfies DeclarationContent;
 

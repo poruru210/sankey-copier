@@ -222,6 +222,7 @@ impl MtDetector {
             version,
             components,
             port_config,
+            port_mismatch: None, // APIで設定される
         })
     }
 

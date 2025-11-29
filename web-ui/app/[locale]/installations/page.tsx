@@ -14,8 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Typography, Muted } from '@/components/ui/typography';
-import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
-import type { MtInstallation } from '@/types';
+import { AlertCircle, AlertTriangle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import type { MtInstallation, EaPortConfig } from '@/types';
 
 export default function InstallationsPage() {
   const content = useIntlayer('installations-page');
@@ -255,6 +256,7 @@ export default function InstallationsPage() {
                     <TableHead className="py-2 text-xs hidden md:table-cell">{content.installationPath}</TableHead>
                     <TableHead className="py-2 text-xs">{content.version}</TableHead>
                     <TableHead className="py-2 text-xs">{content.components}</TableHead>
+                    <TableHead className="py-2 text-xs">{content.ports || 'Ports'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -329,6 +331,38 @@ export default function InstallationsPage() {
                               <span className="text-xs">S</span>
                             </div>
                           </div>
+                        </TableCell>
+                        <TableCell className="py-2 md:py-1">
+                          {installation.port_config ? (
+                            installation.port_mismatch ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-1 text-yellow-500 cursor-help">
+                                      <AlertTriangle className="h-4 w-4" />
+                                      <span className="text-xs">{content.portMismatch || 'Mismatch'}</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-xs">
+                                    <div className="text-xs space-y-1">
+                                      <p className="font-semibold">{content.portMismatchTitle || 'Port configuration mismatch'}</p>
+                                      <p>{content.portMismatchDescription || 'EA ports do not match server. Reinstall to fix.'}</p>
+                                      <div className="mt-2 font-mono text-[10px]">
+                                        <p>EA: {installation.port_config.receiver_port}, {installation.port_config.publisher_port}, {installation.port_config.config_sender_port}</p>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <div className="flex items-center gap-1 text-green-500">
+                                <CheckCircle className="h-4 w-4" />
+                                <span className="text-xs">OK</span>
+                              </div>
+                            )
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

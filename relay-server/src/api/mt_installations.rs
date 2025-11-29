@@ -4,7 +4,7 @@ use axum::{
 };
 use std::path::PathBuf;
 
-use crate::models::{DetectionSummary, MtInstallationsResponse};
+use crate::models::{DetectionSummary, EaPortConfig, MtInstallationsResponse};
 use crate::mt_detector::MtDetector;
 use crate::mt_installer::MtInstaller;
 
@@ -12,14 +12,14 @@ use super::{AppState, ProblemDetails};
 
 /// MT4/MT5インストール一覧を取得（レジストリ検出）
 pub async fn list_mt_installations(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<MtInstallationsResponse>, ProblemDetails> {
     let span = tracing::info_span!("list_mt_installations");
     let _enter = span.enter();
 
     // Windowsレジストリから MT4/MT5 を検出
     let detector = MtDetector::new();
-    let installations = match detector.detect() {
+    let mut installations = match detector.detect() {
         Ok(installs) => {
             tracing::info!(
                 count = installs.len(),
@@ -38,6 +38,33 @@ pub async fn list_mt_installations(
         }
     };
 
+    // サーバーの期待ポート設定
+    let server_ports = EaPortConfig {
+        receiver_port: state.resolved_ports.receiver_port,
+        publisher_port: state.resolved_ports.sender_port,
+        config_sender_port: state.resolved_ports.config_sender_port,
+    };
+
+    // 各インストールのポート設定をチェックし、ミスマッチを検出
+    for installation in &mut installations {
+        if let Some(ref port_config) = installation.port_config {
+            let mismatch = port_config != &server_ports;
+            installation.port_mismatch = Some(mismatch);
+            if mismatch {
+                tracing::warn!(
+                    installation_name = %installation.name,
+                    ea_receiver = port_config.receiver_port,
+                    ea_publisher = port_config.publisher_port,
+                    ea_config = port_config.config_sender_port,
+                    server_receiver = server_ports.receiver_port,
+                    server_publisher = server_ports.publisher_port,
+                    server_config = server_ports.config_sender_port,
+                    "Port mismatch detected - EA needs reinstallation"
+                );
+            }
+        }
+    }
+
     // 検出サマリーを作成
     let total_found = installations.len();
 
@@ -50,6 +77,7 @@ pub async fn list_mt_installations(
         success: true,
         data: installations,
         detection_summary: DetectionSummary { total_found },
+        server_ports: Some(server_ports),
     };
 
     Ok(Json(response))
