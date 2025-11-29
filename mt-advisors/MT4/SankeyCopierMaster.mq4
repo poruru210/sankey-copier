@@ -54,6 +54,7 @@ OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
+bool        g_config_requested = false;   // Track if config request has been sent
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -221,6 +222,21 @@ void OnTimer()
                g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
             }
             ChartRedraw();
+         }
+      }
+
+      // Request configuration if not yet requested (on any successful heartbeat)
+      if(!g_config_requested && current_trade_allowed)
+      {
+         Print("[INFO] First heartbeat successful, requesting configuration...");
+         if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
+         {
+            g_config_requested = true;
+            Print("[INFO] Configuration request sent successfully");
+         }
+         else
+         {
+            Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
          }
       }
    }

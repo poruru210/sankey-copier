@@ -236,21 +236,19 @@ void OnTimer()
                ChartRedraw();
             }
          }
-         else
+
+         // Request configuration if not yet requested (on any successful heartbeat)
+         if(!g_config_requested && current_trade_allowed)
          {
-            // On first successful heartbeat (normal interval), request configuration if not yet requested
-            if(!g_config_requested)
+            Print("[INFO] First heartbeat successful, requesting configuration...");
+            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
             {
-               Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
-               {
-                  g_config_requested = true;
-                  Print("[INFO] Configuration request sent successfully");
-               }
-               else
-               {
-                  Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-               }
+               g_config_requested = true;
+               Print("[INFO] Configuration request sent successfully");
+            }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
             }
          }
       }
