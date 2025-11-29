@@ -241,6 +241,23 @@ begin
   end;
 end;
 
+{ Count occurrences of a character in a string }
+function CountChar(S: String; C: Char): Integer;
+var
+  I: Integer;
+begin
+  Result := 0;
+  for I := 1 to Length(S) do
+  begin
+    if S[I] = C then
+      Result := Result + 1;
+  end;
+end;
+
+{ Merge config files with multi-line value support
+  - Preserves user-configured values from existing config
+  - Handles multi-line arrays (tracks bracket depth)
+  - Uses new config as template for structure/comments }
 procedure MergeConfigFiles(ExistingConfigPath: String; NewConfigPath: String);
 var
   ExistingContent: TArrayOfString;
@@ -250,9 +267,12 @@ var
   CurrentSection: String;
   ExistingSection: String;
   Line: String;
+  OriginalLine: String;
   Key: String;
   ExistingKey: String;
   Found: Boolean;
+  BracketDepth: Integer;
+  SkipMultiline: Boolean;
 begin
   { Load both config files }
   LoadStringsFromFile(ExistingConfigPath, ExistingContent);
@@ -261,13 +281,29 @@ begin
   { Build merged content from new config template }
   SetArrayLength(MergedContent, 0);
   CurrentSection := '';
+  BracketDepth := 0;
+  SkipMultiline := False;
 
   for I := 0 to GetArrayLength(NewContent) - 1 do
   begin
     Line := NewContent[I];
+    OriginalLine := Line;  { Preserve original line for later use }
 
-    { Track current section }
-    if (Length(Trim(Line)) > 0) and (Trim(Line)[1] = '[') then
+    { If we're skipping multi-line continuation, check bracket depth }
+    if SkipMultiline then
+    begin
+      BracketDepth := BracketDepth + CountChar(Line, '[') - CountChar(Line, ']');
+      if BracketDepth <= 0 then
+      begin
+        SkipMultiline := False;
+        BracketDepth := 0;
+      end;
+      Continue;  { Skip this line from new config }
+    end;
+
+    { Track current section - but distinguish TOML sections from arrays }
+    { TOML section: starts with [ and has no = before it on the same line }
+    if (Length(Trim(Line)) > 0) and (Trim(Line)[1] = '[') and (Pos('=', Line) = 0) then
     begin
       CurrentSection := Trim(Line);
       { Add section header }
@@ -285,10 +321,11 @@ begin
 
       for J := 0 to GetArrayLength(ExistingContent) - 1 do
       begin
+        { Use separate variable to avoid overwriting OriginalLine }
         Line := Trim(ExistingContent[J]);
 
         { Track section in existing config }
-        if (Length(Line) > 0) and (Line[1] = '[') then
+        if (Length(Line) > 0) and (Line[1] = '[') and (Pos('=', ExistingContent[J]) = 0) then
         begin
           ExistingSection := Line;
         end
@@ -308,18 +345,27 @@ begin
         end;
       end;
 
-      if not Found then
+      if Found then
+      begin
+        { Check if new config has multi-line value that needs to be skipped }
+        BracketDepth := CountChar(OriginalLine, '[') - CountChar(OriginalLine, ']');
+        if BracketDepth > 0 then
+        begin
+          SkipMultiline := True;  { Skip continuation lines from new config }
+        end;
+      end
+      else
       begin
         { New key - use default from new config }
         SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-        MergedContent[GetArrayLength(MergedContent) - 1] := NewContent[I];
+        MergedContent[GetArrayLength(MergedContent) - 1] := OriginalLine;
       end;
     end
     else
     begin
       { Comment or empty line - keep from new config }
       SetArrayLength(MergedContent, GetArrayLength(MergedContent) + 1);
-      MergedContent[GetArrayLength(MergedContent) - 1] := Line;
+      MergedContent[GetArrayLength(MergedContent) - 1] := OriginalLine;
     end;
   end;
 
