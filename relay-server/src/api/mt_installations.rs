@@ -122,7 +122,12 @@ pub async fn install_to_mt(
 
     // インストール実行
     let mt_path = PathBuf::from(&installation.path);
-    match installer.install(&mt_path, &installation.mt_type, &installation.platform) {
+    match installer.install(
+        &mt_path,
+        &installation.mt_type,
+        &installation.platform,
+        &state.resolved_ports,
+    ) {
         Ok(_) => {
             tracing::info!(
                 installation_id = %id,

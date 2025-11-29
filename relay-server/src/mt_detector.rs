@@ -1,4 +1,5 @@
-use crate::models::{Architecture, InstalledComponents, MtInstallation, MtType};
+use crate::models::{Architecture, EaPortConfig, InstalledComponents, MtInstallation, MtType};
+use crate::mt_installer::EA_CONFIG_FILENAME;
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -196,18 +197,19 @@ impl MtDetector {
         let name = display_name.clone();
 
         // インストールされたコンポーネントをチェック
-        let (components, version) = self
+        let (components, version, port_config) = self
             .check_installed_components(&data_path, &mt_type)
-            .unwrap_or_else(|_| (InstalledComponents::default(), None));
+            .unwrap_or_else(|_| (InstalledComponents::default(), None, None));
 
         tracing::info!(
-            "Detected {} installation: {} ({})",
+            "Detected {} installation: {} ({}) port_config={:?}",
             match mt_type {
                 MtType::MT4 => "MT4",
                 MtType::MT5 => "MT5",
             },
             name,
-            data_path_str
+            data_path_str,
+            port_config
         );
 
         Some(MtInstallation {
@@ -219,6 +221,7 @@ impl MtDetector {
             executable: executable.to_string_lossy().to_string(),
             version,
             components,
+            port_config,
         })
     }
 
@@ -510,13 +513,13 @@ impl MtDetector {
     }
 
     /// インストールされたコンポーネントをチェック
-    /// Returns: (components, client_version)
+    /// Returns: (components, client_version, port_config)
     #[cfg_attr(not(windows), allow(dead_code))]
     fn check_installed_components(
         &self,
         data_path: &Path,
         mt_type: &MtType,
-    ) -> Result<(InstalledComponents, Option<String>)> {
+    ) -> Result<(InstalledComponents, Option<String>, Option<EaPortConfig>)> {
         let (mql_folder, ea_ext) = match mt_type {
             MtType::MT4 => ("MQL4", "ex4"),
             MtType::MT5 => ("MQL5", "ex5"),
@@ -545,13 +548,49 @@ impl MtDetector {
             .join(format!("SankeyCopierSlave.{}", ea_ext));
         let slave_ea_installed = slave_ea_path.exists();
 
+        // EA設定ファイル（sankey_copier.ini）チェック
+        let port_config = self.read_ea_config(&mql_path);
+
         let components = InstalledComponents {
             dll: dll_installed,
             master_ea: master_ea_installed,
             slave_ea: slave_ea_installed,
         };
 
-        Ok((components, version))
+        Ok((components, version, port_config))
+    }
+
+    /// EA設定ファイル（sankey_copier.ini）を読み込み
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn read_ea_config(&self, mql_path: &Path) -> Option<EaPortConfig> {
+        let config_path = mql_path.join("Files").join(EA_CONFIG_FILENAME);
+
+        if !config_path.exists() {
+            tracing::debug!("EA config file not found: {}", config_path.display());
+            return None;
+        }
+
+        match fs::read_to_string(&config_path) {
+            Ok(content) => {
+                let port_config = EaPortConfig::from_ini_content(&content);
+                if port_config.is_some() {
+                    tracing::debug!(
+                        "Read EA config from {}: {:?}",
+                        config_path.display(),
+                        port_config
+                    );
+                }
+                port_config
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read EA config file {}: {}",
+                    config_path.display(),
+                    e
+                );
+                None
+            }
+        }
     }
 
     /// WindowsファイルのバージョンResourceから ProductVersion を取得
@@ -770,7 +809,7 @@ mod tests {
         let mql4_path = mt_path.join("MQL4");
         fs::create_dir_all(&mql4_path).unwrap();
 
-        let (components, version) = detector
+        let (components, version, port_config) = detector
             .check_installed_components(mt_path, &MtType::MT4)
             .unwrap();
 
@@ -778,6 +817,7 @@ mod tests {
         assert!(!components.master_ea);
         assert!(!components.slave_ea);
         assert!(version.is_none());
+        assert!(port_config.is_none());
     }
 
     #[test]
@@ -797,7 +837,7 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex4"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex4"), b"slave").unwrap();
 
-        let (components, _version) = detector
+        let (components, _version, _port_config) = detector
             .check_installed_components(mt_path, &MtType::MT4)
             .unwrap();
 
@@ -823,13 +863,43 @@ mod tests {
         fs::write(experts_path.join("SankeyCopierMaster.ex5"), b"master").unwrap();
         fs::write(experts_path.join("SankeyCopierSlave.ex5"), b"slave").unwrap();
 
-        let (components, _version) = detector
+        let (components, _version, _port_config) = detector
             .check_installed_components(mt_path, &MtType::MT5)
             .unwrap();
 
         assert!(components.dll);
         assert!(components.master_ea);
         assert!(components.slave_ea);
+    }
+
+    #[test]
+    fn test_check_installed_components_with_config() {
+        let detector = MtDetector::new();
+        let temp_dir = TempDir::new().unwrap();
+        let mt_path = temp_dir.path();
+
+        let mql5_path = mt_path.join("MQL5");
+        let files_path = mql5_path.join("Files");
+
+        fs::create_dir_all(&files_path).unwrap();
+
+        // Create sankey_copier.ini
+        let ini_content = r#"[ZeroMQ]
+ReceiverPort=15555
+PublisherPort=15556
+ConfigSenderPort=15557
+"#;
+        fs::write(files_path.join(EA_CONFIG_FILENAME), ini_content).unwrap();
+
+        let (_, _, port_config) = detector
+            .check_installed_components(mt_path, &MtType::MT5)
+            .unwrap();
+
+        assert!(port_config.is_some());
+        let config = port_config.unwrap();
+        assert_eq!(config.receiver_port, 15555);
+        assert_eq!(config.publisher_port, 15556);
+        assert_eq!(config.config_sender_port, 15557);
     }
 
     #[test]

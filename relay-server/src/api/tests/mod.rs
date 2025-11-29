@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::api::AppState;
+use crate::port_resolver::ResolvedPorts;
 use crate::victoria_logs::VLogsController;
 use crate::{
     config::{Config, VictoriaLogsConfig},
@@ -57,6 +58,15 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         None
     };
 
+    // Create default resolved ports for testing
+    let resolved_ports = Arc::new(ResolvedPorts {
+        receiver_port: 5555,
+        sender_port: 5556,
+        config_sender_port: port, // Use the same port as the config_sender
+        is_dynamic: false,
+        generated_at: None,
+    });
+
     AppState {
         db,
         tx,
@@ -66,6 +76,7 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         allowed_origins: vec![],
         cors_disabled: true,
         config,
+        resolved_ports,
         vlogs_controller,
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -221,10 +222,70 @@ pub struct DatabaseConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZeroMqConfig {
+    /// Port for receiving messages from EAs (PULL socket)
+    /// Set to 0 for dynamic port assignment
+    pub receiver_port: u16,
+    /// Port for sending trade signals to EAs (PUB socket)
+    /// Set to 0 for dynamic port assignment
+    pub sender_port: u16,
+    /// Port for sending config updates to EAs (PUB socket)
+    /// Set to 0 for dynamic port assignment
+    pub config_sender_port: u16,
+    pub timeout_seconds: i64,
+}
+
+impl ZeroMqConfig {
+    /// Check if any port is configured for dynamic assignment
+    pub fn has_dynamic_ports(&self) -> bool {
+        self.receiver_port == 0 || self.sender_port == 0 || self.config_sender_port == 0
+    }
+}
+
+/// Runtime configuration for dynamically assigned ports
+/// Stored in runtime.toml and persisted across restarts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    pub zeromq: RuntimeZeromqConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeZeromqConfig {
     pub receiver_port: u16,
     pub sender_port: u16,
     pub config_sender_port: u16,
-    pub timeout_seconds: i64,
+    pub generated_at: DateTime<Utc>,
+}
+
+impl RuntimeConfig {
+    /// Load runtime config from file
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content =
+            std::fs::read_to_string(path.as_ref()).context("Failed to read runtime config file")?;
+        toml::from_str(&content).context("Failed to parse runtime config")
+    }
+
+    /// Save runtime config to file
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let content = toml::to_string_pretty(self).context("Failed to serialize runtime config")?;
+        let header = "# AUTO-GENERATED - DO NOT EDIT\n\
+                      # Delete this file to re-assign ports on next startup\n\n";
+        std::fs::write(path.as_ref(), format!("{}{}", header, content))
+            .context("Failed to write runtime config file")?;
+        Ok(())
+    }
+
+    /// Delete runtime config file
+    pub fn delete<P: AsRef<Path>>(path: P) -> Result<()> {
+        if path.as_ref().exists() {
+            std::fs::remove_file(path.as_ref()).context("Failed to delete runtime config file")?;
+        }
+        Ok(())
+    }
+
+    /// Check if runtime config file exists
+    pub fn exists<P: AsRef<Path>>(path: P) -> bool {
+        path.as_ref().exists()
+    }
 }
 
 impl Config {

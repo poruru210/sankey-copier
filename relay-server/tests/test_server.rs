@@ -12,6 +12,7 @@ use sankey_copier_relay_server::{
     engine::CopyEngine,
     log_buffer::create_log_buffer,
     message_handler::MessageHandler,
+    port_resolver::ResolvedPorts,
     victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer},
 };
@@ -109,6 +110,15 @@ impl TestServer {
         };
         let vlogs_controller = Some(VLogsController::new(vlogs_enabled, vlogs_config));
 
+        // Create resolved ports for tests
+        let resolved_ports = Arc::new(ResolvedPorts {
+            receiver_port: zmq_pull_port,
+            sender_port: zmq_pub_trade_port,
+            config_sender_port: zmq_pub_config_port,
+            is_dynamic: true,
+            generated_at: Some(chrono::Utc::now()),
+        });
+
         // Create app state
         let state = AppState {
             db: db.clone(),
@@ -119,6 +129,7 @@ impl TestServer {
             allowed_origins: vec![],
             cors_disabled: true, // Disable CORS for tests
             config: Arc::new(Config::default()),
+            resolved_ports,
             vlogs_controller,
         };
 

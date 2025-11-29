@@ -29,15 +29,17 @@
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
 
-//--- Port Definitions
-#define PORT_RELAY_PULL       5555  // Heartbeat, ConfigReq, Unregister (Client -> Server)
-#define PORT_RELAY_PUB_TRADE  5556  // Trade Signals (Server -> Client)
-#define PORT_RELAY_PUB_CONFIG 5557  // Config Updates (Server -> Client)
+//--- Include configuration file reader (dynamic port loading)
+#include "ConfigFile.mqh"
 
-//--- Default Addresses
-#define DEFAULT_ADDR_PULL       "tcp://localhost:5555"
-#define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
-#define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
+// Port values are now loaded dynamically from sankey_copier.ini
+// Use the following functions from ConfigFile.mqh:
+//   GetReceiverPort()     - Get PUSH socket port (EA -> Server)
+//   GetPublisherPort()    - Get Trade SUB socket port (Server -> EA)
+//   GetConfigSenderPort() - Get Config SUB socket port (Server -> EA)
+//   GetPushAddress()      - Get full "tcp://localhost:port" address for PUSH socket
+//   GetTradeSubAddress()  - Get full address for Trade subscription
+//   GetConfigSubAddress() - Get full address for Config subscription
 
 //--- Connection status constants (4 states)
 #define STATUS_DISABLED 0         // Slave is disabled

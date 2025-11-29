@@ -18,11 +18,16 @@
 
 //--- Input parameters
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
-input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send signals/heartbeats (PULL)
-input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config updates (SUB)
+// Leave addresses empty to use ports from sankey_copier.ini config file
+input string   RelayServerAddress = "";       // Override PUSH address (empty=use config file)
+input string   ConfigSourceAddress = "";      // Override Config SUB address (empty=use config file)
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
+
+//--- Resolved addresses (from config file or input override)
+string g_RelayAddress = "";
+string g_ConfigAddress = "";
 
 //--- Position tracking structure
 struct PositionInfo
@@ -77,21 +82,39 @@ int OnInit()
    g_symbol_prefix = "";
    g_symbol_suffix = "";
 
+   // Load port configuration from sankey_copier.ini
+   if(!LoadConfig())
+   {
+      Print("WARNING: Failed to load config file, using default ports");
+   }
+   else
+   {
+      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
+            ", PublisherPort=", GetPublisherPort(),
+            ", ConfigSenderPort=", GetConfigSenderPort());
+   }
+
+   // Resolve addresses: use input override if provided, otherwise use config file
+   g_RelayAddress = (RelayServerAddress != "") ? RelayServerAddress : GetPushAddress();
+   g_ConfigAddress = (ConfigSourceAddress != "") ? ConfigSourceAddress : GetConfigSubAddress();
+
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", Config SUB=", g_ConfigAddress);
+
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Master Config SUB");
+   // Create and connect config socket (SUB)
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Master Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_socket, "Master PUSH");
@@ -131,7 +154,7 @@ int OnInit()
       // Show NO_CONFIGURATION status initially (no config received yet)
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
 
-      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateServerRow(g_RelayAddress);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
    }
@@ -154,7 +177,7 @@ void OnDeinit(const int reason)
    VLogsFlush();
 
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, g_RelayAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -187,7 +210,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT5", g_symbol_prefix, g_symbol_suffix, "");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, g_RelayAddress, AccountID, "Master", "MT5", g_symbol_prefix, g_symbol_suffix, "");
 
       if(heartbeat_sent)
       {
@@ -218,7 +241,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Master"))
+               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");

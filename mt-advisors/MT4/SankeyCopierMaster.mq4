@@ -20,11 +20,16 @@
 //--- Input parameters
 // Note: MagicFilter moved to Slave side (allowed_magic_numbers)
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
-input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Server ZMQ address (PULL)
-input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config/sync (SUB)
-input int      ScanInterval = 100;                            // Scan interval in milliseconds
-input bool     ShowConfigPanel = true;                        // Show configuration panel on chart
-input int      PanelWidth = 280;                              // Configuration panel width (pixels)
+// Leave addresses empty to use ports from sankey_copier.ini config file.
+input string   RelayServerAddress = "";         // Override PUSH address (empty=use config file)
+input string   ConfigSourceAddress = "";        // Override Config SUB address (empty=use config file)
+input int      ScanInterval = 100;              // Scan interval in milliseconds
+input bool     ShowConfigPanel = true;          // Show configuration panel on chart
+input int      PanelWidth = 280;                // Configuration panel width (pixels)
+
+//--- Resolved addresses (from config file or input override)
+string g_RelayAddress = "";
+string g_ConfigAddress = "";
 
 //--- Global config variables (populated from Web-UI config)
 string g_symbol_prefix = "";       // Symbol prefix from config
@@ -64,7 +69,23 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   Print("Relay Server Address: ", RelayServerAddress);
+   // Load port configuration from sankey_copier.ini
+   if(!LoadConfig())
+   {
+      Print("WARNING: Failed to load config file, using default ports");
+   }
+   else
+   {
+      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
+            ", PublisherPort=", GetPublisherPort(),
+            ", ConfigSenderPort=", GetConfigSenderPort());
+   }
+
+   // Resolve addresses: use input override if provided, otherwise use config file
+   g_RelayAddress = (RelayServerAddress != "") ? RelayServerAddress : GetPushAddress();
+   g_ConfigAddress = (ConfigSourceAddress != "") ? ConfigSourceAddress : GetConfigSubAddress();
+
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", Config SUB=", g_ConfigAddress);
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -72,7 +93,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
       CleanupZmqContext(g_zmq_context);
@@ -80,7 +101,7 @@ int OnInit()
    }
 
    // Create and connect config socket (SUB to receive SyncRequest)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Master Config SUB");
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Master Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_socket, "Master PUSH");
@@ -117,7 +138,7 @@ int OnInit()
       // Show NO_CONFIGURATION status initially (no config received yet)
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
 
-      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateServerRow(g_RelayAddress);
       // MagicFilter removed - now filtered on Slave side via allowed_magic_numbers
       g_config_panel.UpdateMagicFilterRow(0); // Show 0 = All
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
@@ -145,7 +166,7 @@ void OnDeinit(const int reason)
    VLogsFlush();
 
    // Send unregister message
-   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, g_RelayAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -179,7 +200,7 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT4", g_symbol_prefix, g_symbol_suffix, "");
+      SendHeartbeatMessage(g_zmq_context, g_RelayAddress, AccountID, "Master", "MT4", g_symbol_prefix, g_symbol_suffix, "");
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable

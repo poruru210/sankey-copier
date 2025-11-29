@@ -16,6 +16,7 @@ mod logs;
 mod middleware;
 mod victoria_logs_settings;
 mod websocket;
+mod zeromq_settings;
 
 #[cfg(test)]
 mod tests;
@@ -37,7 +38,7 @@ use tower_http::LatencyUnit;
 
 use crate::{
     config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
-    victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
+    port_resolver::ResolvedPorts, victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
 };
 
 // Import handlers from submodules
@@ -55,6 +56,8 @@ pub struct AppState {
     pub allowed_origins: Vec<String>,
     pub cors_disabled: bool,
     pub config: Arc<Config>,
+    /// Resolved ZeroMQ ports (may be dynamically assigned)
+    pub resolved_ports: Arc<ResolvedPorts>,
     /// Controller for runtime VictoriaLogs toggle (None if not configured in config.toml)
     pub vlogs_controller: Option<VLogsController>,
 }
@@ -160,6 +163,12 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/victoria-logs-settings",
             axum::routing::put(victoria_logs_settings::toggle_vlogs_enabled),
+        )
+        // ZeroMQ API
+        // GET /api/zeromq-config: Returns current ZeroMQ port configuration (read-only)
+        .route(
+            "/api/zeromq-config",
+            get(zeromq_settings::get_zeromq_config),
         )
         .layer(trace_layer)
         .layer(cors)

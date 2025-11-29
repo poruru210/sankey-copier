@@ -9,6 +9,7 @@ mod message_handler;
 mod models;
 mod mt_detector;
 mod mt_installer;
+mod port_resolver;
 mod victoria_logs;
 mod zeromq;
 
@@ -230,10 +231,32 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Resolve ZeroMQ ports (dynamic or fixed)
+    let resolved_ports =
+        port_resolver::resolve_ports(&config.zeromq, port_resolver::RUNTIME_CONFIG_PATH)?;
+
     tracing::info!("Server will listen on: {}", config.server_address());
-    tracing::info!("ZMQ Receiver: {}", config.zmq_receiver_address());
-    tracing::info!("ZMQ Sender: {}", config.zmq_sender_address());
-    tracing::info!("ZMQ Config Sender: {}", config.zmq_config_sender_address());
+    tracing::info!(
+        "ZMQ Receiver: {} (port {})",
+        resolved_ports.receiver_address(),
+        resolved_ports.receiver_port
+    );
+    tracing::info!(
+        "ZMQ Sender: {} (port {})",
+        resolved_ports.sender_address(),
+        resolved_ports.sender_port
+    );
+    tracing::info!(
+        "ZMQ Config Sender: {} (port {})",
+        resolved_ports.config_sender_address(),
+        resolved_ports.config_sender_port
+    );
+    if resolved_ports.is_dynamic {
+        tracing::info!(
+            "Ports are dynamically assigned (generated_at: {:?})",
+            resolved_ports.generated_at
+        );
+    }
 
     // Ensure TLS certificate exists (generate and register if needed)
     let base_path = std::env::current_dir()?;
@@ -289,19 +312,19 @@ async fn main() -> Result<()> {
     // Initialize ZeroMQ server
     let zmq_server = ZmqServer::new(zmq_tx)?;
     zmq_server
-        .start_receiver(&config.zmq_receiver_address())
+        .start_receiver(&resolved_ports.receiver_address())
         .await?;
     tracing::info!(
         "ZeroMQ receiver started on {}",
-        config.zmq_receiver_address()
+        resolved_ports.receiver_address()
     );
 
     // Initialize ZeroMQ sender (PUB socket)
-    let zmq_sender = Arc::new(ZmqSender::new(&config.zmq_sender_address())?);
+    let zmq_sender = Arc::new(ZmqSender::new(&resolved_ports.sender_address())?);
 
     // Initialize ZeroMQ config sender (PUB socket with MessagePack)
     let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(
-        &config.zmq_config_sender_address(),
+        &resolved_ports.config_sender_address(),
     )?);
 
     // Initialize copy engine
@@ -384,6 +407,7 @@ async fn main() -> Result<()> {
         allowed_origins: allowed_origins.clone(),
         cors_disabled,
         config: Arc::new(config.clone()),
+        resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
     };
     if cors_disabled {

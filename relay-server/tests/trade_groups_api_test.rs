@@ -16,6 +16,7 @@ use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
 use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings};
+use sankey_copier_relay_server::port_resolver::ResolvedPorts;
 use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
@@ -31,6 +32,14 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
     // Create a dummy ZMQ config sender
     let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:0").unwrap());
 
+    let resolved_ports = Arc::new(ResolvedPorts {
+        receiver_port: 5555,
+        sender_port: 5556,
+        config_sender_port: 5557,
+        is_dynamic: false,
+        generated_at: None,
+    });
+
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -40,6 +49,7 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
         allowed_origins: vec!["http://localhost:8080".to_string()],
         cors_disabled: false,
         config: Arc::new(sankey_copier_relay_server::config::Config::default()),
+        resolved_ports,
         vlogs_controller: None,
     };
 
