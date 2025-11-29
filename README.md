@@ -132,10 +132,6 @@ http://localhost:8080 でアクセス
 - **[mt-advisors](docs/mt-advisors.md)** - EA (Master/Slave)の詳細
 - **[web-ui](docs/web-ui.md)** - WebUIの詳細
 
-### 旧ドキュメント
-
-過去のドキュメントは [docs/old/](docs/old/) に保存されています。
-
 ## ライセンス
 
 MIT License
