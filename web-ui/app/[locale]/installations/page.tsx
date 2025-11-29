@@ -320,7 +320,7 @@ export default function InstallationsPage() {
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">M</span>
+                              <span className="text-xs">Master</span>
                             </div>
                             <div className="flex items-center gap-1" title={content.slave.value}>
                               {installation.components.slave_ea ? (
@@ -328,7 +328,7 @@ export default function InstallationsPage() {
                               ) : (
                                 <div className="h-3 w-3 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">S</span>
+                              <span className="text-xs">Slave</span>
                             </div>
                           </div>
                         </TableCell>
@@ -340,7 +340,6 @@ export default function InstallationsPage() {
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-1 text-yellow-500 cursor-help">
                                       <AlertTriangle className="h-4 w-4" />
-                                      <span className="text-xs">{content.portMismatch || 'Mismatch'}</span>
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="left" className="max-w-xs">
@@ -357,7 +356,6 @@ export default function InstallationsPage() {
                             ) : (
                               <div className="flex items-center gap-1 text-green-500">
                                 <CheckCircle className="h-4 w-4" />
-                                <span className="text-xs">OK</span>
                               </div>
                             )
                           ) : (
