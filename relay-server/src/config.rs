@@ -386,6 +386,35 @@ impl Default for Config {
     }
 }
 
+/// Update VictoriaLogs enabled setting in config.toml
+/// Uses toml_edit to preserve comments, formatting, and structure
+pub fn update_victoria_logs_enabled(enabled: bool) -> Result<()> {
+    let config_path = "config.toml";
+
+    // Read existing config file
+    let content = std::fs::read_to_string(config_path).context("Failed to read config.toml")?;
+
+    // Parse as editable document (preserves comments and formatting)
+    let mut doc: toml_edit::DocumentMut = content.parse().context("Failed to parse config.toml")?;
+
+    // Update victoria_logs.enabled
+    if let Some(vlogs) = doc.get_mut("victoria_logs") {
+        if let Some(table) = vlogs.as_table_mut() {
+            table["enabled"] = toml_edit::value(enabled);
+        }
+    } else {
+        // victoria_logs section doesn't exist, create it
+        let mut vlogs_table = toml_edit::Table::new();
+        vlogs_table["enabled"] = toml_edit::value(enabled);
+        doc["victoria_logs"] = toml_edit::Item::Table(vlogs_table);
+    }
+
+    // Write back to file (preserves original formatting)
+    std::fs::write(config_path, doc.to_string()).context("Failed to write config.toml")?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

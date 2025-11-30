@@ -10,6 +10,7 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
+    victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage},
 };
 
@@ -32,6 +33,8 @@ pub struct MessageHandler {
     db: Arc<Database>,
     /// Unified ZMQ publisher for all outgoing messages (trade signals + config)
     publisher: Arc<ZmqConfigPublisher>,
+    /// VictoriaLogs controller for EA config broadcasting
+    vlogs_controller: Option<VLogsController>,
 }
 
 impl MessageHandler {
@@ -41,6 +44,7 @@ impl MessageHandler {
         broadcast_tx: broadcast::Sender<String>,
         db: Arc<Database>,
         publisher: Arc<ZmqConfigPublisher>,
+        vlogs_controller: Option<VLogsController>,
     ) -> Self {
         Self {
             connection_manager,
@@ -48,6 +52,7 @@ impl MessageHandler {
             broadcast_tx,
             db,
             publisher,
+            vlogs_controller,
         }
     }
 

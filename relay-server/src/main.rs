@@ -27,7 +27,7 @@ use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
 use models::EaType;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
@@ -159,8 +159,9 @@ async fn main() -> Result<()> {
     };
 
     // Initialize logging with log buffer layer and optional file output
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "sankey_copier_relay_server=debug,tower_http=debug".into());
+    // Default to info level for all modules; can be overridden via RUST_LOG env var
+    let env_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
     let subscriber = tracing_subscriber::registry()
         .with(env_filter)
@@ -263,27 +264,12 @@ async fn main() -> Result<()> {
     tracing::info!("Database initialized");
 
     // Create VLogsController if VictoriaLogs is configured
-    // Load enabled state from DB (overrides config.toml if saved)
+    // Uses config.toml settings directly (no DB override)
     let vlogs_controller = if let Some(enabled_flag) = vlogs_enabled_flag {
-        // Try to load saved enabled state from DB
-        match db.get_vlogs_settings().await {
-            Ok(saved_settings) => {
-                // Update runtime flag from DB
-                enabled_flag.store(saved_settings.enabled, Ordering::Relaxed);
-                tracing::info!(
-                    "VictoriaLogs enabled state loaded from DB: {}",
-                    saved_settings.enabled
-                );
-            }
-            Err(e) => {
-                // No saved settings in DB - use config.toml default
-                tracing::info!(
-                    "No VictoriaLogs settings in DB ({}), using config.toml default: {}",
-                    e,
-                    config.victoria_logs.enabled
-                );
-            }
-        }
+        tracing::info!(
+            "VictoriaLogs configured: enabled={} (from config.toml)",
+            config.victoria_logs.enabled
+        );
         Some(VLogsController::new(
             enabled_flag,
             config.victoria_logs.clone(),
@@ -334,6 +320,7 @@ async fn main() -> Result<()> {
             broadcast_tx.clone(),
             db.clone(),
             zmq_publisher.clone(),
+            vlogs_controller.clone(),
         );
         tracing::info!("MessageHandler created, spawning message processing task...");
 

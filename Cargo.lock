@@ -2062,6 +2062,7 @@ dependencies = [
  "time",
  "tokio",
  "toml 0.8.23",
+ "toml_edit",
  "tower",
  "tower-http",
  "tracing",

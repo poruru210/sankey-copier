@@ -192,6 +192,7 @@ impl Drop for VLogsConfigSubscriber {
 }
 
 /// Test that new EA receives VLogs config on registration (Heartbeat)
+/// Note: VLogs config now comes from config.toml (via VLogsController), not DB
 #[tokio::test]
 async fn test_vlogs_config_sent_on_ea_registration() {
     let server = TestServer::start()
@@ -200,19 +201,11 @@ async fn test_vlogs_config_sent_on_ea_registration() {
 
     let account_id = "VLOGS_TEST_MASTER_001";
 
-    // First, set up VLogs settings in the database
-    let settings = sankey_copier_relay_server::models::VLogsGlobalSettings {
-        enabled: true,
-        endpoint: "http://test-vlogs:9428/insert/jsonline".to_string(),
-        batch_size: 50,
-        flush_interval_secs: 10,
-        log_level: "DEBUG".to_string(),
-    };
-    server
-        .db
-        .save_vlogs_settings(&settings)
-        .await
-        .expect("Failed to save VLogs settings");
+    // TestServer is pre-configured with VLogsController using test settings:
+    // - host: "http://localhost:9428"
+    // - batch_size: 100
+    // - flush_interval_secs: 5
+    // - enabled: true
 
     // Create EA simulator that subscribes to vlogs_config
     let subscriber = VLogsConfigSubscriber::new(
@@ -245,16 +238,16 @@ async fn test_vlogs_config_sent_on_ea_registration() {
 
     let config = config.unwrap();
 
-    // Verify config fields match what we saved
+    // Verify config fields match TestServer's built-in VLogsController settings
     assert!(config.enabled, "enabled should be true");
-    assert_eq!(
-        config.endpoint, "http://test-vlogs:9428/insert/jsonline",
-        "endpoint should match"
+    assert!(
+        config.endpoint.contains("localhost:9428"),
+        "endpoint should contain localhost:9428"
     );
-    assert_eq!(config.batch_size, 50, "batch_size should be 50");
+    assert_eq!(config.batch_size, 100, "batch_size should be 100");
     assert_eq!(
-        config.flush_interval_secs, 10,
-        "flush_interval_secs should be 10"
+        config.flush_interval_secs, 5,
+        "flush_interval_secs should be 5"
     );
 
     println!("✅ VLogs Config on Registration E2E test passed");
@@ -372,6 +365,7 @@ async fn test_vlogs_config_broadcast_on_api_update() {
 }
 
 /// Test VLogs config disable flow
+/// Note: VLogs config now comes from config.toml (via VLogsController), not DB
 #[tokio::test]
 async fn test_vlogs_config_disable() {
     let server = TestServer::start()
@@ -380,19 +374,8 @@ async fn test_vlogs_config_disable() {
 
     let account_id = "VLOGS_DISABLE_TEST";
 
-    // First enable VLogs
-    let enabled_settings = sankey_copier_relay_server::models::VLogsGlobalSettings {
-        enabled: true,
-        endpoint: "http://vlogs:9428/insert/jsonline".to_string(),
-        batch_size: 100,
-        flush_interval_secs: 5,
-        log_level: "DEBUG".to_string(),
-    };
-    server
-        .db
-        .save_vlogs_settings(&enabled_settings)
-        .await
-        .expect("Failed to save enabled settings");
+    // TestServer is pre-configured with VLogsController (enabled=true)
+    // We'll use the API to toggle it off
 
     let subscriber = VLogsConfigSubscriber::new(
         &server.zmq_pull_address(),

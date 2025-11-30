@@ -46,6 +46,7 @@ impl TestContext {
             broadcast_tx,
             db,
             publisher.clone(),
+            None, // vlogs_controller - not needed for tests
         );
 
         Self {
@@ -108,7 +109,14 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
     let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
-    MessageHandler::new(connection_manager, copy_engine, broadcast_tx, db, publisher)
+    MessageHandler::new(
+        connection_manager,
+        copy_engine,
+        broadcast_tx,
+        db,
+        publisher,
+        None,
+    )
 }
 
 /// Create a test TradeSignal

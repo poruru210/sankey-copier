@@ -4,7 +4,9 @@
 //! Master EA is_trade_allowed change notifications to Slave EAs.
 
 use super::MessageHandler;
-use crate::models::{HeartbeatMessage, SlaveConfigMessage, SlaveConfigWithMaster};
+use crate::models::{
+    HeartbeatMessage, SlaveConfigMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
+};
 
 impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
@@ -170,29 +172,36 @@ impl MessageHandler {
 
     /// Send VictoriaLogs configuration to a specific EA on registration
     async fn send_vlogs_config_to_ea(&self, account_id: &str) {
-        match self.db.get_vlogs_settings().await {
-            Ok(settings) => {
-                if let Err(e) = self.publisher.broadcast_vlogs_config(&settings).await {
-                    tracing::error!(
-                        account_id = %account_id,
-                        error = %e,
-                        "Failed to send VictoriaLogs config to newly registered EA"
-                    );
-                } else {
-                    tracing::info!(
-                        account_id = %account_id,
-                        enabled = settings.enabled,
-                        "Sent VictoriaLogs config to newly registered EA"
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::error!(
-                    account_id = %account_id,
-                    error = %e,
-                    "Failed to get VictoriaLogs settings for EA registration"
-                );
-            }
+        // Get VictoriaLogs settings from controller (config.toml based)
+        let Some(controller) = &self.vlogs_controller else {
+            tracing::debug!(
+                account_id = %account_id,
+                "VictoriaLogs not configured, skipping config broadcast"
+            );
+            return;
+        };
+
+        let config = controller.config();
+        let settings = VLogsGlobalSettings {
+            enabled: controller.is_enabled(),
+            endpoint: config.endpoint(),
+            batch_size: config.batch_size as i32,
+            flush_interval_secs: config.flush_interval_secs as i32,
+            log_level: "INFO".to_string(),
+        };
+
+        if let Err(e) = self.publisher.broadcast_vlogs_config(&settings).await {
+            tracing::error!(
+                account_id = %account_id,
+                error = %e,
+                "Failed to send VictoriaLogs config to newly registered EA"
+            );
+        } else {
+            tracing::info!(
+                account_id = %account_id,
+                enabled = settings.enabled,
+                "Sent VictoriaLogs config to newly registered EA"
+            );
         }
     }
 }

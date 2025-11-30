@@ -72,13 +72,32 @@ impl TestServer {
         // Initialize copy engine
         let copy_engine = Arc::new(CopyEngine::new());
 
+        // Create log buffer
+        let log_buffer = create_log_buffer();
+
+        // Create VLogsController for testing (shared config for MessageHandler and AppState)
+        let vlogs_enabled = Arc::new(AtomicBool::new(true));
+        let vlogs_config = VictoriaLogsConfig {
+            enabled: true,
+            host: "http://localhost:9428".to_string(),
+            batch_size: 100,
+            flush_interval_secs: 5,
+            source: "test-relay".to_string(),
+        };
+
         // Initialize MessageHandler (2-port architecture: unified publisher)
+        // MessageHandler needs its own VLogsController for EA config broadcasting
+        let handler_vlogs_controller = Some(VLogsController::new(
+            vlogs_enabled.clone(),
+            vlogs_config.clone(),
+        ));
         let handler = Arc::new(MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
             broadcast_tx.clone(),
             db.clone(),
             zmq_publisher.clone(),
+            handler_vlogs_controller,
         ));
 
         // Spawn ZMQ message processing task
@@ -89,18 +108,7 @@ impl TestServer {
             }
         });
 
-        // Create log buffer
-        let log_buffer = create_log_buffer();
-
-        // Create VLogsController for testing
-        let vlogs_enabled = Arc::new(AtomicBool::new(true));
-        let vlogs_config = VictoriaLogsConfig {
-            enabled: true,
-            host: "http://localhost:9428".to_string(),
-            batch_size: 100,
-            flush_interval_secs: 5,
-            source: "test-relay".to_string(),
-        };
+        // Create VLogsController for AppState
         let vlogs_controller = Some(VLogsController::new(vlogs_enabled, vlogs_config));
 
         // Create resolved ports for tests (2-port architecture)
