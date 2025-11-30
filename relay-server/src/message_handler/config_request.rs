@@ -4,7 +4,12 @@
 //! appropriate handlers based on EA type.
 
 use super::MessageHandler;
-use crate::models::{RequestConfigMessage, SlaveConfigMessage, STATUS_CONNECTED, STATUS_DISABLED};
+use crate::models::{
+    status::{
+        calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
+    },
+    RequestConfigMessage, SlaveConfigMessage, STATUS_CONNECTED, STATUS_DISABLED,
+};
 use sankey_copier_zmq::MasterConfigMessage;
 
 impl MessageHandler {
@@ -36,13 +41,19 @@ impl MessageHandler {
     async fn handle_master_config_request(&self, account_id: &str) {
         match self.db.get_settings_for_master(account_id).await {
             Ok(master_settings) => {
-                // Calculate status based on enabled setting
-                // Note: is_trade_allowed is handled via heartbeat; here we use enabled only
-                let status = if master_settings.enabled {
-                    STATUS_CONNECTED
-                } else {
-                    STATUS_DISABLED
-                };
+                // Get is_trade_allowed from connection manager
+                let is_trade_allowed = self
+                    .connection_manager
+                    .get_ea(account_id)
+                    .await
+                    .map(|conn| conn.is_trade_allowed)
+                    .unwrap_or(true); // Default to true if not connected yet
+
+                // Calculate status using centralized logic
+                let status = calculate_master_status(&MasterStatusInput {
+                    web_ui_enabled: master_settings.enabled,
+                    is_trade_allowed,
+                });
 
                 let config = MasterConfigMessage {
                     account_id: account_id.to_string(),
@@ -58,8 +69,9 @@ impl MessageHandler {
                     tracing::error!("Failed to send master config to {}: {}", account_id, e);
                 } else {
                     tracing::info!(
-                        "Successfully sent Master CONFIG to: {} (version: {})",
+                        "Successfully sent Master CONFIG to: {} (status: {}, version: {})",
                         account_id,
+                        status,
                         config.config_version
                     );
                 }
@@ -91,31 +103,36 @@ impl MessageHandler {
                         settings.slave_settings.lot_multiplier
                     );
 
-                    // Calculate effective status based on Master's is_trade_allowed
-                    let effective_status = if settings.status == 0 {
-                        // User disabled -> DISABLED
-                        0
-                    } else {
-                        // User enabled (status == 1)
-                        // Check if Master is connected and has trading allowed
-                        let master_conn = self
-                            .connection_manager
-                            .get_ea(&settings.master_account)
-                            .await;
+                    // Get Slave's is_trade_allowed from connection manager
+                    let slave_is_trade_allowed = self
+                        .connection_manager
+                        .get_ea(account_id)
+                        .await
+                        .map(|conn| conn.is_trade_allowed)
+                        .unwrap_or(true);
 
-                        if let Some(conn) = master_conn {
-                            if conn.is_trade_allowed {
-                                // Master online && trading allowed -> CONNECTED
-                                2
-                            } else {
-                                // Master online but trading NOT allowed -> ENABLED
-                                1
-                            }
+                    // Get Master's status (CONNECTED if online + trade allowed)
+                    let master_conn = self
+                        .connection_manager
+                        .get_ea(&settings.master_account)
+                        .await;
+                    let master_status = if let Some(conn) = master_conn {
+                        if conn.is_trade_allowed {
+                            STATUS_CONNECTED
                         } else {
-                            // Master offline -> ENABLED
-                            1
+                            STATUS_DISABLED
                         }
+                    } else {
+                        STATUS_DISABLED // Master offline
                     };
+
+                    // Calculate Slave status using centralized logic
+                    // Web UI enabled = DB status > 0
+                    let effective_status = calculate_slave_status(&SlaveStatusInput {
+                        web_ui_enabled: settings.status > 0,
+                        is_trade_allowed: slave_is_trade_allowed,
+                        master_status,
+                    });
 
                     // Fetch Master's equity for margin_ratio mode
                     let master_equity = self
