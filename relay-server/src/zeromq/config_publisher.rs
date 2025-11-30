@@ -83,9 +83,10 @@ impl ZmqPublisher {
     where
         T: ConfigMessage,
     {
-        // Serialize to MessagePack
-        let payload =
-            rmp_serde::to_vec(message).context("Failed to serialize message to MessagePack")?;
+        // Serialize to MessagePack with named fields (map format)
+        // EA side uses field names to access values (e.g., master_config_get_string(handle, "account_id"))
+        let payload = rmp_serde::to_vec_named(message)
+            .context("Failed to serialize message to MessagePack")?;
 
         let serialized = SerializedMessage {
             topic: message.zmq_topic().to_string(),
