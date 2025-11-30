@@ -59,10 +59,22 @@ bool LoadConfig()
 
    // Parse INI file
    bool in_zeromq_section = false;
+   int line_count = 0;
+   int error_code = 0;
 
    while(!FileIsEnding(file_handle))
    {
       string line = FileReadString(file_handle);
+      error_code = GetLastError();
+      line_count++;
+
+      // Check for read error
+      if(error_code != 0)
+      {
+         PrintFormat("[ConfigFile] Error reading line %d: error=%d", line_count, error_code);
+         ResetLastError();
+         break;
+      }
 
       // Trim whitespace
       StringTrimLeft(line);
@@ -79,6 +91,8 @@ bool LoadConfig()
          string upper_line = line;
          StringToUpper(upper_line);
          in_zeromq_section = (upper_line == "[ZEROMQ]");
+         if(in_zeromq_section)
+            PrintFormat("[ConfigFile] Found [ZeroMQ] section at line %d", line_count);
          continue;
       }
 
@@ -97,12 +111,22 @@ bool LoadConfig()
 
             // 2-port architecture: only ReceiverPort and PublisherPort
             if(key == "ReceiverPort")
+            {
                g_ReceiverPort = (int)StringToInteger(value);
+               PrintFormat("[ConfigFile] Parsed ReceiverPort=%d from line %d", g_ReceiverPort, line_count);
+            }
             else if(key == "PublisherPort")
+            {
                g_PublisherPort = (int)StringToInteger(value);
+               PrintFormat("[ConfigFile] Parsed PublisherPort=%d from line %d", g_PublisherPort, line_count);
+            }
          }
       }
    }
+
+   // Log parsing summary
+   PrintFormat("[ConfigFile] Parsed %d lines, in_zeromq_section=%s",
+               line_count, in_zeromq_section ? "true" : "false");
 
    FileClose(file_handle);
    g_ConfigLoaded = true;
