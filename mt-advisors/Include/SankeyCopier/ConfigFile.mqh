@@ -23,7 +23,8 @@ bool g_ConfigLoaded = false;
 
 //+------------------------------------------------------------------+
 //| Load configuration from INI file                                  |
-//| Reads from terminal-specific MQL5/Files/ folder only              |
+//| Tries FILE_COMMON first, then terminal-specific MQL5/Files/       |
+//| Note: FILE_COMMON fallback is required for correct file reading   |
 //| Returns: true if file was read, false if using defaults          |
 //+------------------------------------------------------------------+
 bool LoadConfig()
@@ -31,17 +32,27 @@ bool LoadConfig()
    if(g_ConfigLoaded)
       return true;
 
-   // Check if config file exists in local terminal folder
-   if(!FileIsExist(CONFIG_FILENAME))
+   // Check if config file exists (FILE_COMMON first, then local)
+   if(!FileIsExist(CONFIG_FILENAME, FILE_COMMON))
    {
-      PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d",
-                  CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
-      g_ConfigLoaded = true;
-      return false;
+      // Try without FILE_COMMON flag (local terminal folder)
+      if(!FileIsExist(CONFIG_FILENAME))
+      {
+         PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d",
+                     CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
+         g_ConfigLoaded = true;
+         return false;
+      }
    }
 
-   // Open from local terminal folder
-   int file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT);
+   // Try to open from common folder first, then local
+   // Note: This fallback pattern is required for correct file parsing on Windows
+   int file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT | FILE_COMMON);
+   if(file_handle == INVALID_HANDLE)
+   {
+      file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT);
+   }
+
    if(file_handle == INVALID_HANDLE)
    {
       PrintFormat("[ConfigFile] Failed to open '%s', using defaults", CONFIG_FILENAME);
@@ -162,7 +173,7 @@ int GetPublisherPort()
 //+------------------------------------------------------------------+
 bool ConfigFileExists()
 {
-   return FileIsExist(CONFIG_FILENAME);
+   return FileIsExist(CONFIG_FILENAME, FILE_COMMON) || FileIsExist(CONFIG_FILENAME);
 }
 
 //+------------------------------------------------------------------+
