@@ -29,7 +29,8 @@ pub struct TradeGroup {
 }
 
 /// Master-specific settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Default: enabled=false (new connections start with Switch OFF)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MasterSettings {
     /// Whether the Master is enabled (Web UI switch state)
     /// Defaults to false - new connections start with Switch OFF
@@ -46,17 +47,6 @@ pub struct MasterSettings {
 
     /// Configuration version for tracking updates
     pub config_version: u32,
-}
-
-impl Default for MasterSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false, // New connections start with Switch OFF
-            symbol_prefix: None,
-            symbol_suffix: None,
-            config_version: 0,
-        }
-    }
 }
 
 #[allow(dead_code)]

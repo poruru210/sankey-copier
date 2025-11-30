@@ -8,7 +8,7 @@ use crate::models::{
     status::{
         calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
     },
-    RequestConfigMessage, SlaveConfigMessage, STATUS_CONNECTED, STATUS_DISABLED,
+    RequestConfigMessage, SlaveConfigMessage, STATUS_DISABLED,
 };
 use sankey_copier_zmq::MasterConfigMessage;
 
@@ -111,19 +111,32 @@ impl MessageHandler {
                         .map(|conn| conn.is_trade_allowed)
                         .unwrap_or(true);
 
-                    // Get Master's status (CONNECTED if online + trade allowed)
-                    let master_conn = self
-                        .connection_manager
-                        .get_ea(&settings.master_account)
-                        .await;
-                    let master_status = if let Some(conn) = master_conn {
-                        if conn.is_trade_allowed {
-                            STATUS_CONNECTED
+                    // Get Master's status using centralized logic
+                    // Must consider: Master online + is_trade_allowed + web_ui enabled
+                    let master_status = {
+                        let master_conn = self
+                            .connection_manager
+                            .get_ea(&settings.master_account)
+                            .await;
+
+                        if let Some(conn) = master_conn {
+                            // Master is online, get web_ui enabled from DB
+                            let master_enabled = self
+                                .db
+                                .get_trade_group(&settings.master_account)
+                                .await
+                                .ok()
+                                .flatten()
+                                .map(|tg| tg.master_settings.enabled)
+                                .unwrap_or(false);
+
+                            calculate_master_status(&MasterStatusInput {
+                                web_ui_enabled: master_enabled,
+                                is_trade_allowed: conn.is_trade_allowed,
+                            })
                         } else {
-                            STATUS_DISABLED
+                            STATUS_DISABLED // Master offline
                         }
-                    } else {
-                        STATUS_DISABLED // Master offline
                     };
 
                     // Calculate Slave status using centralized logic
