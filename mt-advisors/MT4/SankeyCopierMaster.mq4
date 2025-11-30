@@ -20,14 +20,12 @@
 //--- Input parameters
 // Note: MagicFilter moved to Slave side (allowed_magic_numbers)
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
-// Leave addresses empty to use ports from sankey_copier.ini config file.
-input string   RelayServerAddress = "";         // Override PUSH address (empty=use config file)
-input string   ConfigSourceAddress = "";        // Override Config SUB address (empty=use config file)
+// ZMQ addresses are loaded from sankey_copier.ini (no input override)
 input int      ScanInterval = 100;              // Scan interval in milliseconds
 input bool     ShowConfigPanel = true;          // Show configuration panel on chart
 input int      PanelWidth = 280;                // Configuration panel width (pixels)
 
-//--- Resolved addresses (from config file or input override)
+//--- Resolved addresses (from sankey_copier.ini config file)
 string g_RelayAddress = "";
 string g_ConfigAddress = "";
 
@@ -82,11 +80,12 @@ int OnInit()
             ", PublisherPort=", GetPublisherPort(), " (unified)");
    }
 
-   // Resolve addresses: use input override if provided, otherwise use config file
-   g_RelayAddress = (RelayServerAddress != "") ? RelayServerAddress : GetPushAddress();
-   g_ConfigAddress = (ConfigSourceAddress != "") ? ConfigSourceAddress : GetConfigSubAddress();
+   // Resolve addresses from sankey_copier.ini config file
+   // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
+   g_RelayAddress = GetPushAddress();
+   g_ConfigAddress = GetConfigSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", Config SUB=", g_ConfigAddress);
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();

@@ -27,18 +27,15 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
 // configured via Web-UI and received through the config message from relay-server.
-// Leave addresses empty to use ports from sankey_copier.ini config file.
-input string   RelayServerAddress = "";             // Override PUSH address (empty=use config file)
-input string   TradeSignalSourceAddress = "";       // Override Trade SUB address (empty=use config file)
-input string   ConfigSourceAddress = "";            // Override Config SUB address (empty=use config file)
+// ZMQ addresses are loaded from sankey_copier.ini (no input override)
 input bool     ShowConfigPanel = true;              // Show configuration panel on chart
 input int      PanelWidth = 280;                    // Configuration panel width (pixels)
 input int      SignalPollingIntervalMs = 100;       // Signal polling interval in ms [100-5000]
 
-//--- Resolved addresses (from config file or input override)
+//--- Resolved addresses (from sankey_copier.ini config file)
+// 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified for trades+configs)
 string g_RelayAddress = "";
-string g_TradeSubAddress = "";
-string g_ConfigAddress = "";
+string g_SubAddress = "";  // Unified SUB address for trades and configs
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -94,28 +91,28 @@ int OnInit()
             ", PublisherPort=", GetPublisherPort(), " (unified)");
    }
 
-   // Resolve addresses: use input override if provided, otherwise use config file
-   g_RelayAddress = (RelayServerAddress != "") ? RelayServerAddress : GetPushAddress();
-   g_TradeSubAddress = (TradeSignalSourceAddress != "") ? TradeSignalSourceAddress : GetTradeSubAddress();
-   g_ConfigAddress = (ConfigSourceAddress != "") ? ConfigSourceAddress : GetConfigSubAddress();
+   // Resolve addresses from sankey_copier.ini config file
+   // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
+   g_RelayAddress = GetPushAddress();
+   g_SubAddress = GetTradeSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", Trade SUB=", g_TradeSubAddress, ", Config SUB=", g_ConfigAddress);
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_SubAddress, " (unified)");
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
-   // Create and connect trade signal socket (SUB)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_TradeSubAddress, "Slave Trade SUB");
+   // Create and connect trade signal socket (SUB) - uses unified PUB address
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   // Create and connect config socket (SUB)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Slave Config SUB");
+   // Create and connect config socket (SUB) - uses same unified PUB address
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
