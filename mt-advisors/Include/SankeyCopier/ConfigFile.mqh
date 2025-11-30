@@ -47,25 +47,49 @@ bool LoadConfig()
 
    // Try to open from common folder first, then local
    // Note: This fallback pattern is required for correct file parsing on Windows
+   bool opened_from_common = false;
    int file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT | FILE_COMMON);
-   if(file_handle == INVALID_HANDLE)
+   if(file_handle != INVALID_HANDLE)
    {
+      opened_from_common = true;
+      PrintFormat("[ConfigFile] DEBUG: Opened from FILE_COMMON, handle=%d", file_handle);
+   }
+   else
+   {
+      PrintFormat("[ConfigFile] DEBUG: FILE_COMMON failed (error=%d), trying local", GetLastError());
+      ResetLastError();
       file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT);
+      if(file_handle != INVALID_HANDLE)
+         PrintFormat("[ConfigFile] DEBUG: Opened from local, handle=%d", file_handle);
    }
 
    if(file_handle == INVALID_HANDLE)
    {
-      PrintFormat("[ConfigFile] Failed to open '%s', using defaults", CONFIG_FILENAME);
+      PrintFormat("[ConfigFile] Failed to open '%s' (error=%d), using defaults", CONFIG_FILENAME, GetLastError());
       g_ConfigLoaded = true;
       return false;
    }
 
    // Parse INI file
    bool in_zeromq_section = false;
+   int line_count = 0;
 
    while(!FileIsEnding(file_handle))
    {
       string line = FileReadString(file_handle);
+      int read_error = GetLastError();
+      line_count++;
+
+      // Debug: log each line read
+      PrintFormat("[ConfigFile] DEBUG: Line %d: '%s' (len=%d, error=%d)",
+                  line_count, line, StringLen(line), read_error);
+
+      if(read_error != 0)
+      {
+         PrintFormat("[ConfigFile] DEBUG: Read error at line %d: %d", line_count, read_error);
+         ResetLastError();
+         break;
+      }
 
       // Trim whitespace
       StringTrimLeft(line);
@@ -82,6 +106,8 @@ bool LoadConfig()
          string upper_line = line;
          StringToUpper(upper_line);
          in_zeromq_section = (upper_line == "[ZEROMQ]");
+         PrintFormat("[ConfigFile] DEBUG: Section header '%s', in_zeromq=%s",
+                     line, in_zeromq_section ? "true" : "false");
          continue;
       }
 
@@ -89,6 +115,7 @@ bool LoadConfig()
       if(in_zeromq_section)
       {
          int eq_pos = StringFind(line, "=");
+         PrintFormat("[ConfigFile] DEBUG: Parsing key=value, eq_pos=%d", eq_pos);
          if(eq_pos > 0)
          {
             string key = StringSubstr(line, 0, eq_pos);
@@ -98,11 +125,19 @@ bool LoadConfig()
             StringTrimLeft(value);
             StringTrimRight(value);
 
+            PrintFormat("[ConfigFile] DEBUG: key='%s', value='%s'", key, value);
+
             // 2-port architecture: only ReceiverPort and PublisherPort
             if(key == "ReceiverPort")
+            {
                g_ReceiverPort = (int)StringToInteger(value);
+               PrintFormat("[ConfigFile] DEBUG: Set ReceiverPort=%d", g_ReceiverPort);
+            }
             else if(key == "PublisherPort")
+            {
                g_PublisherPort = (int)StringToInteger(value);
+               PrintFormat("[ConfigFile] DEBUG: Set PublisherPort=%d", g_PublisherPort);
+            }
          }
       }
    }
@@ -110,6 +145,8 @@ bool LoadConfig()
    FileClose(file_handle);
    g_ConfigLoaded = true;
 
+   PrintFormat("[ConfigFile] DEBUG: Total lines read: %d, in_zeromq_section=%s",
+               line_count, in_zeromq_section ? "true" : "false");
    PrintFormat("[ConfigFile] Loaded from '%s': Receiver=%d, Publisher=%d (unified)",
                CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
 
