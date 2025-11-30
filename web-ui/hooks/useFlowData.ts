@@ -242,7 +242,6 @@ export function useFlowData({
     toggleReceiverExpand,
     toggleSourceEnabled,
     toggleReceiverEnabled,
-    settings,
   ]);
 
   const edges = useMemo(() => {
