@@ -95,14 +95,15 @@ pub fn create_router(state: AppState) -> Router {
     };
 
     // Create HTTP tracing layer for request/response logging
+    // Use DEBUG level to reduce log volume (API requests are frequent)
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(
             DefaultMakeSpan::new()
-                .level(tracing::Level::INFO)
+                .level(tracing::Level::DEBUG)
                 .include_headers(true),
         )
         .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
-            tracing::info!(
+            tracing::debug!(
                 method = %request.method(),
                 uri = %request.uri(),
                 version = ?request.version(),
@@ -111,7 +112,7 @@ pub fn create_router(state: AppState) -> Router {
         })
         .on_response(
             DefaultOnResponse::new()
-                .level(tracing::Level::INFO)
+                .level(tracing::Level::DEBUG)
                 .latency_unit(LatencyUnit::Millis)
                 .include_headers(true),
         );

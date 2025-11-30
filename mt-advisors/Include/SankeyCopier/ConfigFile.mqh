@@ -23,6 +23,7 @@ bool g_ConfigLoaded = false;
 
 //+------------------------------------------------------------------+
 //| Load configuration from INI file                                  |
+//| Reads from terminal-specific MQL5/Files/ folder only              |
 //| Returns: true if file was read, false if using defaults          |
 //+------------------------------------------------------------------+
 bool LoadConfig()
@@ -30,26 +31,17 @@ bool LoadConfig()
    if(g_ConfigLoaded)
       return true;
 
-   // Check if config file exists
-   if(!FileIsExist(CONFIG_FILENAME, FILE_COMMON))
+   // Check if config file exists in local terminal folder
+   if(!FileIsExist(CONFIG_FILENAME))
    {
-      // Try without FILE_COMMON flag (local terminal folder)
-      if(!FileIsExist(CONFIG_FILENAME))
-      {
-         PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d",
-                     CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
-         g_ConfigLoaded = true;
-         return false;
-      }
+      PrintFormat("[ConfigFile] Config file '%s' not found, using defaults: Receiver=%d, Publisher=%d",
+                  CONFIG_FILENAME, g_ReceiverPort, g_PublisherPort);
+      g_ConfigLoaded = true;
+      return false;
    }
 
-   // Try to open from common folder first, then local
-   int file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT | FILE_COMMON);
-   if(file_handle == INVALID_HANDLE)
-   {
-      file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT);
-   }
-
+   // Open from local terminal folder
+   int file_handle = FileOpen(CONFIG_FILENAME, FILE_READ | FILE_TXT);
    if(file_handle == INVALID_HANDLE)
    {
       PrintFormat("[ConfigFile] Failed to open '%s', using defaults", CONFIG_FILENAME);
@@ -59,22 +51,10 @@ bool LoadConfig()
 
    // Parse INI file
    bool in_zeromq_section = false;
-   int line_count = 0;
-   int error_code = 0;
 
    while(!FileIsEnding(file_handle))
    {
       string line = FileReadString(file_handle);
-      error_code = GetLastError();
-      line_count++;
-
-      // Check for read error
-      if(error_code != 0)
-      {
-         PrintFormat("[ConfigFile] Error reading line %d: error=%d", line_count, error_code);
-         ResetLastError();
-         break;
-      }
 
       // Trim whitespace
       StringTrimLeft(line);
@@ -91,8 +71,6 @@ bool LoadConfig()
          string upper_line = line;
          StringToUpper(upper_line);
          in_zeromq_section = (upper_line == "[ZEROMQ]");
-         if(in_zeromq_section)
-            PrintFormat("[ConfigFile] Found [ZeroMQ] section at line %d", line_count);
          continue;
       }
 
@@ -111,22 +89,12 @@ bool LoadConfig()
 
             // 2-port architecture: only ReceiverPort and PublisherPort
             if(key == "ReceiverPort")
-            {
                g_ReceiverPort = (int)StringToInteger(value);
-               PrintFormat("[ConfigFile] Parsed ReceiverPort=%d from line %d", g_ReceiverPort, line_count);
-            }
             else if(key == "PublisherPort")
-            {
                g_PublisherPort = (int)StringToInteger(value);
-               PrintFormat("[ConfigFile] Parsed PublisherPort=%d from line %d", g_PublisherPort, line_count);
-            }
          }
       }
    }
-
-   // Log parsing summary
-   PrintFormat("[ConfigFile] Parsed %d lines, in_zeromq_section=%s",
-               line_count, in_zeromq_section ? "true" : "false");
 
    FileClose(file_handle);
    g_ConfigLoaded = true;
@@ -194,7 +162,7 @@ int GetPublisherPort()
 //+------------------------------------------------------------------+
 bool ConfigFileExists()
 {
-   return FileIsExist(CONFIG_FILENAME, FILE_COMMON) || FileIsExist(CONFIG_FILENAME);
+   return FileIsExist(CONFIG_FILENAME);
 }
 
 //+------------------------------------------------------------------+
