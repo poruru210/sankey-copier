@@ -166,6 +166,7 @@ export interface UpdateMasterConfigRequest {
 
 // TradeGroup (Master settings) types
 export interface MasterSettings {
+  enabled: boolean;
   symbol_prefix?: string | null;
   symbol_suffix?: string | null;
   config_version: number;

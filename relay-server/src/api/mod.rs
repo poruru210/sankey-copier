@@ -139,6 +139,10 @@ pub fn create_router(state: AppState) -> Router {
                 .put(trade_groups::update_trade_group_settings)
                 .delete(trade_groups::delete_trade_group),
         )
+        .route(
+            "/api/trade-groups/:id/toggle",
+            post(trade_groups::toggle_master),
+        )
         // TradeGroupMembers API (Slave settings)
         .route(
             "/api/trade-groups/:id/members",

@@ -186,6 +186,7 @@ async fn test_update_trade_group_settings_success() {
 
     // Update settings
     let updated_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 0, // Will be incremented by the API
@@ -228,6 +229,7 @@ async fn test_update_trade_group_settings_increments_version() {
 
     // First update
     let settings_v1 = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("v1.".to_string()),
         symbol_suffix: None,
         config_version: 0,
@@ -248,6 +250,7 @@ async fn test_update_trade_group_settings_increments_version() {
 
     // Second update
     let settings_v2 = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("v2.".to_string()),
         symbol_suffix: Some(".v2".to_string()),
         config_version: 1, // API will increment this
@@ -318,6 +321,7 @@ async fn test_update_trade_group_settings_not_found() {
 
     // Try to update a non-existent trade group
     let settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("test.".to_string()),
         symbol_suffix: None,
         config_version: 0,

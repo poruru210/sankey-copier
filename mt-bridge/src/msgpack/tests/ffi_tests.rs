@@ -9,6 +9,7 @@ fn test_parse_master_config_ffi() {
     // Test the FFI function parse_master_config()
     let msg = MasterConfigMessage {
         account_id: "test_master_123".to_string(),
+        status: 2, // STATUS_CONNECTED
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 5,
@@ -56,6 +57,7 @@ fn test_parse_master_config_ffi_with_none_values() {
     // Test parsing with None values
     let msg = MasterConfigMessage {
         account_id: "test_master_789".to_string(),
+        status: 0, // STATUS_DISABLED
         symbol_prefix: None,
         symbol_suffix: None,
         config_version: 0,

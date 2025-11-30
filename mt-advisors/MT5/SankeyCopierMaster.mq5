@@ -60,6 +60,7 @@ bool          g_config_requested = false;   // Track if config request has been 
 string        g_symbol_prefix = "";       // Symbol prefix from config (applied dynamically)
 string        g_symbol_suffix = "";       // Symbol suffix from config (applied dynamically)
 uint          g_config_version = 0;       // Current config version
+int           g_server_status = STATUS_NO_CONFIGURATION; // Status from server (DISABLED/CONNECTED)
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -216,24 +217,12 @@ void OnTimer()
          g_last_heartbeat = TimeLocal();
 
          // If trade state changed, log it and update tracking variable
+         // Server will send updated status via config message based on is_trade_allowed
          if(trade_state_changed)
          {
             Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
             g_last_trade_allowed = current_trade_allowed;
-
-            // Update panel status
-            if(ShowConfigPanel)
-            {
-               if(!current_trade_allowed)
-               {
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-               }
-               else
-               {
-                  g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-               }
-               ChartRedraw();
-            }
+            // Status panel is updated by server via config message (ProcessMasterConfigMessage)
          }
 
          // Request configuration if not yet requested (on any successful heartbeat)
@@ -898,6 +887,7 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
    // Extract fields from the parsed config using the handle
    string config_account_id = master_config_get_string(config_handle, "account_id");
+   int status = master_config_get_int(config_handle, "status");
    string prefix = master_config_get_string(config_handle, "symbol_prefix");
    string suffix = master_config_get_string(config_handle, "symbol_suffix");
    int version = master_config_get_int(config_handle, "config_version");
@@ -919,30 +909,22 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
    // Log configuration values
    Print("Account ID: ", config_account_id);
+   Print("Status: ", status, " (", GetStatusString(status), ")");
    Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
    Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
    Print("Config Version: ", version);
 
    // Update global configuration variables
+   g_server_status = status;
    g_symbol_prefix = prefix;
    g_symbol_suffix = suffix;
    g_config_version = version;
 
-   // Update configuration panel
+   // Update configuration panel with server status
    if(ShowConfigPanel)
    {
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
-
-      // Update status after receiving configuration
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
-      {
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-      }
-      else
-      {
-         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-      }
+      g_config_panel.UpdateStatusRow(g_server_status);
       ChartRedraw();
    }
 
@@ -950,5 +932,21 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    master_config_free(config_handle);
 
    Print("=== Master Configuration Updated ===");
+}
+
+//+------------------------------------------------------------------+
+//| Get status string for logging                                    |
+//+------------------------------------------------------------------+
+string GetStatusString(int status)
+{
+   switch(status)
+   {
+      case STATUS_DISABLED:         return "DISABLED";
+      case STATUS_ENABLED:          return "ENABLED";
+      case STATUS_CONNECTED:        return "CONNECTED";
+      case STATUS_NO_CONFIGURATION: return "NO_CONFIGURATION";
+      case STATUS_REMOVED:          return "REMOVED";
+      default:                      return "UNKNOWN";
+   }
 }
 

@@ -24,8 +24,11 @@ pub struct TradeGroup {
 }
 
 /// Master-specific settings
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterSettings {
+    /// Whether the Master is enabled (Web UI switch state)
+    pub enabled: bool,
+
     /// Symbol prefix to remove from Master EA symbols (e.g., "pro.")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub symbol_prefix: Option<String>,
@@ -35,8 +38,18 @@ pub struct MasterSettings {
     pub symbol_suffix: Option<String>,
 
     /// Configuration version for tracking updates
-    #[serde(default)]
     pub config_version: u32,
+}
+
+impl Default for MasterSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            config_version: 0,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -67,6 +80,7 @@ mod tests {
         let tg = TradeGroup::new("MASTER_001".to_string());
 
         assert_eq!(tg.id, "MASTER_001");
+        assert!(tg.master_settings.enabled); // Default: enabled
         assert_eq!(tg.master_settings.config_version, 0);
         assert!(tg.master_settings.symbol_prefix.is_none());
         assert!(tg.master_settings.symbol_suffix.is_none());
@@ -85,6 +99,7 @@ mod tests {
     #[test]
     fn test_master_settings_serialization() {
         let settings = MasterSettings {
+            enabled: true,
             symbol_prefix: Some("pro.".to_string()),
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,
@@ -93,6 +108,7 @@ mod tests {
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: MasterSettings = serde_json::from_str(&json).unwrap();
 
+        assert!(deserialized.enabled);
         assert_eq!(deserialized.symbol_prefix, Some("pro.".to_string()));
         assert_eq!(deserialized.symbol_suffix, Some(".m".to_string()));
         assert_eq!(deserialized.config_version, 1);
@@ -101,6 +117,7 @@ mod tests {
     #[test]
     fn test_master_settings_with_null_values() {
         let settings = MasterSettings {
+            enabled: false,
             symbol_prefix: None,
             symbol_suffix: None,
             config_version: 0,
@@ -112,5 +129,6 @@ mod tests {
         assert!(!json.contains("symbol_prefix"));
         assert!(!json.contains("symbol_suffix"));
         assert!(json.contains("config_version"));
+        assert!(json.contains("enabled"));
     }
 }

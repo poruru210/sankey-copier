@@ -75,11 +75,15 @@ export function useMasterConfig() {
 
       try {
         // Use TradeGroups API to update master_settings
-        // First fetch current config to get the config_version
-        const currentConfig = await getMasterConfig(accountId);
-        const currentVersion = currentConfig?.config_version || 0;
+        // First fetch current TradeGroup to get enabled state and config_version
+        const tradeGroup = await apiClient.get<TradeGroup>(
+          `/trade-groups/${encodeURIComponent(accountId)}`
+        );
+        const currentVersion = tradeGroup?.master_settings.config_version || 0;
+        const currentEnabled = tradeGroup?.master_settings.enabled ?? true;
 
         await apiClient.updateTradeGroupSettings(accountId, {
+          enabled: currentEnabled,
           symbol_prefix: configData.symbol_prefix,
           symbol_suffix: configData.symbol_suffix,
           config_version: currentVersion,
@@ -111,16 +115,19 @@ export function useMasterConfig() {
       try {
         // TradeGroups API doesn't have a DELETE endpoint for settings
         // Instead, we update with null values to reset the configuration
-        // First fetch current config to get the version
-        const currentConfig = await getMasterConfig(accountId);
-        if (!currentConfig) {
+        // First fetch current TradeGroup to get enabled state and version
+        const tradeGroup = await apiClient.get<TradeGroup>(
+          `/trade-groups/${encodeURIComponent(accountId)}`
+        );
+        if (!tradeGroup) {
           throw new Error('Configuration not found');
         }
 
         await apiClient.updateTradeGroupSettings(accountId, {
+          enabled: tradeGroup.master_settings.enabled,
           symbol_prefix: null,
           symbol_suffix: null,
-          config_version: currentConfig.config_version,
+          config_version: tradeGroup.master_settings.config_version,
         });
       } catch (err) {
         const errorMsg =

@@ -2,11 +2,20 @@
 //!
 //! Handles heartbeat messages for health monitoring, auto-registration, and
 //! Master EA is_trade_allowed change notifications to Slave EAs.
+//!
+//! Status calculation flow:
+//! - Master: DISABLED (web_ui OFF or !is_trade_allowed) or CONNECTED
+//! - Slave: DISABLED (web_ui OFF or !is_trade_allowed) or ENABLED (master not connected) or CONNECTED
 
 use super::MessageHandler;
 use crate::models::{
+    status::{
+        calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
+    },
     HeartbeatMessage, SlaveConfigMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
+    STATUS_CONNECTED,
 };
+use sankey_copier_zmq::MasterConfigMessage;
 
 impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
@@ -35,91 +44,157 @@ impl MessageHandler {
             self.send_vlogs_config_to_ea(&account_id).await;
         }
 
-        // If this is a Master EA, check for is_trade_allowed changes
+        // If this is a Master EA, handle status calculation and notification
         if ea_type == "Master" {
             // Detect is_trade_allowed change
             let trade_allowed_changed = old_is_trade_allowed != Some(new_is_trade_allowed);
 
-            if trade_allowed_changed {
-                tracing::info!(
-                    "Master {} is_trade_allowed changed: {:?} -> {}",
+            // Fetch TradeGroup to get master_settings.enabled
+            let trade_group = match self.db.get_trade_group(&account_id).await {
+                Ok(Some(tg)) => tg,
+                Ok(None) => {
+                    tracing::debug!(
+                        "No TradeGroup found for Master {} (new connection without config)",
+                        account_id
+                    );
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get TradeGroup for {}: {}", account_id, e);
+                    return;
+                }
+            };
+
+            // Calculate Master status using centralized logic
+            let master_status = calculate_master_status(&MasterStatusInput {
+                web_ui_enabled: trade_group.master_settings.enabled,
+                is_trade_allowed: new_is_trade_allowed,
+            });
+
+            tracing::debug!(
+                "Master {} status calculated: {} (enabled={}, is_trade_allowed={})",
+                account_id,
+                master_status,
+                trade_group.master_settings.enabled,
+                new_is_trade_allowed
+            );
+
+            // Always send MasterConfigMessage back to Master EA on heartbeat
+            // This ensures the Master EA panel shows the correct status
+            let master_config = MasterConfigMessage {
+                account_id: account_id.clone(),
+                status: master_status,
+                symbol_prefix: trade_group.master_settings.symbol_prefix.clone(),
+                symbol_suffix: trade_group.master_settings.symbol_suffix.clone(),
+                config_version: trade_group.master_settings.config_version,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+
+            if let Err(e) = self.publisher.send(&master_config).await {
+                tracing::error!(
+                    "Failed to send MasterConfigMessage to {}: {}",
                     account_id,
-                    old_is_trade_allowed,
-                    new_is_trade_allowed
+                    e
                 );
+            } else {
+                tracing::debug!(
+                    "Sent MasterConfigMessage to {} (status: {})",
+                    account_id,
+                    master_status
+                );
+            }
+
+            // If is_trade_allowed changed or this is a new connection, notify Slaves
+            if trade_allowed_changed || is_new_registration {
+                if trade_allowed_changed {
+                    tracing::info!(
+                        "Master {} is_trade_allowed changed: {:?} -> {}",
+                        account_id,
+                        old_is_trade_allowed,
+                        new_is_trade_allowed
+                    );
+                }
 
                 // Resend Config to all Slave accounts connected to this Master
                 match self.db.get_members(&account_id).await {
                     Ok(members) => {
                         for member in members {
-                            // Only send to enabled Slaves (status > 0)
-                            if member.status > 0 {
-                                // Build SlaveConfig with calculated effective status
-                                let effective_status = if new_is_trade_allowed { 2 } else { 1 };
+                            // Get Slave's is_trade_allowed from connection manager (if connected)
+                            let slave_is_trade_allowed = self
+                                .connection_manager
+                                .get_ea(&member.slave_account)
+                                .await
+                                .map(|conn| conn.is_trade_allowed)
+                                .unwrap_or(true); // Default to true if not connected
 
-                                // Fetch Master's equity for margin_ratio mode from heartbeat
-                                let master_equity = self
-                                    .connection_manager
-                                    .get_ea(&account_id)
-                                    .await
-                                    .map(|conn| conn.equity);
+                            // Calculate Slave status using centralized logic
+                            // Slave is enabled if member.status > 0 (was previously enabled in DB)
+                            let slave_enabled = member.status > 0;
+                            let slave_status = calculate_slave_status(&SlaveStatusInput {
+                                web_ui_enabled: slave_enabled,
+                                is_trade_allowed: slave_is_trade_allowed,
+                                master_status,
+                            });
 
-                                let config = SlaveConfigMessage {
-                                    account_id: member.slave_account.clone(),
-                                    master_account: account_id.clone(),
-                                    timestamp: chrono::Utc::now().to_rfc3339(),
-                                    trade_group_id: account_id.clone(),
-                                    status: effective_status,
-                                    lot_calculation_mode: member
-                                        .slave_settings
-                                        .lot_calculation_mode
-                                        .clone()
-                                        .into(),
-                                    lot_multiplier: member.slave_settings.lot_multiplier,
-                                    reverse_trade: member.slave_settings.reverse_trade,
-                                    symbol_mappings: member.slave_settings.symbol_mappings.clone(),
-                                    filters: member.slave_settings.filters.clone(),
-                                    config_version: member.slave_settings.config_version,
-                                    symbol_prefix: member.slave_settings.symbol_prefix.clone(),
-                                    symbol_suffix: member.slave_settings.symbol_suffix.clone(),
-                                    source_lot_min: member.slave_settings.source_lot_min,
-                                    source_lot_max: member.slave_settings.source_lot_max,
-                                    master_equity,
-                                    // Open Sync Policy settings
-                                    sync_mode: member.slave_settings.sync_mode.clone().into(),
-                                    limit_order_expiry_min: member
-                                        .slave_settings
-                                        .limit_order_expiry_min,
-                                    market_sync_max_pips: member
-                                        .slave_settings
-                                        .market_sync_max_pips,
-                                    max_slippage: member.slave_settings.max_slippage,
-                                    copy_pending_orders: member.slave_settings.copy_pending_orders,
-                                    // Trade Execution settings
-                                    max_retries: member.slave_settings.max_retries,
-                                    max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
-                                    use_pending_order_for_delayed: member
-                                        .slave_settings
-                                        .use_pending_order_for_delayed,
-                                    // Derived from status: allow new orders when enabled
-                                    allow_new_orders: effective_status > 0,
-                                };
+                            // Fetch Master's equity for margin_ratio mode
+                            let master_equity = self
+                                .connection_manager
+                                .get_ea(&account_id)
+                                .await
+                                .map(|conn| conn.equity);
 
-                                if let Err(e) = self.publisher.send(&config).await {
-                                    tracing::error!(
-                                        "Failed to send config to {} due to Master is_trade_allowed change: {}",
-                                        member.slave_account,
-                                        e
-                                    );
-                                } else {
-                                    tracing::info!(
-                                        "Sent config to {} (effective_status: {}) due to Master {} is_trade_allowed change: {}",
-                                        member.slave_account,
-                                        effective_status,
-                                        account_id,
-                                        new_is_trade_allowed
-                                    );
-                                }
+                            let config = SlaveConfigMessage {
+                                account_id: member.slave_account.clone(),
+                                master_account: account_id.clone(),
+                                timestamp: chrono::Utc::now().to_rfc3339(),
+                                trade_group_id: account_id.clone(),
+                                status: slave_status,
+                                lot_calculation_mode: member
+                                    .slave_settings
+                                    .lot_calculation_mode
+                                    .clone()
+                                    .into(),
+                                lot_multiplier: member.slave_settings.lot_multiplier,
+                                reverse_trade: member.slave_settings.reverse_trade,
+                                symbol_mappings: member.slave_settings.symbol_mappings.clone(),
+                                filters: member.slave_settings.filters.clone(),
+                                config_version: member.slave_settings.config_version,
+                                symbol_prefix: member.slave_settings.symbol_prefix.clone(),
+                                symbol_suffix: member.slave_settings.symbol_suffix.clone(),
+                                source_lot_min: member.slave_settings.source_lot_min,
+                                source_lot_max: member.slave_settings.source_lot_max,
+                                master_equity,
+                                // Open Sync Policy settings
+                                sync_mode: member.slave_settings.sync_mode.clone().into(),
+                                limit_order_expiry_min: member
+                                    .slave_settings
+                                    .limit_order_expiry_min,
+                                market_sync_max_pips: member.slave_settings.market_sync_max_pips,
+                                max_slippage: member.slave_settings.max_slippage,
+                                copy_pending_orders: member.slave_settings.copy_pending_orders,
+                                // Trade Execution settings
+                                max_retries: member.slave_settings.max_retries,
+                                max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
+                                use_pending_order_for_delayed: member
+                                    .slave_settings
+                                    .use_pending_order_for_delayed,
+                                // Derived from status: allow new orders when enabled
+                                allow_new_orders: slave_status > 0,
+                            };
+
+                            if let Err(e) = self.publisher.send(&config).await {
+                                tracing::error!(
+                                    "Failed to send config to {}: {}",
+                                    member.slave_account,
+                                    e
+                                );
+                            } else {
+                                tracing::info!(
+                                    "Sent config to {} (status: {}) due to Master {} state change",
+                                    member.slave_account,
+                                    slave_status,
+                                    account_id
+                                );
                             }
                         }
                     }
@@ -129,36 +204,43 @@ impl MessageHandler {
                 }
             }
 
-            // Update all enabled settings to CONNECTED (status=2)
-            match self.db.update_master_statuses_connected(&account_id).await {
-                Ok(count) if count > 0 => {
-                    tracing::info!(
-                        "Master {} connected: updated {} settings to CONNECTED",
-                        account_id,
-                        count
-                    );
-                    // Notify WebSocket clients
-                    // We need to broadcast the updated settings for all affected slaves
-                    if let Ok(members) = self.db.get_members(&account_id).await {
-                        for member in members {
-                            let settings_with_master = SlaveConfigWithMaster {
-                                master_account: account_id.clone(),
-                                slave_account: member.slave_account.clone(),
-                                status: member.status,
-                                slave_settings: member.slave_settings.clone(),
-                            };
-                            if let Ok(json) = serde_json::to_string(&settings_with_master) {
-                                let _ =
-                                    self.broadcast_tx.send(format!("settings_updated:{}", json));
+            // Update DB status for all slaves based on master connection state
+            // Only if master is now CONNECTED
+            if master_status == STATUS_CONNECTED {
+                match self.db.update_master_statuses_connected(&account_id).await {
+                    Ok(count) if count > 0 => {
+                        tracing::info!(
+                            "Master {} connected: updated {} settings to CONNECTED",
+                            account_id,
+                            count
+                        );
+                        // Notify WebSocket clients
+                        if let Ok(members) = self.db.get_members(&account_id).await {
+                            for member in members {
+                                let settings_with_master = SlaveConfigWithMaster {
+                                    master_account: account_id.clone(),
+                                    slave_account: member.slave_account.clone(),
+                                    status: member.status,
+                                    slave_settings: member.slave_settings.clone(),
+                                };
+                                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+                                    let _ = self
+                                        .broadcast_tx
+                                        .send(format!("settings_updated:{}", json));
+                                }
                             }
                         }
                     }
-                }
-                Ok(_) => {
-                    // No settings updated (no enabled settings for this master)
-                }
-                Err(e) => {
-                    tracing::error!("Failed to update master statuses for {}: {}", account_id, e);
+                    Ok(_) => {
+                        // No settings updated (no enabled settings for this master)
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to update master statuses for {}: {}",
+                            account_id,
+                            e
+                        );
+                    }
                 }
             }
         }

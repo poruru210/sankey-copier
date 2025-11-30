@@ -183,6 +183,16 @@ export class ApiClient {
     return this.put(`/trade-groups/${encodeURIComponent(masterAccount)}`, settings);
   }
 
+  /**
+   * Toggle Master enabled state
+   */
+  async toggleMaster(
+    masterAccount: string,
+    enabled: boolean
+  ): Promise<import('@/types').TradeGroup> {
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/toggle`, { enabled });
+  }
+
   // ============================================================================
   // TradeGroupMembers API (Slave settings)
   // ============================================================================

@@ -252,6 +252,7 @@ mod tests {
 
         let config = MasterConfigMessage {
             account_id: "MASTER123".to_string(),
+            status: 2, // STATUS_CONNECTED
             symbol_prefix: Some("pro.".to_string()),
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,

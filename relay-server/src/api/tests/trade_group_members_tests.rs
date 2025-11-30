@@ -25,6 +25,7 @@ async fn setup_test_trade_group(state: &crate::api::AppState, master_account: &s
 
     // Then update its settings
     let settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,

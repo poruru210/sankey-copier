@@ -4,7 +4,7 @@
 //! appropriate handlers based on EA type.
 
 use super::MessageHandler;
-use crate::models::{RequestConfigMessage, SlaveConfigMessage};
+use crate::models::{RequestConfigMessage, SlaveConfigMessage, STATUS_CONNECTED, STATUS_DISABLED};
 use sankey_copier_zmq::MasterConfigMessage;
 
 impl MessageHandler {
@@ -36,8 +36,17 @@ impl MessageHandler {
     async fn handle_master_config_request(&self, account_id: &str) {
         match self.db.get_settings_for_master(account_id).await {
             Ok(master_settings) => {
+                // Calculate status based on enabled setting
+                // Note: is_trade_allowed is handled via heartbeat; here we use enabled only
+                let status = if master_settings.enabled {
+                    STATUS_CONNECTED
+                } else {
+                    STATUS_DISABLED
+                };
+
                 let config = MasterConfigMessage {
                     account_id: account_id.to_string(),
+                    status,
                     symbol_prefix: master_settings.symbol_prefix,
                     symbol_suffix: master_settings.symbol_suffix,
                     config_version: master_settings.config_version,

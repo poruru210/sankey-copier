@@ -130,9 +130,10 @@ fn default_allow_new_orders() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterConfigMessage {
     pub account_id: String,
-    #[serde(default)]
+    /// Master status: 0=DISABLED, 2=CONNECTED
+    /// Note: Master has no ENABLED state. It's either DISABLED or CONNECTED.
+    pub status: i32,
     pub symbol_prefix: Option<String>,
-    #[serde(default)]
     pub symbol_suffix: Option<String>,
     pub config_version: u32,
     pub timestamp: String, // ISO 8601 format

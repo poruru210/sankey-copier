@@ -10,7 +10,7 @@ use axum::{
 };
 use sankey_copier_zmq::MasterConfigMessage;
 
-use crate::models::{MasterSettings, TradeGroup};
+use crate::models::{MasterSettings, TradeGroup, STATUS_CONNECTED, STATUS_DISABLED};
 
 use super::{AppState, ProblemDetails};
 
@@ -197,10 +197,103 @@ pub async fn delete_trade_group(
     }
 }
 
+/// Request body for toggling Master enabled state
+#[derive(Debug, serde::Deserialize)]
+pub struct ToggleMasterRequest {
+    pub enabled: bool,
+}
+
+/// Toggle Master enabled state
+/// POST /api/trade-groups/{id}/toggle
+pub async fn toggle_master(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<ToggleMasterRequest>,
+) -> Result<Json<TradeGroup>, ProblemDetails> {
+    let span = tracing::info_span!(
+        "toggle_master",
+        master_account = %id,
+        enabled = body.enabled
+    );
+    let _enter = span.enter();
+
+    // Get current trade group
+    let trade_group = match state.db.get_trade_group(&id).await {
+        Ok(Some(tg)) => tg,
+        Ok(None) => {
+            return Err(
+                ProblemDetails::not_found(format!("TradeGroup '{}' not found", id))
+                    .with_instance(format!("/api/trade-groups/{}/toggle", id)),
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to get TradeGroup");
+            return Err(
+                ProblemDetails::internal_error(format!("Failed to get TradeGroup: {}", e))
+                    .with_instance(format!("/api/trade-groups/{}/toggle", id)),
+            );
+        }
+    };
+
+    // Update settings with new enabled state
+    let mut new_settings = trade_group.master_settings.clone();
+    new_settings.enabled = body.enabled;
+    new_settings.config_version += 1;
+
+    // Save to database
+    if let Err(e) = state
+        .db
+        .update_master_settings(&id, new_settings.clone())
+        .await
+    {
+        tracing::error!(error = %e, "Failed to update Master settings");
+        return Err(
+            ProblemDetails::internal_error(format!("Failed to toggle Master: {}", e))
+                .with_instance(format!("/api/trade-groups/{}/toggle", id)),
+        );
+    }
+
+    tracing::info!(
+        master_account = %id,
+        enabled = body.enabled,
+        config_version = new_settings.config_version,
+        "Successfully toggled Master enabled state"
+    );
+
+    // Send config to Master EA via ZMQ
+    send_config_to_master(&state, &id, &new_settings).await;
+
+    // Notify via WebSocket
+    let _ = state.tx.send(format!("trade_group_updated:{}", id));
+
+    // Fetch and return updated trade group
+    match state.db.get_trade_group(&id).await {
+        Ok(Some(updated_tg)) => Ok(Json(updated_tg)),
+        Ok(None) => Err(
+            ProblemDetails::internal_error("TradeGroup disappeared after update")
+                .with_instance(format!("/api/trade-groups/{}/toggle", id)),
+        ),
+        Err(e) => Err(ProblemDetails::internal_error(format!(
+            "Failed to fetch updated TradeGroup: {}",
+            e
+        ))
+        .with_instance(format!("/api/trade-groups/{}/toggle", id))),
+    }
+}
+
 /// Send Master config to Master EA via ZMQ
 async fn send_config_to_master(state: &AppState, master_account: &str, settings: &MasterSettings) {
+    // Calculate status based on enabled setting
+    // Note: is_trade_allowed is not available here; EA will handle local auto-trade state
+    let status = if settings.enabled {
+        STATUS_CONNECTED
+    } else {
+        STATUS_DISABLED
+    };
+
     let config = MasterConfigMessage {
         account_id: master_account.to_string(),
+        status,
         symbol_prefix: settings.symbol_prefix.clone(),
         symbol_suffix: settings.symbol_suffix.clone(),
         config_version: settings.config_version,
