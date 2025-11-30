@@ -33,13 +33,13 @@
 #include "ConfigFile.mqh"
 
 // Port values are now loaded dynamically from sankey_copier.ini
+// 2-port architecture: Receiver (PULL) and Publisher (unified PUB)
 // Use the following functions from ConfigFile.mqh:
 //   GetReceiverPort()     - Get PUSH socket port (EA -> Server)
-//   GetPublisherPort()    - Get Trade SUB socket port (Server -> EA)
-//   GetConfigSenderPort() - Get Config SUB socket port (Server -> EA)
+//   GetPublisherPort()    - Get SUB socket port (Server -> EA, unified for trades and configs)
 //   GetPushAddress()      - Get full "tcp://localhost:port" address for PUSH socket
-//   GetTradeSubAddress()  - Get full address for Trade subscription
-//   GetConfigSubAddress() - Get full address for Config subscription
+//   GetTradeSubAddress()  - Get full address for subscription (trades and configs)
+//   GetConfigSubAddress() - Alias for GetTradeSubAddress() (same unified PUB socket)
 
 //--- Connection status constants (4 states)
 #define STATUS_DISABLED 0         // Slave is disabled
