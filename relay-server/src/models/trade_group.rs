@@ -6,9 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Default value for enabled field (backward compatibility)
+/// Default value for enabled field (used when deserializing old DB records)
 fn default_enabled() -> bool {
-    true
+    false
 }
 
 /// TradeGroup represents a Master account and its configuration.
@@ -32,7 +32,7 @@ pub struct TradeGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterSettings {
     /// Whether the Master is enabled (Web UI switch state)
-    /// Defaults to true for backward compatibility with existing DB records
+    /// Defaults to false - new connections start with Switch OFF
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
@@ -51,7 +51,7 @@ pub struct MasterSettings {
 impl Default for MasterSettings {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false, // New connections start with Switch OFF
             symbol_prefix: None,
             symbol_suffix: None,
             config_version: 0,
@@ -87,7 +87,7 @@ mod tests {
         let tg = TradeGroup::new("MASTER_001".to_string());
 
         assert_eq!(tg.id, "MASTER_001");
-        assert!(tg.master_settings.enabled); // Default: enabled
+        assert!(!tg.master_settings.enabled); // Default: disabled (Switch OFF)
         assert_eq!(tg.master_settings.config_version, 0);
         assert!(tg.master_settings.symbol_prefix.is_none());
         assert!(tg.master_settings.symbol_suffix.is_none());
@@ -140,12 +140,12 @@ mod tests {
     }
 
     #[test]
-    fn test_master_settings_backward_compatibility() {
-        // Old DB records without 'enabled' field should deserialize with enabled=true
-        let old_json = r#"{"symbol_prefix":"pro.","config_version":1}"#;
-        let settings: MasterSettings = serde_json::from_str(old_json).unwrap();
+    fn test_master_settings_missing_enabled_field() {
+        // DB records without 'enabled' field should deserialize with enabled=false
+        let json_without_enabled = r#"{"symbol_prefix":"pro.","config_version":1}"#;
+        let settings: MasterSettings = serde_json::from_str(json_without_enabled).unwrap();
 
-        assert!(settings.enabled); // Should default to true
+        assert!(!settings.enabled); // Should default to false
         assert_eq!(settings.symbol_prefix, Some("pro.".to_string()));
         assert_eq!(settings.config_version, 1);
     }
