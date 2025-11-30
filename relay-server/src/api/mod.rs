@@ -16,6 +16,7 @@ mod logs;
 mod middleware;
 mod victoria_logs_settings;
 mod websocket;
+mod zeromq_settings;
 
 #[cfg(test)]
 mod tests;
@@ -37,7 +38,7 @@ use tower_http::LatencyUnit;
 
 use crate::{
     config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
-    victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
+    port_resolver::ResolvedPorts, victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
 };
 
 // Import handlers from submodules
@@ -55,6 +56,8 @@ pub struct AppState {
     pub allowed_origins: Vec<String>,
     pub cors_disabled: bool,
     pub config: Arc<Config>,
+    /// Resolved ZeroMQ ports (may be dynamically assigned)
+    pub resolved_ports: Arc<ResolvedPorts>,
     /// Controller for runtime VictoriaLogs toggle (None if not configured in config.toml)
     pub vlogs_controller: Option<VLogsController>,
 }
@@ -92,14 +95,15 @@ pub fn create_router(state: AppState) -> Router {
     };
 
     // Create HTTP tracing layer for request/response logging
+    // Use DEBUG level to reduce log volume (API requests are frequent)
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(
             DefaultMakeSpan::new()
-                .level(tracing::Level::INFO)
+                .level(tracing::Level::DEBUG)
                 .include_headers(true),
         )
         .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
-            tracing::info!(
+            tracing::debug!(
                 method = %request.method(),
                 uri = %request.uri(),
                 version = ?request.version(),
@@ -108,7 +112,7 @@ pub fn create_router(state: AppState) -> Router {
         })
         .on_response(
             DefaultOnResponse::new()
-                .level(tracing::Level::INFO)
+                .level(tracing::Level::DEBUG)
                 .latency_unit(LatencyUnit::Millis)
                 .include_headers(true),
         );
@@ -135,6 +139,10 @@ pub fn create_router(state: AppState) -> Router {
                 .put(trade_groups::update_trade_group_settings)
                 .delete(trade_groups::delete_trade_group),
         )
+        .route(
+            "/api/trade-groups/:id/toggle",
+            post(trade_groups::toggle_master),
+        )
         // TradeGroupMembers API (Slave settings)
         .route(
             "/api/trade-groups/:id/members",
@@ -160,6 +168,12 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/victoria-logs-settings",
             axum::routing::put(victoria_logs_settings::toggle_vlogs_enabled),
+        )
+        // ZeroMQ API
+        // GET /api/zeromq-config: Returns current ZeroMQ port configuration (read-only)
+        .route(
+            "/api/zeromq-config",
+            get(zeromq_settings::get_zeromq_config),
         )
         .layer(trace_layer)
         .layer(cors)

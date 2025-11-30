@@ -49,7 +49,7 @@ impl MessageHandler {
         // Route snapshot to each connected slave via config publisher
         for member in &members {
             if let Err(e) = self
-                .config_sender
+                .publisher
                 .publish_to_topic(&member.slave_account, &snapshot)
                 .await
             {

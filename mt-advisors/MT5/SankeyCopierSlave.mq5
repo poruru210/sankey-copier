@@ -27,13 +27,15 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
 // configured via Web-UI and received through the config message from relay-server.
-// Only ZMQ connection settings remain as input parameters.
-input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send heartbeats/requests (PULL)
-input string   TradeSignalSourceAddress = DEFAULT_ADDR_PUB_TRADE; // Address to receive trade signals (SUB)
-input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG;     // Address to receive configuration (SUB)
-input bool     ShowConfigPanel = true;                       // Show configuration panel on chart
-input int      PanelWidth = 280;                             // Configuration panel width (pixels)
-input int      SignalPollingIntervalMs = 100;                // Signal polling interval in ms [100-5000]
+// ZMQ addresses are loaded from sankey_copier.ini (no input override)
+input bool     ShowConfigPanel = true;              // Show configuration panel on chart
+input int      PanelWidth = 280;                    // Configuration panel width (pixels)
+input int      SignalPollingIntervalMs = 100;       // Signal polling interval in ms [100-5000]
+
+//--- Resolved addresses (from sankey_copier.ini config file)
+// 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified for trades+configs)
+string g_RelayAddress = "";
+string g_SubAddress = "";  // Unified SUB address for trades and configs
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -77,21 +79,40 @@ int OnInit()
    // Symbol transformation is now handled by Relay Server
    // Slave EA receives pre-transformed symbols
 
+   // Load port configuration from sankey_copier.ini
+   // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
+   if(!LoadConfig())
+   {
+      Print("WARNING: Failed to load config file, using default ports");
+   }
+   else
+   {
+      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
+            ", PublisherPort=", GetPublisherPort(), " (unified)");
+   }
+
+   // Resolve addresses from sankey_copier.ini config file
+   // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
+   g_RelayAddress = GetPushAddress();
+   g_SubAddress = GetTradeSubAddress();
+
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_SubAddress, " (unified)");
+
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
-   // Create and connect trade signal socket (SUB to port 5556)
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, TradeSignalSourceAddress, "Slave Trade SUB");
+   // Create and connect trade signal socket (SUB) - uses unified PUB address
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Slave Config SUB");
+   // Create and connect config socket (SUB) - uses same unified PUB address
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
@@ -145,7 +166,7 @@ int OnInit()
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
       // Show NO_CONFIGURATION status initially (no config received yet)
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
-      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateServerRow(g_RelayAddress);
       // Symbol config is now per-Master from Web-UI, will be shown in carousel
       g_config_panel.UpdateSymbolConfig("", "", "");
    }
@@ -166,7 +187,7 @@ void OnDeinit(const int reason)
    VLogsFlush();
 
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, g_RelayAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -204,7 +225,7 @@ void OnTimer()
    if(should_send_heartbeat)
    {
       // Slave doesn't send symbol settings in heartbeat - those are managed per-Master config by relay server
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave", "MT5");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave", "MT5");
 
       if(heartbeat_sent)
       {
@@ -238,7 +259,7 @@ void OnTimer()
                         break;
                      }
                   }
-                  
+
                   if(ArraySize(g_configs) == 0)
                      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
                   else if(any_connected)
@@ -246,13 +267,14 @@ void OnTimer()
                   else
                      g_config_panel.UpdateStatusRow(STATUS_ENABLED);
                }
+               ChartRedraw();
             }
 
             // If auto-trading was just enabled, request configuration
             if(current_trade_allowed && !g_config_requested)
             {
                Print("[INFO] Auto-trading enabled, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -269,7 +291,7 @@ void OnTimer()
             if(!g_config_requested)
             {
                Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Slave"))
+               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
                   Print("[INFO] Configuration request sent successfully");
@@ -340,7 +362,7 @@ void OnTimer()
                // Valid SlaveConfig - process it
                slave_config_free(config_handle);
                ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
-                                    g_zmq_context, RelayServerAddress, AccountID);
+                                    g_zmq_context, g_RelayAddress, AccountID);
                g_has_received_config = true;
             }
             else
@@ -384,7 +406,7 @@ void OnTimer()
                      break;
                   }
                }
-               
+
                if(ArraySize(g_configs) == 0)
                   g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
                else if(any_connected)
@@ -392,9 +414,10 @@ void OnTimer()
                else
                   g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
             }
-            
+
             // Update carousel display with detailed copy settings
             g_config_panel.UpdateCarouselConfigs(g_configs);
+            ChartRedraw();
          }
          } // end else (non-vlogs_config topic)
       }

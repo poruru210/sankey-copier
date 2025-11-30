@@ -11,7 +11,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-pub use config_publisher::ZmqConfigPublisher;
+// Export the unified publisher with both names
+// ZmqPublisher is the primary name (2-port architecture)
+// ZmqConfigPublisher is kept for backward compatibility
+#[allow(unused_imports)]
+pub use config_publisher::{ZmqConfigPublisher, ZmqPublisher};
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),
@@ -297,18 +301,23 @@ impl ZmqServer {
 }
 
 /// Generic message for ZMQ publishing
+/// DEPRECATED: Use ZmqPublisher for unified publishing in 2-port architecture
+#[allow(dead_code)]
 struct PublishMessage<T> {
     topic: String,
     payload: T,
 }
 
 /// Generic ZeroMQ publisher using PUB/SUB pattern
-pub struct ZmqPublisher<T: Serialize + Clone + Send + 'static> {
+/// DEPRECATED: Use ZmqPublisher (from config_publisher) for unified publishing in 2-port architecture
+#[allow(dead_code)]
+pub struct GenericZmqPublisher<T: Serialize + Clone + Send + 'static> {
     tx: mpsc::UnboundedSender<PublishMessage<T>>,
     _handle: JoinHandle<()>,
 }
 
-impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
+#[allow(dead_code)]
+impl<T: Serialize + Clone + Send + 'static> GenericZmqPublisher<T> {
     pub fn new(bind_address: &str) -> Result<Self> {
         let context = zmq::Context::new();
         let socket = context
@@ -380,9 +389,13 @@ impl<T: Serialize + Clone + Send + 'static> ZmqPublisher<T> {
 }
 
 /// Type alias for trade signal publisher
-pub type ZmqSender = ZmqPublisher<TradeSignal>;
+/// DEPRECATED: Use ZmqPublisher::send_trade_signal() in 2-port architecture
+#[allow(dead_code)]
+pub type ZmqSender = GenericZmqPublisher<TradeSignal>;
 
 /// Extension methods for ZmqSender to maintain existing API
+/// DEPRECATED: Use ZmqPublisher::send_trade_signal() in 2-port architecture
+#[allow(dead_code)]
 impl ZmqSender {
     pub async fn send_signal(&self, trade_group_id: &str, signal: &TradeSignal) -> Result<()> {
         self.publish(trade_group_id, signal).await

@@ -12,6 +12,7 @@ fn test_basic_transformation_with_mapping_and_suffix() {
     // Master suffix 'm' removed, mapping XAUUSD→GOLD applied, Slave suffix '#' added
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some(String::new()),
         symbol_suffix: Some("m".to_string()),
         config_version: 0,
@@ -44,6 +45,7 @@ fn test_no_mapping_with_suffix() {
     // Master suffix 'm' removed, no mapping, Slave suffix '#' added
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some(String::new()),
         symbol_suffix: Some("m".to_string()),
         config_version: 0,
@@ -73,6 +75,7 @@ fn test_prefix_transformation() {
     // Master prefix 'pro.' removed, Slave prefix 'FX.' added, Slave suffix '.m' added
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(String::new()),
         config_version: 0,
@@ -105,6 +108,7 @@ fn test_complex_mapping_with_suffix() {
     // Master suffix '.raw' removed, mapping XAUUSD→GOLD applied, Slave suffix '-ECN' added
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some(String::new()),
         symbol_suffix: Some(".raw".to_string()),
         config_version: 0,
@@ -140,6 +144,7 @@ fn test_no_transformation_needed() {
     // No prefix/suffix on either side, no mapping
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some(String::new()),
         symbol_suffix: Some(String::new()),
         config_version: 0,
@@ -184,6 +189,7 @@ fn test_trade_signal_transformation_integration() {
     };
 
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some(String::new()),
         symbol_suffix: Some("m".to_string()),
         config_version: 0,

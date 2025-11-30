@@ -2,11 +2,12 @@
 //
 // REST API endpoints for VictoriaLogs configuration and settings management.
 // - GET /api/victoria-logs-config: Returns config.toml settings (read-only) + current enabled state
-// - PUT /api/victoria-logs-settings: Toggle enabled state only
+// - PUT /api/victoria-logs-settings: Toggle enabled state only (updates config.toml)
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 
+use crate::config::update_victoria_logs_enabled;
 use crate::models::VLogsGlobalSettings;
 
 use super::{AppState, ProblemDetails};
@@ -32,18 +33,13 @@ pub struct VLogsConfigInfo {
     pub batch_size: usize,
     pub flush_interval_secs: u64,
     pub source: String,
-    /// Current log level ("DEBUG", "INFO", "WARN", "ERROR")
-    pub log_level: String,
 }
 
 /// Request for PUT /api/victoria-logs-settings
-/// Enabled state and log level can be toggled
+/// Only enabled state can be toggled (persisted to config.toml)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VLogsToggleRequest {
     pub enabled: bool,
-    /// Optional log level update ("DEBUG", "INFO", "WARN", "ERROR")
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub log_level: Option<String>,
 }
 
 /// GET /api/victoria-logs-config
@@ -58,12 +54,6 @@ pub async fn get_vlogs_config(
         Some(controller) => {
             let config = controller.config();
 
-            // Get current log level from DB, default to DEBUG
-            let log_level = match state.db.get_vlogs_settings().await {
-                Ok(settings) => settings.log_level,
-                _ => "DEBUG".to_string(),
-            };
-
             let response = VLogsConfigResponse {
                 configured: true,
                 config: Some(VLogsConfigInfo {
@@ -71,7 +61,6 @@ pub async fn get_vlogs_config(
                     batch_size: config.batch_size,
                     flush_interval_secs: config.flush_interval_secs,
                     source: config.source.clone(),
-                    log_level: log_level.clone(),
                 }),
                 enabled: controller.is_enabled(),
             };
@@ -80,7 +69,6 @@ pub async fn get_vlogs_config(
                 configured = true,
                 enabled = response.enabled,
                 host = %config.host,
-                log_level = %log_level,
                 "Retrieved VictoriaLogs config"
             );
 
@@ -102,8 +90,8 @@ pub async fn get_vlogs_config(
 }
 
 /// PUT /api/victoria-logs-settings
-/// Update VictoriaLogs enabled state and/or log level
-/// Updates runtime state and broadcasts to all connected EAs
+/// Update VictoriaLogs enabled state
+/// Updates runtime state, persists to config.toml, and broadcasts to all connected EAs
 pub async fn toggle_vlogs_enabled(
     State(state): State<AppState>,
     Json(request): Json<VLogsToggleRequest>,
@@ -115,53 +103,44 @@ pub async fn toggle_vlogs_enabled(
     let controller = state.vlogs_controller.as_ref().ok_or_else(|| {
         tracing::warn!("Attempted to toggle VictoriaLogs but it's not configured");
         ProblemDetails::validation_error(
-            "VictoriaLogs is not configured in config.toml. Add [victoria_logs] section with endpoint to enable this feature.",
+            "VictoriaLogs is not configured in config.toml. Add [victoria_logs] section with host to enable this feature.",
         )
     })?;
 
     // Update runtime state
     controller.set_enabled(request.enabled);
 
-    // Get current log_level from DB or use provided value
-    let current_settings = state.db.get_vlogs_settings().await.ok();
-    let log_level = request.log_level.unwrap_or_else(|| {
-        current_settings
-            .map(|s| s.log_level)
-            .unwrap_or_else(|| "DEBUG".to_string())
-    });
+    tracing::info!(
+        enabled = request.enabled,
+        "Updated VictoriaLogs runtime state"
+    );
 
-    // Validate log level
-    let valid_levels = ["DEBUG", "INFO", "WARN", "ERROR"];
-    if !valid_levels.contains(&log_level.as_str()) {
-        return Err(ProblemDetails::validation_error(format!(
-            "Invalid log_level '{}'. Must be one of: DEBUG, INFO, WARN, ERROR",
-            log_level
+    // Save enabled state to config.toml for persistence across restarts
+    if let Err(e) = update_victoria_logs_enabled(request.enabled) {
+        tracing::error!(
+            error = %e,
+            "Failed to persist VictoriaLogs enabled state to config.toml"
+        );
+        return Err(ProblemDetails::internal_error(format!(
+            "Failed to update config.toml: {}",
+            e
         )));
     }
 
     tracing::info!(
         enabled = request.enabled,
-        log_level = %log_level,
-        "Updated VictoriaLogs runtime state"
+        "VictoriaLogs enabled state saved to config.toml"
     );
 
-    // Save enabled state to database for persistence across restarts
+    // Build settings for broadcast
     let config = controller.config();
     let settings = VLogsGlobalSettings {
         enabled: request.enabled,
-        endpoint: config.endpoint(), // Full URL (host + fixed path)
+        endpoint: config.endpoint(),
         batch_size: config.batch_size as i32,
         flush_interval_secs: config.flush_interval_secs as i32,
-        log_level: log_level.clone(),
+        log_level: "INFO".to_string(), // Fixed log level
     };
-
-    if let Err(e) = state.db.save_vlogs_settings(&settings).await {
-        tracing::error!(
-            error = %e,
-            "Failed to persist VictoriaLogs settings to database"
-        );
-        // Continue even if DB save fails - runtime state is already updated
-    }
 
     // Broadcast settings to all connected EAs
     broadcast_vlogs_config(&state, &settings).await;

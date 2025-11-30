@@ -8,10 +8,10 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sankey_copier_zmq::SlaveConfigMessage;
+use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SlaveSettings, TradeGroupMember};
+use crate::models::{SlaveSettings, TradeGroupMember, STATUS_REMOVED};
 
 use super::{AppState, ProblemDetails};
 
@@ -461,7 +461,7 @@ pub async fn delete_member(
     );
     let _enter = span.enter();
 
-    // Before deleting, send status=0 config to Slave EA to remove config
+    // Before deleting, send status=REMOVED config to Slave EA
     send_disabled_config_to_slave(&state, &trade_group_id, &slave_account).await;
 
     match state
@@ -475,6 +475,36 @@ pub async fn delete_member(
                 slave_account = %slave_account,
                 "Successfully deleted member"
             );
+
+            // Check if TradeGroup has any remaining members
+            let remaining_members = state
+                .db
+                .get_members(&trade_group_id)
+                .await
+                .unwrap_or_default();
+            if remaining_members.is_empty() {
+                tracing::info!(
+                    trade_group_id = %trade_group_id,
+                    "No remaining members, deleting TradeGroup and notifying Master EA"
+                );
+
+                // Send REMOVED config to Master EA
+                send_removed_config_to_master(&state, &trade_group_id).await;
+
+                // Delete the TradeGroup from DB
+                if let Err(e) = state.db.delete_trade_group(&trade_group_id).await {
+                    tracing::error!(
+                        trade_group_id = %trade_group_id,
+                        error = %e,
+                        "Failed to delete empty TradeGroup"
+                    );
+                } else {
+                    tracing::info!(
+                        trade_group_id = %trade_group_id,
+                        "Successfully deleted empty TradeGroup"
+                    );
+                }
+            }
 
             // Notify via WebSocket
             let event = serde_json::json!({
@@ -556,6 +586,31 @@ async fn send_disabled_config_to_slave(
             slave_account = %slave_account,
             master_account = %master_account,
             "Successfully sent disabled SlaveConfigMessage via ZMQ"
+        );
+    }
+}
+
+/// Send REMOVED config to Master EA via ZMQ (when TradeGroup is deleted)
+async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
+    let config = MasterConfigMessage {
+        account_id: master_account.to_string(),
+        status: STATUS_REMOVED,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        config_version: 0,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    if let Err(e) = state.config_sender.send(&config).await {
+        tracing::error!(
+            master_account = %master_account,
+            error = %e,
+            "Failed to send REMOVED MasterConfigMessage via ZMQ"
+        );
+    } else {
+        tracing::info!(
+            master_account = %master_account,
+            "Successfully sent REMOVED MasterConfigMessage via ZMQ"
         );
     }
 }

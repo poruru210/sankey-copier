@@ -107,10 +107,7 @@ async fn test_toggle_vlogs_enabled_when_configured() {
     assert!(config.enabled);
 
     // Toggle to disabled
-    let toggle_request = VLogsToggleRequest {
-        enabled: false,
-        log_level: None,
-    };
+    let toggle_request = VLogsToggleRequest { enabled: false };
     let response = app
         .clone()
         .oneshot(
@@ -151,10 +148,7 @@ async fn test_toggle_vlogs_enabled_when_not_configured() {
     let state = create_test_app_state_with_vlogs(false).await;
     let app = create_router(state);
 
-    let toggle_request = VLogsToggleRequest {
-        enabled: true,
-        log_level: None,
-    };
+    let toggle_request = VLogsToggleRequest { enabled: true };
     let response = app
         .oneshot(
             Request::builder()
@@ -178,10 +172,7 @@ async fn test_toggle_vlogs_enabled_cycle() {
     let app = create_router(state);
 
     // Disable
-    let toggle_request = VLogsToggleRequest {
-        enabled: false,
-        log_level: None,
-    };
+    let toggle_request = VLogsToggleRequest { enabled: false };
     let response = app
         .clone()
         .oneshot(
@@ -197,10 +188,7 @@ async fn test_toggle_vlogs_enabled_cycle() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     // Re-enable
-    let toggle_request = VLogsToggleRequest {
-        enabled: true,
-        log_level: None,
-    };
+    let toggle_request = VLogsToggleRequest { enabled: true };
     let response = app
         .clone()
         .oneshot(

@@ -100,8 +100,8 @@ impl MessageHandler {
                 // All slaves subscribe to their master's topic and receive all signals
                 // Filtering (e.g., disabled slave skipping Open) is done on Slave EA side
                 if let Err(e) = self
-                    .zmq_sender
-                    .send_signal(&member.trade_group_id, &transformed)
+                    .publisher
+                    .send_trade_signal(&member.trade_group_id, &transformed)
                     .await
                 {
                     tracing::error!("Failed to send signal to trade group: {}", e);

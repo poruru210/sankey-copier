@@ -1,6 +1,7 @@
 mod connection;
 mod global_settings;
 mod mt_installation;
+pub mod status;
 mod trade_group;
 mod trade_group_member;
 

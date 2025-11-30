@@ -21,10 +21,12 @@ export default function Home() {
   const {
     settings,
     connections,
+    tradeGroups,
     loading,
     error,
     wsMessages,
     toggleEnabled,
+    toggleMaster,
     createSetting,
     updateSetting,
     deleteSetting,
@@ -76,7 +78,9 @@ export default function Home() {
             <ConnectionsViewReactFlow
               connections={connections}
               settings={settings}
+              tradeGroups={tradeGroups}
               onToggle={toggleEnabled}
+              onToggleMaster={toggleMaster}
               onCreate={createSetting}
               onUpdate={updateSetting}
               onDelete={deleteSetting}

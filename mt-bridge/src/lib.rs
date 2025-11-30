@@ -159,7 +159,15 @@ pub extern "C" fn zmq_socket_create(context_handle: i32, socket_type: i32) -> i3
     };
 
     let socket = match ctx.socket(sock_type) {
-        Ok(s) => Box::new(s),
+        Ok(s) => {
+            // Set LINGER to 1000ms to allow messages to be sent before socket close
+            // LINGER=0 caused message loss with create-connect-send-destroy pattern
+            // 1000ms is enough for local connections while avoiding long blocks on exit
+            if let Err(e) = s.set_linger(1000) {
+                eprintln!("zmq_socket_create: failed to set linger: {}", e);
+            }
+            Box::new(s)
+        }
         Err(e) => {
             eprintln!("zmq_socket_create: failed to create socket: {}", e);
             return -1;

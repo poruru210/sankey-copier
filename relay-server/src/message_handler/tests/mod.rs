@@ -21,8 +21,7 @@ mod unregister_tests;
 pub(crate) struct TestContext {
     pub handler: MessageHandler,
     // Store Arc references to ensure proper drop order
-    _zmq_sender: Arc<ZmqSender>,
-    _config_sender: Arc<ZmqConfigPublisher>,
+    _publisher: Arc<ZmqConfigPublisher>,
 }
 
 impl TestContext {
@@ -32,30 +31,27 @@ impl TestContext {
         let connection_manager = Arc::new(ConnectionManager::new(30));
         let copy_engine = Arc::new(CopyEngine::new());
 
-        // Use wildcard port - ZeroMQ will assign an available port automatically
-        let zmq_sender = Arc::new(ZmqSender::new("tcp://127.0.0.1:*").unwrap());
-
         let (broadcast_tx, _) = broadcast::channel::<String>(100);
 
         // Create test database (in-memory)
         let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
 
-        // Create ZmqConfigPublisher for tests with dynamic port
-        let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
+        // Create unified ZmqConfigPublisher for tests with dynamic port
+        // (handles both config and trade signals)
+        let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
         let handler = MessageHandler::new(
             connection_manager,
             copy_engine,
-            zmq_sender.clone(),
             broadcast_tx,
             db,
-            config_sender.clone(),
+            publisher.clone(),
+            None, // vlogs_controller - not needed for tests
         );
 
         Self {
             handler,
-            _zmq_sender: zmq_sender,
-            _config_sender: config_sender,
+            _publisher: publisher,
         }
     }
 
@@ -109,18 +105,17 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
     // explicit lifecycle management.
     let connection_manager = Arc::new(ConnectionManager::new(30));
     let copy_engine = Arc::new(CopyEngine::new());
-    let zmq_sender = Arc::new(ZmqSender::new("tcp://127.0.0.1:*").unwrap());
     let (broadcast_tx, _) = broadcast::channel::<String>(100);
     let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
-    let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
+    let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
     MessageHandler::new(
         connection_manager,
         copy_engine,
-        zmq_sender,
         broadcast_tx,
         db,
-        config_sender,
+        publisher,
+        None,
     )
 }
 

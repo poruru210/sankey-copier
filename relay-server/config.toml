@@ -17,10 +17,10 @@ url = "http://localhost:8080"
 url = "sqlite://sankey_copier.db?mode=rwc"
 
 [zeromq]
-# ZeroMQ port configuration
-receiver_port = 5555      # Port for receiving trade signals from MT4/MT5 EAs
-sender_port = 5556        # Port for sending trade signals to slave accounts
-config_sender_port = 5557 # Port for sending configuration updates
+# ZeroMQ port configuration (2-port architecture)
+# Set to 0 for dynamic port assignment
+receiver_port = 0         # Port for receiving messages from MT4/MT5 EAs (PULL socket)
+sender_port = 0           # Unified port for sending all messages to EAs (PUB socket)
 timeout_seconds = 30      # Connection timeout in seconds
 
 [cors]
@@ -51,11 +51,10 @@ key_path = "certs/server-key.pem"       # Path to private key file (relative to 
 validity_days = 3650                    # Certificate validity period in days (default: 10 years)
 
 [victoria_logs]
-# VictoriaLogs integration for centralized logging
-# Start VictoriaLogs with: docker compose up -d victoria-logs
-# Web UI: http://localhost:9428/select/vmui
-enabled = true                                          # VictoriaLogs enabled by default
-host = "http://localhost:9428"                          # VictoriaLogs host URL
-batch_size = 100                                        # Maximum entries to buffer before sending
-flush_interval_secs = 5                                 # Flush interval in seconds
-source = "relay-server"                                 # Source identifier for logs
+# VictoriaLogs configuration for centralized log shipping
+# Only 'enabled' can be toggled via Web-UI; other settings require direct config file edit
+enabled = false
+host = "http://localhost:9428"
+batch_size = 100
+flush_interval_secs = 5
+source = "relay-server"

@@ -9,6 +9,7 @@ mod message_handler;
 mod models;
 mod mt_detector;
 mod mt_installer;
+mod port_resolver;
 mod victoria_logs;
 mod zeromq;
 
@@ -26,9 +27,9 @@ use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
 use models::EaType;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
-use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer};
+use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -158,8 +159,9 @@ async fn main() -> Result<()> {
     };
 
     // Initialize logging with log buffer layer and optional file output
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "sankey_copier_relay_server=debug,tower_http=debug".into());
+    // Default to info level for all modules; can be overridden via RUST_LOG env var
+    let env_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
     let subscriber = tracing_subscriber::registry()
         .with(env_filter)
@@ -230,10 +232,27 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Resolve ZeroMQ ports (dynamic or fixed)
+    let resolved_ports =
+        port_resolver::resolve_ports(&config.zeromq, port_resolver::RUNTIME_CONFIG_PATH)?;
+
     tracing::info!("Server will listen on: {}", config.server_address());
-    tracing::info!("ZMQ Receiver: {}", config.zmq_receiver_address());
-    tracing::info!("ZMQ Sender: {}", config.zmq_sender_address());
-    tracing::info!("ZMQ Config Sender: {}", config.zmq_config_sender_address());
+    tracing::info!(
+        "ZMQ Receiver: {} (port {})",
+        resolved_ports.receiver_address(),
+        resolved_ports.receiver_port
+    );
+    tracing::info!(
+        "ZMQ Sender (unified): {} (port {})",
+        resolved_ports.sender_address(),
+        resolved_ports.sender_port
+    );
+    if resolved_ports.is_dynamic {
+        tracing::info!(
+            "Ports are dynamically assigned (generated_at: {:?})",
+            resolved_ports.generated_at
+        );
+    }
 
     // Ensure TLS certificate exists (generate and register if needed)
     let base_path = std::env::current_dir()?;
@@ -245,27 +264,12 @@ async fn main() -> Result<()> {
     tracing::info!("Database initialized");
 
     // Create VLogsController if VictoriaLogs is configured
-    // Load enabled state from DB (overrides config.toml if saved)
+    // Uses config.toml settings directly (no DB override)
     let vlogs_controller = if let Some(enabled_flag) = vlogs_enabled_flag {
-        // Try to load saved enabled state from DB
-        match db.get_vlogs_settings().await {
-            Ok(saved_settings) => {
-                // Update runtime flag from DB
-                enabled_flag.store(saved_settings.enabled, Ordering::Relaxed);
-                tracing::info!(
-                    "VictoriaLogs enabled state loaded from DB: {}",
-                    saved_settings.enabled
-                );
-            }
-            Err(e) => {
-                // No saved settings in DB - use config.toml default
-                tracing::info!(
-                    "No VictoriaLogs settings in DB ({}), using config.toml default: {}",
-                    e,
-                    config.victoria_logs.enabled
-                );
-            }
-        }
+        tracing::info!(
+            "VictoriaLogs configured: enabled={} (from config.toml)",
+            config.victoria_logs.enabled
+        );
         Some(VLogsController::new(
             enabled_flag,
             config.victoria_logs.clone(),
@@ -289,20 +293,20 @@ async fn main() -> Result<()> {
     // Initialize ZeroMQ server
     let zmq_server = ZmqServer::new(zmq_tx)?;
     zmq_server
-        .start_receiver(&config.zmq_receiver_address())
+        .start_receiver(&resolved_ports.receiver_address())
         .await?;
     tracing::info!(
         "ZeroMQ receiver started on {}",
-        config.zmq_receiver_address()
+        resolved_ports.receiver_address()
     );
 
-    // Initialize ZeroMQ sender (PUB socket)
-    let zmq_sender = Arc::new(ZmqSender::new(&config.zmq_sender_address())?);
-
-    // Initialize ZeroMQ config sender (PUB socket with MessagePack)
-    let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(
-        &config.zmq_config_sender_address(),
-    )?);
+    // Initialize unified ZeroMQ publisher (PUB socket for all outgoing messages)
+    // 2-port architecture: single publisher handles both trade signals and config messages
+    let zmq_publisher = Arc::new(ZmqConfigPublisher::new(&resolved_ports.sender_address())?);
+    tracing::info!(
+        "ZeroMQ unified publisher started on {}",
+        resolved_ports.sender_address()
+    );
 
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
@@ -313,10 +317,10 @@ async fn main() -> Result<()> {
         let handler = MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
-            zmq_sender.clone(),
             broadcast_tx.clone(),
             db.clone(),
-            zmq_config_sender.clone(),
+            zmq_publisher.clone(),
+            vlogs_controller.clone(),
         );
         tracing::info!("MessageHandler created, spawning message processing task...");
 
@@ -379,11 +383,12 @@ async fn main() -> Result<()> {
         db: db.clone(),
         tx: broadcast_tx,
         connection_manager: connection_manager.clone(),
-        config_sender: zmq_config_sender.clone(),
+        config_sender: zmq_publisher.clone(),
         log_buffer: log_buffer.clone(),
         allowed_origins: allowed_origins.clone(),
         cors_disabled,
         config: Arc::new(config.clone()),
+        resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
     };
     if cors_disabled {

@@ -449,6 +449,7 @@ impl SlaveEaSimulator {
     }
 
     /// Try to receive a TradeSignal with timeout
+    /// Skips non-TradeSignal messages (e.g., MasterConfigMessage from heartbeat responses)
     fn try_receive_trade_signal(
         &self,
         timeout_ms: i32,
@@ -478,8 +479,15 @@ impl SlaveEaSimulator {
                 let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
                 let payload = &bytes[space_pos + 1..];
 
-                let signal: TradeSignal = rmp_serde::from_slice(payload)?;
-                return Ok(Some((topic, signal)));
+                // Try to parse as TradeSignal, skip if it's a different message type
+                // (e.g., MasterConfigMessage sent back on heartbeat)
+                match rmp_serde::from_slice::<TradeSignal>(payload) {
+                    Ok(signal) => return Ok(Some((topic, signal))),
+                    Err(_) => {
+                        // Not a TradeSignal - might be config message, skip and continue
+                        continue;
+                    }
+                }
             } else if received_bytes == 0 {
                 if start.elapsed() >= timeout_duration {
                     return Ok(None);
@@ -2142,6 +2150,7 @@ async fn test_symbol_prefix_suffix_transformation() {
     // Create trade group and update master settings with prefix/suffix
     server.db.create_trade_group(master_account).await.unwrap();
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 0,
@@ -2230,6 +2239,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Create trade group with prefix/suffix settings on Master
     server.db.create_trade_group(master_account).await.unwrap();
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("PRO.".to_string()), // Master configured with PRO. prefix
         symbol_suffix: Some(".m".to_string()),   // and .m suffix
         config_version: 0,

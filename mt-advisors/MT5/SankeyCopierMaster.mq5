@@ -18,11 +18,14 @@
 
 //--- Input parameters
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
-input string   RelayServerAddress = DEFAULT_ADDR_PULL;       // Address to send signals/heartbeats (PULL)
-input string   ConfigSourceAddress = DEFAULT_ADDR_PUB_CONFIG; // Address to receive config updates (SUB)
+// ZMQ addresses are loaded from sankey_copier.ini (no input override)
 input int      ScanInterval = 100;
 input bool     ShowConfigPanel = true;                  // Show configuration panel on chart
 input int      PanelWidth = 280;                        // Configuration panel width (pixels)
+
+//--- Resolved addresses (from sankey_copier.ini config file)
+string g_RelayAddress = "";
+string g_ConfigAddress = "";
 
 //--- Position tracking structure
 struct PositionInfo
@@ -57,6 +60,7 @@ bool          g_config_requested = false;   // Track if config request has been 
 string        g_symbol_prefix = "";       // Symbol prefix from config (applied dynamically)
 string        g_symbol_suffix = "";       // Symbol suffix from config (applied dynamically)
 uint          g_config_version = 0;       // Current config version
+int           g_server_status = STATUS_NO_CONFIGURATION; // Status from server (DISABLED/CONNECTED)
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -77,21 +81,40 @@ int OnInit()
    g_symbol_prefix = "";
    g_symbol_suffix = "";
 
+   // Load port configuration from sankey_copier.ini
+   // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
+   if(!LoadConfig())
+   {
+      Print("WARNING: Failed to load config file, using default ports");
+   }
+   else
+   {
+      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
+            ", PublisherPort=", GetPublisherPort(), " (unified)");
+   }
+
+   // Resolve addresses from sankey_copier.ini config file
+   // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
+   g_RelayAddress = GetPushAddress();
+   g_ConfigAddress = GetConfigSubAddress();
+
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
+
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
    // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, RelayServerAddress, "Master PUSH");
+   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
    if(g_zmq_socket < 0)
    {
       zmq_context_destroy(g_zmq_context);
       return INIT_FAILED;
    }
 
-   // Create and connect config socket (SUB to port 5557)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, ConfigSourceAddress, "Master Config SUB");
+   // Create and connect config socket (SUB)
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Master Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_socket, "Master PUSH");
@@ -131,7 +154,7 @@ int OnInit()
       // Show NO_CONFIGURATION status initially (no config received yet)
       g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
 
-      g_config_panel.UpdateServerRow(RelayServerAddress);
+      g_config_panel.UpdateServerRow(g_RelayAddress);
       g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders) + ArraySize(g_tracked_positions));
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
    }
@@ -154,7 +177,7 @@ void OnDeinit(const int reason)
    VLogsFlush();
 
    // Send unregister message to server
-   SendUnregistrationMessage(g_zmq_context, RelayServerAddress, AccountID);
+   SendUnregistrationMessage(g_zmq_context, g_RelayAddress, AccountID);
 
    // Kill timer
    EventKillTimer();
@@ -187,46 +210,33 @@ void OnTimer()
 
    if(should_send_heartbeat)
    {
-      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, RelayServerAddress, AccountID, "Master", "MT5", g_symbol_prefix, g_symbol_suffix, "");
+      bool heartbeat_sent = SendHeartbeatMessage(g_zmq_context, g_RelayAddress, AccountID, "Master", "MT5", g_symbol_prefix, g_symbol_suffix, "");
 
       if(heartbeat_sent)
       {
          g_last_heartbeat = TimeLocal();
 
          // If trade state changed, log it and update tracking variable
+         // Server will send updated status via config message based on is_trade_allowed
          if(trade_state_changed)
          {
             Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
             g_last_trade_allowed = current_trade_allowed;
-
-            // Update panel status
-            if(ShowConfigPanel)
-            {
-               if(!current_trade_allowed)
-               {
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-               }
-               else
-               {
-                  g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-               }
-            }
+            // Status panel is updated by server via config message (ProcessMasterConfigMessage)
          }
-         else
+
+         // Request configuration if not yet requested (on any successful heartbeat)
+         if(!g_config_requested && current_trade_allowed)
          {
-            // On first successful heartbeat (normal interval), request configuration if not yet requested
-            if(!g_config_requested)
+            Print("[INFO] First heartbeat successful, requesting configuration...");
+            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
             {
-               Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, RelayServerAddress, AccountID, "Master"))
-               {
-                  g_config_requested = true;
-                  Print("[INFO] Configuration request sent successfully");
-               }
-               else
-               {
-                  Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-               }
+               g_config_requested = true;
+               Print("[INFO] Configuration request sent successfully");
+            }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
             }
          }
       }
@@ -877,6 +887,7 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
    // Extract fields from the parsed config using the handle
    string config_account_id = master_config_get_string(config_handle, "account_id");
+   int status = master_config_get_int(config_handle, "status");
    string prefix = master_config_get_string(config_handle, "symbol_prefix");
    string suffix = master_config_get_string(config_handle, "symbol_suffix");
    int version = master_config_get_int(config_handle, "config_version");
@@ -898,35 +909,44 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
    // Log configuration values
    Print("Account ID: ", config_account_id);
+   Print("Status: ", status, " (", GetStatusString(status), ")");
    Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
    Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
    Print("Config Version: ", version);
 
    // Update global configuration variables
+   g_server_status = status;
    g_symbol_prefix = prefix;
    g_symbol_suffix = suffix;
    g_config_version = version;
 
-   // Update configuration panel
+   // Update configuration panel with server status
    if(ShowConfigPanel)
    {
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
-
-      // Update status after receiving configuration
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
-      {
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-      }
-      else
-      {
-         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-      }
+      g_config_panel.UpdateStatusRow(g_server_status);
+      ChartRedraw();
    }
 
    // Free the config handle
    master_config_free(config_handle);
 
    Print("=== Master Configuration Updated ===");
+}
+
+//+------------------------------------------------------------------+
+//| Get status string for logging                                    |
+//+------------------------------------------------------------------+
+string GetStatusString(int status)
+{
+   switch(status)
+   {
+      case STATUS_DISABLED:         return "DISABLED";
+      case STATUS_ENABLED:          return "ENABLED";
+      case STATUS_CONNECTED:        return "CONNECTED";
+      case STATUS_NO_CONFIGURATION: return "NO_CONFIGURATION";
+      case STATUS_REMOVED:          return "REMOVED";
+      default:                      return "UNKNOWN";
+   }
 }
 

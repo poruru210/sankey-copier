@@ -1,16 +1,16 @@
 import { useMemo, useCallback, useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
-import type { EaConnection, CopySettings, AccountInfo } from '@/types';
+import type { EaConnection, CopySettings, AccountInfo, TradeGroup } from '@/types';
 import {
   expandedSourceIdsAtom,
   expandedReceiverIdsAtom,
-  disabledSourceIdsAtom,
   disabledReceiverIdsAtom,
 } from '@/lib/atoms/ui';
 
 interface UseAccountDataProps {
   connections: EaConnection[];
   settings: CopySettings[];
+  tradeGroups: TradeGroup[];
   content: {
     allSourcesInactive: string;
     someSourcesInactive: string;
@@ -33,40 +33,40 @@ interface UseAccountDataReturn {
  *
  * @param connections - List of EA connections
  * @param settings - List of copy settings
+ * @param tradeGroups - List of trade groups (for Master enabled state)
  * @param content - Internationalized content for error messages
  * @returns Account data and helper functions
  */
 export function useAccountData({
   connections,
   settings,
+  tradeGroups,
   content,
 }: UseAccountDataProps): UseAccountDataReturn {
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
-  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
   const [initialized, setInitialized] = useState(false);
 
-  // Initialize disabled lists from settings on first load
+  // Helper to get Master enabled state from TradeGroups
+  const isMasterEnabled = useCallback((masterAccount: string): boolean => {
+    const tradeGroup = tradeGroups.find((tg) => tg.id === masterAccount);
+    return tradeGroup?.master_settings.enabled ?? true;
+  }, [tradeGroups]);
+
+  // Initialize disabled receiver list from settings on first load
   useEffect(() => {
     if (!initialized && settings.length > 0) {
-      const newDisabledSources: string[] = [];
       const newDisabledReceivers: string[] = [];
 
       settings.forEach((setting) => {
         if (setting.status === 0) {
-          if (!disabledSourceIds.includes(setting.master_account) && !newDisabledSources.includes(setting.master_account)) {
-            newDisabledSources.push(setting.master_account);
-          }
           if (!disabledReceiverIds.includes(setting.slave_account) && !newDisabledReceivers.includes(setting.slave_account)) {
             newDisabledReceivers.push(setting.slave_account);
           }
         }
       });
 
-      if (newDisabledSources.length > 0) {
-        setDisabledSourceIds((prev) => [...prev, ...newDisabledSources]);
-      }
       if (newDisabledReceivers.length > 0) {
         setDisabledReceiverIds((prev) => [...prev, ...newDisabledReceivers]);
       }
@@ -109,7 +109,8 @@ export function useAccountData({
         const connection = getAccountConnection(setting.master_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
-        const isEnabled = !disabledSourceIds.includes(setting.master_account);
+        // Master enabled state comes from TradeGroup.master_settings.enabled
+        const isEnabled = isMasterEnabled(setting.master_account);
         const isExpanded = expandedSourceIds.includes(setting.master_account);
 
         // Calculate active state: Master is active if online && trade_allowed && enabled
@@ -206,7 +207,7 @@ export function useAccountData({
     content.autoTradingDisabled,
     expandedSourceIds,
     expandedReceiverIds,
-    disabledSourceIds,
+    isMasterEnabled,
     disabledReceiverIds,
     getAccountConnection,
     getConnectionStatus,

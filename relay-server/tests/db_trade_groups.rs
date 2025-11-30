@@ -69,6 +69,7 @@ async fn test_update_master_settings() {
     db.create_trade_group("MASTER_001").await.unwrap();
 
     let new_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,
@@ -341,6 +342,7 @@ async fn test_get_settings_for_master() {
     let db = create_test_db().await;
 
     let settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,

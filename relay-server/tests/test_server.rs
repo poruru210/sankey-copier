@@ -12,8 +12,9 @@ use sankey_copier_relay_server::{
     engine::CopyEngine,
     log_buffer::create_log_buffer,
     message_handler::MessageHandler,
+    port_resolver::ResolvedPorts,
     victoria_logs::VLogsController,
-    zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqSender, ZmqServer},
+    zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer},
 };
 use std::net::TcpListener;
 use std::sync::atomic::AtomicBool;
@@ -22,12 +23,12 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 
 /// Test server instance with dynamically allocated ports
+/// 2-port architecture: receiver (PULL) and sender (unified PUB)
 #[allow(dead_code)]
 pub struct TestServer {
     pub http_port: u16,
     pub zmq_pull_port: u16,
-    pub zmq_pub_trade_port: u16,
-    pub zmq_pub_config_port: u16,
+    pub zmq_pub_port: u16, // Unified PUB port for trades and configs
     pub db: Arc<Database>,
     zmq_server: Arc<ZmqServer>,
     server_handle: Option<JoinHandle<()>>,
@@ -37,14 +38,14 @@ pub struct TestServer {
 
 impl TestServer {
     /// Start a new test server with dynamic port allocation
+    /// 2-port architecture: receiver (PULL) and unified publisher (PUB)
     pub async fn start() -> Result<Self> {
         // Bind to port 0 to get available ports immediately (avoiding TOCTOU race)
         let http_listener = TcpListener::bind("127.0.0.1:0")?;
         let http_port = http_listener.local_addr()?.port();
 
         let zmq_pull_port = find_available_port()?;
-        let zmq_pub_trade_port = find_available_port()?;
-        let zmq_pub_config_port = find_available_port()?;
+        let zmq_pub_port = find_available_port()?; // Unified PUB port
 
         // Initialize in-memory database
         let db = Arc::new(Database::new("sqlite::memory:").await?);
@@ -62,29 +63,41 @@ impl TestServer {
             .start_receiver(&format!("tcp://127.0.0.1:{}", zmq_pull_port))
             .await?;
 
-        // Initialize ZeroMQ sender (PUB socket for trades)
-        let zmq_sender = Arc::new(ZmqSender::new(&format!(
+        // Initialize unified ZeroMQ publisher (PUB socket for trades and configs)
+        let zmq_publisher = Arc::new(ZmqConfigPublisher::new(&format!(
             "tcp://127.0.0.1:{}",
-            zmq_pub_trade_port
-        ))?);
-
-        // Initialize ZeroMQ config sender (PUB socket for configs)
-        let zmq_config_sender = Arc::new(ZmqConfigPublisher::new(&format!(
-            "tcp://127.0.0.1:{}",
-            zmq_pub_config_port
+            zmq_pub_port
         ))?);
 
         // Initialize copy engine
         let copy_engine = Arc::new(CopyEngine::new());
 
-        // Initialize MessageHandler
+        // Create log buffer
+        let log_buffer = create_log_buffer();
+
+        // Create VLogsController for testing (shared config for MessageHandler and AppState)
+        let vlogs_enabled = Arc::new(AtomicBool::new(true));
+        let vlogs_config = VictoriaLogsConfig {
+            enabled: true,
+            host: "http://localhost:9428".to_string(),
+            batch_size: 100,
+            flush_interval_secs: 5,
+            source: "test-relay".to_string(),
+        };
+
+        // Initialize MessageHandler (2-port architecture: unified publisher)
+        // MessageHandler needs its own VLogsController for EA config broadcasting
+        let handler_vlogs_controller = Some(VLogsController::new(
+            vlogs_enabled.clone(),
+            vlogs_config.clone(),
+        ));
         let handler = Arc::new(MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
-            zmq_sender.clone(),
             broadcast_tx.clone(),
             db.clone(),
-            zmq_config_sender.clone(),
+            zmq_publisher.clone(),
+            handler_vlogs_controller,
         ));
 
         // Spawn ZMQ message processing task
@@ -95,30 +108,28 @@ impl TestServer {
             }
         });
 
-        // Create log buffer
-        let log_buffer = create_log_buffer();
-
-        // Create VLogsController for testing
-        let vlogs_enabled = Arc::new(AtomicBool::new(true));
-        let vlogs_config = VictoriaLogsConfig {
-            enabled: true,
-            host: "http://localhost:9428".to_string(),
-            batch_size: 100,
-            flush_interval_secs: 5,
-            source: "test-relay".to_string(),
-        };
+        // Create VLogsController for AppState
         let vlogs_controller = Some(VLogsController::new(vlogs_enabled, vlogs_config));
+
+        // Create resolved ports for tests (2-port architecture)
+        let resolved_ports = Arc::new(ResolvedPorts {
+            receiver_port: zmq_pull_port,
+            sender_port: zmq_pub_port,
+            is_dynamic: true,
+            generated_at: Some(chrono::Utc::now()),
+        });
 
         // Create app state
         let state = AppState {
             db: db.clone(),
             tx: broadcast_tx.clone(),
             connection_manager: connection_manager.clone(),
-            config_sender: zmq_config_sender.clone(),
+            config_sender: zmq_publisher.clone(),
             log_buffer,
             allowed_origins: vec![],
             cors_disabled: true, // Disable CORS for tests
             config: Arc::new(Config::default()),
+            resolved_ports,
             vlogs_controller,
         };
 
@@ -145,8 +156,7 @@ impl TestServer {
         Ok(TestServer {
             http_port,
             zmq_pull_port,
-            zmq_pub_trade_port,
-            zmq_pub_config_port,
+            zmq_pub_port,
             db,
             zmq_server,
             server_handle: Some(server_handle),
@@ -161,16 +171,22 @@ impl TestServer {
         format!("tcp://localhost:{}", self.zmq_pull_port)
     }
 
-    /// Get the ZMQ PUB address for trades
+    /// Get the ZMQ PUB address (unified for trades and configs)
     #[allow(dead_code)]
-    pub fn zmq_pub_trade_address(&self) -> String {
-        format!("tcp://localhost:{}", self.zmq_pub_trade_port)
+    pub fn zmq_pub_address(&self) -> String {
+        format!("tcp://localhost:{}", self.zmq_pub_port)
     }
 
-    /// Get the ZMQ PUB address for configs
+    /// Get the ZMQ PUB address for trades (alias for compatibility)
+    #[allow(dead_code)]
+    pub fn zmq_pub_trade_address(&self) -> String {
+        self.zmq_pub_address()
+    }
+
+    /// Get the ZMQ PUB address for configs (alias for compatibility)
     #[allow(dead_code)]
     pub fn zmq_pub_config_address(&self) -> String {
-        format!("tcp://localhost:{}", self.zmq_pub_config_port)
+        self.zmq_pub_address()
     }
 
     /// Get the HTTP API base URL
@@ -235,13 +251,11 @@ mod tests {
             .expect("Failed to start test server");
         assert!(server.http_port > 0);
         assert!(server.zmq_pull_port > 0);
-        assert!(server.zmq_pub_trade_port > 0);
-        assert!(server.zmq_pub_config_port > 0);
+        assert!(server.zmq_pub_port > 0);
 
         println!("Test server started successfully on ports:");
         println!("  HTTP: {}", server.http_port);
         println!("  ZMQ PULL: {}", server.zmq_pull_port);
-        println!("  ZMQ PUB (trades): {}", server.zmq_pub_trade_port);
-        println!("  ZMQ PUB (configs): {}", server.zmq_pub_config_port);
+        println!("  ZMQ PUB (unified): {}", server.zmq_pub_port);
     }
 }

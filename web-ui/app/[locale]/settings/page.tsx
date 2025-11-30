@@ -5,8 +5,9 @@
 // This page is only accessible when VictoriaLogs is configured in config.toml
 
 import { useIntlayer } from 'next-intlayer';
-import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2 } from 'lucide-react';
+import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio } from 'lucide-react';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
+import { useZeromqConfig } from '@/hooks/useZeromqConfig';
 import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Typography, Muted } from '@/components/ui/typography';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   const content = useIntlayer('settings-page');
   const { serverLogHeight } = useServerLogContext();
   const { configured, config, enabled, loading, toggling, error, toggleEnabled, refetch } = useVLogsConfig();
+  const { config: zmqConfig, loading: zmqLoading, error: zmqError, refetch: zmqRefetch } = useZeromqConfig();
   const { toast } = useToast();
 
   // Handle toggle
@@ -42,7 +44,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) {
+  if (loading && zmqLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Typography variant="large">{content.loading}</Typography>
@@ -76,7 +78,7 @@ export default function SettingsPage() {
               </AlertDescription>
             </Alert>
 
-            <Card>
+            <Card className="mb-6">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Settings2 className="h-5 w-5 text-muted-foreground" />
@@ -95,6 +97,104 @@ source = "sankey-copier"`}
                 </pre>
               </CardContent>
             </Card>
+
+            {/* ZeroMQ Settings Card - always visible */}
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Radio className="h-5 w-5" />
+                  <CardTitle>{content.zeromq.title}</CardTitle>
+                </div>
+                <CardDescription>{content.zeromq.description}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* ZeroMQ Error Display */}
+                {zmqError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>{content.errorTitle}</AlertTitle>
+                    <AlertDescription>{zmqError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Read-only info alert */}
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>{content.zeromq.readOnlyTitle}</AlertTitle>
+                  <AlertDescription>
+                    {content.zeromq.readOnlyDescription}
+                  </AlertDescription>
+                </Alert>
+
+                {/* Port mode indicator */}
+                <div className="flex items-center gap-2">
+                  {zmqConfig.is_dynamic ? (
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertTitle>{content.zeromq.isDynamic}</AlertTitle>
+                      <AlertDescription>
+                        {content.zeromq.isDynamicDescription}
+                        {zmqConfig.generated_at && (
+                          <span className="block mt-1 text-xs">
+                            {content.zeromq.generatedAt}: {new Date(zmqConfig.generated_at).toLocaleString()}
+                          </span>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertTitle>{content.zeromq.isFixed}</AlertTitle>
+                      <AlertDescription>
+                        {content.zeromq.isFixedDescription}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {/* Receiver Port - read-only */}
+                <div className="space-y-2">
+                  <Label htmlFor="zmq-receiver-port">{content.zeromq.receiverPort}</Label>
+                  <Input
+                    id="zmq-receiver-port"
+                    type="number"
+                    value={zmqConfig.receiver_port}
+                    disabled
+                    className="bg-muted"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {content.zeromq.receiverPortDescription}
+                  </p>
+                </div>
+
+                {/* Sender Port - read-only (unified PUB for trades and configs) */}
+                <div className="space-y-2">
+                  <Label htmlFor="zmq-sender-port">{content.zeromq.senderPort}</Label>
+                  <Input
+                    id="zmq-sender-port"
+                    type="number"
+                    value={zmqConfig.sender_port}
+                    disabled
+                    className="bg-muted"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {content.zeromq.senderPortDescription}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Refresh Button */}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => { refetch(); zmqRefetch(); }}
+                disabled={loading || zmqLoading}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {content.buttons.refresh}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -234,12 +334,98 @@ source = "sankey-copier"`}
             </CardContent>
           </Card>
 
+          {/* ZeroMQ Settings Card */}
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Radio className="h-5 w-5" />
+                <CardTitle>{content.zeromq.title}</CardTitle>
+              </div>
+              <CardDescription>{content.zeromq.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* ZeroMQ Error Display */}
+              {zmqError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>{content.errorTitle}</AlertTitle>
+                  <AlertDescription>{zmqError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Read-only info alert */}
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>{content.zeromq.readOnlyTitle}</AlertTitle>
+                <AlertDescription>
+                  {content.zeromq.readOnlyDescription}
+                </AlertDescription>
+              </Alert>
+
+              {/* Port mode indicator */}
+              <div className="flex items-center gap-2">
+                {zmqConfig.is_dynamic ? (
+                  <Alert>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertTitle>{content.zeromq.isDynamic}</AlertTitle>
+                    <AlertDescription>
+                      {content.zeromq.isDynamicDescription}
+                      {zmqConfig.generated_at && (
+                        <span className="block mt-1 text-xs">
+                          {content.zeromq.generatedAt}: {new Date(zmqConfig.generated_at).toLocaleString()}
+                        </span>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>{content.zeromq.isFixed}</AlertTitle>
+                    <AlertDescription>
+                      {content.zeromq.isFixedDescription}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* Receiver Port - read-only */}
+              <div className="space-y-2">
+                <Label htmlFor="zmq-receiver-port-main">{content.zeromq.receiverPort}</Label>
+                <Input
+                  id="zmq-receiver-port-main"
+                  type="number"
+                  value={zmqConfig.receiver_port}
+                  disabled
+                  className="bg-muted"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {content.zeromq.receiverPortDescription}
+                </p>
+              </div>
+
+              {/* Sender Port - read-only (unified PUB for trades and configs) */}
+              <div className="space-y-2">
+                <Label htmlFor="zmq-sender-port-main">{content.zeromq.senderPort}</Label>
+                <Input
+                  id="zmq-sender-port-main"
+                  type="number"
+                  value={zmqConfig.sender_port}
+                  disabled
+                  className="bg-muted"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {content.zeromq.senderPortDescription}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Refresh Button */}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={refetch}
-              disabled={loading || toggling}
+              onClick={() => { refetch(); zmqRefetch(); }}
+              disabled={loading || toggling || zmqLoading}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               {content.buttons.refresh}

@@ -18,7 +18,7 @@ graph TB
     end
 
     subgraph "relay-server"
-        ZMQ[ZeroMQ<br/>:5555/:5556/:5557]
+        ZMQ[ZeroMQ<br/>:5555/:5556]
         API[REST API<br/>:3000]
         WS[WebSocket<br/>/ws]
         DB[(SQLite)]
@@ -84,8 +84,7 @@ graph TB
         CE["CopyEngine"]
         CM["ConnectionManager"]
         DB[("SQLite")]
-        PUB_T["ZMQ PUB 5556 Trade"]
-        PUB_C["ZMQ PUB 5557 Config"]
+        PUB["ZMQ PUB 5556 (Unified)"]
     end
 
     subgraph slave_eas["Slave EAs"]
@@ -115,13 +114,11 @@ graph TB
     CE --> DB
     CM --> DB
 
-    CE --> PUB_T
-    MH --> PUB_C
+    CE --> PUB
+    MH --> PUB
 
-    PUB_T -->|SUB| DLL3
-    PUB_T -->|SUB| DLL4
-    PUB_C --> DLL3
-    PUB_C --> DLL4
+    PUB -->|SUB| DLL3
+    PUB -->|SUB| DLL4
 
     DLL3 --> SEA1
     DLL3 --> SEA2
@@ -145,8 +142,7 @@ graph TB
 | Master → PULL | 各MasterがHeartbeat、TradeSignalをPUSH送信 |
 | MessageHandler | メッセージタイプを判定し適切なハンドラーに振り分け |
 | CopyEngine | フィルタリング・シンボル変換後、対象Slaveを特定 |
-| PUB (Trade) | trade_group_idをトピックとしてSlaveにシグナル配信 |
-| PUB (Config) | account_idをトピックとして設定変更を配信 |
+| PUB (Unified) | トピックベースでトレードシグナル(trade_group_id)と設定(account_id)を配信 |
 
 ## 通信フロー
 
@@ -188,7 +184,7 @@ sequenceDiagram
     UI->>API: PUT /api/trade-groups/{id}/members/{slave}
     API->>DB: UPDATE slave_settings
     API->>RS: send_config_to_slave()
-    RS->>EA: ZMQ PUB (5557)
+    RS->>EA: ZMQ PUB (5556 unified)
     EA->>EA: 設定適用
 ```
 
@@ -263,8 +259,7 @@ graph TB
 
         subgraph zmq_layer["ZeroMQ Layer"]
             PULL["ZMQ PULL 5555"]
-            PUB_T["ZMQ PUB 5556"]
-            PUB_C["ZMQ PUB 5557"]
+            PUB["ZMQ PUB 5556 (Unified)"]
         end
 
         AXUM --> REST
@@ -284,8 +279,8 @@ graph TB
         HB --> CM
         TS --> CE
         CR --> CD
-        CE --> PUB_T
-        CP --> PUB_C
+        CE --> PUB
+        CP --> PUB
 
         TG --> DB
         TGM --> DB
@@ -427,15 +422,14 @@ graph TB
         end
 
         subgraph s_comm["Communication"]
-            S_SUB_T["ZMQ SUB 5556"]
-            S_SUB_C["ZMQ SUB 5557"]
+            S_SUB["ZMQ SUB 5556 (Unified)"]
             S_PUSH["ZMQ PUSH 5555"]
         end
 
         S_TIMER --> PROC
         S_TICK --> PROC
-        PROC --> S_SUB_T
-        S_SUB_T --> PARSE
+        PROC --> S_SUB
+        S_SUB --> PARSE
         PARSE --> FILTER
 
         FILTER --> EXEC_O
@@ -447,7 +441,7 @@ graph TB
         EXEC_C --> GET_MAP
 
         S_INIT --> RECOVER
-        S_INIT --> S_SUB_C
+        S_INIT --> S_SUB
     end
 ```
 
@@ -568,13 +562,28 @@ flowchart LR
 
 ## ポート構成
 
+2ポートアーキテクチャ: Receiver (PULL) と Publisher (統合PUB) のみ使用。
+
 | ポート | 用途 |
 |--------|------|
 | 3000 | relay-server REST API (HTTPS) |
-| 5555 | ZeroMQ PULL (EA→サーバー) |
-| 5556 | ZeroMQ PUB (トレードシグナル) |
-| 5557 | ZeroMQ PUB (設定配布) |
+| 5555 | ZeroMQ PULL (EA→サーバー) ※動的割り当て可 |
+| 5556 | ZeroMQ PUB (トレードシグナル + 設定配布 統合) ※動的割り当て可 |
 | 8080 | web-ui (開発時) |
+
+### 動的ポート割り当て
+
+ZeroMQポートを `0` に設定すると、OSが利用可能なポートを自動的に割り当てます。
+割り当てられたポートは `runtime.toml` に永続化され、次回起動時に再利用されます。
+
+```toml
+# config.toml - 動的ポート設定
+[zeromq]
+receiver_port = 0  # OS自動割り当て
+sender_port = 0    # OS自動割り当て
+```
+
+詳細は [relay-server.md](./relay-server.md#動的ポート割り当て) を参照。
 
 ## 主要な型定義
 
@@ -653,7 +662,7 @@ graph TB
         EA2 --> DLL
         EA3 --> DLL
 
-        DLL <-->|TCP 5555-5557| RS
+        DLL <-->|TCP 5555-5556| RS
         RS --> DB
         RS --> CERTS
         RS --> LOGS
@@ -671,13 +680,14 @@ graph TB
 
 ### ポート構成詳細
 
+2ポートアーキテクチャ: トレードシグナルと設定配布を統合PUBポートで配信。
+
 ```mermaid
 graph LR
     subgraph relay_ports["relay-server"]
         P3000["3000 - HTTPS REST, WebSocket"]
         P5555["5555 - ZMQ PULL"]
-        P5556["5556 - ZMQ PUB Trade"]
-        P5557["5557 - ZMQ PUB Config"]
+        P5556["5556 - ZMQ PUB (Unified)"]
     end
 
     subgraph external["External"]
@@ -693,9 +703,8 @@ graph LR
     BROWSER <-->|HTTPS| P3000
     EA_M -->|PUSH| P5555
     EA_S -->|PUSH| P5555
+    P5556 -->|SUB| EA_M
     P5556 -->|SUB| EA_S
-    P5557 -->|SUB| EA_M
-    P5557 -->|SUB| EA_S
 ```
 
 ### ファイル配置

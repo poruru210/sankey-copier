@@ -31,10 +31,39 @@ export function useTradeGroups(apiClient: ApiClient) {
     }
   }, [apiClient]);
 
+  /**
+   * Toggle Master enabled state
+   */
+  const toggleMaster = useCallback(async (masterAccount: string, enabled: boolean) => {
+    try {
+      const updatedTradeGroup = await apiClient.toggleMaster(masterAccount, enabled);
+      setTradeGroups((prev) =>
+        prev.map((tg) =>
+          tg.id === masterAccount ? updatedTradeGroup : tg
+        )
+      );
+      return updatedTradeGroup;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to toggle master';
+      console.error('Error toggling master:', err);
+      throw new Error(errorMessage);
+    }
+  }, [apiClient]);
+
+  /**
+   * Get enabled state for a specific Master account
+   */
+  const isMasterEnabled = useCallback((masterAccount: string): boolean => {
+    const tradeGroup = tradeGroups.find((tg) => tg.id === masterAccount);
+    return tradeGroup?.master_settings.enabled ?? true;
+  }, [tradeGroups]);
+
   return {
     tradeGroups,
     loading,
     error,
     fetchTradeGroups,
+    toggleMaster,
+    isMasterEnabled,
   };
 }

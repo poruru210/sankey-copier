@@ -14,17 +14,15 @@ port = 8080
 url = "sqlite://forex_copier.db?mode=rwc"
 
 [zeromq]
-# ZeroMQ port configuration
+# ZeroMQ port configuration - 2-port architecture
 # Each port serves a different purpose and must be unique
 
-# Port for receiving trade signals and heartbeat messages from MT4/MT5 EAs
+# Port for receiving trade signals and heartbeat messages from MT4/MT5 EAs (PULL socket)
 receiver_port = 5555
 
-# Port for sending trade signals to slave accounts (PUB/SUB pattern)
+# Port for unified publishing to EAs (PUB socket)
+# Sends both trade signals and configuration updates using topic-based routing
 sender_port = 5556
-
-# Port for sending configuration updates to EAs (PUB/SUB pattern)
-config_sender_port = 5557
 
 # Connection timeout in seconds
 # EAs that don't send heartbeat within this period will be marked as timed out
