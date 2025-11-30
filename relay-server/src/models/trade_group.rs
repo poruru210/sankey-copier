@@ -6,6 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Default value for enabled field (backward compatibility)
+fn default_enabled() -> bool {
+    true
+}
+
 /// TradeGroup represents a Master account and its configuration.
 /// The id field is the master_account itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +32,8 @@ pub struct TradeGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterSettings {
     /// Whether the Master is enabled (Web UI switch state)
+    /// Defaults to true for backward compatibility with existing DB records
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
 
     /// Symbol prefix to remove from Master EA symbols (e.g., "pro.")
@@ -130,5 +137,16 @@ mod tests {
         assert!(!json.contains("symbol_suffix"));
         assert!(json.contains("config_version"));
         assert!(json.contains("enabled"));
+    }
+
+    #[test]
+    fn test_master_settings_backward_compatibility() {
+        // Old DB records without 'enabled' field should deserialize with enabled=true
+        let old_json = r#"{"symbol_prefix":"pro.","config_version":1}"#;
+        let settings: MasterSettings = serde_json::from_str(old_json).unwrap();
+
+        assert!(settings.enabled); // Should default to true
+        assert_eq!(settings.symbol_prefix, Some("pro.".to_string()));
+        assert_eq!(settings.config_version, 1);
     }
 }
