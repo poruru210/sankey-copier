@@ -264,18 +264,7 @@ void OnTimer()
                else
                {
                   // Auto-trading ON -> show actual config status
-                  int status_to_show = STATUS_NO_CONFIG;
-                  if(ArraySize(g_configs) > 0) status_to_show = STATUS_ENABLED;
-
-                  for(int i=0; i<ArraySize(g_configs); i++)
-                  {
-                     if(g_configs[i].status == STATUS_CONNECTED)
-                     {
-                        status_to_show = STATUS_CONNECTED;
-                        break;
-                     }
-                  }
-                  g_config_panel.UpdateStatusRow(status_to_show);
+                  g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
                }
                ChartRedraw();
             }
@@ -403,23 +392,7 @@ void OnTimer()
             else
             {
                // Local auto-trading ON -> show actual config status from server
-               // If we have at least one connected master, show CONNECTED
-               bool any_connected = false;
-               for(int i=0; i<ArraySize(g_configs); i++)
-               {
-                  if(g_configs[i].status == STATUS_CONNECTED)
-                  {
-                     any_connected = true;
-                     break;
-                  }
-               }
-
-               if(ArraySize(g_configs) == 0)
-                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
-               else if(any_connected)
-                  g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
-               else
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Has configs but none connected
+               g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
             }
 
             // Update carousel display with detailed copy settings
