@@ -11,7 +11,7 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
+use crate::models::{ConnectionStatus, SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
 
 use super::{AppState, ProblemDetails};
 
@@ -623,22 +623,22 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
     let master_equity = master_conn.as_ref().map(|conn| conn.equity);
 
     // Calculate Master status first (needed for Slave status)
-    // Master is CONNECTED if enabled in DB (implied by this function being called for active group)
-    // AND is_trade_allowed is true
+    // Master is CONNECTED if enabled in DB AND is_trade_allowed is true AND connection is Online
+    // Check both is_trade_allowed and connection status (Online/Timeout/Offline)
     let master_is_trade_allowed = master_conn
         .as_ref()
-        .map(|c| c.is_trade_allowed)
-        .unwrap_or(true);
-    // Note: We assume Master Web UI is enabled here because if it was disabled,
-    // the TradeGroup wouldn't be active or we'd be handling it differently.
-    // However, strictly speaking, we should check the TradeGroup's enabled state.
-    // For now, we'll assume if we are sending config, we want to calculate status based on connection.
-    // But wait, send_config_to_slave is called when adding/updating member.
-    // We need to know if Master is enabled.
-    // Let's fetch TradeGroup to be sure, or pass it in.
-    // For simplicity and performance, we'll assume Master is enabled if not passed,
-    // but correct way is to check TradeGroup.
-    // Actually, calculate_slave_status needs master_status.
+        .map(|c| c.is_effective_trade_allowed())
+        .unwrap_or(false); // Default to false if Master not connected
+                           // Note: We assume Master Web UI is enabled here because if it was disabled,
+                           // the TradeGroup wouldn't be active or we'd be handling it differently.
+                           // However, strictly speaking, we should check the TradeGroup's enabled state.
+                           // For now, we'll assume if we are sending config, we want to calculate status based on connection.
+                           // But wait, send_config_to_slave is called when adding/updating member.
+                           // We need to know if Master is enabled.
+                           // Let's fetch TradeGroup to be sure, or pass it in.
+                           // For simplicity and performance, we'll assume Master is enabled if not passed,
+                           // but correct way is to check TradeGroup.
+                           // Actually, calculate_slave_status needs master_status.
 
     // Let's get Master's effective status.
     // We need to know if Master is enabled in Web UI.
@@ -655,12 +655,13 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         });
 
     // Fetch Slave's connection info for is_trade_allowed
+    // Check both is_trade_allowed and connection status via helper method
     let slave_is_trade_allowed = state
         .connection_manager
         .get_ea(&member.slave_account)
         .await
-        .map(|conn| conn.is_trade_allowed)
-        .unwrap_or(true); // Default to true if not connected yet
+        .map(|conn| conn.is_effective_trade_allowed())
+        .unwrap_or(false); // Default to false if Slave not connected
 
     // Calculate Slave's effective status
     let effective_status =
