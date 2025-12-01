@@ -63,6 +63,7 @@ mt-advisors/
 └── Include/
     └── SankeyCopier/
         ├── Common.mqh            # 共通定義、ZMQインポート
+        ├── ConfigFile.mqh        # ポート設定ファイル読み込み
         ├── Zmq.mqh               # ZMQ初期化・接続
         ├── Messages.mqh          # メッセージ送信ユーティリティ
         ├── MasterSignals.mqh     # Master固有シグナル送信

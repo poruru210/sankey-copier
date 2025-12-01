@@ -219,8 +219,75 @@ classDiagram
 
 ```
 PUB/SUB トピック形式: "{topic} {MessagePack payload}"
-例: "IC_Markets_12345 <binary data>"
+例: "config/IC_Markets_12345 <binary data>"
 ```
+
+### トピックルーティング
+
+2ポートアーキテクチャでは、統合PUBソケット(5556)から全メッセージを配信し、トピックでフィルタリングします。
+
+#### トピック形式と用途
+
+| トピック形式 | 用途 | 配信先 | 実装箇所 |
+|------------|------|--------|---------|
+| `config/{account_id}` | Master/Slave設定配布 | 特定EA<br>※account_id = master_accountまたはslave_account | `trade_groups.rs` L311, `trade_group_members.rs` L628 |
+| `trade/{master_account}/{slave_account}` | トレードシグナル配信 | 特定Slave | `config_publisher.rs` L163 |
+| `config/global` | VictoriaLogs設定等 | 全EA | `config_publisher.rs` L138 |
+
+**例**:
+- Master設定: `config/IC_Markets_123456` (account_id = master_account)
+- Slave設定: `config/XM_789012` (account_id = slave_account)
+- トレードシグナル: `trade/IC_Markets_123456/XM_789012`
+- グローバル設定: `config/global`
+
+**注**: 
+- `account_id`は`{BrokerName}_{AccountNumber}`形式（例: `IC_Markets_123456`）
+- Master/Slaveとも同じ`config/{account_id}`形式を使用（EA側で自身のaccount_idでフィルタリング）
+
+#### 動的トピック生成（EA側）
+
+EA側ではFFI関数を使用してトピックを動的に生成します (`mt-bridge/src/ffi.rs`):
+
+```mql5
+// Master/Slave設定トピック生成
+ushort topic_buffer[256];
+int len = build_config_topic(AccountID, topic_buffer, 256);
+// 結果: "config/{AccountID}"
+// AccountID形式: "IC_Markets_123456" (BrokerName_AccountNumber)
+
+// トレードシグナルトピック生成 (Slave側)
+int len = build_trade_topic(MasterAccountID, SlaveAccountID, topic_buffer, 256);
+// 結果: "trade/{MasterAccountID}/{SlaveAccountID}"
+// 例: "trade/IC_Markets_123456/XM_789012"
+
+// グローバル設定トピック取得
+int len = get_global_config_topic(topic_buffer, 256);
+// 結果: "config/global"
+```
+
+#### ConfigMessageトレイト
+
+Relay Server側では`ConfigMessage`トレイトでトピック生成を統一 (`sankey_copier_zmq` crate):
+
+```rust
+pub trait ConfigMessage: serde::Serialize {
+    fn zmq_topic(&self) -> String;
+}
+
+impl ConfigMessage for MasterConfigMessage {
+    fn zmq_topic(&self) -> String {
+        format!("config/{}", self.account_id)
+    }
+}
+
+impl ConfigMessage for SlaveConfigMessage {
+    fn zmq_topic(&self) -> String {
+        format!("config/{}", self.account_id)
+    }
+}
+```
+
+
 
 ## 処理フロー
 
@@ -298,20 +365,95 @@ sequenceDiagram
     EA->>EA: 設定適用
 ```
 
-## Slaveステータス
+## ステータス判定ロジック
 
-| 値 | 名称 | 説明 |
-|----|------|------|
-| 0 | DISABLED | ユーザーが無効化 |
-| 1 | ENABLED | 有効だがMasterオフライン/売買不許可 |
-| 2 | CONNECTED | 完全に有効（トレードコピー実行可能） |
-| 4 | REMOVED | 削除済み |
+### ステータス値の定義
 
-`effective_status`の計算ロジック:
-- ユーザー設定が無効 → 0 (DISABLED)
-- Masterがオフライン → 1 (ENABLED)
-- Masterの`is_trade_allowed`がfalse → 1 (ENABLED)
-- 上記以外 → 2 (CONNECTED)
+| 値 | 名称 | 対象 | 説明 |
+|----|------|------|------|
+| -1 | NO_CONFIG | Master/Slave | 設定未受信またはリセット状態 |
+| 0 | DISABLED | Master/Slave | 無効化（Web UI OFF または EA自動売買OFF） |
+| 1 | ENABLED | Slave専用 | Slave有効だがMasterが未接続 |
+| 2 | CONNECTED | Master/Slave | 完全に有効（トレード実行可能） |
+
+### Masterのステータス判定
+
+**判定要素**:
+1. **Web UI Switch**: Web UI上でON/OFFが切り替えられているか
+2. **EA自動売買許可**: MT4/MT5のEA側で自動売買が許可されているか (`is_trade_allowed`)
+
+**判定ルール**:
+
+| Web UI Switch | EA自動売買 | ステータス | 説明 |
+|:-------------:|:----------:|:----------:|------|
+| ✅ ON | ✅ ON | `CONNECTED (2)` | トレードシグナル送信可能 |
+| ❌ OFF | - | `DISABLED (0)` | Web UIでOFF |
+| ✅ ON | ❌ OFF | `DISABLED (0)` | EA自動売買がOFF |
+
+**実装** (`relay-server/src/models/status.rs`):
+```rust
+pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
+    if !input.web_ui_enabled || !input.is_trade_allowed {
+        STATUS_DISABLED  // 0
+    } else {
+        STATUS_CONNECTED  // 2
+    }
+}
+```
+
+### Slaveのステータス判定
+
+**判定要素**:
+1. **Slave自体の条件**:
+   - Web UI Switch (ON/OFF)
+   - EA自動売買許可 (`is_trade_allowed`)
+2. **接続Masterの状態**:
+   - 接続している各Masterが `CONNECTED` か `DISABLED` か
+
+**判定ルール**:
+
+| Slave自体の条件 | 接続Masterの状態 | Slaveのステータス | 説明 |
+|----------------|------------------|:----------------:|------|
+| Switch❌ または 自動売買❌ | - | `DISABLED (0)` | Slave自体が無効 |
+| Switch✅ かつ 自動売買✅ | **少なくとも1つのMasterが DISABLED** | `ENABLED (1)` | Slave準備完了だがMaster未接続 |
+| Switch✅ かつ 自動売買✅ | **すべてのMasterが CONNECTED** | `CONNECTED (2)` | コピー取引実行可能 |
+
+**実装** (`relay-server/src/models/status.rs`):
+```rust
+pub fn calculate_slave_status(input: &SlaveStatusInput) -> i32 {
+    // Slave自体が無効な場合
+    if !input.web_ui_enabled || !input.is_trade_allowed {
+        return STATUS_DISABLED;  // 0
+    }
+    
+    // Slave自体は有効だが、Masterの状態で判定
+    if input.master_status == STATUS_CONNECTED {
+        STATUS_CONNECTED  // 2
+    } else {
+        STATUS_ENABLED    // 1
+    }
+}
+```
+
+### N:N接続のサポート
+
+このシステムはMasterとSlaveのN:N接続を完全にサポートします。
+
+**例**: Slave Aが Master1, Master2, Master3 に接続している場合
+
+| Master1 | Master2 | Master3 | Slave Aのステータス |
+|:-------:|:-------:|:-------:|:------------------:|
+| CONNECTED | CONNECTED | CONNECTED | `CONNECTED (2)` |
+| CONNECTED | CONNECTED | DISABLED | `ENABLED (1)` |
+| DISABLED | DISABLED | DISABLED | `ENABLED (1)` |
+
+**ルール**: **すべてのMasterが `CONNECTED` の場合のみ Slaveは `CONNECTED (2)`、それ以外は `ENABLED (1)`**
+
+### STATUS_NO_CONFIG (-1) の用途
+
+1. **EA起動直後の初期状態**: 設定メッセージ未受信
+2. **Member削除時のリセット通知**: EAに設定削除を通知
+3. **設定エラー時のフォールバック**: 異常状態からのリカバリ
 
 ## CopyEngine フィルタリング
 
