@@ -80,8 +80,33 @@ impl MessageHandler {
                 new_is_trade_allowed
             );
 
-            // Note: MasterConfigMessage is not sent to Master EA
-            // Master EA calculates its own status locally
+            // Send MasterConfigMessage if this is a new registration or if auto-trading state changed
+            // This ensures Master EA is in sync with Server status (e.g. after Server restart or local toggle)
+            if is_new_registration || trade_allowed_changed {
+                let config = crate::models::MasterConfigMessage {
+                    account_id: account_id.clone(),
+                    status: master_status,
+                    symbol_prefix: trade_group.master_settings.symbol_prefix.clone(),
+                    symbol_suffix: trade_group.master_settings.symbol_suffix.clone(),
+                    config_version: trade_group.master_settings.config_version,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                };
+
+                if let Err(e) = self.publisher.send(&config).await {
+                    tracing::error!("Failed to send master config to {}: {}", account_id, e);
+                } else {
+                    tracing::info!(
+                        "Sent Master CONFIG to {} (status: {}, reason: {})",
+                        account_id,
+                        master_status,
+                        if is_new_registration {
+                            "new_registration"
+                        } else {
+                            "trade_allowed_changed"
+                        }
+                    );
+                }
+            }
 
             // Notify Slaves when Master status changes (N:N connection support)
             // Only send SlaveConfigMessage when Slave's calculated status changes
