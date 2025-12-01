@@ -617,18 +617,64 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
 
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
-    // Fetch Master's equity for margin_ratio mode
-    let master_equity = state
+    // Fetch Master's connection info to calculate master status
+    let master_conn = state.connection_manager.get_ea(master_account).await;
+
+    let master_equity = master_conn.as_ref().map(|conn| conn.equity);
+
+    // Calculate Master status first (needed for Slave status)
+    // Master is CONNECTED if enabled in DB (implied by this function being called for active group)
+    // AND is_trade_allowed is true
+    let master_is_trade_allowed = master_conn
+        .as_ref()
+        .map(|c| c.is_trade_allowed)
+        .unwrap_or(true);
+    // Note: We assume Master Web UI is enabled here because if it was disabled,
+    // the TradeGroup wouldn't be active or we'd be handling it differently.
+    // However, strictly speaking, we should check the TradeGroup's enabled state.
+    // For now, we'll assume if we are sending config, we want to calculate status based on connection.
+    // But wait, send_config_to_slave is called when adding/updating member.
+    // We need to know if Master is enabled.
+    // Let's fetch TradeGroup to be sure, or pass it in.
+    // For simplicity and performance, we'll assume Master is enabled if not passed,
+    // but correct way is to check TradeGroup.
+    // Actually, calculate_slave_status needs master_status.
+
+    // Let's get Master's effective status.
+    // We need to know if Master is enabled in Web UI.
+    // Since we don't have TradeGroup here, we'll fetch it or assume enabled if not found (fallback).
+    let master_web_ui_enabled = match state.db.get_trade_group(master_account).await {
+        Ok(Some(tg)) => tg.master_settings.enabled,
+        _ => true, // Fallback
+    };
+
+    let master_status =
+        crate::models::status::calculate_master_status(&crate::models::status::MasterStatusInput {
+            web_ui_enabled: master_web_ui_enabled,
+            is_trade_allowed: master_is_trade_allowed,
+        });
+
+    // Fetch Slave's connection info for is_trade_allowed
+    let slave_is_trade_allowed = state
         .connection_manager
-        .get_ea(master_account)
+        .get_ea(&member.slave_account)
         .await
-        .map(|conn| conn.equity);
+        .map(|conn| conn.is_trade_allowed)
+        .unwrap_or(true); // Default to true if not connected yet
+
+    // Calculate Slave's effective status
+    let effective_status =
+        crate::models::status::calculate_slave_status(&crate::models::status::SlaveStatusInput {
+            web_ui_enabled: member.status > 0, // member.status from DB is 0 (DISABLED) or 1 (ENABLED)
+            is_trade_allowed: slave_is_trade_allowed,
+            master_status,
+        });
 
     let config = SlaveConfigMessage {
         account_id: member.slave_account.clone(),
         master_account: master_account.to_string(),
         trade_group_id: master_account.to_string(),
-        status: member.status,
+        status: effective_status,
         lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
         lot_multiplier: member.slave_settings.lot_multiplier,
         reverse_trade: member.slave_settings.reverse_trade,
@@ -652,7 +698,7 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
         use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
         // Derived from status: allow new orders when enabled
-        allow_new_orders: member.status > 0,
+        allow_new_orders: effective_status == crate::models::STATUS_CONNECTED,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
