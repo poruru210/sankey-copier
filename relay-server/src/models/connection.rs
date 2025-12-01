@@ -88,15 +88,12 @@ pub enum ConnectionStatus {
 // Re-export SlaveConfigMessage from DLL
 pub use sankey_copier_zmq::SlaveConfigMessage;
 
-impl EaConnection {
-    // Method removed as it's no longer used (replaced by centralized status logic)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use sankey_copier_zmq::TradeFilters;
 
+    #[test]
     fn test_config_message_serialization() {
         let config = SlaveConfigMessage {
             account_id: "TEST_001".to_string(),
