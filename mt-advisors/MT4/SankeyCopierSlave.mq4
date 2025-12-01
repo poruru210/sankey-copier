@@ -256,11 +256,11 @@ void OnTimer()
             // Only update if we have received config, otherwise keep showing "Waiting"
             if(ShowConfigPanel && g_has_received_config)
             {
-               if(!current_trade_allowed)
-               {
-                  // Auto-trading OFF -> show ENABLED (yellow) as warning, like Web UI
-                  g_config_panel.UpdateStatusRow(STATUS_ENABLED);
-               }
+                if(!current_trade_allowed)
+                {
+                   // Auto-trading OFF -> show DISABLED (Slave cannot trade)
+                   g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                }
                else
                {
                   // Auto-trading ON -> show actual config status
@@ -386,8 +386,8 @@ void OnTimer()
             bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
             if(!local_trade_allowed)
             {
-               // Local auto-trading OFF -> show ENABLED (yellow) warning, like Web UI
-               g_config_panel.UpdateStatusRow(STATUS_ENABLED);
+               // Local auto-trading OFF -> show DISABLED (Slave cannot trade)
+               g_config_panel.UpdateStatusRow(STATUS_DISABLED);
             }
             else
             {
