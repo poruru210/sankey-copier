@@ -10,13 +10,15 @@
 // - -1 = NO_CONFIG (used for removal/reset)
 
 // Use status constants from trade_group_member.rs
-use super::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
+use super::{ConnectionStatus, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
 
 /// Input parameters for Master status calculation
 #[derive(Debug, Clone)]
 pub struct MasterStatusInput {
     /// Web UI Switch state (from MasterSettings.enabled)
     pub web_ui_enabled: bool,
+    /// EA connection status (from ConnectionManager)
+    pub connection_status: Option<ConnectionStatus>,
     /// Auto-trading enabled on MT5 terminal (from Heartbeat.is_trade_allowed)
     pub is_trade_allowed: bool,
 }
@@ -26,6 +28,8 @@ pub struct MasterStatusInput {
 pub struct SlaveStatusInput {
     /// Web UI Switch state for this Slave (derived from status > 0)
     pub web_ui_enabled: bool,
+    /// EA connection status (from ConnectionManager)
+    pub connection_status: Option<ConnectionStatus>,
     /// Auto-trading enabled on Slave's MT5 terminal (from Heartbeat.is_trade_allowed)
     pub is_trade_allowed: bool,
     /// Master's calculated status (from calculate_master_status)
@@ -35,31 +39,74 @@ pub struct SlaveStatusInput {
 /// Calculate effective status for Master EA
 ///
 /// Master has only two states:
-/// - DISABLED (0): Web UI Switch OFF or auto-trade OFF
-/// - CONNECTED (2): Both conditions met
+/// - DISABLED (0): Web UI Switch OFF, not connected, or auto-trade OFF
+/// - CONNECTED (2): All conditions met
 ///
-/// Note: Master does NOT have ENABLED state.
+/// Priority order:
+/// 1. Web UI Switch OFF -> DISABLED
+/// 2. Not connected (None, Timeout, Offline) -> DISABLED  
+/// 3. Auto-trade OFF -> DISABLED
+/// 4. All OK -> CONNECTED
 pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
-    if !input.web_ui_enabled || !input.is_trade_allowed {
-        STATUS_DISABLED
-    } else {
-        STATUS_CONNECTED
+    // Priority 1: Web UI OFF
+    if !input.web_ui_enabled {
+        return STATUS_DISABLED;
     }
+
+    // Priority 2: Not connected
+    match input.connection_status {
+        None | Some(super::ConnectionStatus::Timeout) | Some(super::ConnectionStatus::Offline) => {
+            return STATUS_DISABLED;
+        }
+        Some(super::ConnectionStatus::Online) => {
+            // Continue to next check
+        }
+    }
+
+    // Priority 3: Auto-trade OFF
+    if !input.is_trade_allowed {
+        return STATUS_DISABLED;
+    }
+
+    // All conditions met
+    STATUS_CONNECTED
 }
 
 /// Calculate effective status for Slave EA
 ///
 /// Slave has three states:
-/// - DISABLED (0): Own Web UI Switch OFF or own auto-trade OFF
+/// - DISABLED (0): Own Web UI Switch OFF, not connected, or auto-trade OFF
 /// - ENABLED (1): Self is OK but Master is not CONNECTED
 /// - CONNECTED (2): All conditions met
+///
+/// Priority order:
+/// 1. Own Web UI Switch OFF -> DISABLED
+/// 2. Own connection check (None, Timeout, Offline) -> DISABLED
+/// 3. Own auto-trade OFF -> DISABLED
+/// 4. Master not CONNECTED -> ENABLED
+/// 5. All OK -> CONNECTED
 pub fn calculate_slave_status(input: &SlaveStatusInput) -> i32 {
-    // Priority 1: Own settings check
-    if !input.web_ui_enabled || !input.is_trade_allowed {
+    // Priority 1: Own Web UI OFF
+    if !input.web_ui_enabled {
         return STATUS_DISABLED;
     }
 
-    // Priority 2: Master status check
+    // Priority 2: Own connection check
+    match input.connection_status {
+        None | Some(super::ConnectionStatus::Timeout) | Some(super::ConnectionStatus::Offline) => {
+            return STATUS_DISABLED;
+        }
+        Some(super::ConnectionStatus::Online) => {
+            // Continue to next check
+        }
+    }
+
+    // Priority 3: Own auto-trade OFF
+    if !input.is_trade_allowed {
+        return STATUS_DISABLED;
+    }
+
+    // Priority 4: Master status check
     if input.master_status != STATUS_CONNECTED {
         return STATUS_ENABLED;
     }
@@ -80,6 +127,7 @@ mod tests {
     fn test_master_disabled_when_web_ui_off() {
         let input = MasterStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         assert_eq!(calculate_master_status(&input), STATUS_DISABLED);
@@ -89,6 +137,7 @@ mod tests {
     fn test_master_disabled_when_auto_trade_off() {
         let input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
         };
         assert_eq!(calculate_master_status(&input), STATUS_DISABLED);
@@ -98,6 +147,7 @@ mod tests {
     fn test_master_disabled_when_both_off() {
         let input = MasterStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
         };
         assert_eq!(calculate_master_status(&input), STATUS_DISABLED);
@@ -107,6 +157,7 @@ mod tests {
     fn test_master_connected_when_all_enabled() {
         let input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         assert_eq!(calculate_master_status(&input), STATUS_CONNECTED);
@@ -120,6 +171,7 @@ mod tests {
     fn test_slave_disabled_when_web_ui_off() {
         let input = SlaveStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status: STATUS_CONNECTED,
         };
@@ -130,6 +182,7 @@ mod tests {
     fn test_slave_disabled_when_auto_trade_off() {
         let input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
             master_status: STATUS_CONNECTED,
         };
@@ -140,6 +193,7 @@ mod tests {
     fn test_slave_disabled_when_both_off() {
         let input = SlaveStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
             master_status: STATUS_CONNECTED,
         };
@@ -151,6 +205,7 @@ mod tests {
         // Even if Master is DISABLED, Slave's own DISABLED takes priority
         let input = SlaveStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status: STATUS_DISABLED,
         };
@@ -165,6 +220,7 @@ mod tests {
     fn test_slave_enabled_when_master_disabled() {
         let input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status: STATUS_DISABLED,
         };
@@ -176,6 +232,7 @@ mod tests {
         // Master ENABLED means Master is also waiting (shouldn't happen for Master, but test anyway)
         let input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status: STATUS_ENABLED,
         };
@@ -190,6 +247,7 @@ mod tests {
     fn test_slave_connected_when_all_conditions_met() {
         let input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status: STATUS_CONNECTED,
         };
@@ -207,6 +265,7 @@ mod tests {
         for master_status in [STATUS_DISABLED, STATUS_ENABLED, STATUS_CONNECTED] {
             let input = SlaveStatusInput {
                 web_ui_enabled: false,
+                connection_status: Some(super::ConnectionStatus::Online),
                 is_trade_allowed: true,
                 master_status,
             };
@@ -225,6 +284,7 @@ mod tests {
         for master_status in [STATUS_DISABLED, STATUS_ENABLED] {
             let input = SlaveStatusInput {
                 web_ui_enabled: true,
+                connection_status: Some(super::ConnectionStatus::Online),
                 is_trade_allowed: true,
                 master_status,
             };
@@ -246,6 +306,7 @@ mod tests {
         // Master: Web UI ON, auto-trade ON -> CONNECTED
         let master_input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         let master_status = calculate_master_status(&master_input);
@@ -254,6 +315,7 @@ mod tests {
         // Slave: Web UI ON, auto-trade ON, Master CONNECTED -> CONNECTED
         let slave_input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status,
         };
@@ -265,6 +327,7 @@ mod tests {
         // Master: Web UI ON, auto-trade OFF -> DISABLED
         let master_input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
         };
         let master_status = calculate_master_status(&master_input);
@@ -273,6 +336,7 @@ mod tests {
         // Slave: Web UI ON, auto-trade ON, Master DISABLED -> ENABLED
         let slave_input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status,
         };
@@ -284,6 +348,7 @@ mod tests {
         // Master: Web UI OFF, auto-trade ON -> DISABLED
         let master_input = MasterStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         let master_status = calculate_master_status(&master_input);
@@ -292,6 +357,7 @@ mod tests {
         // Slave: Web UI ON, auto-trade ON, Master DISABLED -> ENABLED
         let slave_input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status,
         };
@@ -303,6 +369,7 @@ mod tests {
         // Master: All OK -> CONNECTED
         let master_input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         let master_status = calculate_master_status(&master_input);
@@ -311,6 +378,7 @@ mod tests {
         // Slave: auto-trade OFF -> DISABLED (even if Master is CONNECTED)
         let slave_input = SlaveStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: false,
             master_status,
         };
@@ -322,6 +390,7 @@ mod tests {
         // Master: All OK -> CONNECTED
         let master_input = MasterStatusInput {
             web_ui_enabled: true,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
         };
         let master_status = calculate_master_status(&master_input);
@@ -330,6 +399,7 @@ mod tests {
         // Slave: Web UI OFF -> DISABLED (even if Master is CONNECTED)
         let slave_input = SlaveStatusInput {
             web_ui_enabled: false,
+            connection_status: Some(super::ConnectionStatus::Online),
             is_trade_allowed: true,
             master_status,
         };
@@ -361,6 +431,7 @@ mod tests {
         for (web_ui, trade_allowed, _conn_status_comment, expected) in scenarios {
             let input = MasterStatusInput {
                 web_ui_enabled: web_ui,
+                connection_status: Some(super::ConnectionStatus::Online),
                 is_trade_allowed: trade_allowed,
             };
             assert_eq!(
@@ -392,6 +463,7 @@ mod tests {
         for (web_ui, trade_allowed, master_status, expected) in scenarios {
             let input = SlaveStatusInput {
                 web_ui_enabled: web_ui,
+                connection_status: Some(super::ConnectionStatus::Online),
                 is_trade_allowed: trade_allowed,
                 master_status,
             };

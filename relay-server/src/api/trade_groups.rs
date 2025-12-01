@@ -292,18 +292,17 @@ pub async fn toggle_master(
 
 /// Send Master config to Master EA via ZMQ
 async fn send_config_to_master(state: &AppState, master_account: &str, settings: &MasterSettings) {
-    // Get is_trade_allowed from connection manager (if EA is connected)
-    // Default to true if EA is not connected yet, so toggle ON shows CONNECTED
-    let is_trade_allowed = state
-        .connection_manager
-        .get_ea(master_account)
-        .await
-        .map(|conn| conn.is_trade_allowed)
+    // Get Master connection info
+    let master_conn = state.connection_manager.get_ea(master_account).await;
+    let is_trade_allowed = master_conn
+        .as_ref()
+        .map(|c| c.is_trade_allowed)
         .unwrap_or(true);
 
     // Calculate status using centralized logic (same as heartbeat handler)
     let status = calculate_master_status(&MasterStatusInput {
         web_ui_enabled: settings.enabled,
+        connection_status: master_conn.as_ref().map(|c| c.status),
         is_trade_allowed,
     });
 
@@ -342,16 +341,16 @@ async fn send_config_to_master(state: &AppState, master_account: &str, settings:
 /// Called when Master switch changes to notify Slaves of the new Master status
 async fn send_config_to_slaves(state: &AppState, master_account: &str, settings: &MasterSettings) {
     // Get is_trade_allowed for Master (to calculate master_status)
-    let master_is_trade_allowed = state
-        .connection_manager
-        .get_ea(master_account)
-        .await
-        .map(|conn| conn.is_trade_allowed)
+    let master_conn = state.connection_manager.get_ea(master_account).await;
+    let master_is_trade_allowed = master_conn
+        .as_ref()
+        .map(|c| c.is_trade_allowed)
         .unwrap_or(true);
 
     // Calculate Master status
     let master_status = calculate_master_status(&MasterStatusInput {
         web_ui_enabled: settings.enabled,
+        connection_status: master_conn.as_ref().map(|c| c.status),
         is_trade_allowed: master_is_trade_allowed,
     });
 
@@ -378,10 +377,9 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
     // Send config to each Slave
     for member in members {
         // Get Slave's is_trade_allowed from connection manager (if connected)
-        let slave_is_trade_allowed = state
-            .connection_manager
-            .get_ea(&member.slave_account)
-            .await
+        let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
+        let slave_is_trade_allowed = slave_conn
+            .as_ref()
             .map(|conn| conn.is_trade_allowed)
             .unwrap_or(true);
 
@@ -390,6 +388,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
         let slave_enabled = member.status > 0;
         let slave_status = calculate_slave_status(&SlaveStatusInput {
             web_ui_enabled: slave_enabled,
+            connection_status: slave_conn.as_ref().map(|c| c.status),
             is_trade_allowed: slave_is_trade_allowed,
             master_status,
         });

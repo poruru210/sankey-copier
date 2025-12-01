@@ -89,10 +89,7 @@ pub enum ConnectionStatus {
 pub use sankey_copier_zmq::SlaveConfigMessage;
 
 impl EaConnection {
-    /// Calculate if trade is effectively allowed based on both flag and connection status
-    pub fn is_effective_trade_allowed(&self) -> bool {
-        self.is_trade_allowed && self.status == ConnectionStatus::Online
-    }
+    // Method removed as it's no longer used (replaced by centralized status logic)
 }
 
 #[cfg(test)]

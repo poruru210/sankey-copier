@@ -624,21 +624,10 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
 
     // Calculate Master status first (needed for Slave status)
     // Master is CONNECTED if enabled in DB AND is_trade_allowed is true AND connection is Online
-    // Check both is_trade_allowed and connection status (Online/Timeout/Offline)
     let master_is_trade_allowed = master_conn
         .as_ref()
-        .map(|c| c.is_effective_trade_allowed())
+        .map(|c| c.is_trade_allowed)
         .unwrap_or(false); // Default to false if Master not connected
-                           // Note: We assume Master Web UI is enabled here because if it was disabled,
-                           // the TradeGroup wouldn't be active or we'd be handling it differently.
-                           // However, strictly speaking, we should check the TradeGroup's enabled state.
-                           // For now, we'll assume if we are sending config, we want to calculate status based on connection.
-                           // But wait, send_config_to_slave is called when adding/updating member.
-                           // We need to know if Master is enabled.
-                           // Let's fetch TradeGroup to be sure, or pass it in.
-                           // For simplicity and performance, we'll assume Master is enabled if not passed,
-                           // but correct way is to check TradeGroup.
-                           // Actually, calculate_slave_status needs master_status.
 
     // Let's get Master's effective status.
     // We need to know if Master is enabled in Web UI.
@@ -651,22 +640,22 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
     let master_status =
         crate::models::status::calculate_master_status(&crate::models::status::MasterStatusInput {
             web_ui_enabled: master_web_ui_enabled,
+            connection_status: master_conn.as_ref().map(|c| c.status),
             is_trade_allowed: master_is_trade_allowed,
         });
 
     // Fetch Slave's connection info for is_trade_allowed
-    // Check both is_trade_allowed and connection status via helper method
-    let slave_is_trade_allowed = state
-        .connection_manager
-        .get_ea(&member.slave_account)
-        .await
-        .map(|conn| conn.is_effective_trade_allowed())
+    let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
+    let slave_is_trade_allowed = slave_conn
+        .as_ref()
+        .map(|c| c.is_trade_allowed)
         .unwrap_or(false); // Default to false if Slave not connected
 
     // Calculate Slave's effective status
     let effective_status =
         crate::models::status::calculate_slave_status(&crate::models::status::SlaveStatusInput {
             web_ui_enabled: member.status > 0, // member.status from DB is 0 (DISABLED) or 1 (ENABLED)
+            connection_status: slave_conn.as_ref().map(|c| c.status),
             is_trade_allowed: slave_is_trade_allowed,
             master_status,
         });

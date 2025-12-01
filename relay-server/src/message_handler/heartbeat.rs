@@ -62,9 +62,13 @@ impl MessageHandler {
                 }
             };
 
+            // Get Master connection info
+            let master_conn = self.connection_manager.get_ea(&account_id).await;
+
             // Calculate Master status using centralized logic
             let master_status = calculate_master_status(&MasterStatusInput {
                 web_ui_enabled: trade_group.master_settings.enabled,
+                connection_status: master_conn.as_ref().map(|c| c.status),
                 is_trade_allowed: new_is_trade_allowed,
             });
 
@@ -143,17 +147,18 @@ impl MessageHandler {
                                         }
                                     };
 
-                                // Get Master's is_trade_allowed from connection manager
-                                let master_is_trade_allowed = self
-                                    .connection_manager
-                                    .get_ea(master_account)
-                                    .await
-                                    .map(|conn| conn.is_trade_allowed)
-                                    .unwrap_or(false); // Default to false if not connected
+                                // Get Master connection info
+                                let master_conn =
+                                    self.connection_manager.get_ea(master_account).await;
+                                let master_is_trade_allowed = master_conn
+                                    .as_ref()
+                                    .map(|c| c.is_trade_allowed)
+                                    .unwrap_or(false);
 
                                 // Calculate Master status
                                 let master_status = calculate_master_status(&MasterStatusInput {
                                     web_ui_enabled: master_enabled,
+                                    connection_status: master_conn.as_ref().map(|c| c.status),
                                     is_trade_allowed: master_is_trade_allowed,
                                 });
 

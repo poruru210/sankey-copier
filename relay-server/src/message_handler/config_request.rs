@@ -41,17 +41,17 @@ impl MessageHandler {
     async fn handle_master_config_request(&self, account_id: &str) {
         match self.db.get_settings_for_master(account_id).await {
             Ok(master_settings) => {
-                // Get is_trade_allowed from connection manager
-                let is_trade_allowed = self
-                    .connection_manager
-                    .get_ea(account_id)
-                    .await
-                    .map(|conn| conn.is_trade_allowed)
-                    .unwrap_or(true); // Default to true if not connected yet
+                // Get Master connection info
+                let master_conn = self.connection_manager.get_ea(account_id).await;
+                let is_trade_allowed = master_conn
+                    .as_ref()
+                    .map(|c| c.is_trade_allowed)
+                    .unwrap_or(true);
 
                 // Calculate status using centralized logic
                 let status = calculate_master_status(&MasterStatusInput {
                     web_ui_enabled: master_settings.enabled,
+                    connection_status: master_conn.as_ref().map(|c| c.status),
                     is_trade_allowed,
                 });
 
@@ -132,6 +132,7 @@ impl MessageHandler {
 
                             calculate_master_status(&MasterStatusInput {
                                 web_ui_enabled: master_enabled,
+                                connection_status: Some(conn.status),
                                 is_trade_allowed: conn.is_trade_allowed,
                             })
                         } else {
@@ -141,8 +142,10 @@ impl MessageHandler {
 
                     // Calculate Slave status using centralized logic
                     // Web UI enabled = DB status > 0
+                    let slave_conn = self.connection_manager.get_ea(account_id).await;
                     let effective_status = calculate_slave_status(&SlaveStatusInput {
                         web_ui_enabled: settings.status > 0,
+                        connection_status: slave_conn.as_ref().map(|c| c.status),
                         is_trade_allowed: slave_is_trade_allowed,
                         master_status,
                     });

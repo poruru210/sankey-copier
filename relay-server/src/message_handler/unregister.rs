@@ -63,18 +63,19 @@ impl MessageHandler {
             match self.db.get_members(account_id).await {
                 Ok(members) => {
                     for member in members {
-                        // Get Slave's is_trade_allowed from connection manager (if connected)
-                        let slave_is_trade_allowed = self
-                            .connection_manager
-                            .get_ea(&member.slave_account)
-                            .await
-                            .map(|conn| conn.is_trade_allowed)
+                        // Get Slave connection info
+                        let slave_conn =
+                            self.connection_manager.get_ea(&member.slave_account).await;
+                        let slave_is_trade_allowed = slave_conn
+                            .as_ref()
+                            .map(|c| c.is_trade_allowed)
                             .unwrap_or(true);
 
                         // Calculate Slave status - Master is now DISABLED (disconnected)
                         let slave_enabled = member.status > 0;
                         let slave_status = calculate_slave_status(&SlaveStatusInput {
                             web_ui_enabled: slave_enabled,
+                            connection_status: slave_conn.as_ref().map(|c| c.status),
                             is_trade_allowed: slave_is_trade_allowed,
                             master_status: STATUS_DISABLED, // Master disconnected
                         });
