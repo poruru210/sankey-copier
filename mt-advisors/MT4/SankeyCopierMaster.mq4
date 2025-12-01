@@ -373,23 +373,10 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    {
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
 
-      // Update status after receiving configuration
-      if(g_server_status == STATUS_NO_CONFIG)
-      {
-         g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
-      }
-      else
-      {
-         bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-         if(!local_trade_allowed)
-         {
-            g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-         }
-         else
-         {
-            g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-         }
-      }
+      // Use the status received from server directly
+      // (server already considers both Web UI state and is_trade_allowed)
+      g_config_panel.UpdateStatusRow(g_server_status);
+
       ChartRedraw();
    }
 
