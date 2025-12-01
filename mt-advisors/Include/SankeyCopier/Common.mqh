@@ -45,8 +45,7 @@
 #define STATUS_DISABLED 0         // Slave is disabled
 #define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
-#define STATUS_NO_CONFIGURATION 3 // No configuration received yet
-#define STATUS_REMOVED 4          // Configuration removed (deleted from UI)
+#define STATUS_NO_CONFIG -1 // No configuration received yet
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
@@ -147,6 +146,11 @@
    string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
    int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
    void        vlogs_config_free(HANDLE_TYPE handle);
+
+   // Topic generation functions
+   int         build_config_topic(string account_id, ushort &output[], int output_len);
+   int         build_trade_topic(string master_id, string slave_id, ushort &output[], int output_len);
+   int         get_global_config_topic(ushort &output[], int output_len);
 #import
 
 //--- Common structures

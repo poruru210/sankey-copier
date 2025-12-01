@@ -13,6 +13,7 @@
 bool g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
 
 //--- Include common headers
+//--- Include common headers
 #include <SankeyCopier/Common.mqh>
 #include <SankeyCopier/Zmq.mqh>
 #include <SankeyCopier/Mapping.mqh>
@@ -34,7 +35,7 @@ input int      SignalPollingIntervalMs = 1000;      // Signal polling interval i
 //--- Resolved addresses (from sankey_copier.ini config file)
 // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified for trades+configs)
 string g_RelayAddress = "";
-string g_SubAddress = "";  // Unified SUB address for trades and configs
+string g_TradeAddress = "";  // Unified SUB address for trades and configs
 
 //--- Default values for trade execution (used before config is received)
 #define DEFAULT_SLIPPAGE              30     // Default slippage in points
@@ -44,23 +45,26 @@ string g_SubAddress = "";  // Unified SUB address for trades and configs
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
 HANDLE_TYPE g_zmq_context = -1;
+HANDLE_TYPE g_zmq_socket = -1;
 HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
-// g_local_mappings removed - all symbol transformation now handled by Relay Server
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
-bool        g_config_requested = false; // Track if config has been requested
+bool        g_config_requested = false;   // Track if config request has been sent
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
-// g_received_via_timer is defined before includes (required for SlaveTrade.mqh)
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
 bool           g_has_received_config = false;    // Track if we have received at least one config
 
+//--- Topic strings (generated via FFI)
+string g_config_topic = "";
+string g_vlogs_topic = "";
+
 //--- Configuration panel
-CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
+CGridPanel     g_config_panel;
 
 int g_last_config_count = 0;
 
@@ -71,31 +75,42 @@ int OnInit()
 {
    Print("=== SankeyCopier Slave EA (MT4) Starting ===");
 
-   // Symbol transformation is now handled by Relay Server
-   // Slave EA receives pre-transformed symbols
-
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Load port configuration from sankey_copier.ini
-   // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
-   if(!LoadConfig())
+   // Generate topics using FFI
+   ushort topic_buffer[256];
+   int len = build_config_topic(AccountID, topic_buffer, 256);
+   if(len > 0) 
    {
-      Print("WARNING: Failed to load config file, using default ports");
+      g_config_topic = ShortArrayToString(topic_buffer);
    }
    else
    {
-      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(), " (unified)");
+      Print("ERROR: Failed to build config topic");
+      return INIT_FAILED;
    }
+
+   len = get_global_config_topic(topic_buffer, 256);
+   if(len > 0)
+   {
+      g_vlogs_topic = ShortArrayToString(topic_buffer);
+   }
+   else
+   {
+      Print("ERROR: Failed to build global config topic");
+      return INIT_FAILED;
+   }
+
+   Print("Generated topics: Config=", g_config_topic, ", VLogs=", g_vlogs_topic);
 
    // Resolve addresses from sankey_copier.ini config file
    // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
    g_RelayAddress = GetPushAddress();
-   g_SubAddress = GetTradeSubAddress();
+   g_TradeAddress = GetTradeSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_SubAddress, " (unified)");
+   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_TradeAddress, " (unified)");
 
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
@@ -103,7 +118,7 @@ int OnInit()
       return INIT_FAILED;
 
    // Create and connect trade signal socket (SUB) - uses unified PUB address
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Trade SUB");
+   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_TradeAddress, "Slave Trade SUB");
    if(g_zmq_trade_socket < 0)
    {
       CleanupZmqContext(g_zmq_context);
@@ -111,7 +126,7 @@ int OnInit()
    }
 
    // Create and connect config socket (SUB) - uses same unified PUB address
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Config SUB");
+   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_TradeAddress, "Slave Config SUB");
    if(g_zmq_config_socket < 0)
    {
       CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
@@ -120,14 +135,14 @@ int OnInit()
    }
 
    // Subscribe to config messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, AccountID))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
    {
       CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
-   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
    {
       Print("WARNING: Failed to subscribe to vlogs_config topic");
    }
@@ -159,7 +174,7 @@ int OnInit()
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
       // Show NO_CONFIGURATION status initially (no config received yet)
-      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
       g_config_panel.UpdateServerRow(g_RelayAddress);
       // Symbol config is now per-Master from Web-UI, will be shown in carousel
       g_config_panel.UpdateSymbolConfig("", "", "");
@@ -249,7 +264,7 @@ void OnTimer()
                else
                {
                   // Auto-trading ON -> show actual config status
-                  int status_to_show = STATUS_NO_CONFIGURATION;
+                  int status_to_show = STATUS_NO_CONFIG;
                   if(ArraySize(g_configs) > 0) status_to_show = STATUS_ENABLED;
 
                   for(int i=0; i<ArraySize(g_configs); i++)
@@ -331,7 +346,7 @@ void OnTimer()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          // Check for VLogs config message first (global broadcast)
-         if(topic == "vlogs_config")
+         if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle != 0 && vlogs_handle != -1)
@@ -341,7 +356,7 @@ void OnTimer()
             }
          }
          // Try to parse as SlaveConfig first
-         else
+         else if(topic == g_config_topic)
          {
             HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
             if(config_handle > 0)
@@ -368,6 +383,7 @@ void OnTimer()
                ProcessPositionSnapshot(msgpack_payload, payload_len);
             }
          }
+         
          
          if(ArraySize(g_configs) != g_last_config_count)
          {
@@ -399,7 +415,7 @@ void OnTimer()
                }
 
                if(ArraySize(g_configs) == 0)
-                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
                else if(any_connected)
                   g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
                else
@@ -451,9 +467,23 @@ void ProcessTradeSignals()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
 
-         // Trade socket only handles TradeSignal messages
-         // PositionSnapshot is received via config socket in OnTimer
-         ProcessTradeSignal(msgpack_payload, payload_len);
+         // Trade socket receives messages on master_account topic
+         // This includes both TradeSignal and MasterConfigMessage
+         // We need to filter out non-TradeSignal messages
+         
+         // Try to parse as TradeSignal first
+         HANDLE_TYPE test_handle = parse_trade_signal(msgpack_payload, payload_len);
+         if(test_handle > 0)
+         {
+            // Valid TradeSignal - free test handle and process normally
+            trade_signal_free(test_handle);
+            ProcessTradeSignal(msgpack_payload, payload_len);
+         }
+         else
+         {
+            // Not a TradeSignal (likely MasterConfigMessage or other message type)
+            // Silently ignore - these messages are handled by config_socket
+         }
       }
    }
 }

@@ -10,11 +10,13 @@
 
 mod test_server;
 
-use sankey_copier_zmq::{
-    zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
-    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    HeartbeatMessage, VLogsConfigMessage, ZMQ_PUSH, ZMQ_SUB,
+use sankey_copier_zmq::ffi::{
+    parse_vlogs_config, vlogs_config_free, vlogs_config_get_bool, vlogs_config_get_int,
+    vlogs_config_get_string, zmq_context_create, zmq_context_destroy, zmq_socket_connect,
+    zmq_socket_create, zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary,
+    zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
 };
+use sankey_copier_zmq::{HeartbeatMessage, VLogsConfigMessage};
 use std::ffi::c_char;
 use test_server::TestServer;
 use tokio::time::{sleep, Duration};
@@ -52,8 +54,8 @@ impl VLogsConfigSubscriber {
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
 
-        // Subscribe to "vlogs_config" topic for global VLogs settings
-        let vlogs_topic_utf16: Vec<u16> = "vlogs_config".encode_utf16().chain(Some(0)).collect();
+        // Subscribe to "config/global" topic for global VLogs settings
+        let vlogs_topic_utf16: Vec<u16> = "config/global".encode_utf16().chain(Some(0)).collect();
 
         unsafe {
             let push_result = zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr());
@@ -160,10 +162,10 @@ impl VLogsConfigSubscriber {
                 let topic = &bytes[..space_pos];
                 let payload = &bytes[space_pos + 1..];
 
-                // Verify topic is "vlogs_config"
+                // Verify topic is "config/global"
                 let topic_str = String::from_utf8_lossy(topic);
-                if topic_str != "vlogs_config" {
-                    // Skip non-vlogs_config messages
+                if topic_str != "config/global" {
+                    // Skip non-config/global messages
                     continue;
                 }
 
@@ -620,8 +622,7 @@ async fn test_vlogs_config_ffi_parsing() {
     let bytes = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
 
     // Parse using FFI function
-    let handle =
-        unsafe { sankey_copier_zmq::parse_vlogs_config(bytes.as_ptr(), bytes.len() as i32) };
+    let handle = unsafe { parse_vlogs_config(bytes.as_ptr(), bytes.len() as i32) };
 
     assert!(
         !handle.is_null(),
@@ -632,12 +633,12 @@ async fn test_vlogs_config_ffi_parsing() {
     unsafe {
         // Test enabled
         let enabled_field: Vec<u16> = "enabled".encode_utf16().chain(Some(0)).collect();
-        let enabled = sankey_copier_zmq::vlogs_config_get_bool(handle, enabled_field.as_ptr());
+        let enabled = vlogs_config_get_bool(handle, enabled_field.as_ptr());
         assert_eq!(enabled, 1, "enabled should be 1 (true)");
 
         // Test batch_size
         let batch_field: Vec<u16> = "batch_size".encode_utf16().chain(Some(0)).collect();
-        let batch_size = sankey_copier_zmq::vlogs_config_get_int(handle, batch_field.as_ptr());
+        let batch_size = vlogs_config_get_int(handle, batch_field.as_ptr());
         assert_eq!(batch_size, 75, "batch_size should be 75");
 
         // Test flush_interval_secs
@@ -645,13 +646,12 @@ async fn test_vlogs_config_ffi_parsing() {
             .encode_utf16()
             .chain(Some(0))
             .collect();
-        let interval = sankey_copier_zmq::vlogs_config_get_int(handle, interval_field.as_ptr());
+        let interval = vlogs_config_get_int(handle, interval_field.as_ptr());
         assert_eq!(interval, 8, "flush_interval_secs should be 8");
 
         // Test endpoint string
         let endpoint_field: Vec<u16> = "endpoint".encode_utf16().chain(Some(0)).collect();
-        let endpoint_ptr =
-            sankey_copier_zmq::vlogs_config_get_string(handle, endpoint_field.as_ptr());
+        let endpoint_ptr = vlogs_config_get_string(handle, endpoint_field.as_ptr());
         assert!(!endpoint_ptr.is_null(), "endpoint should not be null");
 
         // Convert UTF-16 pointer to String
@@ -664,7 +664,7 @@ async fn test_vlogs_config_ffi_parsing() {
         assert_eq!(endpoint, "http://ffi-test:9428/insert/jsonline");
 
         // Free handle
-        sankey_copier_zmq::vlogs_config_free(handle);
+        vlogs_config_free(handle);
     }
 
     println!("✅ VLogs Config FFI Parsing test passed");

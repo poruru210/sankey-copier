@@ -7,7 +7,7 @@
 // - 0 = DISABLED
 // - 1 = ENABLED (Slave only: self is OK but Master is not CONNECTED)
 // - 2 = CONNECTED
-// - 3 = NO_CONFIG (determined on EA side, not here)
+// - -1 = NO_CONFIG (used for removal/reset)
 
 // Use status constants from trade_group_member.rs
 use super::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};

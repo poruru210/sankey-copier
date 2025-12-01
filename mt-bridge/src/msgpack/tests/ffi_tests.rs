@@ -2,6 +2,7 @@
 // Purpose: Tests for FFI functions used by MQL4/MQL5
 // Why: Ensures FFI boundary works correctly with UTF-16 strings and handle management
 
+use crate::ffi::*;
 use crate::msgpack::*;
 
 #[test]

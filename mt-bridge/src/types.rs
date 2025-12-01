@@ -1,4 +1,4 @@
-// Location: mt-bridge/src/msgpack/types.rs
+// Location: mt-bridge/src/types.rs
 // Purpose: Type definitions for MessagePack messages exchanged between EA and relay-server
 // Why: Centralized type definitions for all configuration and trade signal messages
 

@@ -1,8 +1,8 @@
-// Location: mt-bridge/src/msgpack/traits.rs
+// Location: mt-bridge/src/traits.rs
 // Purpose: Trait hierarchy for configuration messages
 // Why: Provides polymorphic interface for Master and Slave config messages
 
-use super::types::{MasterConfigMessage, SlaveConfigMessage, SymbolMapping, TradeFilters};
+use crate::types::{MasterConfigMessage, SlaveConfigMessage, SymbolMapping, TradeFilters};
 use serde::Serialize;
 
 // ============================================================================
@@ -22,8 +22,8 @@ pub trait ConfigMessage: Serialize {
     fn timestamp(&self) -> &str;
 
     /// Get the ZMQ topic for pub/sub
-    fn zmq_topic(&self) -> &str {
-        self.account_id()
+    fn zmq_topic(&self) -> String {
+        format!("config/{}", self.account_id())
     }
 
     /// Get the symbol prefix (common to both Master and Slave)

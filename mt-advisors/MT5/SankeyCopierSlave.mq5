@@ -60,6 +60,8 @@ bool        g_last_trade_allowed = false; // Track auto-trading state for change
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
 bool           g_has_received_config = false;    // Track if we have received at least one config
+string         g_config_topic = "";              // Config topic (generated via FFI)
+string         g_vlogs_topic = "";               // VLogs topic (generated via FFI)
 
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
@@ -98,6 +100,32 @@ int OnInit()
 
    Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_SubAddress, " (unified)");
 
+   // Initialize topics using FFI
+   ushort topic_buffer[256];
+   int len = build_config_topic(AccountID, topic_buffer, 256);
+   if(len > 0) 
+   {
+      g_config_topic = ShortArrayToString(topic_buffer);
+      Print("Generated config topic: ", g_config_topic);
+   }
+   else 
+   {
+      g_config_topic = AccountID; // Fallback
+      Print("WARNING: Failed to generate config topic, using AccountID fallback: ", g_config_topic);
+   }
+
+   len = get_global_config_topic(topic_buffer, 256);
+   if(len > 0) 
+   {
+      g_vlogs_topic = ShortArrayToString(topic_buffer);
+      Print("Generated vlogs topic: ", g_vlogs_topic);
+   }
+   else 
+   {
+      g_vlogs_topic = "vlogs_config"; // Fallback
+      Print("WARNING: Failed to generate vlogs topic, using fallback: ", g_vlogs_topic);
+   }
+
    // Initialize ZMQ context
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
@@ -121,14 +149,14 @@ int OnInit()
    }
 
    // Subscribe to config messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, AccountID))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
    {
       CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs configuration messages (broadcast from relay-server)
-   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
    {
       CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
       return INIT_FAILED;
@@ -165,7 +193,7 @@ int OnInit()
    {
       g_config_panel.InitializeSlavePanel("SankeyCopierPanel_", PanelWidth);
       // Show NO_CONFIGURATION status initially (no config received yet)
-      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
       g_config_panel.UpdateServerRow(g_RelayAddress);
       // Symbol config is now per-Master from Web-UI, will be shown in carousel
       g_config_panel.UpdateSymbolConfig("", "", "");
@@ -261,7 +289,7 @@ void OnTimer()
                   }
 
                   if(ArraySize(g_configs) == 0)
-                     g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+                     g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
                   else if(any_connected)
                      g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
                   else
@@ -336,7 +364,7 @@ void OnTimer()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          // Handle VictoriaLogs configuration message
-         if(topic == "vlogs_config")
+         if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle > 0)
@@ -350,9 +378,9 @@ void OnTimer()
             }
             // Continue to next message (don't process as SlaveConfig)
          }
-         else
-         {
          // Try to parse as SlaveConfig first
+         else if(topic == g_config_topic)
+         {
          HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
          if(config_handle > 0)
          {
@@ -408,7 +436,7 @@ void OnTimer()
                }
 
                if(ArraySize(g_configs) == 0)
-                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+                  g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
                else if(any_connected)
                   g_config_panel.UpdateStatusRow(STATUS_CONNECTED);
                else

@@ -9,13 +9,10 @@
 
 use super::MessageHandler;
 use crate::models::{
-    status::{
-        calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
-    },
+    status::{calculate_master_status, MasterStatusInput},
     HeartbeatMessage, SlaveConfigMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
-    STATUS_CONNECTED,
+    STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
 };
-use sankey_copier_zmq::MasterConfigMessage;
 
 impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
@@ -79,32 +76,11 @@ impl MessageHandler {
                 new_is_trade_allowed
             );
 
-            // Always send MasterConfigMessage back to Master EA on heartbeat
-            // This ensures the Master EA panel shows the correct status
-            let master_config = MasterConfigMessage {
-                account_id: account_id.clone(),
-                status: master_status,
-                symbol_prefix: trade_group.master_settings.symbol_prefix.clone(),
-                symbol_suffix: trade_group.master_settings.symbol_suffix.clone(),
-                config_version: trade_group.master_settings.config_version,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            };
+            // Note: MasterConfigMessage is not sent to Master EA
+            // Master EA calculates its own status locally
 
-            if let Err(e) = self.publisher.send(&master_config).await {
-                tracing::error!(
-                    "Failed to send MasterConfigMessage to {}: {}",
-                    account_id,
-                    e
-                );
-            } else {
-                tracing::debug!(
-                    "Sent MasterConfigMessage to {} (status: {})",
-                    account_id,
-                    master_status
-                );
-            }
-
-            // If is_trade_allowed changed or this is a new connection, notify Slaves
+            // Notify Slaves when Master status changes (N:N connection support)
+            // Only send SlaveConfigMessage when Slave's calculated status changes
             if trade_allowed_changed || is_new_registration {
                 if trade_allowed_changed {
                     tracing::info!(
@@ -115,26 +91,126 @@ impl MessageHandler {
                     );
                 }
 
-                // Resend Config to all Slave accounts connected to this Master
+                // Get all Slaves connected to this Master
                 match self.db.get_members(&account_id).await {
                     Ok(members) => {
+                        // Track which Slaves we've already processed to avoid duplicates
+                        let mut processed_slaves = std::collections::HashSet::new();
+
                         for member in members {
-                            // Get Slave's is_trade_allowed from connection manager (if connected)
+                            let slave_account = member.slave_account.clone();
+
+                            // Skip if we've already processed this Slave
+                            if processed_slaves.contains(&slave_account) {
+                                continue;
+                            }
+                            processed_slaves.insert(slave_account.clone());
+
+                            // Get ALL Masters this Slave is connected to
+                            let all_masters =
+                                match self.db.get_masters_for_slave(&slave_account).await {
+                                    Ok(masters) => masters,
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to get masters for Slave {}: {}",
+                                            slave_account,
+                                            e
+                                        );
+                                        continue;
+                                    }
+                                };
+
+                            // Check if ALL Masters are CONNECTED
+                            let mut all_masters_connected = true;
+                            for master_account in &all_masters {
+                                // Get Master's TradeGroup to check web_ui_enabled
+                                let master_enabled =
+                                    match self.db.get_trade_group(master_account).await {
+                                        Ok(Some(tg)) => tg.master_settings.enabled,
+                                        Ok(None) => {
+                                            // Master not found, treat as disabled
+                                            all_masters_connected = false;
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "Failed to get TradeGroup for Master {}: {}",
+                                                master_account,
+                                                e
+                                            );
+                                            all_masters_connected = false;
+                                            break;
+                                        }
+                                    };
+
+                                // Get Master's is_trade_allowed from connection manager
+                                let master_is_trade_allowed = self
+                                    .connection_manager
+                                    .get_ea(master_account)
+                                    .await
+                                    .map(|conn| conn.is_trade_allowed)
+                                    .unwrap_or(false); // Default to false if not connected
+
+                                // Calculate Master status
+                                let master_status = calculate_master_status(&MasterStatusInput {
+                                    web_ui_enabled: master_enabled,
+                                    is_trade_allowed: master_is_trade_allowed,
+                                });
+
+                                if master_status != STATUS_CONNECTED {
+                                    all_masters_connected = false;
+                                    break;
+                                }
+                            }
+
+                            // Get Slave's is_trade_allowed
                             let slave_is_trade_allowed = self
                                 .connection_manager
-                                .get_ea(&member.slave_account)
+                                .get_ea(&slave_account)
                                 .await
                                 .map(|conn| conn.is_trade_allowed)
                                 .unwrap_or(true); // Default to true if not connected
 
-                            // Calculate Slave status using centralized logic
+                            // Calculate Slave status
                             // Slave is enabled if member.status > 0 (was previously enabled in DB)
                             let slave_enabled = member.status > 0;
-                            let slave_status = calculate_slave_status(&SlaveStatusInput {
-                                web_ui_enabled: slave_enabled,
-                                is_trade_allowed: slave_is_trade_allowed,
-                                master_status,
-                            });
+                            let new_slave_status = if !slave_enabled || !slave_is_trade_allowed {
+                                STATUS_DISABLED
+                            } else if all_masters_connected {
+                                STATUS_CONNECTED
+                            } else {
+                                STATUS_ENABLED
+                            };
+
+                            // Compare with previous status
+                            // Always send config on new registration, otherwise only when status changed
+                            let old_slave_status = member.status;
+                            if !is_new_registration && new_slave_status == old_slave_status {
+                                // Status unchanged and not a new registration, skip sending config
+                                tracing::debug!(
+                                    "Slave {} status unchanged ({}), skipping config send",
+                                    slave_account,
+                                    new_slave_status
+                                );
+                                continue;
+                            }
+
+                            // Status changed or new registration, send SlaveConfigMessage
+                            if is_new_registration {
+                                tracing::info!(
+                                    "Slave {} new registration, sending initial config (status: {})",
+                                    slave_account,
+                                    new_slave_status
+                                );
+                            } else {
+                                tracing::info!(
+                                    "Slave {} status changed: {} -> {} (Master {} heartbeat)",
+                                    slave_account,
+                                    old_slave_status,
+                                    new_slave_status,
+                                    account_id
+                                );
+                            }
 
                             // Fetch Master's equity for margin_ratio mode
                             let master_equity = self
@@ -144,11 +220,11 @@ impl MessageHandler {
                                 .map(|conn| conn.equity);
 
                             let config = SlaveConfigMessage {
-                                account_id: member.slave_account.clone(),
+                                account_id: slave_account.clone(),
                                 master_account: account_id.clone(),
                                 timestamp: chrono::Utc::now().to_rfc3339(),
                                 trade_group_id: account_id.clone(),
-                                status: slave_status,
+                                status: new_slave_status,
                                 lot_calculation_mode: member
                                     .slave_settings
                                     .lot_calculation_mode
@@ -179,21 +255,33 @@ impl MessageHandler {
                                     .slave_settings
                                     .use_pending_order_for_delayed,
                                 // Derived from status: allow new orders when enabled
-                                allow_new_orders: slave_status > 0,
+                                allow_new_orders: new_slave_status > 0,
                             };
 
                             if let Err(e) = self.publisher.send(&config).await {
                                 tracing::error!(
                                     "Failed to send config to {}: {}",
-                                    member.slave_account,
+                                    slave_account,
                                     e
                                 );
                             } else {
                                 tracing::info!(
-                                    "Sent config to {} (status: {}) due to Master {} state change",
-                                    member.slave_account,
-                                    slave_status,
-                                    account_id
+                                    "Sent config to {} (status: {})",
+                                    slave_account,
+                                    new_slave_status
+                                );
+                            }
+
+                            // Update database with new status
+                            if let Err(e) = self
+                                .db
+                                .update_member_status(&account_id, &slave_account, new_slave_status)
+                                .await
+                            {
+                                tracing::error!(
+                                    "Failed to update status for Slave {}: {}",
+                                    slave_account,
+                                    e
                                 );
                             }
                         }

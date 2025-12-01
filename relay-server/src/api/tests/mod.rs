@@ -4,7 +4,6 @@
 //! like connections, app state, heartbeats, and settings.
 
 mod trade_group_members_tests;
-mod victoria_logs_config_tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;

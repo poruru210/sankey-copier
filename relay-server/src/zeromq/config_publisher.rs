@@ -121,7 +121,7 @@ impl ZmqPublisher {
     }
 
     /// Broadcast VictoriaLogs configuration to all EAs
-    /// Uses fixed topic "vlogs_config" for global broadcast
+    /// Uses fixed topic "config/global" for system-wide broadcast
     pub async fn broadcast_vlogs_config(
         &self,
         settings: &crate::models::VLogsGlobalSettings,
@@ -135,24 +135,24 @@ impl ZmqPublisher {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        self.publish_to_topic("vlogs_config", &message).await?;
+        self.publish_to_topic("config/global", &message).await?;
 
         tracing::info!(
             enabled = settings.enabled,
             endpoint = %settings.endpoint,
             log_level = %settings.log_level,
-            "Broadcasted VictoriaLogs config to all EAs on 'vlogs_config' topic"
+            "Broadcasted VictoriaLogs config to all EAs on 'config/global' topic"
         );
 
         Ok(())
     }
 
-    /// Send trade signal to slaves subscribed to a trade group
-    /// Uses trade_group_id (= master_account) as the topic
-    /// This unifies the previous separate ZmqSender functionality
+    /// Send trade signal to a specific Master-Slave pair
+    /// Uses trade/{master_id}/{slave_id} as the topic for precise routing
     pub async fn send_trade_signal(
         &self,
-        trade_group_id: &str,
+        master_id: &str,
+        slave_id: &str,
         signal: &TradeSignal,
     ) -> Result<()> {
         // Use rmp_serde::to_vec_named to match the previous ZmqSender serialization format
@@ -160,7 +160,7 @@ impl ZmqPublisher {
             .context("Failed to serialize TradeSignal to MessagePack")?;
 
         let serialized = SerializedMessage {
-            topic: trade_group_id.to_string(),
+            topic: format!("trade/{}/{}", master_id, slave_id),
             payload,
         };
 

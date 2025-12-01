@@ -10,12 +10,12 @@
 #property strict
 
 //--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
-#include <SankeyCopier/GridPanel.mqh>
-#include <SankeyCopier/Logging.mqh>
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Logging.mqh"
 
 //--- Input parameters
 // Note: MagicFilter moved to Slave side (allowed_magic_numbers)
@@ -33,6 +33,11 @@ string g_ConfigAddress = "";
 string g_symbol_prefix = "";       // Symbol prefix from config
 string g_symbol_suffix = "";       // Symbol suffix from config
 uint   g_config_version = 0;       // Current config version
+int    g_server_status = STATUS_NO_CONFIG; // Status from server (DISABLED/CONNECTED)
+
+//--- Topic strings (generated via FFI)
+string g_config_topic = "";
+string g_vlogs_topic = "";
 
 //--- Order tracking structure
 struct OrderInfo
@@ -68,17 +73,34 @@ int OnInit()
    AccountID = GenerateAccountID();
    Print("Auto-generated AccountID: ", AccountID);
 
-   // Load port configuration from sankey_copier.ini
-   // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
-   if(!LoadConfig())
+   // Generate topics using FFI
+   ushort topic_buffer[256];
+   int len = build_config_topic(AccountID, topic_buffer, 256);
+   if(len > 0) 
    {
-      Print("WARNING: Failed to load config file, using default ports");
+      g_config_topic = ShortArrayToString(topic_buffer);
+      // Remove null terminator if present (ShortArrayToString might include it depending on implementation, 
+      // but usually it stops at null. Rust FFI returns len without null, but buffer has it.)
+      // StringLen check is safer.
    }
    else
    {
-      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(), " (unified)");
+      Print("ERROR: Failed to build config topic");
+      return INIT_FAILED;
    }
+
+   len = get_global_config_topic(topic_buffer, 256);
+   if(len > 0)
+   {
+      g_vlogs_topic = ShortArrayToString(topic_buffer);
+   }
+   else
+   {
+      Print("ERROR: Failed to build global config topic");
+      return INIT_FAILED;
+   }
+
+   Print("Generated topics: Config=", g_config_topic, ", VLogs=", g_vlogs_topic);
 
    // Resolve addresses from sankey_copier.ini config file
    // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
@@ -110,7 +132,7 @@ int OnInit()
    }
 
    // Subscribe to messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, AccountID))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
    {
       CleanupZmqSocket(g_zmq_config_socket, "Master Config SUB");
       CleanupZmqSocket(g_zmq_socket, "Master PUSH");
@@ -119,7 +141,7 @@ int OnInit()
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
-   if(!SubscribeToTopic(g_zmq_config_socket, "vlogs_config"))
+   if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
    {
       Print("WARNING: Failed to subscribe to vlogs_config topic");
    }
@@ -136,7 +158,7 @@ int OnInit()
       g_config_panel.InitializeMasterPanel("SankeyCopierPanel_", PanelWidth);
 
       // Show NO_CONFIGURATION status initially (no config received yet)
-      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIGURATION);
+      g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
 
       g_config_panel.UpdateServerRow(g_RelayAddress);
       // MagicFilter removed - now filtered on Slave side via allowed_magic_numbers
@@ -271,7 +293,7 @@ void OnTimer()
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
          // Check for VLogs config message first (global broadcast)
-         if(topic == "vlogs_config")
+         if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle != 0 && vlogs_handle != -1)
@@ -281,7 +303,7 @@ void OnTimer()
             }
          }
          // Try to parse as MasterConfig
-         else if(topic == AccountID)
+         else if(topic == g_config_topic)
          {
             HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
             if(config_handle != 0 && config_handle != -1)
@@ -320,6 +342,8 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    string prefix = master_config_get_string(config_handle, "symbol_prefix");
    string suffix = master_config_get_string(config_handle, "symbol_suffix");
    int version = master_config_get_int(config_handle, "config_version");
+   int status = master_config_get_int(config_handle, "status");
+   g_server_status = status;
 
    if(config_account_id == "")
    {
@@ -341,9 +365,20 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
          " suffix=", (suffix == "" ? "(none)" : suffix), " version=", version);
 
    // Update global configuration variables
-   g_symbol_prefix = prefix;
-   g_symbol_suffix = suffix;
-   g_config_version = (uint)version;
+   if(g_server_status == STATUS_NO_CONFIG)
+   {
+      Print("Status is NO_CONFIG -> Resetting configuration");
+      g_server_status = STATUS_NO_CONFIG;
+      g_symbol_prefix = "";
+      g_symbol_suffix = "";
+      g_config_version = 0;
+   }
+   else
+   {
+      g_symbol_prefix = prefix;
+      g_symbol_suffix = suffix;
+      g_config_version = (uint)version;
+   }
 
    // Update configuration panel
    if(ShowConfigPanel)
@@ -351,14 +386,21 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
 
       // Update status after receiving configuration
-      bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-      if(!local_trade_allowed)
+      if(g_server_status == STATUS_NO_CONFIG)
       {
-         g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
+         g_config_panel.UpdateStatusRow(STATUS_NO_CONFIG);
       }
       else
       {
-         g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
+         bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+         if(!local_trade_allowed)
+         {
+            g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
+         }
+         else
+         {
+            g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
+         }
       }
       ChartRedraw();
    }

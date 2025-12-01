@@ -96,19 +96,19 @@ impl MessageHandler {
                     transformed.lots.unwrap_or(0.0)
                 );
 
-                // Send to trade group using PUB/SUB with master_account as topic
-                // All slaves subscribe to their master's topic and receive all signals
-                // Filtering (e.g., disabled slave skipping Open) is done on Slave EA side
+                // Send to specific Master-Slave pair using trade/{master}/{slave} topic
+                // Each slave subscribes to their specific topic for precise filtering
                 if let Err(e) = self
                     .publisher
-                    .send_trade_signal(&member.trade_group_id, &transformed)
+                    .send_trade_signal(&signal.source_account, &member.slave_account, &transformed)
                     .await
                 {
                     tracing::error!("Failed to send signal to trade group: {}", e);
                 } else {
                     tracing::debug!(
-                        "Sent signal to trade group '{}' for slave '{}'",
-                        member.trade_group_id,
+                        "Sent signal on topic 'trade/{}/{}' for slave '{}'",
+                        signal.source_account,
+                        member.slave_account,
                         member.slave_account
                     );
 

@@ -11,7 +11,7 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SlaveSettings, TradeGroupMember, STATUS_REMOVED};
+use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
 
 use super::{AppState, ProblemDetails};
 
@@ -546,7 +546,7 @@ async fn send_disabled_config_to_slave(
     let config = SlaveConfigMessage {
         account_id: slave_account.to_string(),
         master_account: master_account.to_string(),
-        status: 4, // STATUS_REMOVED
+        status: STATUS_NO_CONFIG,
         lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
         lot_multiplier: None,
         reverse_trade: false,
@@ -594,7 +594,7 @@ async fn send_disabled_config_to_slave(
 async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
     let config = MasterConfigMessage {
         account_id: master_account.to_string(),
-        status: STATUS_REMOVED,
+        status: STATUS_NO_CONFIG,
         symbol_prefix: None,
         symbol_suffix: None,
         config_version: 0,

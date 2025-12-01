@@ -1,4 +1,4 @@
-// Location: mt-bridge/src/msgpack/helpers.rs
+// Location: mt-bridge/src/ffi_helpers.rs
 // Purpose: UTF-16 conversion helper functions and FFI utilities for MQL4/MQL5
 // Why: MQL uses UTF-16 strings, so we need bidirectional conversion utilities
 //      Also provides generic helpers to reduce FFI boilerplate code
@@ -20,6 +20,10 @@ pub(crate) static BUFFER_INDEX: LazyLock<Mutex<usize>> = LazyLock::new(|| Mutex:
 
 /// Convert UTF-16 string to Rust String
 /// Returns None if pointer is null or conversion fails
+///
+/// # Safety
+/// - ptr must be a valid pointer to a null-terminated UTF-16 string, or null
+/// - The UTF-16 string must remain valid for the duration of this function call
 pub unsafe fn utf16_to_string(ptr: *const u16) -> Option<String> {
     if ptr.is_null() {
         return None;
@@ -35,6 +39,10 @@ pub unsafe fn utf16_to_string(ptr: *const u16) -> Option<String> {
 
 /// Convert UTF-16 string to Option<String> (empty becomes None)
 /// This is useful for optional fields where empty strings should be treated as None
+///
+/// # Safety
+/// - ptr must be a valid pointer to a null-terminated UTF-16 string, or null
+/// - The UTF-16 string must remain valid for the duration of this function call
 pub unsafe fn utf16_to_string_opt(ptr: *const u16) -> Option<String> {
     let s = utf16_to_string(ptr)?;
     if s.is_empty() {
@@ -47,6 +55,11 @@ pub unsafe fn utf16_to_string_opt(ptr: *const u16) -> Option<String> {
 /// Convert Rust String to UTF-16 buffer
 /// Uses round-robin buffer allocation to support up to 4 concurrent string returns
 /// Returns a pointer to the static buffer (valid until next 4 calls)
+///
+/// # Safety
+/// - The returned pointer is valid until 4 more calls to this function
+/// - Caller must not modify the data pointed to by the returned pointer
+/// - This function is marked unsafe because it returns a raw pointer to static data
 pub unsafe fn string_to_utf16_buffer(s: &str) -> *const u16 {
     let mut index = BUFFER_INDEX.lock().unwrap();
     let current_index = *index;

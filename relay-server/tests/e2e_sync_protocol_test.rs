@@ -15,11 +15,13 @@ mod test_server;
 
 use chrono::Utc;
 use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
-use sankey_copier_zmq::{
+use sankey_copier_zmq::ffi::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
-    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
+    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH,
+    ZMQ_SUB,
+};
+use sankey_copier_zmq::{
     HeartbeatMessage, PositionInfo, PositionSnapshotMessage, SyncRequestMessage, TradeFilters,
-    ZMQ_PUSH, ZMQ_SUB,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -67,7 +69,8 @@ impl MasterEaSimulator {
 
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
-        let topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let config_topic = format!("config/{}", account_id);
+        let topic_utf16: Vec<u16> = config_topic.encode_utf16().chain(Some(0)).collect();
 
         unsafe {
             if zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr()) != 1 {
@@ -280,7 +283,8 @@ impl SlaveEaSimulator {
 
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
-        let topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let config_topic = format!("config/{}", account_id);
+        let topic_utf16: Vec<u16> = config_topic.encode_utf16().chain(Some(0)).collect();
 
         unsafe {
             if zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr()) != 1 {
