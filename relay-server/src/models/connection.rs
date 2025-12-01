@@ -124,37 +124,55 @@ mod tests {
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Online;
         conn.is_trade_allowed = true;
-        assert!(conn.is_effective_trade_allowed(), "Online + Allowed should be True");
+        assert!(
+            conn.is_effective_trade_allowed(),
+            "Online + Allowed should be True"
+        );
 
         // Case 2: Online + Not Allowed -> False
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Online;
         conn.is_trade_allowed = false;
-        assert!(!conn.is_effective_trade_allowed(), "Online + Not Allowed should be False");
+        assert!(
+            !conn.is_effective_trade_allowed(),
+            "Online + Not Allowed should be False"
+        );
 
         // Case 3: Timeout + Allowed -> False
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Timeout;
         conn.is_trade_allowed = true;
-        assert!(!conn.is_effective_trade_allowed(), "Timeout + Allowed should be False");
+        assert!(
+            !conn.is_effective_trade_allowed(),
+            "Timeout + Allowed should be False"
+        );
 
         // Case 4: Timeout + Not Allowed -> False
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Timeout;
         conn.is_trade_allowed = false;
-        assert!(!conn.is_effective_trade_allowed(), "Timeout + Not Allowed should be False");
+        assert!(
+            !conn.is_effective_trade_allowed(),
+            "Timeout + Not Allowed should be False"
+        );
 
         // Case 5: Offline + Allowed -> False
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Offline;
         conn.is_trade_allowed = true;
-        assert!(!conn.is_effective_trade_allowed(), "Offline + Allowed should be False");
+        assert!(
+            !conn.is_effective_trade_allowed(),
+            "Offline + Allowed should be False"
+        );
 
         // Case 6: Offline + Not Allowed -> False
         let mut conn = base_conn.clone();
         conn.status = ConnectionStatus::Offline;
         conn.is_trade_allowed = false;
-        assert!(!conn.is_effective_trade_allowed(), "Offline + Not Allowed should be False");
+        assert!(
+            !conn.is_effective_trade_allowed(),
+            "Offline + Not Allowed should be False"
+        );
     }
 
     #[test]

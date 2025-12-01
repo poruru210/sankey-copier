@@ -345,17 +345,15 @@ mod tests {
         // Matrix: Web UI | AutoTrade | Connection -> Result
         let scenarios = vec![
             // OFF cases
-            (false, true, STATUS_CONNECTED, STATUS_DISABLED),  // Web UI OFF
-            (true, false, STATUS_CONNECTED, STATUS_DISABLED),  // AutoTrade OFF
+            (false, true, STATUS_CONNECTED, STATUS_DISABLED), // Web UI OFF
+            (true, false, STATUS_CONNECTED, STATUS_DISABLED), // AutoTrade OFF
             (false, false, STATUS_CONNECTED, STATUS_DISABLED), // Both OFF
-            
             // Connection cases (assuming is_trade_allowed reflects connection status)
             // Note: In real app, is_trade_allowed becomes false if Offline/Timeout
             // Here we test the logic given the inputs
-            
+
             // If is_trade_allowed is passed as false (due to Offline/Timeout), result must be DISABLED
             (true, false, STATUS_DISABLED, STATUS_DISABLED),
-            
             // If everything is ON
             (true, true, STATUS_CONNECTED, STATUS_CONNECTED),
         ];
@@ -366,10 +364,12 @@ mod tests {
                 is_trade_allowed: trade_allowed,
             };
             assert_eq!(
-                calculate_master_status(&input), 
+                calculate_master_status(&input),
                 expected,
-                "Failed for Master: WebUI={}, TradeAllowed={} -> Expected {}", 
-                web_ui, trade_allowed, expected
+                "Failed for Master: WebUI={}, TradeAllowed={} -> Expected {}",
+                web_ui,
+                trade_allowed,
+                expected
             );
         }
     }
@@ -379,16 +379,14 @@ mod tests {
         // Matrix: Web UI | AutoTrade | Master Status -> Result
         let scenarios = vec![
             // Slave Self-Check Failures (Priority 1)
-            (false, true, STATUS_CONNECTED, STATUS_DISABLED),   // Web UI OFF
-            (true, false, STATUS_CONNECTED, STATUS_DISABLED),   // AutoTrade OFF (or Timeout/Offline)
-            (false, false, STATUS_CONNECTED, STATUS_DISABLED),  // Both OFF
-
+            (false, true, STATUS_CONNECTED, STATUS_DISABLED), // Web UI OFF
+            (true, false, STATUS_CONNECTED, STATUS_DISABLED), // AutoTrade OFF (or Timeout/Offline)
+            (false, false, STATUS_CONNECTED, STATUS_DISABLED), // Both OFF
             // Slave OK, Master Check (Priority 2)
-            (true, true, STATUS_DISABLED, STATUS_ENABLED),      // Master DISABLED
-            (true, true, STATUS_ENABLED, STATUS_ENABLED),       // Master ENABLED (Waiting)
-            
+            (true, true, STATUS_DISABLED, STATUS_ENABLED), // Master DISABLED
+            (true, true, STATUS_ENABLED, STATUS_ENABLED),  // Master ENABLED (Waiting)
             // All OK
-            (true, true, STATUS_CONNECTED, STATUS_CONNECTED),   // All Green
+            (true, true, STATUS_CONNECTED, STATUS_CONNECTED), // All Green
         ];
 
         for (web_ui, trade_allowed, master_status, expected) in scenarios {
@@ -398,10 +396,13 @@ mod tests {
                 master_status,
             };
             assert_eq!(
-                calculate_slave_status(&input), 
+                calculate_slave_status(&input),
                 expected,
-                "Failed for Slave: WebUI={}, TradeAllowed={}, MasterStatus={} -> Expected {}", 
-                web_ui, trade_allowed, master_status, expected
+                "Failed for Slave: WebUI={}, TradeAllowed={}, MasterStatus={} -> Expected {}",
+                web_ui,
+                trade_allowed,
+                master_status,
+                expected
             );
         }
     }
