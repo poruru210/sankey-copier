@@ -19,6 +19,7 @@ export function useSankeyCopier() {
 
   const [settings, setSettings] = useAtom(settingsAtom);
   const [connections, setConnections] = useAtom(connectionsAtom);
+  const [tradeGroups, setTradeGroups] = useState<TradeGroup[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,17 +50,19 @@ export function useSankeyCopier() {
       setLoading(true);
 
       // Fetch all TradeGroups (Masters)
-      const tradeGroups = await apiClient.get<TradeGroup[]>('/trade-groups');
-      if (!tradeGroups) {
+      const fetchedTradeGroups = await apiClient.get<TradeGroup[]>('/trade-groups');
+      if (!fetchedTradeGroups) {
         setSettings([]);
+        setTradeGroups([]);
         setError(null);
         return;
       }
+      setTradeGroups(fetchedTradeGroups);
 
       // Fetch members for each TradeGroup
       const membersMap = new Map<string, TradeGroupMember[]>();
       await Promise.all(
-        tradeGroups.map(async (tradeGroup) => {
+        fetchedTradeGroups.map(async (tradeGroup) => {
           try {
             const members = await apiClient.get<TradeGroupMember[]>(
               `/trade-groups/${encodeURIComponent(tradeGroup.id)}/members`
@@ -75,7 +78,7 @@ export function useSankeyCopier() {
       );
 
       // Convert to legacy CopySettings format
-      const copySettings = convertMembersToCopySettings(tradeGroups, membersMap);
+      const copySettings = convertMembersToCopySettings(fetchedTradeGroups, membersMap);
       setSettings(copySettings);
       setError(null);
     } catch (err) {
@@ -317,13 +320,41 @@ export function useSankeyCopier() {
     }
   };
 
+  // Toggle Master enabled state
+  const toggleMaster = async (masterAccount: string, enabled: boolean) => {
+    if (!apiClient) throw new Error('API client not available');
+
+    // Optimistically update TradeGroups
+    const previousTradeGroups = tradeGroups;
+    setTradeGroups((prev) =>
+      prev.map((tg) =>
+        tg.id === masterAccount
+          ? { ...tg, master_settings: { ...tg.master_settings, enabled } }
+          : tg
+      )
+    );
+
+    try {
+      await apiClient.post<TradeGroup>(
+        `/trade-groups/${encodeURIComponent(masterAccount)}/toggle`,
+        { enabled }
+      );
+    } catch (err) {
+      // Revert on error
+      setTradeGroups(previousTradeGroups);
+      throw err;
+    }
+  };
+
   return {
     settings,
     connections,
+    tradeGroups,
     loading,
     error,
     wsMessages,
     toggleEnabled,
+    toggleMaster,
     createSetting,
     updateSetting,
     deleteSetting,

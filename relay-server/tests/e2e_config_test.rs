@@ -14,11 +14,13 @@
 mod test_server;
 
 use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
-use sankey_copier_zmq::{
+use sankey_copier_zmq::ffi::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
-    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SlaveConfigMessage, ZMQ_PUSH,
+    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH,
     ZMQ_SUB,
+};
+use sankey_copier_zmq::{
+    HeartbeatMessage, MasterConfigMessage, RequestConfigMessage, SlaveConfigMessage,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -65,7 +67,8 @@ impl MasterEaSimulator {
         // Convert addresses to UTF-16 (MQL string format)
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
-        let topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let topic = format!("config/{}", account_id);
+        let topic_utf16: Vec<u16> = topic.encode_utf16().chain(Some(0)).collect();
 
         // Connect sockets and subscribe to topic
         unsafe {
@@ -92,7 +95,7 @@ impl MasterEaSimulator {
                 zmq_socket_destroy(config_socket_handle);
                 zmq_socket_destroy(push_socket_handle);
                 zmq_context_destroy(context_handle);
-                anyhow::bail!("Failed to subscribe to topic: {}", account_id);
+                anyhow::bail!("Failed to subscribe to topic: {}", topic);
             }
         }
 
@@ -205,12 +208,13 @@ impl MasterEaSimulator {
                 let topic = &bytes[..space_pos];
                 let payload = &bytes[space_pos + 1..];
 
-                // Verify topic matches account_id
+                // Verify topic matches config/{account_id}
+                let expected_topic = format!("config/{}", self.account_id);
                 let topic_str = String::from_utf8_lossy(topic);
-                if topic_str != self.account_id {
+                if topic_str != expected_topic {
                     return Err(anyhow::anyhow!(
                         "Topic mismatch: expected '{}', got '{}'",
-                        self.account_id,
+                        expected_topic,
                         topic_str
                     ));
                 }
@@ -300,7 +304,8 @@ impl SlaveEaSimulator {
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
         let trade_addr_utf16: Vec<u16> = trade_address.encode_utf16().chain(Some(0)).collect();
-        let account_topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let config_topic = format!("config/{}", account_id);
+        let config_topic_utf16: Vec<u16> = config_topic.encode_utf16().chain(Some(0)).collect();
 
         // Connect sockets and subscribe to config topic
         unsafe {
@@ -334,13 +339,13 @@ impl SlaveEaSimulator {
 
             // Subscribe to config messages for this account_id (topic-based filtering)
             let sub_result =
-                zmq_socket_subscribe(config_socket_handle, account_topic_utf16.as_ptr());
+                zmq_socket_subscribe(config_socket_handle, config_topic_utf16.as_ptr());
             if sub_result != 1 {
                 zmq_socket_destroy(trade_socket_handle);
                 zmq_socket_destroy(config_socket_handle);
                 zmq_socket_destroy(push_socket_handle);
                 zmq_context_destroy(context_handle);
-                anyhow::bail!("Failed to subscribe to config topic: {}", account_id);
+                anyhow::bail!("Failed to subscribe to config topic: {}", config_topic);
             }
         }
 
@@ -469,12 +474,13 @@ impl SlaveEaSimulator {
                 let topic = &bytes[..space_pos];
                 let payload = &bytes[space_pos + 1..];
 
-                // Verify topic matches account_id
+                // Verify topic matches config/{account_id}
+                let expected_topic = format!("config/{}", self.account_id);
                 let topic_str = String::from_utf8_lossy(topic);
-                if topic_str != self.account_id {
+                if topic_str != expected_topic {
                     return Err(anyhow::anyhow!(
                         "Topic mismatch: expected '{}', got '{}'",
-                        self.account_id,
+                        expected_topic,
                         topic_str
                     ));
                 }
@@ -1201,8 +1207,8 @@ async fn test_delete_member_sends_disabled_config() {
     );
     let config = disabled_config.unwrap(); // Verify status is REMOVED (4)
     assert_eq!(
-        config.status, 4,
-        "Config status should be REMOVED (4) after member deletion"
+        config.status, -1,
+        "Config status should be NO_CONFIG (-1) after member deletion"
     );
 
     println!("✅ Delete Member E2E test passed: Slave received status=4 config");

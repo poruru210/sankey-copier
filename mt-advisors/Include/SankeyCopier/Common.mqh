@@ -29,22 +29,23 @@
 #define MESSAGE_BUFFER_SIZE 4096
 #define SPACE_CHAR 32
 
-//--- Port Definitions
-#define PORT_RELAY_PULL       5555  // Heartbeat, ConfigReq, Unregister (Client -> Server)
-#define PORT_RELAY_PUB_TRADE  5556  // Trade Signals (Server -> Client)
-#define PORT_RELAY_PUB_CONFIG 5557  // Config Updates (Server -> Client)
+//--- Include configuration file reader (dynamic port loading)
+#include "ConfigFile.mqh"
 
-//--- Default Addresses
-#define DEFAULT_ADDR_PULL       "tcp://localhost:5555"
-#define DEFAULT_ADDR_PUB_TRADE  "tcp://localhost:5556"
-#define DEFAULT_ADDR_PUB_CONFIG "tcp://localhost:5557"
+// Port values are now loaded dynamically from sankey_copier.ini
+// 2-port architecture: Receiver (PULL) and Publisher (unified PUB)
+// Use the following functions from ConfigFile.mqh:
+//   GetReceiverPort()     - Get PUSH socket port (EA -> Server)
+//   GetPublisherPort()    - Get SUB socket port (Server -> EA, unified for trades and configs)
+//   GetPushAddress()      - Get full "tcp://localhost:port" address for PUSH socket
+//   GetTradeSubAddress()  - Get full address for subscription (trades and configs)
+//   GetConfigSubAddress() - Alias for GetTradeSubAddress() (same unified PUB socket)
 
 //--- Connection status constants (4 states)
 #define STATUS_DISABLED 0         // Slave is disabled
 #define STATUS_ENABLED 1          // Slave is enabled, Master disconnected
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
-#define STATUS_NO_CONFIGURATION 3 // No configuration received yet
-#define STATUS_REMOVED 4          // Configuration removed (deleted from UI)
+#define STATUS_NO_CONFIG -1 // No configuration received yet
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
@@ -145,6 +146,11 @@
    string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
    int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
    void        vlogs_config_free(HANDLE_TYPE handle);
+
+   // Topic generation functions
+   int         build_config_topic(string account_id, ushort &output[], int output_len);
+   int         build_trade_topic(string master_id, string slave_id, ushort &output[], int output_len);
+   int         get_global_config_topic(ushort &output[], int output_len);
 #import
 
 //--- Common structures

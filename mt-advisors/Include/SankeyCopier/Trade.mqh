@@ -125,11 +125,27 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    // Extract fields from the parsed config using the handle
    string new_master = slave_config_get_string(config_handle, "master_account");
+   // trade_group_id is no longer used for subscription, but we still read it for compatibility
    string new_group = slave_config_get_string(config_handle, "trade_group_id");
 
-   if(new_master == "" || new_group == "")
+   if(new_master == "")
    {
-      LogError(CAT_CONFIG, "Invalid config message received");
+      LogError(CAT_CONFIG, "Invalid config message received - missing master_account");
+      slave_config_free(config_handle);
+      return;
+   }
+
+   // Generate trade topic using FFI
+   ushort topic_buffer[256];
+   int len = build_trade_topic(new_master, slave_account, topic_buffer, 256);
+   string new_trade_topic = "";
+   if(len > 0) 
+   {
+      new_trade_topic = ShortArrayToString(topic_buffer);
+   }
+   else
+   {
+      LogError(CAT_CONFIG, "Failed to build trade topic via FFI");
       slave_config_free(config_handle);
       return;
    }
@@ -166,7 +182,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    bool new_allow_new_orders = (slave_config_get_bool(config_handle, "allow_new_orders") == 1);
 
    // Log configuration values (compact format)
-   LogInfo(CAT_CONFIG, StringFormat("Master: %s, Group: %s, Status: %d", new_master, new_group, new_status));
+   LogInfo(CAT_CONFIG, StringFormat("Master: %s, Topic: %s, Status: %d", new_master, new_trade_topic, new_status));
    LogDebug(CAT_CONFIG, StringFormat("Lot mode: %s, multiplier: %.2f, reverse: %d", lot_calc_mode_str, new_lot_mult, new_reverse));
    LogDebug(CAT_CONFIG, StringFormat("Source lot: %.2f-%.2f, master_equity: %.2f", new_source_lot_min, new_source_lot_max, new_master_equity));
    LogDebug(CAT_CONFIG, StringFormat("Sync mode: %s, limit_expiry: %d min, max_pips: %.1f", sync_mode_str, new_limit_order_expiry, new_market_sync_max_pips));
@@ -187,9 +203,9 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
 
    LogDebug(CAT_CONFIG, StringFormat("Found index: %d", index));
 
-   if(new_status == STATUS_REMOVED)
+   if(new_status == STATUS_NO_CONFIG)
    {
-      // Remove configuration ONLY if status is REMOVED (4)
+      // Remove configuration ONLY if status is NO_CONFIG (-1)
       if(index >= 0)
       {
          LogDebug(CAT_CONFIG, StringFormat("Removing configuration for master %s at index %d", new_master, index));
@@ -226,35 +242,35 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          ArrayResize(configs, index + 1);
          configs[index].master_account = new_master;
 
-         // Subscribe to new trade group
-         if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
+         // Subscribe to new trade topic
+         if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
          {
-            LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade group: %s", new_group));
+            LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
          }
          else
          {
-            LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade group: %s", new_group));
+            LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade topic: %s", new_trade_topic));
          }
       }
       else
       {
          LogDebug(CAT_CONFIG, StringFormat("Updating existing configuration for %s at index %d", new_master, index));
-         if(configs[index].trade_group_id != new_group)
+         if(configs[index].trade_group_id != new_trade_topic)
          {
-            // Group changed, subscribe to new one
-            if(zmq_socket_subscribe(zmq_trade_socket, new_group) == 0)
+            // Topic changed, subscribe to new one
+            if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
             {
-                LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade group: %s", new_group));
+                LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
             }
             else
             {
-                LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade group: %s", new_group));
+                LogInfo(CAT_CONFIG, StringFormat("Subscribed to trade topic: %s", new_trade_topic));
             }
          }
       }
       
       // Update fields
-      configs[index].trade_group_id = new_group;
+      configs[index].trade_group_id = new_trade_topic;
       configs[index].status = new_status;
       configs[index].lot_calculation_mode = new_lot_calc_mode;
       configs[index].lot_multiplier = new_lot_mult;

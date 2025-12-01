@@ -1,6 +1,7 @@
 mod connection;
 mod global_settings;
 mod mt_installation;
+pub mod status;
 mod trade_group;
 mod trade_group_member;
 
@@ -11,7 +12,7 @@ pub use trade_group::*;
 pub use trade_group_member::*;
 
 // Re-export shared types from DLL
-pub use sankey_copier_zmq::{SymbolMapping, TradeFilters};
+pub use sankey_copier_zmq::{MasterConfigMessage, SymbolMapping, TradeFilters};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

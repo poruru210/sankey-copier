@@ -328,6 +328,7 @@ function CreateConnectionForm({
         if (existingTradeGroup && apiClient && formData.master_account &&
             (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
           await apiClient.updateTradeGroupSettings(formData.master_account, {
+            enabled: existingTradeGroup.master_settings.enabled,
             symbol_prefix: masterSettings.symbol_prefix || null,
             symbol_suffix: masterSettings.symbol_suffix || null,
             config_version: existingTradeGroup.master_settings.config_version || 0,
@@ -383,6 +384,7 @@ function CreateConnectionForm({
           (masterSettings.symbol_prefix || masterSettings.symbol_suffix)) {
         try {
           await apiClient.updateTradeGroupSettings(formData.master_account, {
+            enabled: true, // New TradeGroups are enabled by default
             symbol_prefix: masterSettings.symbol_prefix || null,
             symbol_suffix: masterSettings.symbol_suffix || null,
             config_version: 0,

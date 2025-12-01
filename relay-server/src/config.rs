@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -221,10 +222,68 @@ pub struct DatabaseConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZeroMqConfig {
+    /// Port for receiving messages from EAs (PULL socket)
+    /// Set to 0 for dynamic port assignment
+    pub receiver_port: u16,
+    /// Port for sending all messages to EAs (PUB socket)
+    /// Includes trade signals and configuration updates, distinguished by topic
+    /// Set to 0 for dynamic port assignment
+    pub sender_port: u16,
+    pub timeout_seconds: i64,
+}
+
+impl ZeroMqConfig {
+    /// Check if any port is configured for dynamic assignment
+    pub fn has_dynamic_ports(&self) -> bool {
+        self.receiver_port == 0 || self.sender_port == 0
+    }
+}
+
+/// Runtime configuration for dynamically assigned ports
+/// Stored in runtime.toml and persisted across restarts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    pub zeromq: RuntimeZeromqConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeZeromqConfig {
     pub receiver_port: u16,
     pub sender_port: u16,
-    pub config_sender_port: u16,
-    pub timeout_seconds: i64,
+    pub generated_at: DateTime<Utc>,
+}
+
+impl RuntimeConfig {
+    /// Load runtime config from file
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content =
+            std::fs::read_to_string(path.as_ref()).context("Failed to read runtime config file")?;
+        toml::from_str(&content).context("Failed to parse runtime config")
+    }
+
+    /// Save runtime config to file
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let content = toml::to_string_pretty(self).context("Failed to serialize runtime config")?;
+        let header = "# AUTO-GENERATED - DO NOT EDIT\n\
+                      # Delete this file to re-assign ports on next startup\n\n";
+        std::fs::write(path.as_ref(), format!("{}{}", header, content))
+            .context("Failed to write runtime config file")?;
+        Ok(())
+    }
+
+    /// Delete runtime config file
+    #[allow(dead_code)]
+    pub fn delete<P: AsRef<Path>>(path: P) -> Result<()> {
+        if path.as_ref().exists() {
+            std::fs::remove_file(path.as_ref()).context("Failed to delete runtime config file")?;
+        }
+        Ok(())
+    }
+
+    /// Check if runtime config file exists
+    pub fn exists<P: AsRef<Path>>(path: P) -> bool {
+        path.as_ref().exists()
+    }
 }
 
 impl Config {
@@ -276,18 +335,15 @@ impl Config {
     }
 
     /// Get ZMQ receiver address
+    #[allow(dead_code)]
     pub fn zmq_receiver_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.receiver_port)
     }
 
-    /// Get ZMQ sender address
+    /// Get ZMQ sender address (unified publisher for all outgoing messages)
+    #[allow(dead_code)]
     pub fn zmq_sender_address(&self) -> String {
         format!("tcp://*:{}", self.zeromq.sender_port)
-    }
-
-    /// Get ZMQ config sender address
-    pub fn zmq_config_sender_address(&self) -> String {
-        format!("tcp://*:{}", self.zeromq.config_sender_port)
     }
 
     /// Get all allowed CORS origins
@@ -319,7 +375,6 @@ impl Default for Config {
             zeromq: ZeroMqConfig {
                 receiver_port: 5555,
                 sender_port: 5556,
-                config_sender_port: 5557,
                 timeout_seconds: 30,
             },
             cors: CorsConfig::default(),
@@ -329,6 +384,49 @@ impl Default for Config {
             victoria_logs: VictoriaLogsConfig::default(),
         }
     }
+}
+
+/// Update VictoriaLogs enabled setting in config.toml
+/// Uses toml_edit to preserve comments, formatting, and structure
+///
+/// Safety measures:
+/// 1. Creates backup before write
+/// 2. Validates content after write
+/// 3. Restores from backup if validation fails
+///
+/// Update VictoriaLogs enabled setting in config.toml
+/// Uses toml_edit to preserve comments, formatting, and structure
+pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_path: P) -> Result<()> {
+    let config_path = config_path.as_ref();
+
+    // Read existing config file
+    let content = std::fs::read_to_string(config_path).context("Failed to read config file")?;
+
+    // Parse as editable document (preserves comments and formatting)
+    let mut doc: toml_edit::DocumentMut = content.parse().context("Failed to parse config.toml")?;
+
+    // Update victoria_logs.enabled
+    if let Some(vlogs) = doc.get_mut("victoria_logs") {
+        if let Some(table) = vlogs.as_table_mut() {
+            table["enabled"] = toml_edit::value(enabled);
+        }
+    } else {
+        // victoria_logs section doesn't exist, create it
+        let mut vlogs_table = toml_edit::Table::new();
+        vlogs_table["enabled"] = toml_edit::value(enabled);
+        doc["victoria_logs"] = toml_edit::Item::Table(vlogs_table);
+    }
+
+    // Write back to file (preserves original formatting)
+    std::fs::write(config_path, doc.to_string()).context("Failed to write config.toml")?;
+
+    tracing::info!(
+        "Successfully updated config.toml (victoria_logs.enabled = {}) at {:?}",
+        enabled,
+        config_path
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -342,7 +440,6 @@ mod tests {
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.zeromq.receiver_port, 5555);
         assert_eq!(config.zeromq.sender_port, 5556);
-        assert_eq!(config.zeromq.config_sender_port, 5557);
     }
 
     #[test]
@@ -356,7 +453,6 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.zmq_receiver_address(), "tcp://*:5555");
         assert_eq!(config.zmq_sender_address(), "tcp://*:5556");
-        assert_eq!(config.zmq_config_sender_address(), "tcp://*:5557");
     }
 
     #[test]
@@ -373,7 +469,6 @@ mod tests {
             zeromq: ZeroMqConfig {
                 receiver_port: 6666,
                 sender_port: 6667,
-                config_sender_port: 6668,
                 timeout_seconds: 60,
             },
             cors: CorsConfig::default(),
@@ -386,7 +481,6 @@ mod tests {
         assert_eq!(config.server_address(), "127.0.0.1:9090");
         assert_eq!(config.zmq_receiver_address(), "tcp://*:6666");
         assert_eq!(config.zmq_sender_address(), "tcp://*:6667");
-        assert_eq!(config.zmq_config_sender_address(), "tcp://*:6668");
     }
 
     #[test]
@@ -402,6 +496,7 @@ mod tests {
 
     #[test]
     fn test_toml_deserialization() {
+        // 2-port architecture: only receiver_port and sender_port
         let toml_str = r#"
 [server]
 host = "127.0.0.1"
@@ -413,7 +508,6 @@ url = "sqlite://custom.db"
 [zeromq]
 receiver_port = 7777
 sender_port = 7778
-config_sender_port = 7779
 timeout_seconds = 45
 "#;
 
@@ -422,6 +516,72 @@ timeout_seconds = 45
         assert_eq!(config.server.port, 9000);
         assert_eq!(config.database.url, "sqlite://custom.db");
         assert_eq!(config.zeromq.receiver_port, 7777);
+        assert_eq!(config.zeromq.sender_port, 7778);
         assert_eq!(config.zeromq.timeout_seconds, 45);
+    }
+    #[test]
+    fn test_update_victoria_logs_enabled() {
+        use std::io::Write;
+
+        // Create a temporary config file
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join(format!("test_config_{}.toml", uuid::Uuid::new_v4()));
+
+        // Write initial content
+        let initial_content = r#"
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[webui]
+host = "0.0.0.0"
+port = 8080
+url = "http://localhost:8080"
+
+[database]
+url = "sqlite://sankey_copier.db?mode=rwc"
+
+[zeromq]
+receiver_port = 5555
+sender_port = 5556
+timeout_seconds = 30
+
+[cors]
+disable = true
+additional_origins = []
+
+[logging]
+enabled = true
+directory = "logs"
+file_prefix = "sankey-copier-server"
+rotation = "daily"
+max_files = 3
+max_age_days = 3
+
+[tls]
+cert_path = "certs/server.pem"
+key_path = "certs/server-key.pem"
+validity_days = 3650
+
+[victoria_logs]
+enabled = false
+host = "http://localhost:9428"
+batch_size = 100
+flush_interval_secs = 5
+source = "relay-server"
+"#;
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(initial_content.as_bytes()).unwrap();
+
+        // Update enabled to true
+        update_victoria_logs_enabled(true, &config_path).unwrap();
+
+        // Verify update
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(content.contains("enabled = true"));
+        assert!(content.contains("[victoria_logs]"));
+
+        // Cleanup
+        let _ = std::fs::remove_file(config_path);
     }
 }

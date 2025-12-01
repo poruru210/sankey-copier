@@ -48,11 +48,8 @@ impl MessageHandler {
 
         // Route snapshot to each connected slave via config publisher
         for member in &members {
-            if let Err(e) = self
-                .config_sender
-                .publish_to_topic(&member.slave_account, &snapshot)
-                .await
-            {
+            let topic = format!("config/{}", member.slave_account);
+            if let Err(e) = self.publisher.publish_to_topic(&topic, &snapshot).await {
                 tracing::error!(
                     "Failed to send PositionSnapshot to slave {}: {}",
                     member.slave_account,

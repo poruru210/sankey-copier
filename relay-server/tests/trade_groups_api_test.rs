@@ -16,6 +16,7 @@ use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
 use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings};
+use sankey_copier_relay_server::port_resolver::ResolvedPorts;
 use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
@@ -31,6 +32,14 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
     // Create a dummy ZMQ config sender
     let config_sender = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:0").unwrap());
 
+    // 2-port architecture: receiver and unified publisher
+    let resolved_ports = Arc::new(ResolvedPorts {
+        receiver_port: 5555,
+        sender_port: 5556,
+        is_dynamic: false,
+        generated_at: None,
+    });
+
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -40,6 +49,7 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
         allowed_origins: vec!["http://localhost:8080".to_string()],
         cors_disabled: false,
         config: Arc::new(sankey_copier_relay_server::config::Config::default()),
+        resolved_ports,
         vlogs_controller: None,
     };
 
@@ -176,6 +186,7 @@ async fn test_update_trade_group_settings_success() {
 
     // Update settings
     let updated_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 0, // Will be incremented by the API
@@ -218,6 +229,7 @@ async fn test_update_trade_group_settings_increments_version() {
 
     // First update
     let settings_v1 = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("v1.".to_string()),
         symbol_suffix: None,
         config_version: 0,
@@ -238,6 +250,7 @@ async fn test_update_trade_group_settings_increments_version() {
 
     // Second update
     let settings_v2 = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("v2.".to_string()),
         symbol_suffix: Some(".v2".to_string()),
         config_version: 1, // API will increment this
@@ -308,6 +321,7 @@ async fn test_update_trade_group_settings_not_found() {
 
     // Try to update a non-existent trade group
     let settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("test.".to_string()),
         symbol_suffix: None,
         config_version: 0,

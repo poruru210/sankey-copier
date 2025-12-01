@@ -120,6 +120,12 @@ export interface InstalledComponents {
   slave_ea: boolean;
 }
 
+// 2-port architecture: receiver (PULL) and unified publisher (PUB)
+export interface EaPortConfig {
+  receiver_port: number;
+  publisher_port: number;
+}
+
 export interface MtInstallation {
   id: string;
   name: string;
@@ -129,6 +135,8 @@ export interface MtInstallation {
   executable: string;
   version: string | null;  // DLL version = client version
   components: InstalledComponents;
+  port_config?: EaPortConfig;
+  port_mismatch?: boolean;
 }
 
 export interface DetectionSummary {
@@ -139,6 +147,7 @@ export interface MtInstallationsResponse {
   success: boolean;
   data: MtInstallation[];
   detection_summary: DetectionSummary;
+  server_ports?: EaPortConfig;
 }
 
 // Master EA Configuration types
@@ -157,6 +166,7 @@ export interface UpdateMasterConfigRequest {
 
 // TradeGroup (Master settings) types
 export interface MasterSettings {
+  enabled: boolean;
   symbol_prefix?: string | null;
   symbol_suffix?: string | null;
   config_version: number;

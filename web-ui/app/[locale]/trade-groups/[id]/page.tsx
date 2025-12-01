@@ -71,6 +71,7 @@ export default function TradeGroupDetailPage() {
 
     try {
       const settings: MasterSettings = {
+        enabled: tradeGroup?.master_settings.enabled ?? true,
         symbol_prefix: formData.symbol_prefix || null,
         symbol_suffix: formData.symbol_suffix || null,
         config_version: tradeGroup?.master_settings.config_version || 0,

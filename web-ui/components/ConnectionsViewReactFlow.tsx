@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { CopySettings, EaConnection, CreateSettingsRequest } from '@/types';
+import type { CopySettings, EaConnection, CreateSettingsRequest, TradeGroup } from '@/types';
 import {
   useAccountData,
   useConnectionHighlight,
@@ -37,7 +37,9 @@ import { Plus, RefreshCw } from 'lucide-react';
 interface ConnectionsViewReactFlowProps {
   connections: EaConnection[];
   settings: CopySettings[];
+  tradeGroups: TradeGroup[];
   onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
   onCreate: (data: CreateSettingsRequest) => Promise<void>;
   onUpdate: (id: number, data: CopySettings) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -56,7 +58,9 @@ const edgeTypes = Object.freeze({
 function ConnectionsViewReactFlowInner({
   connections,
   settings,
+  tradeGroups,
   onToggle,
+  onToggleMaster,
   onCreate,
   onUpdate,
   onDelete,
@@ -79,6 +83,7 @@ function ConnectionsViewReactFlowInner({
   } = useAccountData({
     connections,
     settings,
+    tradeGroups,
     content: {
       allSourcesInactive: content.allSourcesInactive,
       someSourcesInactive: content.someSourcesInactive,
@@ -230,6 +235,7 @@ function ConnectionsViewReactFlowInner({
     isMobile,
     content: accountCardContent,
     onToggle,
+    onToggleMaster,
   });
 
   // Use React Flow's state management for nodes and edges

@@ -2,8 +2,8 @@
 // Purpose: MessagePack serialization/deserialization functions for FFI
 // Why: Provides binary serialization for efficient message passing between EA and relay-server
 
-use super::helpers::{utf16_to_string, utf16_to_string_opt};
-use super::types::{HeartbeatMessage, RequestConfigMessage, TradeSignalMessage, UnregisterMessage};
+use crate::ffi_helpers::{utf16_to_string, utf16_to_string_opt};
+use crate::types::{HeartbeatMessage, RequestConfigMessage, TradeSignalMessage, UnregisterMessage};
 use std::sync::{LazyLock, Mutex};
 
 // Static buffer for serialized data

@@ -286,6 +286,7 @@ public:
 
    // Common helpers
    void     UpdateStatusRow(int status);
+   void     UpdatePanelStatusFromConfigs(CopyConfig &configs[]);
    void     UpdateMasterRow(string master_name);
    void     UpdateLotMultiplierRow(double multiplier);
    void     UpdateReverseRow(bool reverse);
@@ -1095,7 +1096,7 @@ void CGridPanel::HideMessage()
 
 //+------------------------------------------------------------------+
 //| Update status row (4 states)                                     |
-//| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED, 3=NO_CONFIGURATION |
+//| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED, -1=NO_CONFIG |
 //+------------------------------------------------------------------+
 void CGridPanel::UpdateStatusRow(int status)
 {
@@ -1115,7 +1116,7 @@ void CGridPanel::UpdateStatusRow(int status)
    {
       vals[1] = "CONNECTED";
    }
-   else if(status == STATUS_NO_CONFIGURATION)
+   else if(status == STATUS_NO_CONFIG)
    {
       vals[1] = "NO CONFIG";
    }
@@ -1140,7 +1141,7 @@ void CGridPanel::UpdateStatusRow(int status)
    {
       cols[1] = PANEL_COLOR_CONNECTED;        // Green (connected to Master)
    }
-   else if(status == STATUS_NO_CONFIGURATION)
+   else if(status == STATUS_NO_CONFIG)
    {
       cols[1] = PANEL_COLOR_NO_CONFIG;        // Dark gray (no config received)
    }
@@ -1150,6 +1151,43 @@ void CGridPanel::UpdateStatusRow(int status)
    }
 
    UpdateRow("status", vals, cols);
+}
+
+//+------------------------------------------------------------------+
+//| Update status row based on configs array                         |
+//| Centralized logic for determining panel status from configs      |
+//+------------------------------------------------------------------+
+void CGridPanel::UpdatePanelStatusFromConfigs(CopyConfig &configs[])
+{
+   if(ArraySize(configs) == 0)
+   {
+      UpdateStatusRow(STATUS_NO_CONFIG);
+      return;
+   }
+
+   bool any_connected = false;
+   bool all_disabled = true;
+
+   for(int i=0; i<ArraySize(configs); i++)
+   {
+      if(configs[i].status == STATUS_CONNECTED)
+      {
+         any_connected = true;
+         all_disabled = false;
+         break;
+      }
+      if(configs[i].status != STATUS_DISABLED)
+      {
+         all_disabled = false;
+      }
+   }
+
+   if(any_connected)
+      UpdateStatusRow(STATUS_CONNECTED);
+   else if(all_disabled)
+      UpdateStatusRow(STATUS_DISABLED);
+   else
+      UpdateStatusRow(STATUS_ENABLED);
 }
 
 //+------------------------------------------------------------------+

@@ -54,7 +54,7 @@ validity_days = 3650                    # Certificate validity period in days (d
 # VictoriaLogs integration for centralized logging
 # Start VictoriaLogs with: docker compose up -d victoria-logs
 # Web UI: http://localhost:9428/select/vmui
-enabled = true                                          # VictoriaLogs enabled by default
+enabled = true
 host = "http://localhost:9428"                          # VictoriaLogs host URL
 batch_size = 100                                        # Maximum entries to buffer before sending
 flush_interval_secs = 5                                 # Flush interval in seconds

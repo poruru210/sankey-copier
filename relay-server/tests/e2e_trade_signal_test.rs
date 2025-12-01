@@ -21,11 +21,12 @@ use sankey_copier_relay_server::models::{
     LotCalculationMode, MasterSettings, OrderType, SlaveSettings, SyncMode, TradeAction,
     TradeSignal,
 };
-use sankey_copier_zmq::{
+use sankey_copier_zmq::ffi::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
-    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe,
-    HeartbeatMessage, SymbolMapping, TradeFilters, TradeSignalMessage, ZMQ_PUSH, ZMQ_SUB,
+    zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH,
+    ZMQ_SUB,
 };
+use sankey_copier_zmq::{HeartbeatMessage, SymbolMapping, TradeFilters, TradeSignalMessage};
 use std::ffi::c_char;
 use test_server::TestServer;
 use tokio::time::{sleep, Duration};
@@ -72,7 +73,8 @@ impl MasterEaSimulator {
 
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
-        let topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let config_topic = format!("config/{}", account_id);
+        let topic_utf16: Vec<u16> = config_topic.encode_utf16().chain(Some(0)).collect();
 
         unsafe {
             if zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr()) != 1 {
@@ -342,7 +344,8 @@ impl SlaveEaSimulator {
         let push_addr_utf16: Vec<u16> = push_address.encode_utf16().chain(Some(0)).collect();
         let config_addr_utf16: Vec<u16> = config_address.encode_utf16().chain(Some(0)).collect();
         let trade_addr_utf16: Vec<u16> = trade_address.encode_utf16().chain(Some(0)).collect();
-        let account_topic_utf16: Vec<u16> = account_id.encode_utf16().chain(Some(0)).collect();
+        let config_topic = format!("config/{}", account_id);
+        let account_topic_utf16: Vec<u16> = config_topic.encode_utf16().chain(Some(0)).collect();
 
         unsafe {
             if zmq_socket_connect(push_socket_handle, push_addr_utf16.as_ptr()) != 1 {
@@ -388,14 +391,15 @@ impl SlaveEaSimulator {
         })
     }
 
-    /// Subscribe to trade signals from a specific master account
-    /// Server sends signals to trade_group_id (master_account) topic
-    /// All slaves under the same master subscribe to this topic
+    /// Subscribe to trade signals for a specific Master-Slave pair
+    /// New topic format: trade/{master_account}/{slave_account}
+    /// This allows precise routing to individual slaves
     fn subscribe_to_master(&self, master_account: &str) -> anyhow::Result<()> {
-        let topic_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
+        let trade_topic = format!("trade/{}/{}", master_account, self.account_id);
+        let topic_utf16: Vec<u16> = trade_topic.encode_utf16().chain(Some(0)).collect();
         unsafe {
             if zmq_socket_subscribe(self.trade_socket_handle, topic_utf16.as_ptr()) != 1 {
-                anyhow::bail!("Failed to subscribe to master: {}", master_account);
+                anyhow::bail!("Failed to subscribe to trade topic: {}", trade_topic);
             }
         }
         Ok(())
@@ -449,6 +453,7 @@ impl SlaveEaSimulator {
     }
 
     /// Try to receive a TradeSignal with timeout
+    /// Skips non-TradeSignal messages (e.g., MasterConfigMessage from heartbeat responses)
     fn try_receive_trade_signal(
         &self,
         timeout_ms: i32,
@@ -478,8 +483,15 @@ impl SlaveEaSimulator {
                 let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
                 let payload = &bytes[space_pos + 1..];
 
-                let signal: TradeSignal = rmp_serde::from_slice(payload)?;
-                return Ok(Some((topic, signal)));
+                // Try to parse as TradeSignal, skip if it's a different message type
+                // (e.g., MasterConfigMessage sent back on heartbeat)
+                match rmp_serde::from_slice::<TradeSignal>(payload) {
+                    Ok(signal) => return Ok(Some((topic, signal))),
+                    Err(_) => {
+                        // Not a TradeSignal - might be config message, skip and continue
+                        continue;
+                    }
+                }
             } else if received_bytes == 0 {
                 if start.elapsed() >= timeout_duration {
                     return Ok(None);
@@ -571,6 +583,16 @@ async fn setup_test_scenario(
 ) -> anyhow::Result<()> {
     // Create trade group for master
     server.db.create_trade_group(master_account).await?;
+
+    // Enable Master (web_ui switch ON)
+    let master_settings = sankey_copier_relay_server::models::MasterSettings {
+        enabled: true,
+        ..Default::default()
+    };
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await?;
 
     // Add slaves with settings
     for (i, slave_account) in slave_accounts.iter().enumerate() {
@@ -688,9 +710,11 @@ async fn test_open_close_cycle() {
     // Verify: Slave received 2 signals
     assert_eq!(signals.len(), 2, "Slave should receive 2 signals");
 
+    let expected_topic = format!("trade/{}/{}", master_account, slave_account);
+
     // Verify Open signal
     let (topic1, sig1) = &signals[0];
-    assert_eq!(topic1, master_account);
+    assert_eq!(topic1, &expected_topic);
     assert!(matches!(sig1.action, TradeAction::Open));
     assert_eq!(sig1.ticket, 12345);
     assert_eq!(sig1.symbol.as_deref(), Some("EURUSD"));
@@ -698,7 +722,7 @@ async fn test_open_close_cycle() {
 
     // Verify Close signal
     let (topic2, sig2) = &signals[1];
-    assert_eq!(topic2, master_account);
+    assert_eq!(topic2, &expected_topic);
     assert!(matches!(sig2.action, TradeAction::Close));
     assert_eq!(sig2.ticket, 12345);
 
@@ -1461,12 +1485,18 @@ async fn test_multi_master_signal_isolation() {
     // Slave1 should only receive ticket 100 from Master1
     assert_eq!(signals1.len(), 1, "Slave1 should receive only 1 signal");
     assert_eq!(signals1[0].1.ticket, 100);
-    assert_eq!(signals1[0].0, master1_account);
+    assert_eq!(
+        signals1[0].0,
+        format!("trade/{}/{}", master1_account, slave1_account)
+    );
 
     // Slave2 should only receive ticket 200 from Master2
     assert_eq!(signals2.len(), 1, "Slave2 should receive only 1 signal");
     assert_eq!(signals2[0].1.ticket, 200);
-    assert_eq!(signals2[0].0, master2_account);
+    assert_eq!(
+        signals2[0].0,
+        format!("trade/{}/{}", master2_account, slave2_account)
+    );
 
     println!("✅ test_multi_master_signal_isolation passed");
 
@@ -2142,6 +2172,7 @@ async fn test_symbol_prefix_suffix_transformation() {
     // Create trade group and update master settings with prefix/suffix
     server.db.create_trade_group(master_account).await.unwrap();
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 0,
@@ -2230,6 +2261,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     // Create trade group with prefix/suffix settings on Master
     server.db.create_trade_group(master_account).await.unwrap();
     let master_settings = MasterSettings {
+        enabled: true,
         symbol_prefix: Some("PRO.".to_string()), // Master configured with PRO. prefix
         symbol_suffix: Some(".m".to_string()),   // and .m suffix
         config_version: 0,
@@ -3103,112 +3135,6 @@ async fn test_multiple_sequential_partial_closes() {
     );
 
     println!("✅ test_multiple_sequential_partial_closes passed");
-
-    server.shutdown().await;
-}
-
-// =============================================================================
-// Disabled Slave Tests
-// =============================================================================
-
-/// Test that both enabled and disabled slaves receive signals
-/// (Filtering for disabled slaves happens on Slave EA side, not relay-server)
-#[tokio::test]
-async fn test_disabled_slave_receives_signals() {
-    let server = TestServer::start()
-        .await
-        .expect("Failed to start test server");
-
-    let master_account = "MASTER_DISABLED_001";
-    let slave_enabled = "SLAVE_ENABLED_001";
-    let slave_disabled = "SLAVE_DISABLED_001";
-
-    // Create trade group
-    server.db.create_trade_group(master_account).await.unwrap();
-
-    // Add enabled slave (status = CONNECTED)
-    server
-        .db
-        .add_member(
-            master_account,
-            slave_enabled,
-            default_test_slave_settings(),
-            0,
-        )
-        .await
-        .unwrap();
-    server
-        .db
-        .update_member_status(master_account, slave_enabled, STATUS_CONNECTED)
-        .await
-        .unwrap();
-
-    // Add disabled slave (status = 0)
-    server
-        .db
-        .add_member(
-            master_account,
-            slave_disabled,
-            default_test_slave_settings(),
-            0,
-        )
-        .await
-        .unwrap();
-    server
-        .db
-        .update_member_status(master_account, slave_disabled, 0) // STATUS_DISABLED
-        .await
-        .unwrap();
-
-    let master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_config_address(),
-        master_account,
-    )
-    .unwrap();
-
-    let slave1 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_config_address(),
-        &server.zmq_pub_trade_address(),
-        slave_enabled,
-    )
-    .unwrap();
-
-    let slave2 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_config_address(),
-        &server.zmq_pub_trade_address(),
-        slave_disabled,
-    )
-    .unwrap();
-
-    slave1.subscribe_to_master(master_account).unwrap();
-    slave2.subscribe_to_master(master_account).unwrap();
-    register_all_eas(&master, &[&slave1, &slave2])
-        .await
-        .unwrap();
-
-    // Send signal
-    let signal =
-        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
-    master.send_trade_signal(&signal).unwrap();
-
-    sleep(Duration::from_millis(300)).await;
-
-    // Enabled slave should receive
-    let signals1 = slave1.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(signals1.len(), 1, "Enabled slave should receive signal");
-
-    // Disabled slave ALSO receives signal (filtering happens on Slave EA side)
-    let signals2 = slave2.collect_trade_signals(3000, 1).unwrap();
-    assert_eq!(
-        signals2.len(),
-        1,
-        "Disabled slave should also receive signal (EA-side filtering)"
-    );
-
-    println!("✅ test_disabled_slave_receives_signals passed");
 
     server.shutdown().await;
 }

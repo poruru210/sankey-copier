@@ -9,7 +9,6 @@ import {
   selectedSourceIdAtom,
   expandedSourceIdsAtom,
   expandedReceiverIdsAtom,
-  disabledSourceIdsAtom,
   disabledReceiverIdsAtom,
 } from '@/lib/atoms/ui';
 
@@ -26,6 +25,7 @@ interface UseFlowDataProps {
   isMobile: boolean;
   content: any;
   onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
 }
 
 // Layout constants - Desktop (horizontal)
@@ -57,6 +57,7 @@ export function useFlowData({
   isMobile,
   content,
   onToggle,
+  onToggleMaster,
 }: UseFlowDataProps): { nodes: Node[]; edges: Edge[] } {
   const hoveredSourceId = useAtomValue(hoveredSourceIdAtom);
   const hoveredReceiverId = useAtomValue(hoveredReceiverIdAtom);
@@ -64,7 +65,6 @@ export function useFlowData({
 
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
-  const [disabledSourceIds, setDisabledSourceIds] = useAtom(disabledSourceIdsAtom);
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
 
   const toggleSourceExpand = useCallback((accountId: string) => {
@@ -84,35 +84,9 @@ export function useFlowData({
   }, [setExpandedReceiverIds]);
 
   const toggleSourceEnabled = useCallback((accountId: string, enabled: boolean) => {
-    // Update local state (disabledSourceIds)
-    setDisabledSourceIds((prev) => {
-      if (enabled) {
-        return prev.filter((id) => id !== accountId);
-      } else {
-        return prev.includes(accountId) ? prev : [...prev, accountId];
-      }
-    });
-
-    // Find all settings for this source and toggle them based on logic
-    const sourceSettings = settings.filter((s) => s.master_account === accountId);
-    sourceSettings.forEach((setting) => {
-      const isCurrentlyEnabled = setting.status !== 0;
-
-      if (enabled) {
-        // Master is being enabled
-        // Only enable connection if Slave is ALSO enabled
-        const isSlaveEnabled = !disabledReceiverIds.includes(setting.slave_account);
-        if (isSlaveEnabled && !isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
-        }
-      } else {
-        // Master is being disabled -> Always disable connection
-        if (isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
-        }
-      }
-    });
-  }, [settings, onToggle, setDisabledSourceIds, disabledReceiverIds]);
+    // Call toggle Master API - server handles ZMQ notification to EA
+    onToggleMaster(accountId, enabled);
+  }, [onToggleMaster]);
 
   const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledReceiverIds)
@@ -132,7 +106,8 @@ export function useFlowData({
       if (enabled) {
         // Slave is being enabled
         // Only enable connection if Master is ALSO enabled
-        const isMasterEnabled = !disabledSourceIds.includes(setting.master_account);
+        const masterAccount = sourceAccounts.find((acc) => acc.id === setting.master_account);
+        const isMasterEnabled = masterAccount?.isEnabled ?? true;
         if (isMasterEnabled && !isCurrentlyEnabled) {
           onToggle(setting.id, setting.status);
         }
@@ -143,7 +118,7 @@ export function useFlowData({
         }
       }
     });
-  }, [settings, onToggle, setDisabledReceiverIds, disabledSourceIds]);
+  }, [settings, onToggle, setDisabledReceiverIds, sourceAccounts]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
@@ -242,7 +217,6 @@ export function useFlowData({
     toggleReceiverExpand,
     toggleSourceEnabled,
     toggleReceiverEnabled,
-    settings,
   ]);
 
   const edges = useMemo(() => {

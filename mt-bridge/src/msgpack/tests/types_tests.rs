@@ -300,6 +300,7 @@ fn test_messagepack_size_optimization() {
 fn test_master_config_message_serialization() {
     let msg = MasterConfigMessage {
         account_id: "master_account_123".to_string(),
+        status: 2, // STATUS_CONNECTED
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,
@@ -329,6 +330,7 @@ fn test_master_config_message_serialization() {
 fn test_master_config_message_with_none_values() {
     let msg = MasterConfigMessage {
         account_id: "master_account_456".to_string(),
+        status: 0, // STATUS_DISABLED
         symbol_prefix: None,
         symbol_suffix: None,
         config_version: 2,

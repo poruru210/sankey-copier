@@ -181,6 +181,28 @@ impl Database {
         Ok(())
     }
 
+    /// Get all Masters (trade_group_ids) that a Slave is connected to
+    ///
+    /// # Arguments
+    /// * `slave_account` - The slave account ID
+    ///
+    /// # Returns
+    /// Vector of master account IDs (trade_group_ids) that this Slave is connected to
+    pub async fn get_masters_for_slave(&self, slave_account: &str) -> Result<Vec<String>> {
+        let rows = sqlx::query(
+            "SELECT DISTINCT trade_group_id
+             FROM trade_group_members
+             WHERE slave_account = ?
+             ORDER BY trade_group_id",
+        )
+        .bind(slave_account)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let masters: Vec<String> = rows.iter().map(|row| row.get("trade_group_id")).collect();
+        Ok(masters)
+    }
+
     /// Delete a member
     pub async fn delete_member(&self, trade_group_id: &str, slave_account: &str) -> Result<()> {
         sqlx::query(

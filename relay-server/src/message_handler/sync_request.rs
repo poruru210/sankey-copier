@@ -51,11 +51,8 @@ impl MessageHandler {
         }
 
         // Route sync request to Master EA via config publisher
-        if let Err(e) = self
-            .config_sender
-            .publish_to_topic(&request.master_account, &request)
-            .await
-        {
+        let topic = format!("config/{}", request.master_account);
+        if let Err(e) = self.publisher.publish_to_topic(&topic, &request).await {
             tracing::error!(
                 "Failed to send SyncRequest to master {}: {}",
                 request.master_account,

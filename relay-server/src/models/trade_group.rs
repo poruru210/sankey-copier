@@ -6,6 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Default value for enabled field (used when deserializing old DB records)
+fn default_enabled() -> bool {
+    false
+}
+
 /// TradeGroup represents a Master account and its configuration.
 /// The id field is the master_account itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,8 +29,14 @@ pub struct TradeGroup {
 }
 
 /// Master-specific settings
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Default: enabled=false (new connections start with Switch OFF)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MasterSettings {
+    /// Whether the Master is enabled (Web UI switch state)
+    /// Defaults to false - new connections start with Switch OFF
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+
     /// Symbol prefix to remove from Master EA symbols (e.g., "pro.")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub symbol_prefix: Option<String>,
@@ -35,7 +46,6 @@ pub struct MasterSettings {
     pub symbol_suffix: Option<String>,
 
     /// Configuration version for tracking updates
-    #[serde(default)]
     pub config_version: u32,
 }
 
@@ -67,6 +77,7 @@ mod tests {
         let tg = TradeGroup::new("MASTER_001".to_string());
 
         assert_eq!(tg.id, "MASTER_001");
+        assert!(!tg.master_settings.enabled); // Default: disabled (Switch OFF)
         assert_eq!(tg.master_settings.config_version, 0);
         assert!(tg.master_settings.symbol_prefix.is_none());
         assert!(tg.master_settings.symbol_suffix.is_none());
@@ -85,6 +96,7 @@ mod tests {
     #[test]
     fn test_master_settings_serialization() {
         let settings = MasterSettings {
+            enabled: true,
             symbol_prefix: Some("pro.".to_string()),
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,
@@ -93,6 +105,7 @@ mod tests {
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: MasterSettings = serde_json::from_str(&json).unwrap();
 
+        assert!(deserialized.enabled);
         assert_eq!(deserialized.symbol_prefix, Some("pro.".to_string()));
         assert_eq!(deserialized.symbol_suffix, Some(".m".to_string()));
         assert_eq!(deserialized.config_version, 1);
@@ -101,6 +114,7 @@ mod tests {
     #[test]
     fn test_master_settings_with_null_values() {
         let settings = MasterSettings {
+            enabled: false,
             symbol_prefix: None,
             symbol_suffix: None,
             config_version: 0,
@@ -112,5 +126,17 @@ mod tests {
         assert!(!json.contains("symbol_prefix"));
         assert!(!json.contains("symbol_suffix"));
         assert!(json.contains("config_version"));
+        assert!(json.contains("enabled"));
+    }
+
+    #[test]
+    fn test_master_settings_missing_enabled_field() {
+        // DB records without 'enabled' field should deserialize with enabled=false
+        let json_without_enabled = r#"{"symbol_prefix":"pro.","config_version":1}"#;
+        let settings: MasterSettings = serde_json::from_str(json_without_enabled).unwrap();
+
+        assert!(!settings.enabled); // Should default to false
+        assert_eq!(settings.symbol_prefix, Some("pro.".to_string()));
+        assert_eq!(settings.config_version, 1);
     }
 }
