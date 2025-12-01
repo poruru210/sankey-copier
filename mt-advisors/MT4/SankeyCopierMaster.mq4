@@ -226,24 +226,12 @@ void OnTimer()
       g_last_heartbeat = TimeLocal();
 
       // If trade state changed, log it and update tracking variable
+      // Server will send updated status via config message based on is_trade_allowed
       if(trade_state_changed)
       {
          Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
          g_last_trade_allowed = current_trade_allowed;
-
-         // Update panel status
-         if(ShowConfigPanel)
-         {
-            if(!current_trade_allowed)
-            {
-               g_config_panel.UpdateStatusRow(STATUS_ENABLED); // Yellow warning
-            }
-            else
-            {
-               g_config_panel.UpdateStatusRow(STATUS_CONNECTED); // Green active
-            }
-            ChartRedraw();
-         }
+         // Status panel is updated by server via config message (ProcessMasterConfigMessage)
       }
 
       // Request configuration if not yet requested (on any successful heartbeat)
