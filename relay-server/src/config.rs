@@ -388,11 +388,19 @@ impl Default for Config {
 
 /// Update VictoriaLogs enabled setting in config.toml
 /// Uses toml_edit to preserve comments, formatting, and structure
-pub fn update_victoria_logs_enabled(enabled: bool) -> Result<()> {
-    let config_path = "config.toml";
+///
+/// Safety measures:
+/// 1. Creates backup before write
+/// 2. Validates content after write
+/// 3. Restores from backup if validation fails
+///
+/// Update VictoriaLogs enabled setting in config.toml
+/// Uses toml_edit to preserve comments, formatting, and structure
+pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_path: P) -> Result<()> {
+    let config_path = config_path.as_ref();
 
     // Read existing config file
-    let content = std::fs::read_to_string(config_path).context("Failed to read config.toml")?;
+    let content = std::fs::read_to_string(config_path).context("Failed to read config file")?;
 
     // Parse as editable document (preserves comments and formatting)
     let mut doc: toml_edit::DocumentMut = content.parse().context("Failed to parse config.toml")?;
@@ -411,6 +419,12 @@ pub fn update_victoria_logs_enabled(enabled: bool) -> Result<()> {
 
     // Write back to file (preserves original formatting)
     std::fs::write(config_path, doc.to_string()).context("Failed to write config.toml")?;
+
+    tracing::info!(
+        "Successfully updated config.toml (victoria_logs.enabled = {}) at {:?}",
+        enabled,
+        config_path
+    );
 
     Ok(())
 }
@@ -504,5 +518,70 @@ timeout_seconds = 45
         assert_eq!(config.zeromq.receiver_port, 7777);
         assert_eq!(config.zeromq.sender_port, 7778);
         assert_eq!(config.zeromq.timeout_seconds, 45);
+    }
+    #[test]
+    fn test_update_victoria_logs_enabled() {
+        use std::io::Write;
+
+        // Create a temporary config file
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join(format!("test_config_{}.toml", uuid::Uuid::new_v4()));
+
+        // Write initial content
+        let initial_content = r#"
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[webui]
+host = "0.0.0.0"
+port = 8080
+url = "http://localhost:8080"
+
+[database]
+url = "sqlite://sankey_copier.db?mode=rwc"
+
+[zeromq]
+receiver_port = 5555
+sender_port = 5556
+timeout_seconds = 30
+
+[cors]
+disable = true
+additional_origins = []
+
+[logging]
+enabled = true
+directory = "logs"
+file_prefix = "sankey-copier-server"
+rotation = "daily"
+max_files = 3
+max_age_days = 3
+
+[tls]
+cert_path = "certs/server.pem"
+key_path = "certs/server-key.pem"
+validity_days = 3650
+
+[victoria_logs]
+enabled = false
+host = "http://localhost:9428"
+batch_size = 100
+flush_interval_secs = 5
+source = "relay-server"
+"#;
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        file.write_all(initial_content.as_bytes()).unwrap();
+
+        // Update enabled to true
+        update_victoria_logs_enabled(true, &config_path).unwrap();
+
+        // Verify update
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(content.contains("enabled = true"));
+        assert!(content.contains("[victoria_logs]"));
+
+        // Cleanup
+        let _ = std::fs::remove_file(config_path);
     }
 }

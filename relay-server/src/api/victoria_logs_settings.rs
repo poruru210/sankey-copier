@@ -116,7 +116,7 @@ pub async fn toggle_vlogs_enabled(
     );
 
     // Save enabled state to config.toml for persistence across restarts
-    if let Err(e) = update_victoria_logs_enabled(request.enabled) {
+    if let Err(e) = update_victoria_logs_enabled(request.enabled, "config.toml") {
         tracing::error!(
             error = %e,
             "Failed to persist VictoriaLogs enabled state to config.toml"
