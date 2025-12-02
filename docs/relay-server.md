@@ -116,6 +116,7 @@ classDiagram
     class TradeGroup {
         +String id
         +MasterSettings master_settings
+        +i32 master_runtime_status
         +String created_at
         +String updated_at
     }
@@ -132,6 +133,8 @@ classDiagram
         +String slave_account
         +SlaveSettings slave_settings
         +i32 status
+        +i32 runtime_status
+        +bool enabled_flag
         +String created_at
         +String updated_at
     }
@@ -186,6 +189,18 @@ classDiagram
 | POST | `/api/trade-groups/:id/members/:slave_id/toggle` | Slave有効/無効切替 |
 | GET | `/api/logs` | サーバーログ取得 |
 | GET | `/api/mt-installations` | MTインストール検出 |
+
+### Status Engine によるフィールドの分担
+
+| フィールド | 役割 | 更新主体 |
+|------------|------|-----------|
+| `enabled_flag` | ユーザー意図 (UI トグル状態)。Master/Slave とも `POST /toggle` API でのみ変更。 | Web UI / API クライアント |
+| `runtime_status` | Status Engine が算出する実効ステータス (`0=Manual OFF / 1=Standby / 2=Streaming`)。 | Relay Server (Status Engine) |
+| `master_runtime_status` | Master 単位の実効ステータス。Master ノード可視化や ZMQ Config builder に利用。 | Relay Server |
+
+- `enabled_flag` を書き換えた後、Status Engine は最新の接続状況や EA からの Heartbeat を参照して `runtime_status`/`master_runtime_status` を再計算し、DBへ書き戻す。<br>
+- Web UI や EA は `runtime_status` 系フィールドを観測値として扱い、意図 (`enabled_flag`) と実行 (`runtime_status`) のギャップを UI/ログで可視化する。<br>
+- ZeroMQ の `allow_new_orders` は `runtime_status == 2` のときのみ `true` となり、EA サイドのコピー可否フラグと同期する。
 
 ## WebSocketイベント
 
@@ -393,16 +408,9 @@ sequenceDiagram
 | ❌ OFF | - | `DISABLED (0)` | Web UIでOFF |
 | ✅ ON | ❌ OFF | `DISABLED (0)` | EA自動売買がOFF |
 
-**実装** (`relay-server/src/models/status.rs`):
-```rust
-pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
-    if !input.web_ui_enabled || !input.is_trade_allowed {
-        STATUS_DISABLED  // 0
-    } else {
-        STATUS_CONNECTED  // 2
-    }
-}
-```
+**実装の所在**: `relay-server/src/models/status_engine.rs`
+
+`MasterIntent` (Web UI のトグル状態) と `ConnectionSnapshot` (Heartbeat が持つ接続状態 / `is_trade_allowed`) を `evaluate_master_status(intent, snapshot)` に渡す。Status Engine が `MasterStatusResult { status }` を返し、その値が `master_runtime_status` として DB/WebSocket に書き込まれる。
 
 ### Slaveのステータス判定
 
@@ -421,22 +429,9 @@ pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
 | Switch✅ かつ 自動売買✅ | **少なくとも1つのMasterが DISABLED** | `ENABLED (1)` | Slave準備完了だがMaster未接続 |
 | Switch✅ かつ 自動売買✅ | **すべてのMasterが CONNECTED** | `CONNECTED (2)` | コピー取引実行可能 |
 
-**実装** (`relay-server/src/models/status.rs`):
-```rust
-pub fn calculate_slave_status(input: &SlaveStatusInput) -> i32 {
-    // Slave自体が無効な場合
-    if !input.web_ui_enabled || !input.is_trade_allowed {
-        return STATUS_DISABLED;  // 0
-    }
-    
-    // Slave自体は有効だが、Masterの状態で判定
-    if input.master_status == STATUS_CONNECTED {
-        STATUS_CONNECTED  // 2
-    } else {
-        STATUS_ENABLED    // 1
-    }
-}
-```
+**実装の所在**: `relay-server/src/models/status_engine.rs`
+
+`SlaveIntent` と Slave の `ConnectionSnapshot` に加え、関連する Master の `runtime_status` を `MasterClusterSnapshot::new(vec![...])` に詰めて `evaluate_slave_status(intent, slave_conn, cluster)` を呼び出す。Cluster 内のすべてが `STATUS_CONNECTED` なら Slave も `CONNECTED`、それ以外は `ENABLED`。Status Engine は `allow_new_orders` を同時に算出し、Config Builder (`config_builder.rs`) 経由で EA に届ける。
 
 ### N:N接続のサポート
 

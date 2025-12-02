@@ -53,6 +53,7 @@ graph TB
 | [mt-bridge](./mt-bridge.md) | EA-サーバー通信DLL | Rust, ZeroMQ, MessagePack |
 | [mt-advisors](./mt-advisors.md) | MT4/MT5用EA | MQL4/MQL5 |
 | [web-ui](./web-ui.md) | 設定・監視UI | Next.js, React, TypeScript |
+| [API仕様](./api-specification.md) | REST / WebSocket エンドポイントとレスポンス定義 | HTTP |
 
 ## 詳細データフロー図（複数Master/Slave構成）
 

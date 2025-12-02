@@ -114,6 +114,7 @@ classDiagram
     class CopySettings {
         +number id
         +number status
+        +number runtime_status
         +string master_account
         +string slave_account
         +LotCalculationMode lot_calculation_mode
@@ -124,11 +125,13 @@ classDiagram
         +SyncMode sync_mode
         +number max_slippage
         +number max_retries
+        +boolean enabled_flag
     }
 
     class TradeGroup {
         +string id
         +MasterSettings master_settings
+        +number master_runtime_status
         +string created_at
         +string updated_at
     }
@@ -139,6 +142,8 @@ classDiagram
         +string slave_account
         +SlaveSettings slave_settings
         +number status
+        +number runtime_status
+        +boolean enabled_flag
     }
 
     class Site {
@@ -311,6 +316,18 @@ class ApiClient {
     toggleVLogs(enabled: boolean, logLevel?: string): Promise<void>;
 }
 ```
+
+### ステータスフィールド (runtime / intent)
+
+| フィールド | 役割 | 更新トリガー |
+|------------|------|--------------|
+| `enabled_flag` | ユーザーの意図。スイッチ操作で `true/false` を切り替える。 | Web UI の `POST /api/trade-groups/{master}/members/{slave}/toggle`、またはマスタートグル (`POST /api/trade-groups/{master}/toggle`) |
+| `runtime_status` | リレーサーバーの Status Engine が算出する実効ステータス。`0=Manual OFF / 1=Standby / 2=Streaming`。 | サーバー側で計算後、`member_*` WebSocket イベント → `GET /trade-groups` + `GET /trade-groups/{master}/members` の再取得 |
+| `master_runtime_status` | Master 単位の実効ステータス。Master ノードのバッジや React Flow ノード色分けに使用。 | Status Engine 更新後に `TradeGroup` レスポンスへ書き戻し |
+
+- Web UI はトグル操作で **intent (`enabled_flag`) のみ** を即時更新し、`runtime_status` は WebSocket 経由の再フェッチまで待機する。<br>
+- Master ノードの `master_settings.enabled` は最後に送信したトグルの意図を保持し、`master_runtime_status` が 2 (Streaming) になるまで待機表示を続ける。<br>
+- Slave ノードの `Intent` バッジと `Runtime` バッジを分離し、ユーザー操作と Status Engine 判定の差分を明示する。
 
 ### WebSocket
 
