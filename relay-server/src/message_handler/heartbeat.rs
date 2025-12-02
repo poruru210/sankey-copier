@@ -9,9 +9,12 @@
 
 use super::MessageHandler;
 use crate::models::{
-    status::{calculate_master_status, MasterStatusInput},
+    status_engine::{
+        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, SlaveIntent,
+    },
     HeartbeatMessage, SlaveConfigMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
-    STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
+    STATUS_CONNECTED, STATUS_DISABLED,
 };
 
 impl MessageHandler {
@@ -65,12 +68,17 @@ impl MessageHandler {
             // Get Master connection info
             let master_conn = self.connection_manager.get_ea(&account_id).await;
 
-            // Calculate Master status using centralized logic
-            let master_status = calculate_master_status(&MasterStatusInput {
-                web_ui_enabled: trade_group.master_settings.enabled,
-                connection_status: master_conn.as_ref().map(|c| c.status),
-                is_trade_allowed: new_is_trade_allowed,
-            });
+            // Calculate Master status using new status engine
+            let master_status = evaluate_master_status(
+                MasterIntent {
+                    web_ui_enabled: trade_group.master_settings.enabled,
+                },
+                ConnectionSnapshot {
+                    connection_status: master_conn.as_ref().map(|c| c.status),
+                    is_trade_allowed: new_is_trade_allowed,
+                },
+            )
+            .status;
 
             tracing::debug!(
                 "Master {} status calculated: {} (enabled={}, is_trade_allowed={})",
@@ -149,17 +157,15 @@ impl MessageHandler {
                                     }
                                 };
 
-                            // Check if ALL Masters are CONNECTED
-                            let mut all_masters_connected = true;
+                            // Evaluate status for all masters connected to this Slave
+                            let mut master_statuses = Vec::new();
                             for master_account in &all_masters {
-                                // Get Master's TradeGroup to check web_ui_enabled
                                 let master_enabled =
                                     match self.db.get_trade_group(master_account).await {
                                         Ok(Some(tg)) => tg.master_settings.enabled,
                                         Ok(None) => {
-                                            // Master not found, treat as disabled
-                                            all_masters_connected = false;
-                                            break;
+                                            master_statuses.push(STATUS_DISABLED);
+                                            continue;
                                         }
                                         Err(e) => {
                                             tracing::error!(
@@ -167,50 +173,51 @@ impl MessageHandler {
                                                 master_account,
                                                 e
                                             );
-                                            all_masters_connected = false;
-                                            break;
+                                            master_statuses.push(STATUS_DISABLED);
+                                            continue;
                                         }
                                     };
 
-                                // Get Master connection info
                                 let master_conn =
                                     self.connection_manager.get_ea(master_account).await;
-                                let master_is_trade_allowed = master_conn
-                                    .as_ref()
-                                    .map(|c| c.is_trade_allowed)
-                                    .unwrap_or(false);
-
-                                // Calculate Master status
-                                let master_status = calculate_master_status(&MasterStatusInput {
-                                    web_ui_enabled: master_enabled,
-                                    connection_status: master_conn.as_ref().map(|c| c.status),
-                                    is_trade_allowed: master_is_trade_allowed,
-                                });
-
-                                if master_status != STATUS_CONNECTED {
-                                    all_masters_connected = false;
-                                    break;
-                                }
+                                let master_status = evaluate_master_status(
+                                    MasterIntent {
+                                        web_ui_enabled: master_enabled,
+                                    },
+                                    ConnectionSnapshot {
+                                        connection_status: master_conn.as_ref().map(|c| c.status),
+                                        is_trade_allowed: master_conn
+                                            .as_ref()
+                                            .map(|c| c.is_trade_allowed)
+                                            .unwrap_or(false),
+                                    },
+                                )
+                                .status;
+                                master_statuses.push(master_status);
                             }
+                            let masters_snapshot = MasterClusterSnapshot::new(master_statuses);
 
-                            // Get Slave's is_trade_allowed
-                            let slave_is_trade_allowed = self
-                                .connection_manager
-                                .get_ea(&slave_account)
-                                .await
+                            // Get Slave connection snapshot
+                            let slave_conn = self.connection_manager.get_ea(&slave_account).await;
+                            let slave_is_trade_allowed = slave_conn
+                                .as_ref()
                                 .map(|conn| conn.is_trade_allowed)
                                 .unwrap_or(true); // Default to true if not connected
 
                             // Calculate Slave status
                             // Slave is enabled if member.status > 0 (was previously enabled in DB)
                             let slave_enabled = member.status > 0;
-                            let new_slave_status = if !slave_enabled || !slave_is_trade_allowed {
-                                STATUS_DISABLED
-                            } else if all_masters_connected {
-                                STATUS_CONNECTED
-                            } else {
-                                STATUS_ENABLED
-                            };
+                            let slave_result = evaluate_slave_status(
+                                SlaveIntent {
+                                    web_ui_enabled: slave_enabled,
+                                },
+                                ConnectionSnapshot {
+                                    connection_status: slave_conn.as_ref().map(|c| c.status),
+                                    is_trade_allowed: slave_is_trade_allowed,
+                                },
+                                masters_snapshot,
+                            );
+                            let new_slave_status = slave_result.status;
 
                             // Compare with previous status
                             // Always send config on new registration or trade_allowed_changed
@@ -296,8 +303,8 @@ impl MessageHandler {
                                 use_pending_order_for_delayed: member
                                     .slave_settings
                                     .use_pending_order_for_delayed,
-                                // Derived from status: allow new orders when enabled
-                                allow_new_orders: new_slave_status > 0,
+                                // Derived from status engine result
+                                allow_new_orders: slave_result.allow_new_orders,
                             };
 
                             if let Err(e) = self.publisher.send(&config).await {

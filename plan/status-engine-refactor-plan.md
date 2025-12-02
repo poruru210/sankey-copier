@@ -53,6 +53,7 @@
 
 2. **Status Engine 適用**
    - `heartbeat.rs` → 新API。
+   - ✅ `evaluate_*` への切替済み (2025-12-02)
    - `api/trade_group_members.rs`, `api/trade_groups.rs`, `message_handler/unregister.rs`, timeoutハンドラを順次差し替え。
    - 旧ロジックと新ロジックの差分ログを一時的に出力。
 

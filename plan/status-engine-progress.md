@@ -4,7 +4,7 @@
 |----------|----------|------|------|------|------|------|
 | P1 | 準備 | 影響範囲調査・ログ取得 | TBD |  | ☐ 未着手 | 
 | P2 | 準備 | `status_engine.rs` ひな形 + 単体テスト | TBD |  | ☑ 完了 (2025-12-02) | 基本API+テスト追加済み |
-| P3 | Phase1 | heartbeat を新 API に置換 | TBD |  | ☐ 未着手 | 
+| P3 | Phase1 | heartbeat を新 API に置換 | TBD |  | ☑ 完了 (2025-12-02) | evaluate_* に統一 |
 | P4 | Phase1 | API (`trade_group_members`, `trade_groups`) を新 API に置換 | TBD |  | ☐ 未着手 | 
 | P5 | Phase1 | unregister / timeout ハンドラ適用 | TBD |  | ☐ 未着手 | 
 | P6 | Phase2 | DB へ `enabled_flag` / `runtime_status` 追加 (マイグレーション) | TBD |  | ☐ 未着手 | 
