@@ -2,6 +2,7 @@ mod connection;
 mod global_settings;
 mod mt_installation;
 pub mod status;
+pub mod status_engine;
 mod trade_group;
 mod trade_group_member;
 

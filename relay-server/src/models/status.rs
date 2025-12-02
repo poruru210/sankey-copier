@@ -10,7 +10,16 @@
 // - -1 = NO_CONFIG (used for removal/reset)
 
 // Use status constants from trade_group_member.rs
-use super::{ConnectionStatus, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
+use super::{
+    status_engine::{
+        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, SlaveIntent,
+    },
+    ConnectionStatus,
+};
+
+#[cfg(test)]
+use super::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
 
 /// Input parameters for Master status calculation
 #[derive(Debug, Clone)]
@@ -48,28 +57,16 @@ pub struct SlaveStatusInput {
 /// 3. Auto-trade OFF -> DISABLED
 /// 4. All OK -> CONNECTED
 pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
-    // Priority 1: Web UI OFF
-    if !input.web_ui_enabled {
-        return STATUS_DISABLED;
-    }
-
-    // Priority 2: Not connected
-    match input.connection_status {
-        None | Some(super::ConnectionStatus::Timeout) | Some(super::ConnectionStatus::Offline) => {
-            return STATUS_DISABLED;
-        }
-        Some(super::ConnectionStatus::Online) => {
-            // Continue to next check
-        }
-    }
-
-    // Priority 3: Auto-trade OFF
-    if !input.is_trade_allowed {
-        return STATUS_DISABLED;
-    }
-
-    // All conditions met
-    STATUS_CONNECTED
+    evaluate_master_status(
+        MasterIntent {
+            web_ui_enabled: input.web_ui_enabled,
+        },
+        ConnectionSnapshot {
+            connection_status: input.connection_status,
+            is_trade_allowed: input.is_trade_allowed,
+        },
+    )
+    .status
 }
 
 /// Calculate effective status for Slave EA
@@ -86,33 +83,17 @@ pub fn calculate_master_status(input: &MasterStatusInput) -> i32 {
 /// 4. Master not CONNECTED -> ENABLED
 /// 5. All OK -> CONNECTED
 pub fn calculate_slave_status(input: &SlaveStatusInput) -> i32 {
-    // Priority 1: Own Web UI OFF
-    if !input.web_ui_enabled {
-        return STATUS_DISABLED;
-    }
-
-    // Priority 2: Own connection check
-    match input.connection_status {
-        None | Some(super::ConnectionStatus::Timeout) | Some(super::ConnectionStatus::Offline) => {
-            return STATUS_DISABLED;
-        }
-        Some(super::ConnectionStatus::Online) => {
-            // Continue to next check
-        }
-    }
-
-    // Priority 3: Own auto-trade OFF
-    if !input.is_trade_allowed {
-        return STATUS_DISABLED;
-    }
-
-    // Priority 4: Master status check
-    if input.master_status != STATUS_CONNECTED {
-        return STATUS_ENABLED;
-    }
-
-    // All conditions met
-    STATUS_CONNECTED
+    evaluate_slave_status(
+        SlaveIntent {
+            web_ui_enabled: input.web_ui_enabled,
+        },
+        ConnectionSnapshot {
+            connection_status: input.connection_status,
+            is_trade_allowed: input.is_trade_allowed,
+        },
+        MasterClusterSnapshot::new(vec![input.master_status]),
+    )
+    .status
 }
 
 #[cfg(test)]
