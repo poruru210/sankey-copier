@@ -5,6 +5,7 @@
 // For Master (source) nodes: shows Master settings button
 // For Slave (receiver) nodes: shows connection settings button
 
+import type { ReactNode } from 'react';
 import { ChevronDown, Settings } from 'lucide-react';
 import { useIntlayer } from 'next-intlayer';
 import { Switch } from '@/components/ui/switch';
@@ -68,7 +69,7 @@ export function AccountNodeHeader({
 
   const renderStatusBadges = () => {
     const runtimeStatus = account.runtimeStatus ?? account.masterRuntimeStatus;
-    const badges: JSX.Element[] = [];
+    const badges: ReactNode[] = [];
 
     if (runtimeStatus !== undefined) {
       const runtimeLabels: Record<number, string> = {

@@ -1,10 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+type SwitchLabelProps = React.LabelHTMLAttributes<HTMLLabelElement> &
+  Record<string, string | number | boolean | undefined>;
+
 export interface SwitchProps extends React.InputHTMLAttributes<HTMLInputElement> {
   onCheckedChange?: (checked: boolean) => void;
   ref?: React.Ref<HTMLInputElement>;
-  labelProps?: React.LabelHTMLAttributes<HTMLLabelElement>;
+  labelProps?: SwitchLabelProps;
 }
 
 function Switch({ className, onCheckedChange, onChange, ref, labelProps, ...props }: SwitchProps) {
