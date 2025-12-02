@@ -213,30 +213,42 @@ impl MessageHandler {
                             };
 
                             // Compare with previous status
-                            // Always send config on new registration, otherwise only when status changed
+                            // Always send config on new registration or trade_allowed_changed
+                            // When Master's is_trade_allowed changes, we must notify Slave even if Slave's status doesn't change
+                            // (e.g., Slave stays ENABLED when Master goes from CONNECTED to DISABLED)
                             let old_slave_status = member.status;
-                            if !is_new_registration && new_slave_status == old_slave_status {
-                                // Status unchanged and not a new registration, skip sending config
+                            if !is_new_registration
+                                && !trade_allowed_changed
+                                && new_slave_status == old_slave_status
+                            {
+                                // Status unchanged, no trade_allowed change, and not a new registration - skip sending config
                                 tracing::debug!(
-                                    "Slave {} status unchanged ({}), skipping config send",
+                                    "Slave {} status unchanged ({}) and no Master trade_allowed change, skipping config send",
                                     slave_account,
                                     new_slave_status
                                 );
                                 continue;
                             }
 
-                            // Status changed or new registration, send SlaveConfigMessage
+                            // Status changed, trade_allowed changed, or new registration - send SlaveConfigMessage
                             if is_new_registration {
                                 tracing::info!(
                                     "Slave {} new registration, sending initial config (status: {})",
                                     slave_account,
                                     new_slave_status
                                 );
-                            } else {
+                            } else if old_slave_status != new_slave_status {
                                 tracing::info!(
                                     "Slave {} status changed: {} -> {} (Master {} heartbeat)",
                                     slave_account,
                                     old_slave_status,
+                                    new_slave_status,
+                                    account_id
+                                );
+                            } else {
+                                tracing::info!(
+                                    "Slave {} status unchanged ({}) but notifying due to Master {} trade_allowed change",
+                                    slave_account,
                                     new_slave_status,
                                     account_id
                                 );
