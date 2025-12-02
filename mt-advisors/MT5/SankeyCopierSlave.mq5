@@ -582,17 +582,15 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
    bool allow_new_orders = g_configs[config_index].allow_new_orders;
 
-   // Check if connected to Master for Open signals only
-   // Close/Modify signals are allowed even when disconnected (to close existing positions)
-   if(action == "Open" && g_configs[config_index].status != STATUS_CONNECTED)
+   if(action == "Open")
    {
-      Print("Open signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
-      trade_signal_free(handle);
-      return;
-   }
+      if(!allow_new_orders)
+      {
+         Print("Open signal rejected: allow_new_orders=false (status=", g_configs[config_index].status, ") for master #", master_ticket);
+         trade_signal_free(handle);
+         return;
+      }
 
-   if(action == "Open" && allow_new_orders)
-   {
       // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
       // We process all signals received here
 

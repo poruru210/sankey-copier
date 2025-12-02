@@ -61,9 +61,6 @@ graph TB
 
 ```
 relay-server/
-├── src/
-│   ├── main.rs                    # エントリポイント
-│   ├── lib.rs                     # ライブラリ公開インターフェース
 │   ├── config.rs                  # TOML設定管理
 │   ├── cert.rs                    # TLS証明書管理
 │   ├── api/                       # REST APIエンドポイント
@@ -287,6 +284,12 @@ impl ConfigMessage for SlaveConfigMessage {
 }
 ```
 
+
+## Config Builder
+
+- `relay-server/src/config_builder.rs` が `MasterConfigMessage`/`SlaveConfigMessage` の生成を一手に引き受け、Heartbeat・REST API・config_request・unregister のすべての経路で同じステータス計算ロジックを再利用しています。
+- `status_engine.rs` から返される `MasterStatusResult`/`SlaveStatusResult` をビルダーが受け取り、Slave 設定メッセージの `allow_new_orders` は `runtime_status == CONNECTED` のときだけ `true` になるようにしています。
+- API やハンドラはビルダーのステータス結果をデータベースの `runtime_status` に書き戻し、Web UI は `enabled_flag`（ユーザー意図）と `runtime_status`（サーバ側判定）の 2 層情報で表示しつつ、EA には `allow_new_orders` をそのまま渡せるようになりました。
 
 
 ## 処理フロー
@@ -582,6 +585,12 @@ Settings画面のZeroMQ設定セクションで、現在使用中のポートと
 
 MTインストール時に `sankey_copier.ini` が生成され、EAはこのファイルからポート設定を読み込みます。
 ポート変更時はEAの再インストールが必要です（Web-UI Installationsページから実行）。
+
+## Phase4: MT EA のステータス同期 (P9)
+
+- Relay Server の Status Engine は `runtime_status`/`allow_new_orders` を `ConfigBuilder` 経由で統一しているため、MT4/MT5 側はこの値をそのまま表示・実行条件として扱うべきです。
+- 詳細な作業手順・テスト計画は `plan/p9-mt-advisor-plan.md` を参照してください。現フェーズでは `allow_new_orders` が `CONNECTED` 時のみ `true` となり、`status` は Web UI に合わせた状態表示用として維持されています。
+- MT EA では `ProcessConfigMessage` で受信した `CopyConfig.status`/`allow_new_orders` を `GridPanel` に反映しつつ、`Open` シグナルは `allow_new_orders` を起点に、`Close`/`Modify` は常に許可する動作でサーバ側判定と整合させます。
 
 ## 関連コンポーネント
 

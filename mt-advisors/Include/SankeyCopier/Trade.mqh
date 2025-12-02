@@ -24,11 +24,11 @@
 //+------------------------------------------------------------------+
 bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 {
-   // Check if copying is enabled and connected
-   // STATUS_CONNECTED (2) means both Slave is enabled AND Master is connected
-   if(config.status != STATUS_CONNECTED)
+   // Check if the server explicitly allows new trades (runtime_status + auto-trade)
+   if(!config.allow_new_orders)
    {
-      LogDebug(CAT_TRADE, StringFormat("Trade filtering: Status is %d (need STATUS_CONNECTED=2)", config.status));
+      LogDebug(CAT_TRADE, StringFormat("Trade filtering: allow_new_orders=%d runtime_status=%d",
+            config.allow_new_orders ? 1 : 0, config.status));
       return false;
    }
 

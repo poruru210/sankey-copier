@@ -13,16 +13,15 @@
 bool g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
 
 //--- Include common headers
-//--- Include common headers
-#include <SankeyCopier/Common.mqh>
-#include <SankeyCopier/Zmq.mqh>
-#include <SankeyCopier/Mapping.mqh>
-#include <SankeyCopier/GridPanel.mqh>
-#include <SankeyCopier/Messages.mqh>
-#include <SankeyCopier/Trade.mqh>
-#include <SankeyCopier/SlaveTrade.mqh>
-#include <SankeyCopier/MessageParsing.mqh>
-#include <SankeyCopier/Logging.mqh>
+#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/Zmq.mqh"
+#include "../Include/SankeyCopier/Mapping.mqh"
+#include "../Include/SankeyCopier/GridPanel.mqh"
+#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveTrade.mqh"
+#include "../Include/SankeyCopier/MessageParsing.mqh"
+#include "../Include/SankeyCopier/Logging.mqh"
 
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
@@ -542,35 +541,30 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
    bool allow_new_orders = g_configs[config_index].allow_new_orders;
 
-   // Check if connected to Master for Open signals only
-   // Close/Modify signals are allowed even when disconnected (to close existing positions)
-   if(action == "Open" && g_configs[config_index].status != STATUS_CONNECTED)
-   {
-      Print("Open signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
-      trade_signal_free(handle);
-      return;
-   }
-
    if(action == "Open")
    {
-      if(allow_new_orders)
+      if(!allow_new_orders)
       {
-         // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
-         // We process all signals received here
-
-         // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
-         string transformed_symbol = symbol;
-
-         // Transform lot size (supports multiplier and margin_ratio modes)
-         double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
-         string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
-
-         // Open order with transformed values (pass config settings)
-         ExecuteOpenTrade(g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
-                          transformed_order_type, transformed_lots, open_price, stop_loss, take_profit,
-                          timestamp, source_account, magic, trade_slippage,
-                          max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
+         Print("Open signal rejected: allow_new_orders=false (status=", g_configs[config_index].status, ") for master #", master_ticket);
+         trade_signal_free(handle);
+         return;
       }
+
+      // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
+      // We process all signals received here
+
+      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+      string transformed_symbol = symbol;
+
+      // Transform lot size (supports multiplier and margin_ratio modes)
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
+      string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
+
+      // Open order with transformed values (pass config settings)
+      ExecuteOpenTrade(g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
+                       transformed_order_type, transformed_lots, open_price, stop_loss, take_profit,
+                       timestamp, source_account, magic, trade_slippage,
+                       max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
    else if(action == "Close")
    {
