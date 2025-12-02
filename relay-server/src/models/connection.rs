@@ -85,13 +85,9 @@ pub enum ConnectionStatus {
     Timeout,
 }
 
-// Re-export SlaveConfigMessage from DLL
-pub use sankey_copier_zmq::SlaveConfigMessage;
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use sankey_copier_zmq::TradeFilters;
+    use sankey_copier_zmq::{LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters};
 
     #[test]
     fn test_config_message_serialization() {
@@ -101,7 +97,7 @@ mod tests {
             timestamp: "2023-01-01T00:00:00Z".to_string(),
             trade_group_id: "MASTER_001".to_string(),
             status: 2, // STATUS_CONNECTED
-            lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
+            lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
             symbol_mappings: vec![],
@@ -118,7 +114,7 @@ mod tests {
             source_lot_max: None,
             master_equity: None,
             // Open Sync Policy defaults
-            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            sync_mode: SyncMode::default(),
             limit_order_expiry_min: None,
             market_sync_max_pips: None,
             max_slippage: None,

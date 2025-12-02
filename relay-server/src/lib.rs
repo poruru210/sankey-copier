@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod config;
+pub mod config_builder;
 pub mod connection_manager;
 pub mod db;
 pub mod engine;

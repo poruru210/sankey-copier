@@ -11,12 +11,10 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
+use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
 use crate::models::{
-    status_engine::{
-        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
-        MasterIntent, SlaveIntent,
-    },
-    SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG,
+    status_engine::{ConnectionSnapshot, MasterClusterSnapshot, MasterIntent, SlaveIntent},
+    MasterSettings, SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG,
 };
 
 use super::{AppState, ProblemDetails};
@@ -634,18 +632,36 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
             .unwrap_or(false),
     };
 
-    // Resolve Master's intent (Web UI toggle)
-    let master_web_ui_enabled = match state.db.get_trade_group(master_account).await {
-        Ok(Some(tg)) => tg.master_settings.enabled,
-        _ => true, // Fallback
+    let master_settings = match state.db.get_trade_group(master_account).await {
+        Ok(Some(tg)) => tg.master_settings,
+        Ok(None) => {
+            tracing::warn!(
+                master_account = %master_account,
+                "TradeGroup missing when building config, using defaults"
+            );
+            MasterSettings::default()
+        }
+        Err(e) => {
+            tracing::error!(
+                master_account = %master_account,
+                error = %e,
+                "Failed to load TradeGroup settings, using defaults"
+            );
+            MasterSettings::default()
+        }
     };
 
-    let master_result = evaluate_master_status(
-        MasterIntent {
-            web_ui_enabled: master_web_ui_enabled,
+    let master_context = MasterConfigContext {
+        account_id: master_account.to_string(),
+        intent: MasterIntent {
+            web_ui_enabled: master_settings.enabled,
         },
-        master_snapshot,
-    );
+        connection_snapshot: master_snapshot,
+        settings: &master_settings,
+        timestamp: chrono::Utc::now(),
+    };
+
+    let master_bundle = ConfigBuilder::build_master_config(master_context);
 
     // Fetch Slave connection snapshot and evaluate via engine
     let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
@@ -657,44 +673,23 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
             .unwrap_or(false),
     };
 
-    let slave_result = evaluate_slave_status(
-        SlaveIntent {
-            web_ui_enabled: member.enabled_flag,
-        },
-        slave_snapshot,
-        MasterClusterSnapshot::new(vec![master_result.status]),
-    );
-
-    let config = SlaveConfigMessage {
-        account_id: member.slave_account.clone(),
+    let slave_context = SlaveConfigContext {
+        slave_account: member.slave_account.clone(),
         master_account: master_account.to_string(),
         trade_group_id: master_account.to_string(),
-        status: slave_result.status,
-        lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
-        lot_multiplier: member.slave_settings.lot_multiplier,
-        reverse_trade: member.slave_settings.reverse_trade,
-        symbol_prefix: member.slave_settings.symbol_prefix.clone(),
-        symbol_suffix: member.slave_settings.symbol_suffix.clone(),
-        symbol_mappings: member.slave_settings.symbol_mappings.clone(),
-        filters: member.slave_settings.filters.clone(),
-        config_version: member.slave_settings.config_version,
-        source_lot_min: member.slave_settings.source_lot_min,
-        source_lot_max: member.slave_settings.source_lot_max,
+        intent: SlaveIntent {
+            web_ui_enabled: member.enabled_flag,
+        },
+        slave_connection_snapshot: slave_snapshot,
+        master_cluster: MasterClusterSnapshot::new(vec![master_bundle.status_result.status]),
+        slave_settings: &member.slave_settings,
         master_equity,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        // Open Sync Policy settings
-        sync_mode: member.slave_settings.sync_mode.clone().into(),
-        limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
-        market_sync_max_pips: member.slave_settings.market_sync_max_pips,
-        max_slippage: member.slave_settings.max_slippage,
-        copy_pending_orders: member.slave_settings.copy_pending_orders,
-        // Trade Execution settings
-        max_retries: member.slave_settings.max_retries,
-        max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
-        use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
-        // Derived from status engine for consistent behavior
-        allow_new_orders: slave_result.allow_new_orders,
+        timestamp: chrono::Utc::now(),
     };
+
+    let slave_bundle = ConfigBuilder::build_slave_config(slave_context);
+    let slave_status = slave_bundle.status_result.status;
+    let config = slave_bundle.config;
 
     if let Err(e) = state.config_sender.send(&config).await {
         tracing::error!(
@@ -715,13 +710,13 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
 
     if let Err(e) = state
         .db
-        .update_member_runtime_status(master_account, &member.slave_account, slave_result.status)
+        .update_member_runtime_status(master_account, &member.slave_account, slave_status)
         .await
     {
         tracing::error!(
             slave_account = %member.slave_account,
             master_account = %master_account,
-            status = slave_result.status,
+            status = slave_status,
             error = %e,
             "Failed to persist Slave runtime status"
         );

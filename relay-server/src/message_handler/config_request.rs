@@ -4,14 +4,14 @@
 //! appropriate handlers based on EA type.
 
 use super::MessageHandler;
+use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
 use crate::models::{
     status_engine::{
-        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
-        MasterIntent, SlaveIntent,
+        evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
+        SlaveIntent,
     },
-    RequestConfigMessage, SlaveConfigMessage,
+    RequestConfigMessage,
 };
-use sankey_copier_zmq::MasterConfigMessage;
 
 impl MessageHandler {
     /// Handle configuration request from Master or Slave EA
@@ -52,23 +52,17 @@ impl MessageHandler {
                         .unwrap_or(true),
                 };
 
-                // Calculate status using centralized engine
-                let status = evaluate_master_status(
-                    MasterIntent {
+                let bundle = ConfigBuilder::build_master_config(MasterConfigContext {
+                    account_id: account_id.to_string(),
+                    intent: MasterIntent {
                         web_ui_enabled: master_settings.enabled,
                     },
-                    master_snapshot,
-                )
-                .status;
-
-                let config = MasterConfigMessage {
-                    account_id: account_id.to_string(),
-                    status,
-                    symbol_prefix: master_settings.symbol_prefix,
-                    symbol_suffix: master_settings.symbol_suffix,
-                    config_version: master_settings.config_version,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                };
+                    connection_snapshot: master_snapshot,
+                    settings: &master_settings,
+                    timestamp: chrono::Utc::now(),
+                });
+                let status = bundle.status_result.status;
+                let config = bundle.config;
 
                 // Send Master CONFIG via MessagePack
                 if let Err(e) = self.publisher.send(&config).await {
@@ -148,65 +142,31 @@ impl MessageHandler {
                     );
 
                     let slave_conn = self.connection_manager.get_ea(account_id).await;
-                    let slave_snapshot = ConnectionSnapshot {
-                        connection_status: slave_conn.as_ref().map(|c| c.status),
-                        is_trade_allowed: slave_conn
-                            .as_ref()
-                            .map(|c| c.is_trade_allowed)
-                            .unwrap_or(false),
-                    };
-                    let slave_result = evaluate_slave_status(
-                        SlaveIntent {
+                    let slave_bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
+                        slave_account: settings.slave_account.clone(),
+                        master_account: settings.master_account.clone(),
+                        trade_group_id: settings.master_account.clone(),
+                        intent: SlaveIntent {
                             web_ui_enabled: settings.enabled_flag,
                         },
-                        slave_snapshot,
-                        MasterClusterSnapshot::new(vec![master_result.status]),
-                    );
-
-                    // Fetch Master's equity for margin_ratio mode
-                    let master_equity = self
-                        .connection_manager
-                        .get_ea(&settings.master_account)
-                        .await
-                        .map(|conn| conn.equity);
-
-                    // Build SlaveConfigMessage with calculated effective status
-                    let config = SlaveConfigMessage {
-                        account_id: settings.slave_account.clone(),
-                        master_account: settings.master_account.clone(),
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                        trade_group_id: settings.master_account.clone(),
-                        status: slave_result.status,
-                        lot_calculation_mode: settings
-                            .slave_settings
-                            .lot_calculation_mode
-                            .clone()
-                            .into(),
-                        lot_multiplier: settings.slave_settings.lot_multiplier,
-                        reverse_trade: settings.slave_settings.reverse_trade,
-                        symbol_mappings: settings.slave_settings.symbol_mappings.clone(),
-                        filters: settings.slave_settings.filters.clone(),
-                        config_version: settings.slave_settings.config_version,
-                        symbol_prefix: settings.slave_settings.symbol_prefix.clone(),
-                        symbol_suffix: settings.slave_settings.symbol_suffix.clone(),
-                        source_lot_min: settings.slave_settings.source_lot_min,
-                        source_lot_max: settings.slave_settings.source_lot_max,
-                        master_equity,
-                        // Open Sync Policy settings
-                        sync_mode: settings.slave_settings.sync_mode.clone().into(),
-                        limit_order_expiry_min: settings.slave_settings.limit_order_expiry_min,
-                        market_sync_max_pips: settings.slave_settings.market_sync_max_pips,
-                        max_slippage: settings.slave_settings.max_slippage,
-                        copy_pending_orders: settings.slave_settings.copy_pending_orders,
-                        // Trade Execution settings
-                        max_retries: settings.slave_settings.max_retries,
-                        max_signal_delay_ms: settings.slave_settings.max_signal_delay_ms,
-                        use_pending_order_for_delayed: settings
-                            .slave_settings
-                            .use_pending_order_for_delayed,
-                        // Derived from status engine for consistent behavior
-                        allow_new_orders: slave_result.allow_new_orders,
-                    };
+                        slave_connection_snapshot: ConnectionSnapshot {
+                            connection_status: slave_conn.as_ref().map(|c| c.status),
+                            is_trade_allowed: slave_conn
+                                .as_ref()
+                                .map(|c| c.is_trade_allowed)
+                                .unwrap_or(false),
+                        },
+                        master_cluster: MasterClusterSnapshot::new(vec![master_result.status]),
+                        slave_settings: &settings.slave_settings,
+                        master_equity: self
+                            .connection_manager
+                            .get_ea(&settings.master_account)
+                            .await
+                            .map(|conn| conn.equity),
+                        timestamp: chrono::Utc::now(),
+                    });
+                    let config = slave_bundle.config;
+                    let new_status = slave_bundle.status_result.status;
 
                     // Send CONFIG via MessagePack
                     if let Err(e) = self.publisher.send(&config).await {
@@ -216,7 +176,7 @@ impl MessageHandler {
                             "Successfully sent CONFIG to: {} (db_status: {}, effective_status: {})",
                             account_id,
                             settings.status,
-                            slave_result.status
+                            new_status
                         );
                     }
                 }

@@ -1,6 +1,7 @@
 mod api;
 mod cert;
 mod config;
+mod config_builder;
 mod connection_manager;
 mod db;
 mod engine;

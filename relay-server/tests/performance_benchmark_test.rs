@@ -1,4 +1,5 @@
-use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
+use sankey_copier_relay_server::models::{SymbolMapping, TradeFilters};
+use sankey_copier_zmq::SlaveConfigMessage;
 use sankey_copier_zmq::{LotCalculationMode, SyncMode};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension

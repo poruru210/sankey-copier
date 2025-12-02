@@ -60,11 +60,10 @@ pub fn evaluate_master_status(
     intent: MasterIntent,
     conn: ConnectionSnapshot,
 ) -> MasterStatusResult {
-    let status = if !intent.web_ui_enabled {
-        STATUS_DISABLED
-    } else if !is_connection_online(conn.connection_status) {
-        STATUS_DISABLED
-    } else if !conn.is_trade_allowed {
+    let status = if !intent.web_ui_enabled
+        || !is_connection_online(conn.connection_status)
+        || !conn.is_trade_allowed
+    {
         STATUS_DISABLED
     } else {
         STATUS_CONNECTED
@@ -78,11 +77,10 @@ pub fn evaluate_slave_status(
     slave_conn: ConnectionSnapshot,
     mastered: MasterClusterSnapshot,
 ) -> SlaveStatusResult {
-    let status = if !intent.web_ui_enabled {
-        STATUS_DISABLED
-    } else if !is_connection_online(slave_conn.connection_status) {
-        STATUS_DISABLED
-    } else if !slave_conn.is_trade_allowed {
+    let status = if !intent.web_ui_enabled
+        || !is_connection_online(slave_conn.connection_status)
+        || !slave_conn.is_trade_allowed
+    {
         STATUS_DISABLED
     } else if mastered.all_connected() {
         STATUS_CONNECTED
@@ -176,6 +174,52 @@ mod tests {
             MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_ENABLED]),
         );
         assert_eq!(result.status, STATUS_ENABLED);
+        assert!(!result.allow_new_orders);
+    }
+
+    #[test]
+    fn master_cluster_requires_non_empty_for_all_connected() {
+        let empty_cluster = MasterClusterSnapshot::default();
+        assert!(!empty_cluster.all_connected());
+
+        let mixed_cluster = MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_ENABLED]);
+        assert!(!mixed_cluster.all_connected());
+
+        let healthy_cluster = MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_CONNECTED]);
+        assert!(healthy_cluster.all_connected());
+    }
+
+    #[test]
+    fn slave_enabled_when_no_master_connection_yet() {
+        let result = evaluate_slave_status(
+            SlaveIntent {
+                web_ui_enabled: true,
+            },
+            ConnectionSnapshot {
+                connection_status: Some(ConnectionStatus::Online),
+                is_trade_allowed: true,
+            },
+            MasterClusterSnapshot::default(),
+        );
+
+        assert_eq!(result.status, STATUS_ENABLED);
+        assert!(!result.allow_new_orders);
+    }
+
+    #[test]
+    fn slave_disabled_when_connection_offline() {
+        let result = evaluate_slave_status(
+            SlaveIntent {
+                web_ui_enabled: true,
+            },
+            ConnectionSnapshot {
+                connection_status: Some(ConnectionStatus::Offline),
+                is_trade_allowed: true,
+            },
+            MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_CONNECTED]),
+        );
+
+        assert_eq!(result.status, STATUS_DISABLED);
         assert!(!result.allow_new_orders);
     }
 }

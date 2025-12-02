@@ -8,15 +8,15 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sankey_copier_zmq::MasterConfigMessage;
 use serde::Serialize;
 
+use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
 use crate::models::{
     status_engine::{
-        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
-        MasterIntent, SlaveIntent,
+        evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
+        SlaveIntent,
     },
-    MasterSettings, SlaveConfigMessage, TradeGroup,
+    MasterSettings, TradeGroup,
 };
 
 use super::{AppState, ProblemDetails};
@@ -367,23 +367,17 @@ async fn send_config_to_master(state: &AppState, master_account: &str, settings:
     };
     let is_trade_allowed = master_snapshot.is_trade_allowed;
 
-    // Calculate status using centralized status engine (shared with heartbeat handler)
-    let status = evaluate_master_status(
-        MasterIntent {
+    let bundle = ConfigBuilder::build_master_config(MasterConfigContext {
+        account_id: master_account.to_string(),
+        intent: MasterIntent {
             web_ui_enabled: settings.enabled,
         },
-        master_snapshot,
-    )
-    .status;
-
-    let config = MasterConfigMessage {
-        account_id: master_account.to_string(),
-        status,
-        symbol_prefix: settings.symbol_prefix.clone(),
-        symbol_suffix: settings.symbol_suffix.clone(),
-        config_version: settings.config_version,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    };
+        connection_snapshot: master_snapshot,
+        settings,
+        timestamp: chrono::Utc::now(),
+    });
+    let status = bundle.status_result.status;
+    let config = bundle.config;
 
     if let Err(e) = state.config_sender.send(&config).await {
         tracing::error!(
@@ -457,42 +451,21 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
                 .unwrap_or(true),
         };
 
-        // Calculate Slave status (web_ui_enabled stored as member.enabled_flag)
-        let slave_result = evaluate_slave_status(
-            SlaveIntent {
+        let bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
+            slave_account: member.slave_account.clone(),
+            master_account: master_account.to_string(),
+            trade_group_id: master_account.to_string(),
+            intent: SlaveIntent {
                 web_ui_enabled: member.enabled_flag,
             },
-            slave_snapshot,
-            master_cluster.clone(),
-        );
-
-        let config = SlaveConfigMessage {
-            account_id: member.slave_account.clone(),
-            master_account: master_account.to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            trade_group_id: master_account.to_string(),
-            status: slave_result.status,
-            lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
-            lot_multiplier: member.slave_settings.lot_multiplier,
-            reverse_trade: member.slave_settings.reverse_trade,
-            symbol_mappings: member.slave_settings.symbol_mappings.clone(),
-            filters: member.slave_settings.filters.clone(),
-            config_version: member.slave_settings.config_version,
-            symbol_prefix: member.slave_settings.symbol_prefix.clone(),
-            symbol_suffix: member.slave_settings.symbol_suffix.clone(),
-            source_lot_min: member.slave_settings.source_lot_min,
-            source_lot_max: member.slave_settings.source_lot_max,
+            slave_connection_snapshot: slave_snapshot,
+            master_cluster: master_cluster.clone(),
+            slave_settings: &member.slave_settings,
             master_equity,
-            sync_mode: member.slave_settings.sync_mode.clone().into(),
-            limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
-            market_sync_max_pips: member.slave_settings.market_sync_max_pips,
-            max_slippage: member.slave_settings.max_slippage,
-            copy_pending_orders: member.slave_settings.copy_pending_orders,
-            max_retries: member.slave_settings.max_retries,
-            max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
-            use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
-            allow_new_orders: slave_result.allow_new_orders,
-        };
+            timestamp: chrono::Utc::now(),
+        });
+        let config = bundle.config;
+        let new_status = bundle.status_result.status;
 
         if let Err(e) = state.config_sender.send(&config).await {
             tracing::error!(
@@ -505,24 +478,20 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
             tracing::info!(
                 slave_account = %member.slave_account,
                 master_account = %master_account,
-                status = slave_result.status,
+                status = new_status,
                 "Sent SlaveConfigMessage due to Master switch change"
             );
         }
 
         if let Err(e) = state
             .db
-            .update_member_runtime_status(
-                master_account,
-                &member.slave_account,
-                slave_result.status,
-            )
+            .update_member_runtime_status(master_account, &member.slave_account, new_status)
             .await
         {
             tracing::error!(
                 slave_account = %member.slave_account,
                 master_account = %master_account,
-                status = slave_result.status,
+                status = new_status,
                 error = %e,
                 "Failed to persist Slave runtime status after master toggle"
             );

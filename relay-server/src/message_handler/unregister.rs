@@ -4,15 +4,16 @@
 //! When a Master EA disconnects, notifies all Slaves so they can update their status.
 
 use super::MessageHandler;
+use crate::config_builder::{ConfigBuilder, SlaveConfigContext};
 use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     models::{
         status_engine::{
-            evaluate_master_status, evaluate_slave_status, ConnectionSnapshot,
-            MasterClusterSnapshot, MasterIntent, SlaveIntent,
+            evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
+            SlaveIntent,
         },
-        EaType, SlaveConfigMessage, SlaveConfigWithMaster, UnregisterMessage,
+        EaType, SlaveConfigWithMaster, UnregisterMessage,
     },
     zeromq::ZmqConfigPublisher,
 };
@@ -117,43 +118,21 @@ pub(crate) async fn notify_slaves_master_offline(
                         .unwrap_or(false),
                 };
 
-                let slave_result = evaluate_slave_status(
-                    SlaveIntent {
+                let slave_bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
+                    slave_account: member.slave_account.clone(),
+                    master_account: master_account.to_string(),
+                    trade_group_id: master_account.to_string(),
+                    intent: SlaveIntent {
                         web_ui_enabled: member.enabled_flag,
                     },
-                    slave_snapshot,
-                    master_cluster.clone(),
-                );
-
-                let config = SlaveConfigMessage {
-                    account_id: member.slave_account.clone(),
-                    master_account: master_account.to_string(),
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                    trade_group_id: master_account.to_string(),
-                    status: slave_result.status,
-                    lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
-                    lot_multiplier: member.slave_settings.lot_multiplier,
-                    reverse_trade: member.slave_settings.reverse_trade,
-                    symbol_mappings: member.slave_settings.symbol_mappings.clone(),
-                    filters: member.slave_settings.filters.clone(),
-                    config_version: member.slave_settings.config_version,
-                    symbol_prefix: member.slave_settings.symbol_prefix.clone(),
-                    symbol_suffix: member.slave_settings.symbol_suffix.clone(),
-                    source_lot_min: member.slave_settings.source_lot_min,
-                    source_lot_max: member.slave_settings.source_lot_max,
+                    slave_connection_snapshot: slave_snapshot,
+                    master_cluster: master_cluster.clone(),
+                    slave_settings: &member.slave_settings,
                     master_equity: None,
-                    sync_mode: member.slave_settings.sync_mode.clone().into(),
-                    limit_order_expiry_min: member.slave_settings.limit_order_expiry_min,
-                    market_sync_max_pips: member.slave_settings.market_sync_max_pips,
-                    max_slippage: member.slave_settings.max_slippage,
-                    copy_pending_orders: member.slave_settings.copy_pending_orders,
-                    max_retries: member.slave_settings.max_retries,
-                    max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
-                    use_pending_order_for_delayed: member
-                        .slave_settings
-                        .use_pending_order_for_delayed,
-                    allow_new_orders: slave_result.allow_new_orders,
-                };
+                    timestamp: chrono::Utc::now(),
+                });
+                let config = slave_bundle.config;
+                let new_status = slave_bundle.status_result.status;
 
                 if let Err(e) = publisher.send(&config).await {
                     tracing::error!(
@@ -165,7 +144,7 @@ pub(crate) async fn notify_slaves_master_offline(
                     tracing::info!(
                         "Notified {} (status: {}) of Master {} disconnect",
                         member.slave_account,
-                        slave_result.status,
+                        new_status,
                         master_account
                     );
                 }
@@ -173,8 +152,8 @@ pub(crate) async fn notify_slaves_master_offline(
                 let settings_with_master = SlaveConfigWithMaster {
                     master_account: master_account.to_string(),
                     slave_account: member.slave_account.clone(),
-                    status: slave_result.status,
-                    runtime_status: slave_result.status,
+                    status: new_status,
+                    runtime_status: new_status,
                     enabled_flag: member.enabled_flag,
                     slave_settings: member.slave_settings.clone(),
                 };
