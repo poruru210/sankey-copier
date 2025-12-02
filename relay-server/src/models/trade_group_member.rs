@@ -31,8 +31,16 @@ pub struct TradeGroupMember {
     /// Slave-specific settings (stored as JSON in DB)
     pub slave_settings: SlaveSettings,
 
-    /// Connection status: 0=DISABLED, 1=ENABLED, 2=CONNECTED
+    /// Legacy connection status field kept for backward compatibility (mirrors runtime_status)
     pub status: i32,
+
+    /// Runtime status calculated by the status engine: 0=DISABLED, 1=ENABLED, 2=CONNECTED
+    #[serde(default)]
+    pub runtime_status: i32,
+
+    /// User intent flag (true when the Web UI toggle is ON)
+    #[serde(default)]
+    pub enabled_flag: bool,
 
     /// Timestamp when the member was created
     pub created_at: String,
@@ -181,6 +189,8 @@ impl TradeGroupMember {
             slave_account,
             slave_settings: SlaveSettings::default(),
             status: STATUS_DISABLED,
+            runtime_status: STATUS_DISABLED,
+            enabled_flag: false,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
@@ -192,9 +202,9 @@ impl TradeGroupMember {
         self.updated_at = chrono::Utc::now().to_rfc3339();
     }
 
-    /// Check if the member is enabled (status > 0)
+    /// Check if the member is enabled (reflects user intent flag)
     pub fn is_enabled(&self) -> bool {
-        self.status > STATUS_DISABLED
+        self.enabled_flag
     }
 
     /// Check if the member is connected (status == 2)
@@ -236,10 +246,10 @@ mod tests {
         let mut member =
             TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
 
-        member.status = STATUS_DISABLED;
+        member.enabled_flag = false;
         assert!(!member.is_enabled());
 
-        member.status = STATUS_ENABLED;
+        member.enabled_flag = true;
         assert!(member.is_enabled());
 
         member.status = STATUS_CONNECTED;

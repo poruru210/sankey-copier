@@ -656,12 +656,20 @@ async fn test_slave_config_distribution() {
     let slave_account = "SLAVE_E2E_001";
 
     // Create TradeGroup (Master)
-    server
+    let trade_group = server
         .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
 
+    // Enable the master so status engine can evaluate CONNECTED
+    let mut master_settings = trade_group.master_settings.clone();
+    master_settings.enabled = true;
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to enable master");
     // Add Slave member to TradeGroup with default settings
     server
         .db
@@ -741,11 +749,20 @@ async fn test_master_slave_config_distribution() {
     let slave_account = "SLAVE_E2E_002";
 
     // Create TradeGroup (Master)
-    server
+    let trade_group = server
         .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
+
+    // Enable the master so the status engine can compute CONNECTED
+    let mut master_settings = trade_group.master_settings.clone();
+    master_settings.enabled = true;
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to enable master");
 
     // Add Slave member to TradeGroup with default settings
     server
@@ -841,11 +858,20 @@ async fn test_multiple_slaves_same_master() {
     let slave_accounts = ["SLAVE_A", "SLAVE_B", "SLAVE_C"];
 
     // Create TradeGroup (Master)
-    server
+    let trade_group = server
         .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
+
+    // Enable the master so the request-config handler surfaces allow_new_orders
+    let mut master_settings = trade_group.master_settings.clone();
+    master_settings.enabled = true;
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to enable master");
 
     // Add 3 Slaves to the same Master with different lot multipliers
     for (i, slave_account) in slave_accounts.iter().enumerate() {
@@ -960,11 +986,20 @@ async fn test_new_member_initial_status_disabled() {
     let slave_account = "SLAVE_INITIAL_STATUS_TEST";
 
     // Create TradeGroup (Master)
-    server
+    let trade_group = server
         .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
+
+    // Enable the master so the request-config handler surfaces allow_new_orders
+    let mut master_settings = trade_group.master_settings.clone();
+    master_settings.enabled = true;
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to enable master");
 
     // Add Slave member to TradeGroup with default settings
     server
@@ -1042,9 +1077,14 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     // Enable the member first (so we can test toggle OFF)
     server
         .db
-        .update_member_status(master_account, slave_account, 1)
+        .update_member_enabled_flag(master_account, slave_account, true)
         .await
-        .expect("Failed to enable member");
+        .expect("Failed to enable member (flag)");
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_account, 1)
+        .await
+        .expect("Failed to enable member (runtime)");
 
     // Create Slave EA simulator
     let simulator = SlaveEaSimulator::new(
@@ -2263,12 +2303,29 @@ async fn test_allow_new_orders_follows_status() {
     let slave_enabled = "SLAVE_ENABLED";
     let slave_disabled = "SLAVE_DISABLED";
 
+    // Create a Master EA simulator so master_status can reach CONNECTED
+    let master_sim = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_config_address(),
+        master_account,
+    )
+    .expect("Failed to create Master EA simulator");
+
     // Create TradeGroup (Master)
-    server
+    let trade_group = server
         .db
         .create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
+
+    // Enable the master so the request-config handler surfaces allow_new_orders
+    let mut master_settings = trade_group.master_settings.clone();
+    master_settings.enabled = true;
+    server
+        .db
+        .update_master_settings(master_account, master_settings)
+        .await
+        .expect("Failed to enable master");
 
     // Add two slaves with default settings
     let settings = SlaveSettings {
@@ -2302,9 +2359,14 @@ async fn test_allow_new_orders_follows_status() {
     // Set status to CONNECTED (2) - allow_new_orders should be true
     server
         .db
-        .update_member_status(master_account, slave_enabled, 2)
+        .update_member_enabled_flag(master_account, slave_enabled, true)
         .await
-        .expect("Failed to set enabled status");
+        .expect("Failed to set enabled status (flag)");
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_enabled, 2)
+        .await
+        .expect("Failed to set enabled status (runtime)");
 
     // Add disabled slave (status will be set to DISABLED)
     server
@@ -2316,9 +2378,14 @@ async fn test_allow_new_orders_follows_status() {
     // Set status to DISABLED (0) - allow_new_orders should be false
     server
         .db
-        .update_member_status(master_account, slave_disabled, 0)
+        .update_member_enabled_flag(master_account, slave_disabled, false)
         .await
-        .expect("Failed to set disabled status");
+        .expect("Failed to set disabled status (flag)");
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_disabled, 0)
+        .await
+        .expect("Failed to set disabled status (runtime)");
 
     // Create Slave EA simulators
     let sim_enabled = SlaveEaSimulator::new(
@@ -2340,7 +2407,7 @@ async fn test_allow_new_orders_follows_status() {
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(200)).await;
 
-    // Both send heartbeat
+    // Slaves send heartbeat first so connection manager marks them online
     sim_enabled
         .send_heartbeat()
         .expect("Failed to send heartbeat (enabled)");
@@ -2348,6 +2415,12 @@ async fn test_allow_new_orders_follows_status() {
         .send_heartbeat()
         .expect("Failed to send heartbeat (disabled)");
     sleep(Duration::from_millis(100)).await;
+
+    // Master sends heartbeat after slaves are registered so status engine sees them
+    master_sim
+        .send_heartbeat()
+        .expect("Failed to send master heartbeat");
+    sleep(Duration::from_millis(300)).await;
 
     // Both request config
     sim_enabled

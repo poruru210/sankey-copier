@@ -9,6 +9,7 @@ import {
   Edge,
 } from '@xyflow/react';
 import { Settings } from 'lucide-react';
+import { useIntlayer } from 'next-intlayer';
 import type { CopySettings } from '@/types';
 
 export interface SettingsEdgeData {
@@ -34,6 +35,7 @@ export const SettingsEdge = memo(({
   style,
   markerEnd,
 }: EdgeProps<SettingsEdgeType>) => {
+  const content = useIntlayer('settings-edge');
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -57,7 +59,8 @@ export const SettingsEdge = memo(({
   const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
 
   // Determine if edge is active
-  const isActive = setting?.status !== 0;
+  const runtimeStatus = setting?.runtime_status ?? setting?.status;
+  const isActive = runtimeStatus !== 0;
 
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -96,7 +99,7 @@ export const SettingsEdge = memo(({
             <button
               onClick={handleSettingsClick}
               className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400"
-              title="Connection Settings"
+              title={content.connectionSettingsTitle}
             >
               <Settings className="w-3.5 h-3.5" />
             </button>

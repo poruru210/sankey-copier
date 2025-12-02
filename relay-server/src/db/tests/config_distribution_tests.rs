@@ -17,7 +17,10 @@ async fn test_update_master_statuses_connected() {
     db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone(), 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+    db.update_member_enabled_flag("MASTER_001", "SLAVE_001", false)
+        .await
+        .unwrap();
+    db.update_member_runtime_status("MASTER_001", "SLAVE_001", 0)
         .await
         .unwrap(); // DISABLED
 
@@ -25,7 +28,10 @@ async fn test_update_master_statuses_connected() {
     db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone(), 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+    db.update_member_enabled_flag("MASTER_001", "SLAVE_002", true)
+        .await
+        .unwrap();
+    db.update_member_runtime_status("MASTER_001", "SLAVE_002", 1)
         .await
         .unwrap(); // ENABLED
 
@@ -33,7 +39,10 @@ async fn test_update_master_statuses_connected() {
     db.add_member("MASTER_001", "SLAVE_003", slave_settings, 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 1)
+    db.update_member_enabled_flag("MASTER_001", "SLAVE_003", true)
+        .await
+        .unwrap();
+    db.update_member_runtime_status("MASTER_001", "SLAVE_003", 1)
         .await
         .unwrap(); // ENABLED
 
@@ -82,7 +91,7 @@ async fn test_update_master_statuses_disconnected() {
     db.add_member("MASTER_001", "SLAVE_001", slave_settings.clone(), 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
+    db.update_member_runtime_status("MASTER_001", "SLAVE_001", 0)
         .await
         .unwrap(); // DISABLED
 
@@ -90,7 +99,7 @@ async fn test_update_master_statuses_disconnected() {
     db.add_member("MASTER_001", "SLAVE_002", slave_settings.clone(), 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1)
+    db.update_member_runtime_status("MASTER_001", "SLAVE_002", 1)
         .await
         .unwrap(); // ENABLED
 
@@ -98,7 +107,7 @@ async fn test_update_master_statuses_disconnected() {
     db.add_member("MASTER_001", "SLAVE_003", slave_settings, 0)
         .await
         .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 2)
+    db.update_member_runtime_status("MASTER_001", "SLAVE_003", 2)
         .await
         .unwrap(); // CONNECTED
 

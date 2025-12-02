@@ -4,7 +4,7 @@
 //! with CRUD operations split into separate submodules.
 
 use anyhow::Result;
-use sqlx::sqlite::SqlitePool;
+use sqlx::{sqlite::SqlitePool, Row};
 
 // Submodule declarations
 mod config_distribution;
@@ -60,6 +60,8 @@ impl Database {
                 slave_account TEXT NOT NULL,
                 slave_settings TEXT NOT NULL DEFAULT '{}',
                 status INTEGER NOT NULL DEFAULT 0,
+                enabled_flag INTEGER NOT NULL DEFAULT 0,
+                runtime_status INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (trade_group_id, slave_account),
@@ -69,6 +71,40 @@ impl Database {
         )
         .execute(&pool)
         .await?;
+
+        let enabled_added = Self::ensure_column(
+            &pool,
+            "trade_group_members",
+            "enabled_flag",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        .await?;
+
+        if enabled_added {
+            sqlx::query(
+                "UPDATE trade_group_members
+                 SET enabled_flag = CASE WHEN status > 0 THEN 1 ELSE 0 END",
+            )
+            .execute(&pool)
+            .await?;
+        }
+
+        let runtime_added = Self::ensure_column(
+            &pool,
+            "trade_group_members",
+            "runtime_status",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        .await?;
+
+        if runtime_added {
+            sqlx::query(
+                "UPDATE trade_group_members
+                 SET runtime_status = status",
+            )
+            .execute(&pool)
+            .await?;
+        }
 
         // Create indexes for performance
         sqlx::query(
@@ -99,5 +135,30 @@ impl Database {
         .await?;
 
         Ok(Self { pool })
+    }
+}
+
+impl Database {
+    async fn ensure_column(
+        pool: &SqlitePool,
+        table: &str,
+        column: &str,
+        definition: &str,
+    ) -> Result<bool> {
+        if Self::column_exists(pool, table, column).await? {
+            return Ok(false);
+        }
+
+        let sql = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, definition);
+        sqlx::query(&sql).execute(pool).await?;
+        Ok(true)
+    }
+
+    async fn column_exists(pool: &SqlitePool, table: &str, column: &str) -> Result<bool> {
+        let pragma = format!("PRAGMA table_info({})", table);
+        let rows = sqlx::query(&pragma).fetch_all(pool).await?;
+        Ok(rows
+            .iter()
+            .any(|row| row.get::<String, _>("name") == column))
     }
 }

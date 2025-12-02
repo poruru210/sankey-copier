@@ -35,7 +35,7 @@ pub struct MasterStatusInput {
 /// Input parameters for Slave status calculation
 #[derive(Debug, Clone)]
 pub struct SlaveStatusInput {
-    /// Web UI Switch state for this Slave (derived from status > 0)
+    /// Web UI Switch state for this Slave (derived from enabled_flag)
     pub web_ui_enabled: bool,
     /// EA connection status (from ConnectionManager)
     pub connection_status: Option<ConnectionStatus>,

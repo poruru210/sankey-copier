@@ -466,6 +466,23 @@ fn default_test_slave_settings() -> SlaveSettings {
     }
 }
 
+async fn set_member_status(
+    server: &TestServer,
+    master_account: &str,
+    slave_account: &str,
+    status: i32,
+) -> anyhow::Result<()> {
+    server
+        .db
+        .update_member_enabled_flag(master_account, slave_account, status > 0)
+        .await?;
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_account, status)
+        .await?;
+    Ok(())
+}
+
 /// Setup test scenario with master and slaves
 async fn setup_test_scenario(
     server: &TestServer,
@@ -484,10 +501,7 @@ async fn setup_test_scenario(
             .await?;
 
         // Enable slave (set status to CONNECTED for trade copying)
-        server
-            .db
-            .update_member_status(master_account, slave_account, STATUS_CONNECTED)
-            .await?;
+        set_member_status(server, master_account, slave_account, STATUS_CONNECTED).await?;
     }
 
     Ok(())

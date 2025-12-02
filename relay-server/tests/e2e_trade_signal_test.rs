@@ -574,6 +574,23 @@ fn default_test_slave_settings() -> SlaveSettings {
     }
 }
 
+async fn set_member_status(
+    server: &TestServer,
+    master_account: &str,
+    slave_account: &str,
+    status: i32,
+) -> anyhow::Result<()> {
+    server
+        .db
+        .update_member_enabled_flag(master_account, slave_account, status > 0)
+        .await?;
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_account, status)
+        .await?;
+    Ok(())
+}
+
 /// Setup test scenario with master and slaves
 async fn setup_test_scenario(
     server: &TestServer,
@@ -602,11 +619,8 @@ async fn setup_test_scenario(
             .add_member(master_account, slave_account, settings, 0)
             .await?;
 
-        // Enable slave (set status to CONNECTED for trade copying)
-        server
-            .db
-            .update_member_status(master_account, slave_account, STATUS_CONNECTED)
-            .await?;
+        // Enable slave intent and mark runtime as CONNECTED for trade copying
+        set_member_status(server, master_account, slave_account, STATUS_CONNECTED).await?;
     }
 
     Ok(())
@@ -2192,9 +2206,7 @@ async fn test_symbol_prefix_suffix_transformation() {
         .add_member(master_account, slave_account, settings, 0)
         .await
         .unwrap();
-    server
-        .db
-        .update_member_status(master_account, slave_account, STATUS_CONNECTED)
+    set_member_status(&server, master_account, slave_account, STATUS_CONNECTED)
         .await
         .unwrap();
 
@@ -2282,9 +2294,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
         .add_member(master_account, slave_account, settings, 0)
         .await
         .unwrap();
-    server
-        .db
-        .update_member_status(master_account, slave_account, STATUS_CONNECTED)
+    set_member_status(&server, master_account, slave_account, STATUS_CONNECTED)
         .await
         .unwrap();
 

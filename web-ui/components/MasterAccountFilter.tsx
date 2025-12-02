@@ -51,7 +51,9 @@ export function MasterAccountFilter({
 
     return masters.map((master): MasterAccountInfo => {
       const connectionCount = settings.filter(
-        (s) => s.master_account === master.account_id && s.status !== 0
+        (s) =>
+          s.master_account === master.account_id &&
+          (s.enabled_flag ?? (s.status !== 0))
       ).length;
 
       const isOnline = master.status === 'Online';
@@ -73,7 +75,7 @@ export function MasterAccountFilter({
 
   // Count total connections for "All Accounts"
   const totalConnections = useMemo(() => {
-    return settings.filter((s) => s.status !== 0).length;
+    return settings.filter((s) => s.enabled_flag ?? (s.status !== 0)).length;
   }, [settings]);
 
   // Get current selection display text

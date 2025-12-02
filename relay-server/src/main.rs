@@ -25,6 +25,7 @@ use connection_manager::ConnectionManager;
 use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
+use message_handler::unregister::notify_slaves_master_offline;
 use message_handler::MessageHandler;
 use models::EaType;
 use std::sync::atomic::AtomicBool;
@@ -337,6 +338,8 @@ async fn main() -> Result<()> {
     {
         let conn_mgr = connection_manager.clone();
         let db_clone = db.clone();
+        let publisher_clone = zmq_publisher.clone();
+        let broadcast_clone = broadcast_tx.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
             loop {
@@ -368,6 +371,15 @@ async fn main() -> Result<()> {
                                 );
                             }
                         }
+
+                        notify_slaves_master_offline(
+                            &conn_mgr,
+                            &db_clone,
+                            &publisher_clone,
+                            &broadcast_clone,
+                            &account_id,
+                        )
+                        .await;
                     }
                 }
             }

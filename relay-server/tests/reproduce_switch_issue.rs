@@ -42,9 +42,14 @@ async fn test_switch_persistence() {
     // 2. Toggle ON
     server
         .db
-        .update_member_status(master_account, slave_account, 1)
+        .update_member_enabled_flag(master_account, slave_account, true)
         .await
-        .expect("Failed to toggle ON");
+        .expect("Failed to toggle ON (enabled flag)");
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_account, 1)
+        .await
+        .expect("Failed to toggle ON (runtime status)");
 
     // Verify status persisted as 1
     let member = server
@@ -58,9 +63,14 @@ async fn test_switch_persistence() {
     // 3. Toggle OFF
     server
         .db
-        .update_member_status(master_account, slave_account, 0)
+        .update_member_enabled_flag(master_account, slave_account, false)
         .await
-        .expect("Failed to toggle OFF");
+        .expect("Failed to toggle OFF (enabled flag)");
+    server
+        .db
+        .update_member_runtime_status(master_account, slave_account, 0)
+        .await
+        .expect("Failed to toggle OFF (runtime status)");
 
     // Verify status persisted as 0
     let member = server

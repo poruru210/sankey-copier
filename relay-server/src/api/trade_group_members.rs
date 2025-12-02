@@ -11,7 +11,13 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
+use crate::models::{
+    status_engine::{
+        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, SlaveIntent,
+    },
+    SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG,
+};
 
 use super::{AppState, ProblemDetails};
 
@@ -386,7 +392,7 @@ pub async fn toggle_member_status(
 
     match state
         .db
-        .update_member_status(&trade_group_id, &slave_account, new_status)
+        .update_member_enabled_flag(&trade_group_id, &slave_account, request.enabled)
         .await
     {
         Ok(_) => {
@@ -617,54 +623,53 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
 
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
-    // Fetch Master's connection info to calculate master status
+    // Fetch Master's connection info to calculate status + equity
     let master_conn = state.connection_manager.get_ea(master_account).await;
-
     let master_equity = master_conn.as_ref().map(|conn| conn.equity);
+    let master_snapshot = ConnectionSnapshot {
+        connection_status: master_conn.as_ref().map(|c| c.status),
+        is_trade_allowed: master_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(false),
+    };
 
-    // Calculate Master status first (needed for Slave status)
-    // Master is CONNECTED if enabled in DB AND is_trade_allowed is true AND connection is Online
-    let master_is_trade_allowed = master_conn
-        .as_ref()
-        .map(|c| c.is_trade_allowed)
-        .unwrap_or(false); // Default to false if Master not connected
-
-    // Let's get Master's effective status.
-    // We need to know if Master is enabled in Web UI.
-    // Since we don't have TradeGroup here, we'll fetch it or assume enabled if not found (fallback).
+    // Resolve Master's intent (Web UI toggle)
     let master_web_ui_enabled = match state.db.get_trade_group(master_account).await {
         Ok(Some(tg)) => tg.master_settings.enabled,
         _ => true, // Fallback
     };
 
-    let master_status =
-        crate::models::status::calculate_master_status(&crate::models::status::MasterStatusInput {
+    let master_result = evaluate_master_status(
+        MasterIntent {
             web_ui_enabled: master_web_ui_enabled,
-            connection_status: master_conn.as_ref().map(|c| c.status),
-            is_trade_allowed: master_is_trade_allowed,
-        });
+        },
+        master_snapshot,
+    );
 
-    // Fetch Slave's connection info for is_trade_allowed
+    // Fetch Slave connection snapshot and evaluate via engine
     let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
-    let slave_is_trade_allowed = slave_conn
-        .as_ref()
-        .map(|c| c.is_trade_allowed)
-        .unwrap_or(false); // Default to false if Slave not connected
+    let slave_snapshot = ConnectionSnapshot {
+        connection_status: slave_conn.as_ref().map(|c| c.status),
+        is_trade_allowed: slave_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(false),
+    };
 
-    // Calculate Slave's effective status
-    let effective_status =
-        crate::models::status::calculate_slave_status(&crate::models::status::SlaveStatusInput {
-            web_ui_enabled: member.status > 0, // member.status from DB is 0 (DISABLED) or 1 (ENABLED)
-            connection_status: slave_conn.as_ref().map(|c| c.status),
-            is_trade_allowed: slave_is_trade_allowed,
-            master_status,
-        });
+    let slave_result = evaluate_slave_status(
+        SlaveIntent {
+            web_ui_enabled: member.enabled_flag,
+        },
+        slave_snapshot,
+        MasterClusterSnapshot::new(vec![master_result.status]),
+    );
 
     let config = SlaveConfigMessage {
         account_id: member.slave_account.clone(),
         master_account: master_account.to_string(),
         trade_group_id: master_account.to_string(),
-        status: effective_status,
+        status: slave_result.status,
         lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
         lot_multiplier: member.slave_settings.lot_multiplier,
         reverse_trade: member.slave_settings.reverse_trade,
@@ -687,8 +692,8 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
         max_retries: member.slave_settings.max_retries,
         max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
         use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
-        // Derived from status: allow new orders when enabled
-        allow_new_orders: effective_status == crate::models::STATUS_CONNECTED,
+        // Derived from status engine for consistent behavior
+        allow_new_orders: slave_result.allow_new_orders,
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -705,6 +710,20 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
             master_account = %master_account,
             config_version = member.slave_settings.config_version,
             "Successfully sent SlaveConfigMessage via ZMQ"
+        );
+    }
+
+    if let Err(e) = state
+        .db
+        .update_member_runtime_status(master_account, &member.slave_account, slave_result.status)
+        .await
+    {
+        tracing::error!(
+            slave_account = %member.slave_account,
+            master_account = %master_account,
+            status = slave_result.status,
+            error = %e,
+            "Failed to persist Slave runtime status"
         );
     }
 }

@@ -9,20 +9,44 @@ use axum::{
     Json,
 };
 use sankey_copier_zmq::MasterConfigMessage;
+use serde::Serialize;
 
 use crate::models::{
-    status::{
-        calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
+    status_engine::{
+        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, SlaveIntent,
     },
     MasterSettings, SlaveConfigMessage, TradeGroup,
 };
 
 use super::{AppState, ProblemDetails};
 
+/// API response view that augments TradeGroup with runtime status evaluated by the status engine.
+#[derive(Debug, Clone, Serialize)]
+pub struct TradeGroupRuntimeView {
+    pub id: String,
+    pub master_settings: MasterSettings,
+    pub master_runtime_status: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl TradeGroupRuntimeView {
+    fn new(trade_group: TradeGroup, master_runtime_status: i32) -> Self {
+        Self {
+            id: trade_group.id,
+            master_settings: trade_group.master_settings,
+            master_runtime_status,
+            created_at: trade_group.created_at,
+            updated_at: trade_group.updated_at,
+        }
+    }
+}
+
 /// List all TradeGroups (Master accounts and their settings)
 pub async fn list_trade_groups(
     State(state): State<AppState>,
-) -> Result<Json<Vec<TradeGroup>>, ProblemDetails> {
+) -> Result<Json<Vec<TradeGroupRuntimeView>>, ProblemDetails> {
     let span = tracing::info_span!("list_trade_groups");
     let _enter = span.enter();
 
@@ -32,7 +56,13 @@ pub async fn list_trade_groups(
                 count = trade_groups.len(),
                 "Successfully retrieved trade groups"
             );
-            Ok(Json(trade_groups))
+
+            let mut response = Vec::with_capacity(trade_groups.len());
+            for trade_group in trade_groups {
+                response.push(build_trade_group_response(&state, trade_group).await);
+            }
+
+            Ok(Json(response))
         }
         Err(e) => {
             tracing::error!(
@@ -53,7 +83,7 @@ pub async fn list_trade_groups(
 pub async fn get_trade_group(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<TradeGroup>, ProblemDetails> {
+) -> Result<Json<TradeGroupRuntimeView>, ProblemDetails> {
     let span = tracing::info_span!("get_trade_group", master_account = %id);
     let _enter = span.enter();
 
@@ -64,7 +94,8 @@ pub async fn get_trade_group(
                 config_version = trade_group.master_settings.config_version,
                 "Successfully retrieved trade group"
             );
-            Ok(Json(trade_group))
+            let response = build_trade_group_response(&state, trade_group).await;
+            Ok(Json(response))
         }
         Ok(None) => {
             tracing::warn!(master_account = %id, "Trade group not found");
@@ -126,7 +157,8 @@ pub async fn update_trade_group_settings(
 
             // Notify via WebSocket
             if let Ok(Some(tg)) = state.db.get_trade_group(&id).await {
-                if let Ok(json) = serde_json::to_string(&tg) {
+                let response = build_trade_group_response(&state, tg).await;
+                if let Ok(json) = serde_json::to_string(&response) {
                     let _ = state.tx.send(format!("trade_group_updated:{}", json));
                 }
             }
@@ -181,8 +213,10 @@ pub async fn delete_trade_group(
                 "Successfully deleted TradeGroup and all its members (CASCADE)"
             );
 
-            // Notify via WebSocket
-            let _ = state.tx.send(format!("trade_group_deleted:{}", id));
+            // Notify via WebSocket with structured payload
+            if let Ok(json) = serde_json::to_string(&serde_json::json!({"id": id})) {
+                let _ = state.tx.send(format!("trade_group_deleted:{}", json));
+            }
 
             Ok(StatusCode::NO_CONTENT)
         }
@@ -214,7 +248,7 @@ pub async fn toggle_master(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<ToggleMasterRequest>,
-) -> Result<Json<TradeGroup>, ProblemDetails> {
+) -> Result<Json<TradeGroupRuntimeView>, ProblemDetails> {
     let span = tracing::info_span!(
         "toggle_master",
         master_account = %id,
@@ -272,12 +306,15 @@ pub async fn toggle_master(
     // When Master switch changes, Slaves need to know the new Master status
     send_config_to_slaves(&state, &id, &new_settings).await;
 
-    // Notify via WebSocket
-    let _ = state.tx.send(format!("trade_group_updated:{}", id));
-
-    // Fetch and return updated trade group
+    // Fetch updated trade group, broadcast runtime-aware payload, and return response
     match state.db.get_trade_group(&id).await {
-        Ok(Some(updated_tg)) => Ok(Json(updated_tg)),
+        Ok(Some(updated_tg)) => {
+            let response = build_trade_group_response(&state, updated_tg).await;
+            if let Ok(json) = serde_json::to_string(&response) {
+                let _ = state.tx.send(format!("trade_group_updated:{}", json));
+            }
+            Ok(Json(response))
+        }
         Ok(None) => Err(
             ProblemDetails::internal_error("TradeGroup disappeared after update")
                 .with_instance(format!("/api/trade-groups/{}/toggle", id)),
@@ -290,21 +327,54 @@ pub async fn toggle_master(
     }
 }
 
+async fn build_trade_group_response(
+    state: &AppState,
+    trade_group: TradeGroup,
+) -> TradeGroupRuntimeView {
+    let master_runtime_status = evaluate_master_runtime_status(state, &trade_group).await;
+    TradeGroupRuntimeView::new(trade_group, master_runtime_status)
+}
+
+async fn evaluate_master_runtime_status(state: &AppState, trade_group: &TradeGroup) -> i32 {
+    let master_conn = state.connection_manager.get_ea(&trade_group.id).await;
+    let master_snapshot = ConnectionSnapshot {
+        connection_status: master_conn.as_ref().map(|c| c.status),
+        is_trade_allowed: master_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(true),
+    };
+
+    evaluate_master_status(
+        MasterIntent {
+            web_ui_enabled: trade_group.master_settings.enabled,
+        },
+        master_snapshot,
+    )
+    .status
+}
+
 /// Send Master config to Master EA via ZMQ
 async fn send_config_to_master(state: &AppState, master_account: &str, settings: &MasterSettings) {
     // Get Master connection info
     let master_conn = state.connection_manager.get_ea(master_account).await;
-    let is_trade_allowed = master_conn
-        .as_ref()
-        .map(|c| c.is_trade_allowed)
-        .unwrap_or(true);
-
-    // Calculate status using centralized logic (same as heartbeat handler)
-    let status = calculate_master_status(&MasterStatusInput {
-        web_ui_enabled: settings.enabled,
+    let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
-        is_trade_allowed,
-    });
+        is_trade_allowed: master_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(true),
+    };
+    let is_trade_allowed = master_snapshot.is_trade_allowed;
+
+    // Calculate status using centralized status engine (shared with heartbeat handler)
+    let status = evaluate_master_status(
+        MasterIntent {
+            web_ui_enabled: settings.enabled,
+        },
+        master_snapshot,
+    )
+    .status;
 
     let config = MasterConfigMessage {
         account_id: master_account.to_string(),
@@ -342,24 +412,25 @@ async fn send_config_to_master(state: &AppState, master_account: &str, settings:
 async fn send_config_to_slaves(state: &AppState, master_account: &str, settings: &MasterSettings) {
     // Get is_trade_allowed for Master (to calculate master_status)
     let master_conn = state.connection_manager.get_ea(master_account).await;
-    let master_is_trade_allowed = master_conn
-        .as_ref()
-        .map(|c| c.is_trade_allowed)
-        .unwrap_or(true);
-
-    // Calculate Master status
-    let master_status = calculate_master_status(&MasterStatusInput {
-        web_ui_enabled: settings.enabled,
+    let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
-        is_trade_allowed: master_is_trade_allowed,
-    });
+        is_trade_allowed: master_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(true),
+    };
+
+    // Calculate Master status once and reuse for every Slave notification
+    let master_status = evaluate_master_status(
+        MasterIntent {
+            web_ui_enabled: settings.enabled,
+        },
+        master_snapshot,
+    );
+    let master_cluster = MasterClusterSnapshot::new(vec![master_status.status]);
 
     // Fetch Master's equity for margin_ratio mode
-    let master_equity = state
-        .connection_manager
-        .get_ea(master_account)
-        .await
-        .map(|conn| conn.equity);
+    let master_equity = master_conn.as_ref().map(|conn| conn.equity);
 
     // Get all members (Slaves) for this Master
     let members = match state.db.get_members(master_account).await {
@@ -378,27 +449,29 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
     for member in members {
         // Get Slave's is_trade_allowed from connection manager (if connected)
         let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
-        let slave_is_trade_allowed = slave_conn
-            .as_ref()
-            .map(|conn| conn.is_trade_allowed)
-            .unwrap_or(true);
-
-        // Calculate Slave status
-        // Slave is enabled if member.status > 0 (was previously enabled in DB)
-        let slave_enabled = member.status > 0;
-        let slave_status = calculate_slave_status(&SlaveStatusInput {
-            web_ui_enabled: slave_enabled,
+        let slave_snapshot = ConnectionSnapshot {
             connection_status: slave_conn.as_ref().map(|c| c.status),
-            is_trade_allowed: slave_is_trade_allowed,
-            master_status,
-        });
+            is_trade_allowed: slave_conn
+                .as_ref()
+                .map(|conn| conn.is_trade_allowed)
+                .unwrap_or(true),
+        };
+
+        // Calculate Slave status (web_ui_enabled stored as member.enabled_flag)
+        let slave_result = evaluate_slave_status(
+            SlaveIntent {
+                web_ui_enabled: member.enabled_flag,
+            },
+            slave_snapshot,
+            master_cluster.clone(),
+        );
 
         let config = SlaveConfigMessage {
             account_id: member.slave_account.clone(),
             master_account: master_account.to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             trade_group_id: master_account.to_string(),
-            status: slave_status,
+            status: slave_result.status,
             lot_calculation_mode: member.slave_settings.lot_calculation_mode.clone().into(),
             lot_multiplier: member.slave_settings.lot_multiplier,
             reverse_trade: member.slave_settings.reverse_trade,
@@ -418,7 +491,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
             max_retries: member.slave_settings.max_retries,
             max_signal_delay_ms: member.slave_settings.max_signal_delay_ms,
             use_pending_order_for_delayed: member.slave_settings.use_pending_order_for_delayed,
-            allow_new_orders: slave_status > 0,
+            allow_new_orders: slave_result.allow_new_orders,
         };
 
         if let Err(e) = state.config_sender.send(&config).await {
@@ -432,8 +505,26 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
             tracing::info!(
                 slave_account = %member.slave_account,
                 master_account = %master_account,
-                status = slave_status,
+                status = slave_result.status,
                 "Sent SlaveConfigMessage due to Master switch change"
+            );
+        }
+
+        if let Err(e) = state
+            .db
+            .update_member_runtime_status(
+                master_account,
+                &member.slave_account,
+                slave_result.status,
+            )
+            .await
+        {
+            tracing::error!(
+                slave_account = %member.slave_account,
+                master_account = %master_account,
+                status = slave_result.status,
+                error = %e,
+                "Failed to persist Slave runtime status after master toggle"
             );
         }
     }

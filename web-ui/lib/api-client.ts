@@ -241,8 +241,9 @@ export class ApiClient {
    */
   async toggleTradeGroupMemberStatus(
     masterAccount: string,
-    slaveAccount: string
+    slaveAccount: string,
+    enabled: boolean
   ): Promise<void> {
-    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`, {});
+    return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members/${encodeURIComponent(slaveAccount)}/toggle`, { enabled });
   }
 }

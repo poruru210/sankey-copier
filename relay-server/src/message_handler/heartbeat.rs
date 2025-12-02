@@ -204,9 +204,8 @@ impl MessageHandler {
                                 .map(|conn| conn.is_trade_allowed)
                                 .unwrap_or(true); // Default to true if not connected
 
-                            // Calculate Slave status
-                            // Slave is enabled if member.status > 0 (was previously enabled in DB)
-                            let slave_enabled = member.status > 0;
+                            // Calculate Slave status based on stored user intent flag
+                            let slave_enabled = member.enabled_flag;
                             let slave_result = evaluate_slave_status(
                                 SlaveIntent {
                                     web_ui_enabled: slave_enabled,
@@ -324,7 +323,11 @@ impl MessageHandler {
                             // Update database with new status
                             if let Err(e) = self
                                 .db
-                                .update_member_status(&account_id, &slave_account, new_slave_status)
+                                .update_member_runtime_status(
+                                    &account_id,
+                                    &slave_account,
+                                    new_slave_status,
+                                )
                                 .await
                             {
                                 tracing::error!(
@@ -358,6 +361,8 @@ impl MessageHandler {
                                     master_account: account_id.clone(),
                                     slave_account: member.slave_account.clone(),
                                     status: member.status,
+                                    runtime_status: member.runtime_status,
+                                    enabled_flag: member.enabled_flag,
                                     slave_settings: member.slave_settings.clone(),
                                 };
                                 if let Ok(json) = serde_json::to_string(&settings_with_master) {

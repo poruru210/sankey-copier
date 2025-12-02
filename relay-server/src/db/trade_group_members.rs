@@ -30,13 +30,23 @@ impl Database {
     ) -> Result<()> {
         let settings_json = serde_json::to_string(&settings)?;
 
+        let enabled_flag = if status > 0 { 1 } else { 0 };
+
         sqlx::query(
-            "INSERT INTO trade_group_members (trade_group_id, slave_account, slave_settings, status)
-             VALUES (?, ?, ?, ?)",
+            "INSERT INTO trade_group_members (
+                trade_group_id,
+                slave_account,
+                slave_settings,
+                status,
+                enabled_flag,
+                runtime_status
+            ) VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(trade_group_id)
         .bind(slave_account)
         .bind(&settings_json)
+        .bind(status)
+        .bind(enabled_flag)
         .bind(status)
         .execute(&self.pool)
         .await?;
@@ -47,7 +57,7 @@ impl Database {
     /// Get all members for a TradeGroup
     pub async fn get_members(&self, trade_group_id: &str) -> Result<Vec<TradeGroupMember>> {
         let rows = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, runtime_status, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ?
              ORDER BY slave_account"
@@ -64,6 +74,8 @@ impl Database {
             let settings_json: String = row.get("slave_settings");
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
+            let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
+            let runtime_status: i32 = row.try_get("runtime_status").unwrap_or(status);
             let created_at: String = row.get("created_at");
             let updated_at: String = row.get("updated_at");
 
@@ -72,7 +84,9 @@ impl Database {
                 trade_group_id,
                 slave_account,
                 slave_settings,
-                status,
+                status: runtime_status,
+                runtime_status,
+                enabled_flag,
                 created_at,
                 updated_at,
             });
@@ -88,7 +102,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Option<TradeGroupMember>> {
         let row = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, runtime_status, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ? AND slave_account = ?"
         )
@@ -104,6 +118,8 @@ impl Database {
             let settings_json: String = row.get("slave_settings");
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
+            let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
+            let runtime_status: i32 = row.try_get("runtime_status").unwrap_or(status);
             let created_at: String = row.get("created_at");
             let updated_at: String = row.get("updated_at");
 
@@ -112,7 +128,9 @@ impl Database {
                 trade_group_id,
                 slave_account,
                 slave_settings,
-                status,
+                status: runtime_status,
+                runtime_status,
+                enabled_flag,
                 created_at,
                 updated_at,
             }))
@@ -152,19 +170,50 @@ impl Database {
         Ok(())
     }
 
-    /// Update member status
-    pub async fn update_member_status(
+    /// Update the user intent flag for a member
+    pub async fn update_member_enabled_flag(
         &self,
         trade_group_id: &str,
         slave_account: &str,
-        status: i32,
+        enabled: bool,
+    ) -> Result<()> {
+        let flag = if enabled { 1 } else { 0 };
+        let result = sqlx::query(
+            "UPDATE trade_group_members
+             SET enabled_flag = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE trade_group_id = ? AND slave_account = ?",
+        )
+        .bind(flag)
+        .bind(trade_group_id)
+        .bind(slave_account)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!(
+                "Member not found: trade_group_id={}, slave_account={}",
+                trade_group_id,
+                slave_account
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Update runtime status (calculated by the status engine)
+    pub async fn update_member_runtime_status(
+        &self,
+        trade_group_id: &str,
+        slave_account: &str,
+        runtime_status: i32,
     ) -> Result<()> {
         let result = sqlx::query(
             "UPDATE trade_group_members
-             SET status = ?, updated_at = CURRENT_TIMESTAMP
+             SET runtime_status = ?, status = ?, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND slave_account = ?",
         )
-        .bind(status)
+        .bind(runtime_status)
+        .bind(runtime_status)
         .bind(trade_group_id)
         .bind(slave_account)
         .execute(&self.pool)

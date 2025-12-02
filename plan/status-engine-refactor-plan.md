@@ -54,7 +54,9 @@
 2. **Status Engine 適用**
    - `heartbeat.rs` → 新API。
    - ✅ `evaluate_*` への切替済み (2025-12-02)
-   - `api/trade_group_members.rs`, `api/trade_groups.rs`, `message_handler/unregister.rs`, timeoutハンドラを順次差し替え。
+   - ✅ `api/trade_group_members.rs`, `api/trade_groups.rs` を新 Engine 経由に更新 (2025-12-06)
+   - ✅ `message_handler/unregister.rs` / timeout ハンドラの通知経路を status engine 化 (2025-12-06)
+   - ✅ `message_handler/config_request.rs` を新 Engine 経由に更新 (2025-12-06)
    - 旧ロジックと新ロジックの差分ログを一時的に出力。
 
 3. **DB マイグレーション**
@@ -62,6 +64,23 @@
    - ブート時に `enabled_flag` が NULL の行へ `status > 0` をコピー。
    - API/UI を `enabled_flag` ベースに更新。
    - `runtime_status` 専用カラムを追加し、Status Engine 出力を保存。
+
+### Phase2 残タスク詳細 (API/UI)
+1. **API 拡張**
+   - `TradeGroupMember` / `SlaveConfigWithMaster` のシリアライズに `enabled_flag` と `runtime_status` を必ず含め、Web UI で追加フィールドにアクセスできるようにする。
+   - `/api/trade-groups/{id}` レスポンスへ `master_runtime_status` を追加し、Master ステータスも Web UI が参照できるようにする (Status Engine の結果を `master_status_snapshot` キャッシュに保存)。
+   - WebSocket 通知 (`member_*`, `settings_updated`, `trade_group_updated`) も同じ構造体を返すよう統一し、フロント側で追加ロジック不要にする。
+   - 旧 `status` ベースのトグル API を正式に廃止して `enabled_flag` を唯一の入口とする (現状コードは対応済みだが API 契約書の更新とレスポンス整形が必要)。
+2. **Web UI 更新**
+   - `useMembers()` などの SWR hooks を `enabled_flag` + `runtime_status` を保持する shape に変更し、表示ロジックから `status` 参照をなくす。
+   - Graph ノード / 詳細パネルの状態バッジを `enabled_flag` (ユーザー意図) と `runtime_status` (実際の稼働) の 2 層表示へ刷新。例: "手動OFF" / "準備完了" / "接続中"。
+   - トグル UI は `enabled_flag` だけを切り替え、応答で返る `runtime_status` を optimistic 更新せずサーバ通知を待つようにする。
+   - `allow_new_orders` 表示は Status Engine の結果から計算された値を使い、クライアント側計算を削除。
+   - i18n 辞書 (`*.content.ts`) とヘルプツールチップを新しい用語に合わせて更新。
+3. **テスト/ドキュメント**
+   - API 契約書 (`docs/api-specification.md`) に `enabled_flag` / `runtime_status` を追加し、旧 `status` の説明を削除。
+   - Web UI E2E (`web-ui/__tests__`) でスイッチ操作後に `enabled_flag` が保持され、`runtime_status` がハートビート後に更新されるケースを追加。
+   - Playwright テストのモック API も新レスポンスに合わせて更新。
 
 4. **Config Builder 導入**
    - 新 Builder を作成し、すべての config 送信経路を移行。

@@ -24,7 +24,7 @@ interface UseFlowDataProps {
   isAccountHighlighted: (accountId: string, type: 'source' | 'receiver') => boolean;
   isMobile: boolean;
   content: any;
-  onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggle: (id: number, enabled: boolean) => Promise<void>;
   onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
 }
 
@@ -101,20 +101,20 @@ export function useFlowData({
     // Receiver enabled state is derived from settings, so we just need to update settings
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
     receiverSettings.forEach((setting) => {
-      const isCurrentlyEnabled = setting.status !== 0;
+      const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
 
       if (enabled) {
         // Slave is being enabled
         // Only enable connection if Master is ALSO enabled
         const masterAccount = sourceAccounts.find((acc) => acc.id === setting.master_account);
         const isMasterEnabled = masterAccount?.isEnabled ?? true;
-        if (isMasterEnabled && !isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
+        if (isMasterEnabled && !intentEnabled) {
+          onToggle(setting.id, true);
         }
       } else {
         // Slave is being disabled -> Always disable connection
-        if (isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
+        if (intentEnabled) {
+          onToggle(setting.id, false);
         }
       }
     });
@@ -235,8 +235,9 @@ export function useFlowData({
 
       // Edge is active only if both source and receiver are active (green)
       // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
+      const runtimeStatus = setting.runtime_status ?? setting.status;
       const isActive =
-        setting.status !== 0 &&
+        runtimeStatus !== 0 &&
         sourceAccount.isActive &&
         receiverAccount.isActive;
 

@@ -20,7 +20,7 @@ mod heartbeat;
 mod position_snapshot;
 mod sync_request;
 mod trade_signal;
-mod unregister;
+pub(crate) mod unregister;
 
 #[cfg(test)]
 mod tests;

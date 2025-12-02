@@ -38,7 +38,7 @@ interface ConnectionsViewReactFlowProps {
   connections: EaConnection[];
   settings: CopySettings[];
   tradeGroups: TradeGroup[];
-  onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggle: (id: number, enabled: boolean) => Promise<void>;
   onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
   onCreate: (data: CreateSettingsRequest) => Promise<void>;
   onUpdate: (id: number, data: CopySettings) => Promise<void>;

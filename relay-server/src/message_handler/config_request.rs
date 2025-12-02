@@ -5,10 +5,11 @@
 
 use super::MessageHandler;
 use crate::models::{
-    status::{
-        calculate_master_status, calculate_slave_status, MasterStatusInput, SlaveStatusInput,
+    status_engine::{
+        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, SlaveIntent,
     },
-    RequestConfigMessage, SlaveConfigMessage, STATUS_DISABLED,
+    RequestConfigMessage, SlaveConfigMessage,
 };
 use sankey_copier_zmq::MasterConfigMessage;
 
@@ -41,19 +42,24 @@ impl MessageHandler {
     async fn handle_master_config_request(&self, account_id: &str) {
         match self.db.get_settings_for_master(account_id).await {
             Ok(master_settings) => {
-                // Get Master connection info
+                // Get Master connection snapshot
                 let master_conn = self.connection_manager.get_ea(account_id).await;
-                let is_trade_allowed = master_conn
-                    .as_ref()
-                    .map(|c| c.is_trade_allowed)
-                    .unwrap_or(true);
-
-                // Calculate status using centralized logic
-                let status = calculate_master_status(&MasterStatusInput {
-                    web_ui_enabled: master_settings.enabled,
+                let master_snapshot = ConnectionSnapshot {
                     connection_status: master_conn.as_ref().map(|c| c.status),
-                    is_trade_allowed,
-                });
+                    is_trade_allowed: master_conn
+                        .as_ref()
+                        .map(|c| c.is_trade_allowed)
+                        .unwrap_or(true),
+                };
+
+                // Calculate status using centralized engine
+                let status = evaluate_master_status(
+                    MasterIntent {
+                        web_ui_enabled: master_settings.enabled,
+                    },
+                    master_snapshot,
+                )
+                .status;
 
                 let config = MasterConfigMessage {
                     account_id: account_id.to_string(),
@@ -103,52 +109,59 @@ impl MessageHandler {
                         settings.slave_settings.lot_multiplier
                     );
 
-                    // Get Slave's is_trade_allowed from connection manager
-                    let slave_is_trade_allowed = self
+                    // Snapshot connections for Master / Slave evaluation
+                    let master_conn = self
                         .connection_manager
-                        .get_ea(account_id)
-                        .await
-                        .map(|conn| conn.is_trade_allowed)
-                        .unwrap_or(true);
-
-                    // Get Master's status using centralized logic
-                    // Must consider: Master online + is_trade_allowed + web_ui enabled
-                    let master_status = {
-                        let master_conn = self
-                            .connection_manager
-                            .get_ea(&settings.master_account)
-                            .await;
-
-                        if let Some(conn) = master_conn {
-                            // Master is online, get web_ui enabled from DB
-                            let master_enabled = self
-                                .db
-                                .get_trade_group(&settings.master_account)
-                                .await
-                                .ok()
-                                .flatten()
-                                .map(|tg| tg.master_settings.enabled)
-                                .unwrap_or(false);
-
-                            calculate_master_status(&MasterStatusInput {
-                                web_ui_enabled: master_enabled,
-                                connection_status: Some(conn.status),
-                                is_trade_allowed: conn.is_trade_allowed,
-                            })
-                        } else {
-                            STATUS_DISABLED // Master offline
-                        }
+                        .get_ea(&settings.master_account)
+                        .await;
+                    let master_snapshot = ConnectionSnapshot {
+                        connection_status: master_conn.as_ref().map(|c| c.status),
+                        is_trade_allowed: master_conn
+                            .as_ref()
+                            .map(|c| c.is_trade_allowed)
+                            .unwrap_or(false),
                     };
+                    let master_enabled =
+                        match self.db.get_trade_group(&settings.master_account).await {
+                            Ok(Some(tg)) => tg.master_settings.enabled,
+                            Ok(None) => {
+                                tracing::warn!(
+                                    "Config request: missing trade group for master {}",
+                                    settings.master_account
+                                );
+                                false
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    "Config request: failed to load trade group {}: {}",
+                                    settings.master_account,
+                                    err
+                                );
+                                false
+                            }
+                        };
+                    let master_result = evaluate_master_status(
+                        MasterIntent {
+                            web_ui_enabled: master_enabled,
+                        },
+                        master_snapshot,
+                    );
 
-                    // Calculate Slave status using centralized logic
-                    // Web UI enabled = DB status > 0
                     let slave_conn = self.connection_manager.get_ea(account_id).await;
-                    let effective_status = calculate_slave_status(&SlaveStatusInput {
-                        web_ui_enabled: settings.status > 0,
+                    let slave_snapshot = ConnectionSnapshot {
                         connection_status: slave_conn.as_ref().map(|c| c.status),
-                        is_trade_allowed: slave_is_trade_allowed,
-                        master_status,
-                    });
+                        is_trade_allowed: slave_conn
+                            .as_ref()
+                            .map(|c| c.is_trade_allowed)
+                            .unwrap_or(false),
+                    };
+                    let slave_result = evaluate_slave_status(
+                        SlaveIntent {
+                            web_ui_enabled: settings.enabled_flag,
+                        },
+                        slave_snapshot,
+                        MasterClusterSnapshot::new(vec![master_result.status]),
+                    );
 
                     // Fetch Master's equity for margin_ratio mode
                     let master_equity = self
@@ -163,7 +176,7 @@ impl MessageHandler {
                         master_account: settings.master_account.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
                         trade_group_id: settings.master_account.clone(),
-                        status: effective_status,
+                        status: slave_result.status,
                         lot_calculation_mode: settings
                             .slave_settings
                             .lot_calculation_mode
@@ -191,8 +204,8 @@ impl MessageHandler {
                         use_pending_order_for_delayed: settings
                             .slave_settings
                             .use_pending_order_for_delayed,
-                        // Derived from status: allow new orders when enabled
-                        allow_new_orders: effective_status > 0,
+                        // Derived from status engine for consistent behavior
+                        allow_new_orders: slave_result.allow_new_orders,
                     };
 
                     // Send CONFIG via MessagePack
@@ -203,7 +216,7 @@ impl MessageHandler {
                             "Successfully sent CONFIG to: {} (db_status: {}, effective_status: {})",
                             account_id,
                             settings.status,
-                            effective_status
+                            slave_result.status
                         );
                     }
                 }

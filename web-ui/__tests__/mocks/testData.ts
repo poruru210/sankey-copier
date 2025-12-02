@@ -139,6 +139,8 @@ export const mockSettings: CopySettings[] = [
   {
     id: 1,
     status: 2, // STATUS_CONNECTED
+    runtime_status: 2,
+    enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'FxPro_22222004',
     lot_multiplier: 1.5,
@@ -154,6 +156,8 @@ export const mockSettings: CopySettings[] = [
   {
     id: 2,
     status: 2, // STATUS_CONNECTED
+    runtime_status: 2,
+    enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'OANDA_33333005',
     lot_multiplier: 0.5,
@@ -171,6 +175,8 @@ export const mockSettings: CopySettings[] = [
   {
     id: 3,
     status: 2, // STATUS_CONNECTED
+    runtime_status: 2,
+    enabled_flag: true,
     master_account: 'OANDA_67890002',
     slave_account: 'XM_44444006',
     lot_multiplier: 2.0,
@@ -186,6 +192,8 @@ export const mockSettings: CopySettings[] = [
   {
     id: 4,
     status: 2, // STATUS_CONNECTED
+    runtime_status: 2,
+    enabled_flag: true,
     master_account: 'XM_11111003',
     slave_account: 'FxPro_55555007',
     lot_multiplier: 1.0,

@@ -54,13 +54,19 @@ export function useAccountData({
     return tradeGroup?.master_settings.enabled ?? true;
   }, [tradeGroups]);
 
+  const getMasterRuntimeStatus = useCallback((masterAccount: string): number | undefined => {
+    const tradeGroup = tradeGroups.find((tg) => tg.id === masterAccount);
+    return tradeGroup?.master_runtime_status;
+  }, [tradeGroups]);
+
   // Initialize disabled receiver list from settings on first load
   useEffect(() => {
     if (!initialized && settings.length > 0) {
       const newDisabledReceivers: string[] = [];
 
       settings.forEach((setting) => {
-        if (setting.status === 0) {
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        if (!intentEnabled) {
           if (!disabledReceiverIds.includes(setting.slave_account) && !newDisabledReceivers.includes(setting.slave_account)) {
             newDisabledReceivers.push(setting.slave_account);
           }
@@ -113,8 +119,12 @@ export function useAccountData({
         const isEnabled = isMasterEnabled(setting.master_account);
         const isExpanded = expandedSourceIds.includes(setting.master_account);
 
-        // Calculate active state: Master is active if online && trade_allowed && enabled
-        const isActive = isOnline && isTradeAllowed && isEnabled;
+        const masterRuntimeStatus = getMasterRuntimeStatus(setting.master_account);
+
+        // Calculate active state: use runtime_status when provided, otherwise fallback to online/trade allowed
+        const isActive = masterRuntimeStatus !== undefined
+          ? masterRuntimeStatus === 2
+          : isOnline && isTradeAllowed && isEnabled;
 
         // Warnings: only show if online but trade not allowed
         const hasWarning = isOnline && !isTradeAllowed;
@@ -132,6 +142,8 @@ export function useAccountData({
           hasWarning,
           errorMsg,
           isExpanded,
+          masterRuntimeStatus,
+          masterIntentEnabled: isEnabled,
         });
       }
 
@@ -163,6 +175,7 @@ export function useAccountData({
           hasWarning,
           errorMsg: hasWarning ? content.autoTradingDisabled : '',
           isExpanded,
+          slaveIntentEnabled: setting.enabled_flag ?? (setting.status !== 0),
         });
       }
     });

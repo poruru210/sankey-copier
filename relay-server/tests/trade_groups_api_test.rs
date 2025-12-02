@@ -110,6 +110,7 @@ async fn test_list_trade_groups_with_data() {
     for tg in trade_groups {
         assert!(tg["id"].is_string());
         assert!(tg["master_settings"].is_object());
+        assert!(tg["master_runtime_status"].is_number());
         assert!(tg["created_at"].is_string());
         assert!(tg["updated_at"].is_string());
     }
@@ -139,6 +140,7 @@ async fn test_get_trade_group_success() {
     // Check response structure
     assert_eq!(json["id"], "MASTER_123");
     assert!(json["master_settings"].is_object());
+    assert!(json["master_runtime_status"].is_number());
     assert!(json["created_at"].is_string());
     assert!(json["updated_at"].is_string());
 
@@ -297,6 +299,7 @@ async fn test_trade_group_response_structure() {
 
     // Verify all required fields exist
     assert_eq!(tg["id"], "MASTER_STRUCT_TEST");
+    assert!(tg["master_runtime_status"].is_number());
 
     // Verify master_settings structure
     let settings = &tg["master_settings"];
