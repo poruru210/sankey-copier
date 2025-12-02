@@ -39,7 +39,7 @@ pnpm install
 pnpm dev
 ```
 
-開発サーバー: [http://localhost:5173](http://localhost:5173)
+開発サーバー: [http://localhost:8080](http://localhost:8080)
 
 デフォルトでは `/en` (英語) にリダイレクトされます。
 
@@ -49,6 +49,13 @@ pnpm dev
 pnpm build
 pnpm start
 ```
+
+## E2Eテスト (Playwright)
+
+- `pnpm test:e2e` は Playwright が Next.js dev サーバーを自動起動します。
+- サーバーは空きポートを検出して起動し、その URL はテスト内へ自動的に共有されます。
+- 既存のサーバーを流用したい場合は `PLAYWRIGHT_BASE_URL` を指定してください。
+- 特定ポートで自動起動したい場合は `PLAYWRIGHT_PORT=<port>` を指定できます。
 
 ## プロジェクト構造
 

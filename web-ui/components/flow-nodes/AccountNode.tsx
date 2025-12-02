@@ -79,6 +79,8 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
   return (
     <div
       className="account-node relative"
+      data-account-id={account.id}
+      data-testid="account-node"
       style={{ width: isMobile ? '100%' : '380px', maxWidth: isMobile ? '100%' : '380px' }}
     >
       {/* Connection handles - position based on mobile/desktop and source/receiver type */}

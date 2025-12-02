@@ -93,9 +93,8 @@ export function useFlowData({
     setDisabledReceiverIds((prev) => {
       if (enabled) {
         return prev.filter((id) => id !== accountId);
-      } else {
-        return prev.includes(accountId) ? prev : [...prev, accountId];
       }
+      return prev.includes(accountId) ? prev : [...prev, accountId];
     });
 
     // Receiver enabled state is derived from settings, so we just need to update settings
@@ -103,22 +102,14 @@ export function useFlowData({
     receiverSettings.forEach((setting) => {
       const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
 
-      if (enabled) {
-        // Slave is being enabled
-        // Only enable connection if Master is ALSO enabled
-        const masterAccount = sourceAccounts.find((acc) => acc.id === setting.master_account);
-        const isMasterEnabled = masterAccount?.isEnabled ?? true;
-        if (isMasterEnabled && !intentEnabled) {
-          onToggle(setting.id, true);
-        }
-      } else {
-        // Slave is being disabled -> Always disable connection
-        if (intentEnabled) {
-          onToggle(setting.id, false);
-        }
+      if (intentEnabled === enabled) {
+        return;
       }
+
+      // Always propagate intent changes so UI can diverge from runtime when needed
+      onToggle(setting.id, enabled);
     });
-  }, [settings, onToggle, setDisabledReceiverIds, sourceAccounts]);
+  }, [settings, onToggle, setDisabledReceiverIds]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
@@ -235,9 +226,9 @@ export function useFlowData({
 
       // Edge is active only if both source and receiver are active (green)
       // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
-      const runtimeStatus = setting.runtime_status ?? setting.status;
+      const runtimeStatus = setting.runtime_status ?? setting.status ?? 0;
       const isActive =
-        runtimeStatus !== 0 &&
+        runtimeStatus === 2 &&
         sourceAccount.isActive &&
         receiverAccount.isActive;
 

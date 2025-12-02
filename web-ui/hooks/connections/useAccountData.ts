@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useLayoutEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import type { EaConnection, CopySettings, AccountInfo, TradeGroup } from '@/types';
 import {
@@ -60,7 +60,7 @@ export function useAccountData({
   }, [tradeGroups]);
 
   // Initialize disabled receiver list from settings on first load
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!initialized && settings.length > 0) {
       const newDisabledReceivers: string[] = [];
 
@@ -107,8 +107,14 @@ export function useAccountData({
   const { sourceAccounts, receiverAccounts } = useMemo(() => {
     const sourceMap = new Map<string, AccountInfo>();
     const receiverMap = new Map<string, AccountInfo>();
+    const receiverRuntimeStatuses = new Map<string, number[]>();
 
     settings.forEach((setting, index) => {
+      const runtimeStatusValue = setting.runtime_status ?? setting.status ?? 0;
+      const existingStatuses = receiverRuntimeStatuses.get(setting.slave_account) ?? [];
+      existingStatuses.push(runtimeStatusValue);
+      receiverRuntimeStatuses.set(setting.slave_account, existingStatuses);
+
       // Add source (Master)
       if (!sourceMap.has(setting.master_account)) {
         const isOnline = getConnectionStatus(setting.master_account);
@@ -120,11 +126,13 @@ export function useAccountData({
         const isExpanded = expandedSourceIds.includes(setting.master_account);
 
         const masterRuntimeStatus = getMasterRuntimeStatus(setting.master_account);
-
-        // Calculate active state: use runtime_status when provided, otherwise fallback to online/trade allowed
-        const isActive = masterRuntimeStatus !== undefined
-          ? masterRuntimeStatus === 2
-          : isOnline && isTradeAllowed && isEnabled;
+        const fallbackRuntimeStatus = isOnline && isTradeAllowed && isEnabled
+          ? 2
+          : isOnline && isTradeAllowed
+          ? 1
+          : 0;
+        const runtimeStatus = masterRuntimeStatus ?? fallbackRuntimeStatus;
+        const isActive = runtimeStatus === 2;
 
         // Warnings: only show if online but trade not allowed
         const hasWarning = isOnline && !isTradeAllowed;
@@ -143,6 +151,7 @@ export function useAccountData({
           errorMsg,
           isExpanded,
           masterRuntimeStatus,
+          runtimeStatus,
           masterIntentEnabled: isEnabled,
         });
       }
@@ -153,8 +162,9 @@ export function useAccountData({
         const connection = getAccountConnection(setting.slave_account);
         const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
-        // Receiver is enabled if not in disabled list (independent of settings status)
-        const isEnabled = !disabledReceiverIds.includes(setting.slave_account);
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        const isManuallyDisabled = disabledReceiverIds.includes(setting.slave_account);
+        const isEnabled = isManuallyDisabled ? false : intentEnabled;
         const isExpanded = expandedReceiverIds.includes(setting.slave_account);
 
         // Active state calculation will be done after all masters are processed
@@ -175,7 +185,8 @@ export function useAccountData({
           hasWarning,
           errorMsg: hasWarning ? content.autoTradingDisabled : '',
           isExpanded,
-          slaveIntentEnabled: setting.enabled_flag ?? (setting.status !== 0),
+          slaveIntentEnabled: intentEnabled,
+          runtimeStatus: runtimeStatusValue,
         });
       }
     });
@@ -186,28 +197,18 @@ export function useAccountData({
 
     // Update receiver active state based on connected masters
     newReceiverAccounts.forEach((receiver) => {
-      // Get all connected masters for this receiver
-      const connectedMasters = settings
-        .filter((s) => s.slave_account === receiver.id)
-        .map((s) => s.master_account);
-
-      // Check if ALL connected masters are active
-      const allMastersActive = connectedMasters.every((masterId) => {
-        const master = newSourceAccounts.find((acc) => acc.id === masterId);
-        return master?.isActive === true;
-      });
-
-      // Slave active = isOnline && isTradeAllowed && isEnabled && allMastersActive
       const connection = getAccountConnection(receiver.id);
       const isTradeAllowed = connection?.is_trade_allowed ?? true;
-      receiver.isActive = receiver.isOnline && isTradeAllowed && receiver.isEnabled && allMastersActive;
 
-      // Simplify warnings: only show auto-trading warning if relevant
+      const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
+      const runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
+      receiver.runtimeStatus = runtimeStatus;
+      receiver.isActive = receiver.isOnline && receiver.isEnabled && isTradeAllowed && runtimeStatus === 2;
+
       if (receiver.isOnline && !isTradeAllowed) {
         receiver.hasWarning = true;
         receiver.errorMsg = content.autoTradingDisabled;
       } else {
-        // No warnings/errors based on master states
         receiver.hasWarning = false;
         receiver.hasError = false;
         receiver.errorMsg = '';
@@ -224,6 +225,7 @@ export function useAccountData({
     disabledReceiverIds,
     getAccountConnection,
     getConnectionStatus,
+    getMasterRuntimeStatus,
   ]);
 
   // Toggle expand state for source accounts

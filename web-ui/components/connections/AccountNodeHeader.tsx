@@ -35,6 +35,22 @@ export function AccountNodeHeader({
 }: AccountNodeHeaderProps) {
   const content = useIntlayer('account-node-header');
 
+  const resolveContent = (value: unknown, replacements?: Record<string, string>) => {
+    if (typeof value === 'function') {
+      return value(replacements ?? {});
+    }
+    if (typeof value === 'string') {
+      if (!replacements) {
+        return value;
+      }
+      return Object.entries(replacements).reduce(
+        (acc, [key, replacement]) => acc.replace(`{${key}}`, replacement),
+        value
+      );
+    }
+    return '';
+  };
+
   // Split account name into broker name and account number
   // Format: "Broker_Name_AccountNumber"
   const splitAccountName = () => {
@@ -51,61 +67,65 @@ export function AccountNodeHeader({
   const { brokerName, accountNumber } = splitAccountName();
 
   const renderStatusBadges = () => {
-    if (account.masterRuntimeStatus !== undefined) {
-      const runtime = account.masterRuntimeStatus;
+    const runtimeStatus = account.runtimeStatus ?? account.masterRuntimeStatus;
+    const badges: JSX.Element[] = [];
+
+    if (runtimeStatus !== undefined) {
       const runtimeLabels: Record<number, string> = {
         0: content.runtimeManualOff,
         1: content.runtimeStandby,
         2: content.runtimeStreaming,
       };
       const runtimeLabel =
-        runtimeLabels[runtime] ??
-        content.runtimeUnknownState.replace('{code}', runtime.toString());
+        runtimeLabels[runtimeStatus] ??
+        resolveContent(content.runtimeUnknownState, { code: runtimeStatus.toString() });
       const runtimeColors: Record<number, string> = {
         0: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
         1: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
         2: 'bg-emerald-500 text-white',
       };
-      return (
-        <div className="flex flex-wrap gap-1">
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge className={`text-[10px] px-1.5 py-0 ${runtimeColors[runtime] ?? 'bg-gray-200'}`}>
-                  {runtimeLabel}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">
-                  {content.runtimeTooltip.replace('{state}', runtimeLabel)}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {typeof account.masterIntentEnabled === 'boolean' && (
-            <TooltipProvider delayDuration={100}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant={account.masterIntentEnabled ? 'default' : 'secondary'}
-                    className="text-[10px] px-1.5 py-0"
-                  >
-                    {account.masterIntentEnabled ? content.masterIntentOn : content.masterIntentOff}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">{content.masterIntentTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
+
+      badges.push(
+        <TooltipProvider key="runtime" delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className={`text-[10px] px-1.5 py-0 ${runtimeColors[runtimeStatus] ?? 'bg-gray-200'}`}>
+                {runtimeLabel}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">
+                {resolveContent(content.runtimeTooltip, { state: runtimeLabel })}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (typeof account.masterIntentEnabled === 'boolean') {
+      badges.push(
+        <TooltipProvider key="master-intent" delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant={account.masterIntentEnabled ? 'default' : 'secondary'}
+                className="text-[10px] px-1.5 py-0"
+              >
+                {account.masterIntentEnabled ? content.masterIntentOn : content.masterIntentOff}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">{content.masterIntentTooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
 
     if (typeof account.slaveIntentEnabled === 'boolean') {
-      return (
-        <TooltipProvider delayDuration={100}>
+      badges.push(
+        <TooltipProvider key="slave-intent" delayDuration={100}>
           <Tooltip>
             <TooltipTrigger asChild>
               <Badge
@@ -123,7 +143,11 @@ export function AccountNodeHeader({
       );
     }
 
-    return null;
+    if (badges.length === 0) {
+      return null;
+    }
+
+    return <div className="flex flex-wrap gap-1">{badges}</div>;
   };
 
   const statusBadges = renderStatusBadges();
@@ -177,6 +201,7 @@ export function AccountNodeHeader({
             checked={account.isEnabled}
             onCheckedChange={(checked) => onToggleEnabled?.(checked)}
             className="scale-75 md:scale-80"
+            labelProps={{ 'data-testid': 'account-toggle-switch', 'data-account-id': account.id }}
           />
         </div>
         {/* Settings button - shown for both Master and Slave accounts */}

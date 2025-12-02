@@ -383,7 +383,11 @@ function ConnectionsViewReactFlowInner({
             <RefreshCw className="h-4 w-4 mr-2" />
             {content.refresh}
           </Button>
-          <Button size="sm" onClick={handleOpenCreateDialog}>
+          <Button
+            size="sm"
+            onClick={handleOpenCreateDialog}
+            data-testid="create-connection-button"
+          >
             <Plus className="h-4 w-4 mr-2" />
             {content.createNewLink}
           </Button>
@@ -405,7 +409,10 @@ function ConnectionsViewReactFlowInner({
             : selectedMasterName.substring(lastUnderscoreIndex + 1);
 
           return (
-            <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300">
+            <div
+              className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300"
+              data-testid="master-filter-indicator"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
                 <div className="flex flex-col">

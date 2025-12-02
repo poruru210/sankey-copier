@@ -112,6 +112,7 @@ export interface AccountInfo {
   masterRuntimeStatus?: number;
   masterIntentEnabled?: boolean;
   slaveIntentEnabled?: boolean;
+  runtimeStatus?: number; // Effective runtime status (0/1/2) used for badges/colors
 }
 
 // MT4/MT5 Installation types
