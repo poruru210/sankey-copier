@@ -12,7 +12,7 @@
 | P7 | Phase2 | API/UI を `enabled_flag` ベースに更新 | TBD |  | ☑ 完了 (2025-12-03) | API + WebSocket + Web UI (badges/i18n) 対応完了 |
 | P8 | Phase3 | Config Builder 実装・全経路切替 | TBD |  | ☑ 完了 (2025-12-03) | Builder + docs/tests (allow_new_orders) 全経路切替完了 |
 | P9 | Phase4 | MT アドバイザ更新 (MT4/MT5) | TBD | 2025-12-03 | ☑ 完了 | MT EA 側で `allow_new_orders/runtime_status` を起点に制御するよう改修済み |
-| P10 | Phase4 | Web UI 更新 | TBD |  | ☐ 未着手 | 
+| P10 | Phase4 | Web UI 更新 | TBD |  | 🔄 進行中 | `enabled_flag/runtime_status` を Web UI が表示/操作できるように更新 |
 | P11 | Phase5 | Docs / Test 更新 | TBD |  | ☐ 未着手 | 
 | P12 | Phase6 | 旧ロジック削除・監視整備 | TBD |  | ☐ 未着手 | 
 
