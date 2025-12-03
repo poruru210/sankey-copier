@@ -46,54 +46,36 @@
 - Web UI: API レスポンス (enabled_flag, runtime_status) をそのまま表示し、状態バッジを新ルールで実装。
 - Docs+テスト: 新しい状態遷移表を共有し、古い記述を削除。
 
-## 実装ステップ
-1. **準備**
-   - 影響範囲調査・既存ログ取得。
-   - `status_engine.rs` ひな形と単体テスト追加。→ ✅ 2025-12-02 完了
+## 実装ステップ（最新版）
+### フェーズA: 既存対応（完了）
+1. Status Engine モジュール化とユニットテスト ✅
+2. Heartbeat/API/ConfigRequest/Unregister の evaluate_* 置換 ✅
+3. DB マイグレーション（`enabled_flag`／`runtime_status` 分離） ✅
+4. Config Builder 適用・MT EA/Web UI 旧仕様削除 ✅
 
-2. **Status Engine 適用**
-   - `heartbeat.rs` → 新API。
-   - ✅ `evaluate_*` への切替済み (2025-12-02)
-   - ✅ `api/trade_group_members.rs`, `api/trade_groups.rs` を新 Engine 経由に更新 (2025-12-06)
-   - ✅ `message_handler/unregister.rs` / timeout ハンドラの通知経路を status engine 化 (2025-12-06)
-   - ✅ `message_handler/config_request.rs` を新 Engine 経由に更新 (2025-12-06)
-   - 旧ロジックと新ロジックの差分ログを一時的に出力。
+### フェーズB: 最終仕上げ（今回着手）
+1. **イベント全網羅で runtime_status を更新**
+   - Master/Slave Heartbeat を受信したら必ず最新の `ConnectionSnapshot` で Status Engine を実行し、`trade_group_members.runtime_status` と `trade_groups.master_settings.enabled` に反映。
+   - Timeout / Unregister / VictoriaLogs 起動時も同じユーティリティを用いて即時反映。
+2. **MasterCluster 再評価の共通化**
+   - `get_masters_for_slave`→`MasterClusterSnapshot` 作成処理を `runtime_status_updater` (新規モジュール) に切り出し、Heartbeat/RequestConfig/API Toggle の全経路から再利用。
+   - 多 Master 接続時でも一貫した `runtime_status=1` (Standby) 判定が得られるようにする。
+3. **Intent Toggle/API 応答の即時反映**
+   - `/api/trade-group-members/{id}/toggle` 等で `enabled_flag` 更新後、同じリクエスト内で Status Engine を再評価し DB へ保存→ZMQ 送信。Web UI はサーバ通知を待つだけで良くなる。
+4. **warning_codes の精緻化**
+   - `warning_codes` を Master/Slave 別の enum として管理し、未接続 Master 名や `is_trade_allowed=false` など原因を付与。Web UI への通知構造体を拡張し、Colour override の理由をロギング。
+5. **ユーティリティ/監視整備**
+   - `RuntimeStatusUpdater` (仮) を追加し、status-engine 呼び出し + DB 更新 + ログ出力を統合。
+   - `tracing` target `status_engine` でメトリクス化し、Prometheus/VictoriaLogs へ送る Hooks を準備。
+6. **テスト/ドキュメント刷新**
+   - Heartbeat だけで Slave runtime が変化するケース、Master 復帰待ちケース等の自動テストを `message_handler/tests` に追加。
+   - `e2e_*` テストに Standby 表示/警告の回帰シナリオを増強。
+   - `docs/runtime-status-alignment.md`／`docs/api-specification.md`／`docs/architecture.md` を今回の設計で再記述し、UI 側補正 (B) が不要になった旨を明記。
 
-3. **DB マイグレーション**
-   - SQLite: `ALTER TABLE trade_group_members ADD COLUMN enabled_flag INTEGER DEFAULT 0;`
-   - ブート時に `enabled_flag` が NULL の行へ `status > 0` をコピー。
-   - API/UI を `enabled_flag` ベースに更新。
-   - `runtime_status` 専用カラムを追加し、Status Engine 出力を保存。
-
-### Phase2 残タスク詳細 (API/UI)
-1. **API 拡張**
-   - `TradeGroupMember` / `SlaveConfigWithMaster` のシリアライズに `enabled_flag` と `runtime_status` を必ず含め、Web UI で追加フィールドにアクセスできるようにする。
-   - `/api/trade-groups/{id}` レスポンスへ `master_runtime_status` を追加し、Master ステータスも Web UI が参照できるようにする (Status Engine の結果を `master_status_snapshot` キャッシュに保存)。
-   - WebSocket 通知 (`member_*`, `settings_updated`, `trade_group_updated`) も同じ構造体を返すよう統一し、フロント側で追加ロジック不要にする。
-   - 旧 `status` ベースのトグル API を正式に廃止して `enabled_flag` を唯一の入口とする (現状コードは対応済みだが API 契約書の更新とレスポンス整形が必要)。
-2. **Web UI 更新**
-   - `useMembers()` などの SWR hooks を `enabled_flag` + `runtime_status` を保持する shape に変更し、表示ロジックから `status` 参照をなくす。
-   - Graph ノード / 詳細パネルの状態バッジを `enabled_flag` (ユーザー意図) と `runtime_status` (実際の稼働) の 2 層表示へ刷新。例: "手動OFF" / "準備完了" / "接続中"。
-   - トグル UI は `enabled_flag` だけを切り替え、応答で返る `runtime_status` を optimistic 更新せずサーバ通知を待つようにする。
-   - `allow_new_orders` 表示は Status Engine の結果から計算された値を使い、クライアント側計算を削除。
-   - i18n 辞書 (`*.content.ts`) とヘルプツールチップを新しい用語に合わせて更新。
-3. **テスト/ドキュメント**
-   - API 契約書 (`docs/api-specification.md`) に `enabled_flag` / `runtime_status` を追加し、旧 `status` の説明を削除。
-   - Web UI E2E (`web-ui/__tests__`) でスイッチ操作後に `enabled_flag` が保持され、`runtime_status` がハートビート後に更新されるケースを追加。
-   - Playwright テストのモック API も新レスポンスに合わせて更新。
-
-4. **Config Builder 導入**
-   - 新 Builder を作成し、すべての config 送信経路を移行。
-   - `allow_new_orders` を `runtime_status == CONNECTED` に一本化。
-
-5. **クライアントとドキュメント更新**
-   - MTアドバイザ: `ProcessConfigMessage` とパネルロジックを新仕様に変更。
-   - Web UI: 表示/操作 UI と API クライアントを更新。
-   - Docs/E2Eテストを最新仕様に改定。
-
-6. **クリーンアップ**
-   - 旧 `status` カラム削除、不要ログ/flag撤去。
-   - 監視メトリクス整備、ステータス異常検知を追加。
+### フェーズC: リリース準備
+1. 旧 `status` カラムと冗長ログ削除。
+2. モニタリングダッシュボード更新（Master/Slave runtime_status 分布、警告件数）。
+3. インストーラ/リリースノート更新、QA チェックリスト反映。
 
 ## リスクと対策
 - **移行期間中の不整合**: 新旧ロジック比較ログで検知、feature flag で切替。
