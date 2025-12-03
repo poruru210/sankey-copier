@@ -189,6 +189,7 @@ classDiagram
 | POST | `/api/trade-groups/:id/members/:slave_id/toggle` | Slave有効/無効切替 |
 | GET | `/api/logs` | サーバーログ取得 |
 | GET | `/api/mt-installations` | MTインストール検出 |
+| GET | `/api/runtime-status-metrics` | RuntimeStatusUpdater が計測した評価回数/失敗率/クラスターサイズのスナップショット |
 
 ### Status Engine によるフィールドの分担
 
@@ -197,10 +198,12 @@ classDiagram
 | `enabled_flag` | ユーザー意図 (UI トグル状態)。Master/Slave とも `POST /toggle` API でのみ変更。 | Web UI / API クライアント |
 | `runtime_status` | Status Engine が算出する実効ステータス (`0=Manual OFF / 1=Standby / 2=Streaming`)。 | Relay Server (Status Engine) |
 | `master_runtime_status` | Master 単位の実効ステータス。Master ノード可視化や ZMQ Config builder に利用。 | Relay Server |
+| `warning_codes` | Master/Slave ごとの警告配列。`enum WarningCode` で型付けされ、Config/REST/WebSocket が同じ内容を返す。 | Relay Server |
 
 - `enabled_flag` を書き換えた後、Status Engine は最新の接続状況や EA からの Heartbeat を参照して `runtime_status`/`master_runtime_status` を再計算し、DBへ書き戻す。<br>
 - Web UI や EA は `runtime_status` 系フィールドを観測値として扱い、意図 (`enabled_flag`) と実行 (`runtime_status`) のギャップを UI/ログで可視化する。<br>
 - ZeroMQ の `allow_new_orders` は `runtime_status == 2` のときのみ `true` となり、EA サイドのコピー可否フラグと同期する。
+- `warning_codes` は Nord バーの色決定や CS ログの根拠として使われ、Master 側の `MasterOffline` などクラスタ情報が含まれる。
 
 ## WebSocketイベント
 
@@ -305,6 +308,13 @@ impl ConfigMessage for SlaveConfigMessage {
 - `relay-server/src/config_builder.rs` が `MasterConfigMessage`/`SlaveConfigMessage` の生成を一手に引き受け、Heartbeat・REST API・config_request・unregister のすべての経路で同じステータス計算ロジックを再利用しています。
 - `status_engine.rs` から返される `MasterStatusResult`/`SlaveStatusResult` をビルダーが受け取り、Slave 設定メッセージの `allow_new_orders` は `runtime_status == CONNECTED` のときだけ `true` になるようにしています。
 - API やハンドラはビルダーのステータス結果をデータベースの `runtime_status` に書き戻し、Web UI は `enabled_flag`（ユーザー意図）と `runtime_status`（サーバ側判定）の 2 層情報で表示しつつ、EA には `allow_new_orders` をそのまま渡せるようになりました。
+
+### RuntimeStatusUpdater サービス
+
+- `relay-server/src/runtime_status_updater.rs` に `RuntimeStatusUpdater` が追加され、Heartbeat / Timeout / Intent API / RequestConfig / Unregister のすべてがこのサービスを経由して `trade_group_members.runtime_status` を再計算します。
+- `master_cluster_snapshot` と `slave_connection_snapshot` をまとめて取得し、Config Builder で使われる `SlaveConfigBundle` を生成すると同時に DB 更新・ZMQ 配信・`warning_codes` 算出まで一貫して扱います。
+- Master/Slave 双方の評価結果は `RuntimeStatusMetrics` に記録され、`GET /api/runtime-status-metrics` エンドポイントも同じスナップショットを返します。Grafana や VictoriaLogs から呼び出すことで、Heartbeat スパイクや評価失敗を即座に検知できます。
+- `warning_codes` は Master/Slave 用の enum に整理され、`config` メッセージ / REST 応答 / WebSocket で同じ配列が共有されます。Nord バーは `warning_codes` が空でない場合に黄色へフォールバックし、EA も原因をログできるようになりました。
 
 
 ## 処理フロー

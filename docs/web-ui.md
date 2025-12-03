@@ -324,10 +324,23 @@ class ApiClient {
 | `enabled_flag` | ユーザーの意図。スイッチ操作で `true/false` を切り替える。 | Web UI の `POST /api/trade-groups/{master}/members/{slave}/toggle`、またはマスタートグル (`POST /api/trade-groups/{master}/toggle`) |
 | `runtime_status` | リレーサーバーの Status Engine が算出する実効ステータス。`0=Manual OFF / 1=Standby / 2=Streaming`。 | サーバー側で計算後、`member_*` WebSocket イベント → `GET /trade-groups` + `GET /trade-groups/{master}/members` の再取得 |
 | `master_runtime_status` | Master 単位の実効ステータス。Master ノードのバッジや React Flow ノード色分けに使用。 | Status Engine 更新後に `TradeGroup` レスポンスへ書き戻し |
+| `warning_codes` | Status Engine が付与する警告配列。`slave_offline` や `master_cluster_degraded` を含み、Nord バーやツールチップの優先色決定に使う。 | Heartbeat / Timeout / Intent API / RequestConfig / Unregister の各イベント後、WebSocket・REST フェッチで受信 |
 
 - Web UI はトグル操作で **intent (`enabled_flag`) のみ** を即時更新し、`runtime_status` は WebSocket 経由の再フェッチまで待機する。<br>
 - Master ノードの `master_settings.enabled` は最後に送信したトグルの意図を保持し、`master_runtime_status` が 2 (Streaming) になるまで待機表示を続ける。<br>
 - Slave ノードの `Intent` バッジと `Runtime` バッジを分離し、ユーザー操作と Status Engine 判定の差分を明示する。
+- `warning_codes` が空でない場合は `StatusIndicatorBar` が黄色 (`bg-yellow-500`) を優先し、ツールチップで `warning_codes` の `snake_case` を Intlayer 経由で翻訳表示する。`AccountNodeHeader` も同じ配列を受け取り、警告アイコンの表示を制御する。
+
+### Warning 表示ルール
+
+| 優先度 | 判定条件 | 表示 | 参照コンポーネント |
+|--------|----------|------|------------------|
+| 1 | `warning_codes.length > 0` | Nord バーを黄、ノードヘッダに警告ツールチップ | `StatusIndicatorBar.tsx`, `AccountNodeHeader.tsx` |
+| 2 | `runtime_status === 2` | Master: `配信中`, Slave: `受信中` (緑) | 同上 |
+| 3 | `runtime_status === 1` | `待機中` (琥珀) | 同上 |
+| 4 | `runtime_status === 0` | `手動OFF` (グレー) | 同上 |
+
+`web-ui/hooks/connections/useAccountData.ts` と `web-ui/utils/tradeGroupAdapter.ts` が REST 応答の `warning_codes` をストアへ保持し、`StatusIndicatorBar.tsx` / `AccountNodeHeader.tsx` に流す。実装の参照先をドキュメント内に明示することで、設計とコードの同期がしやすくなった。
 
 ### WebSocket
 
@@ -342,7 +355,7 @@ ws.onmessage = (event) => {
         // トレードイベント
         refreshConnections();
     } else if (data.startsWith('member_')) {
-        // 設定変更イベント
+        // 設定変更イベント (runtime_status / warning_codes を含む)
         refreshSettings();
     } else if (data.startsWith('settings_')) {
         // グローバル設定変更

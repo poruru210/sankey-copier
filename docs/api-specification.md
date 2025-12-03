@@ -1,3 +1,19 @@
+- `warning_codes` は REST / WebSocket / ZMQ Config すべてで同じリストが返るため、UI・EA・サポートが統一的に原因を把握できる。
+
+## Warning Codes リファレンス
+
+| コード | 発生条件 | 推奨対応 |
+|--------|----------|-----------|
+| `slave_web_ui_disabled` | Web UI で Slave Intent が OFF | UI でトグルを ON に戻す。 |
+| `slave_offline` | Slave Heartbeat を受信できていない | 端末/ネットワークを確認し、Heartbeat を再送する。 |
+| `slave_auto_trading_disabled` | MT4/MT5 の AlgoTrading が OFF | 「Algo Trading」ボタンを有効にする。 |
+| `master_web_ui_disabled` | Master Intent が OFF | Master ノードを ON に戻す。 |
+| `master_offline` | Master Heartbeat が失われた | Master EA を起動する。 |
+| `master_auto_trading_disabled` | Master 側の自動売買が OFF | Master の Algo 設定を修正。 |
+| `master_cluster_degraded` | マルチ Master の一部が未接続 | すべての Master を接続するまで Slave は Standby。 |
+| `no_master_assigned` | Slave に紐付く Master が 0 件 | Web UI で TradeGroup に Slave を追加。 |
+
+すべて `snake_case` 文字列でシリアライズされ、将来的にコードが増える場合も後方互換を維持する。
 # API仕様 (Status Engine 版)
 
 Status Engine リファクタリング後の REST / WebSocket API で公開されるステータス関連フィールドをまとめる。`enabled_flag` (ユーザー意図) と `runtime_status` (Status Engine の計算結果) を統一的に扱うためのリファレンスとして利用できる。
@@ -10,6 +26,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 | `runtime_status` | number (0/1/2) | Status Engine | Slave 実効ステータス。0=DISABLED, 1=ENABLED (Slave準備完了だが Master 未接続), 2=CONNECTED。 |
 | `master_runtime_status` | number (0/2) | Status Engine | Master の実効ステータス。Master は ENABLED を取らないため 0 (DISABLED) or 2 (CONNECTED)。 |
 | `allow_new_orders` | boolean | Status Engine | Slave runtime_status が 2 の場合のみ true。EA へ設定を送る際に参照される。 |
+| `warning_codes` | WarningCode[] | Status Engine | RuntimeStatusUpdater が付与する警告配列。`snake_case` 文字列 (`slave_offline` など) を返し、原因を UI/EA/CS で共有する。 |
 
 > **重要:** `status` カラムは後方互換目的で DB に残っているが値は常に `runtime_status` と一致する。API / WebSocket では `runtime_status` を参照すること。
 
@@ -24,6 +41,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
   "enabled": true,
   "enabled_flag": true,
   "master_runtime_status": 2,
+  "warning_codes": [],
   "members": [ ... ]
 }
 ```
@@ -53,6 +71,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 | `runtime_status` | Status Engine の実効ステータス。`member_updated` WebSocket で配信。 |
 | `status` | 互換用ミラー。クライアントは `runtime_status` を使う。 |
 | `allow_new_orders` | Slave 設定 (`send_config_to_slave`) 内に含まれる。`runtime_status === 2` のときのみ true。 |
+| `warning_codes` | Slave 用の警告配列。`slave_offline` や `master_cluster_degraded` など原因を示す。 |
 
 ## REST エンドポイント
 
@@ -67,6 +86,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 - 単一マスター詳細。
 - `master_runtime_status`、`members[].runtime_status` が最新値で返る。
 - マルチ Master/Slave の「全 Master 接続判定」は Status Engine が計算済み。
+- `warning_codes` が付与されている場合は UI で黄色バナーを表示し、CS も同じ配列を確認できる。
 
 ### `POST /api/trade-groups/{master_account}/toggle`
 
@@ -90,6 +110,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 
 - `enabled_flag` を切り替える唯一の手段。
 - レスポンスは更新後の `TradeGroupMember`。`runtime_status` は WebSocket で配信される値を待つ（即時同期しない）。
+- `warning_codes` は Heartbeat/RuntimeStatusUpdater の再評価後に WebSocket/Config 経由で更新される点に注意。
 
 ### `GET /api/trade-groups/{master_account}/members`
 
@@ -102,9 +123,9 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 
 | イベント | ペイロード | 説明 |
 |----------|------------|------|
-| `member_updated` | `TradeGroupMember` | Slave の `enabled_flag`/`runtime_status` 更新を通知。トグル操作後の `runtime_status` 反映に必須。 |
-| `trade_group_updated` | `TradeGroup` | Master の `enabled_flag`/`master_runtime_status` 更新。複数 Slave に影響する。 |
-| `settings_updated` | `SlaveConfigWithMaster` | `allow_new_orders` を含む config 再配信。Status Engine 結果を EA に同期。 |
+| `member_updated` | `TradeGroupMember` | Slave の `enabled_flag`/`runtime_status`/`warning_codes` 更新を通知。トグル操作後の状態反映に必須。 |
+| `trade_group_updated` | `TradeGroup` | Master の `enabled_flag`/`master_runtime_status`/`warning_codes` 更新。複数 Slave に影響する。 |
+| `settings_updated` | `SlaveConfigWithMaster` | `allow_new_orders` と `warning_codes` を含む config 再配信。Status Engine 結果を EA に同期。 |
 
 ## 状態遷移タイミング
 
@@ -112,6 +133,24 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 2. 接続情報 (Heartbeat/Unregister) を受けた Status Engine が `runtime_status`/`master_runtime_status` を再計算。
 3. DB 更新後、WebSocket で `member_updated` / `trade_group_updated` を配信。UI はこの通知で実効ステータスを更新する。
 4. Config Builder が `allow_new_orders` を含む設定を再生成し、対象 EA へ配信する。
+
+## Runtime Status Metrics API
+
+- `GET /api/runtime-status-metrics` は `RuntimeStatusUpdater` のメトリクススナップショットを返す。
+- レスポンス例:
+
+```json
+{
+  "master_evaluations_total": 420,
+  "master_evaluations_failed": 0,
+  "slave_evaluations_total": 1380,
+  "slave_evaluations_failed": 2,
+  "slave_bundles_built": 512,
+  "last_cluster_size": 2
+}
+```
+
+- 監視用途: `slave_evaluations_failed` の急増で ZeroMQ/DB 輻輳を検知、`last_cluster_size` でマルチ Master の接続数を可視化できる。
 
 ## テストポリシー
 
