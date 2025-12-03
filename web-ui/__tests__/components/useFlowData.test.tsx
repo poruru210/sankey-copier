@@ -45,6 +45,7 @@ function createAccount(id: string, overrides: Partial<AccountInfo> = {}): Accoun
   return {
     id,
     name: id,
+    accountType: 'master',
     isOnline: true,
     isEnabled: true,
     isActive: true,
@@ -127,7 +128,10 @@ function getNodeData(nodes: Node[], id: string): AccountNodeData {
 describe('useFlowData master/slave combinations', () => {
   it('creates nodes and edges for 1:N master to slave relationships', () => {
     const sourceAccounts = [createAccount('MASTER-1')];
-    const receiverAccounts = [createAccount('SLAVE-A'), createAccount('SLAVE-B')];
+    const receiverAccounts = [
+      createAccount('SLAVE-A', { accountType: 'slave' }),
+      createAccount('SLAVE-B', { accountType: 'slave' }),
+    ];
     const settings = [
       createSetting(1, 'MASTER-1', 'SLAVE-A'),
       createSetting(2, 'MASTER-1', 'SLAVE-B'),
@@ -146,7 +150,7 @@ describe('useFlowData master/slave combinations', () => {
 
   it('supports N:1 relationships where multiple masters feed the same slave', () => {
     const sourceAccounts = [createAccount('MASTER-1'), createAccount('MASTER-2')];
-    const receiverAccounts = [createAccount('SLAVE-A')];
+    const receiverAccounts = [createAccount('SLAVE-A', { accountType: 'slave' })];
     const settings = [
       createSetting(1, 'MASTER-1', 'SLAVE-A'),
       createSetting(2, 'MASTER-2', 'SLAVE-A'),
@@ -170,9 +174,9 @@ describe('useFlowData master/slave combinations', () => {
       createAccount('MASTER-3'),
     ];
     const receiverAccounts = [
-      createAccount('SLAVE-A'),
-      createAccount('SLAVE-B'),
-      createAccount('SLAVE-C'),
+      createAccount('SLAVE-A', { accountType: 'slave' }),
+      createAccount('SLAVE-B', { accountType: 'slave' }),
+      createAccount('SLAVE-C', { accountType: 'slave' }),
     ];
     const settings = [
       createSetting(1, 'MASTER-1', 'SLAVE-A'),

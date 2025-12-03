@@ -101,6 +101,7 @@ export interface CreateSettingsRequest {
 export interface AccountInfo {
   id: string;
   name: string;
+  accountType: 'master' | 'slave';
   platform?: 'MT4' | 'MT5';
   isOnline: boolean;
   isEnabled: boolean; // User's switch state (enabled_flag)

@@ -77,7 +77,7 @@ export function AccountNodeHeader({
       const runtimeLabels: Record<number, string> = {
         0: content.runtimeManualOff,
         1: content.runtimeStandby,
-        2: content.runtimeStreaming,
+        2: account.accountType === 'slave' ? content.runtimeReceiving : content.runtimeStreaming,
       };
       const runtimeLabel =
         runtimeLabels[runtimeStatus] ??

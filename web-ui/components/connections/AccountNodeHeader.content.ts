@@ -15,6 +15,10 @@ const accountNodeHeaderContent = {
       en: 'Streaming',
       ja: '配信中',
     }),
+    runtimeReceiving: t({
+      en: 'Receiving',
+      ja: '受信中',
+    }),
     runtimeUnknownState: t({
       en: 'State {code}',
       ja: '状態{code}',

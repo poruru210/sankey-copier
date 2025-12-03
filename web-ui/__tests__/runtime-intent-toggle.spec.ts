@@ -165,6 +165,48 @@ async function fulfillJson(route: Route, data: unknown) {
 }
 
 test.describe('Runtime vs intent toggles', () => {
+  test('runtime badge falls back to Manual OFF when MT auto-trading is disabled', async ({ page }) => {
+    const targetMaster = 'FxPro_12345001';
+    const targetSlave = 'FxPro_22222004';
+    const { tradeGroups, members } = buildApiState(mockSettings);
+
+    const connections = mockConnections.map((connection) => ({ ...connection }));
+    const targetConnection = connections.find((conn) => conn.account_id === targetMaster);
+    if (targetConnection) {
+      targetConnection.is_trade_allowed = false;
+    }
+    const slaveConnection = connections.find((conn) => conn.account_id === targetSlave);
+    if (slaveConnection) {
+      slaveConnection.is_trade_allowed = false;
+    }
+
+    await page.route('**/api/connections', async (route) => {
+      await fulfillJson(route, connections);
+    });
+
+    await page.route('**/api/trade-groups/*/members', async (route) => {
+      const master = extractSegment(route.request().url(), 'trade-groups');
+      await fulfillJson(route, members.get(master) ?? []);
+    });
+
+    await page.route('**/api/trade-groups', async (route) => {
+      await fulfillJson(route, Array.from(tradeGroups.values()));
+    });
+
+    await gotoApp(page);
+
+    const masterCard = page.locator(`[data-account-id="${targetMaster}"]`).first();
+    await expect(masterCard).toBeVisible();
+
+    await expect(masterCard.getByText('Streaming')).toHaveCount(0);
+    await expect(masterCard.getByText('Manual OFF')).toBeVisible();
+
+    const memberCard = page.locator(`[data-account-id="${targetSlave}"]`).first();
+    await expect(memberCard).toBeVisible();
+    await expect(memberCard.getByText('Receiving')).toHaveCount(0);
+    await expect(memberCard.getByText('Manual OFF')).toBeVisible();
+  });
+
   test('runtime badge updates only after WebSocket refresh', async ({ page }) => {
     const { tradeGroups, members } = buildApiState(mockSettings);
     const toggleCalls: ToggleCall[] = [];
@@ -248,7 +290,7 @@ test.describe('Runtime vs intent toggles', () => {
       (window as unknown as { __emitWsMessage?: (message: string) => void }).__emitWsMessage?.('member_runtime_update');
     });
 
-    await expect(receiverCard.getByText('Streaming')).toBeVisible();
+    await expect(receiverCard.getByText('Receiving')).toBeVisible();
     await expect.poll(async () => toggleSwitch.getAttribute('data-pending')).toBeNull();
   });
 });

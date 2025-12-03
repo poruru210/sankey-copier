@@ -131,7 +131,9 @@ export function useAccountData({
           : isOnline && isTradeAllowed
           ? 1
           : 0;
-        const runtimeStatus = masterRuntimeStatus ?? fallbackRuntimeStatus;
+        const runtimeStatus = isTradeAllowed
+          ? (masterRuntimeStatus ?? fallbackRuntimeStatus)
+          : 0;
         const isActive = runtimeStatus === 2;
 
         // Warnings: only show if online but trade not allowed
@@ -142,6 +144,7 @@ export function useAccountData({
         sourceMap.set(setting.master_account, {
           id: setting.master_account,
           name: setting.master_account,
+          accountType: 'master',
           platform: connection?.platform,
           isOnline,
           isEnabled,
@@ -177,6 +180,7 @@ export function useAccountData({
         receiverMap.set(setting.slave_account, {
           id: setting.slave_account,
           name: setting.slave_account,
+          accountType: 'slave',
           platform: connection?.platform,
           isOnline,
           isEnabled,
@@ -202,7 +206,7 @@ export function useAccountData({
 
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
       const runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
-      receiver.runtimeStatus = runtimeStatus;
+      receiver.runtimeStatus = isTradeAllowed ? runtimeStatus : 0;
       receiver.isActive = receiver.isOnline && receiver.isEnabled && isTradeAllowed && runtimeStatus === 2;
 
       if (receiver.isOnline && !isTradeAllowed) {

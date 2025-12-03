@@ -6,6 +6,7 @@ import type { AccountInfo } from '@/types';
 const baseAccount: AccountInfo = {
   id: 'mock-account',
   name: 'Mock Broker_0001',
+  accountType: 'master',
   isOnline: true,
   isEnabled: true,
   isActive: true,

@@ -52,7 +52,6 @@ export async function setupDefaultApiMocks(page: Page): Promise<void> {
   }
   await page.route('**/api/connections', async (route) => {
     if (shouldLogApi) {
-      // eslint-disable-next-line no-console
       console.log('[MockAPI] connections', route.request().url());
     }
     await fulfillJson(route, mockConnections);
