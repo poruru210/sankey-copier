@@ -124,6 +124,7 @@ mod tests {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
             allow_new_orders: true,
+            warning_codes: Vec::new(),
         };
 
         let msgpack = rmp_serde::to_vec_named(&config).unwrap();

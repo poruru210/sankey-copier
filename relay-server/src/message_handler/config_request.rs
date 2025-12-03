@@ -4,14 +4,12 @@
 //! appropriate handlers based on EA type.
 
 use super::MessageHandler;
-use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
+use crate::config_builder::{ConfigBuilder, MasterConfigContext};
 use crate::models::{
-    status_engine::{
-        evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
-        SlaveIntent,
-    },
+    status_engine::{ConnectionSnapshot, MasterIntent},
     RequestConfigMessage,
 };
+use crate::runtime_status_updater::SlaveRuntimeTarget;
 
 impl MessageHandler {
     /// Handle configuration request from Master or Slave EA
@@ -94,79 +92,55 @@ impl MessageHandler {
                     return;
                 }
 
+                let runtime_updater = self.runtime_status_updater();
+                let cluster_snapshot = runtime_updater.master_cluster_snapshot(account_id).await;
+
                 for settings in settings_list {
+                    let master_account = settings.master_account.clone();
+                    let slave_account = settings.slave_account.clone();
+
                     tracing::info!(
                         "Found settings for {}: master={}, db_status={}, lot_mult={:?}",
                         account_id,
-                        settings.master_account,
+                        master_account,
                         settings.status,
                         settings.slave_settings.lot_multiplier
                     );
 
-                    // Snapshot connections for Master / Slave evaluation
-                    let master_conn = self
-                        .connection_manager
-                        .get_ea(&settings.master_account)
+                    let slave_bundle = runtime_updater
+                        .build_slave_bundle(
+                            SlaveRuntimeTarget {
+                                master_account: master_account.as_str(),
+                                trade_group_id: master_account.as_str(),
+                                slave_account: account_id,
+                                enabled_flag: settings.enabled_flag,
+                                slave_settings: &settings.slave_settings,
+                            },
+                            Some(cluster_snapshot.clone()),
+                        )
                         .await;
-                    let master_snapshot = ConnectionSnapshot {
-                        connection_status: master_conn.as_ref().map(|c| c.status),
-                        is_trade_allowed: master_conn
-                            .as_ref()
-                            .map(|c| c.is_trade_allowed)
-                            .unwrap_or(false),
-                    };
-                    let master_enabled =
-                        match self.db.get_trade_group(&settings.master_account).await {
-                            Ok(Some(tg)) => tg.master_settings.enabled,
-                            Ok(None) => {
-                                tracing::warn!(
-                                    "Config request: missing trade group for master {}",
-                                    settings.master_account
-                                );
-                                false
-                            }
-                            Err(err) => {
-                                tracing::error!(
-                                    "Config request: failed to load trade group {}: {}",
-                                    settings.master_account,
-                                    err
-                                );
-                                false
-                            }
-                        };
-                    let master_result = evaluate_master_status(
-                        MasterIntent {
-                            web_ui_enabled: master_enabled,
-                        },
-                        master_snapshot,
-                    );
-
-                    let slave_conn = self.connection_manager.get_ea(account_id).await;
-                    let slave_bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
-                        slave_account: settings.slave_account.clone(),
-                        master_account: settings.master_account.clone(),
-                        trade_group_id: settings.master_account.clone(),
-                        intent: SlaveIntent {
-                            web_ui_enabled: settings.enabled_flag,
-                        },
-                        slave_connection_snapshot: ConnectionSnapshot {
-                            connection_status: slave_conn.as_ref().map(|c| c.status),
-                            is_trade_allowed: slave_conn
-                                .as_ref()
-                                .map(|c| c.is_trade_allowed)
-                                .unwrap_or(false),
-                        },
-                        master_cluster: MasterClusterSnapshot::new(vec![master_result.status]),
-                        slave_settings: &settings.slave_settings,
-                        master_equity: self
-                            .connection_manager
-                            .get_ea(&settings.master_account)
-                            .await
-                            .map(|conn| conn.equity),
-                        timestamp: chrono::Utc::now(),
-                    });
                     let config = slave_bundle.config;
                     let new_status = slave_bundle.status_result.status;
+
+                    if let Err(err) = self
+                        .db
+                        .update_member_runtime_status(&master_account, &slave_account, new_status)
+                        .await
+                    {
+                        tracing::error!(
+                            "Failed to persist runtime_status for slave {} in trade group {}: {}",
+                            slave_account,
+                            master_account,
+                            err
+                        );
+                    } else {
+                        tracing::debug!(
+                            "Updated runtime_status via RequestConfig: master={}, slave={}, status={}",
+                            master_account,
+                            slave_account,
+                            new_status
+                        );
+                    }
 
                     // Send CONFIG via MessagePack
                     if let Err(e) = self.publisher.send(&config).await {

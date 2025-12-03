@@ -4,17 +4,11 @@
 //! When a Master EA disconnects, notifies all Slaves so they can update their status.
 
 use super::MessageHandler;
-use crate::config_builder::{ConfigBuilder, SlaveConfigContext};
 use crate::{
     connection_manager::ConnectionManager,
     db::Database,
-    models::{
-        status_engine::{
-            evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
-            SlaveIntent,
-        },
-        EaType, SlaveConfigWithMaster, UnregisterMessage,
-    },
+    models::{EaType, SlaveConfigWithMaster, UnregisterMessage},
+    runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater, SlaveRuntimeTarget},
     zeromq::ZmqConfigPublisher,
 };
 use std::sync::Arc;
@@ -75,6 +69,7 @@ impl MessageHandler {
                 &self.db,
                 &self.publisher,
                 &self.broadcast_tx,
+                self.runtime_status_metrics.clone(),
                 account_id,
             )
             .await;
@@ -87,52 +82,46 @@ pub(crate) async fn notify_slaves_master_offline(
     db: &Arc<Database>,
     publisher: &Arc<ZmqConfigPublisher>,
     broadcast_tx: &broadcast::Sender<String>,
+    runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     master_account: &str,
 ) {
-    // Resolve Master's intent for consistent status evaluation
-    let master_web_ui_enabled = match db.get_trade_group(master_account).await {
-        Ok(Some(tg)) => tg.master_settings.enabled,
-        _ => true,
-    };
-
-    let master_result = evaluate_master_status(
-        MasterIntent {
-            web_ui_enabled: master_web_ui_enabled,
-        },
-        ConnectionSnapshot {
-            connection_status: None,
-            is_trade_allowed: false,
-        },
+    let runtime_updater = RuntimeStatusUpdater::with_metrics(
+        db.clone(),
+        connection_manager.clone(),
+        runtime_status_metrics,
     );
-    let master_cluster = MasterClusterSnapshot::new(vec![master_result.status]);
-
     match db.get_members(master_account).await {
         Ok(members) => {
             for member in members {
-                let slave_conn = connection_manager.get_ea(&member.slave_account).await;
-                let slave_snapshot = ConnectionSnapshot {
-                    connection_status: slave_conn.as_ref().map(|c| c.status),
-                    is_trade_allowed: slave_conn
-                        .as_ref()
-                        .map(|c| c.is_trade_allowed)
-                        .unwrap_or(false),
-                };
-
-                let slave_bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
-                    slave_account: member.slave_account.clone(),
-                    master_account: master_account.to_string(),
-                    trade_group_id: master_account.to_string(),
-                    intent: SlaveIntent {
-                        web_ui_enabled: member.enabled_flag,
-                    },
-                    slave_connection_snapshot: slave_snapshot,
-                    master_cluster: master_cluster.clone(),
-                    slave_settings: &member.slave_settings,
-                    master_equity: None,
-                    timestamp: chrono::Utc::now(),
-                });
+                let cluster_snapshot = runtime_updater
+                    .master_cluster_snapshot(&member.slave_account)
+                    .await;
+                let slave_bundle = runtime_updater
+                    .build_slave_bundle(
+                        SlaveRuntimeTarget {
+                            master_account,
+                            trade_group_id: master_account,
+                            slave_account: &member.slave_account,
+                            enabled_flag: member.enabled_flag,
+                            slave_settings: &member.slave_settings,
+                        },
+                        Some(cluster_snapshot.clone()),
+                    )
+                    .await;
                 let config = slave_bundle.config;
                 let new_status = slave_bundle.status_result.status;
+
+                super::log_slave_runtime_trace(
+                    "master_unregister",
+                    master_account,
+                    &member.slave_account,
+                    member.runtime_status,
+                    new_status,
+                    slave_bundle.status_result.allow_new_orders,
+                    &slave_bundle.status_result.warning_codes,
+                    cluster_snapshot.master_statuses.len(),
+                    cluster_snapshot.all_connected(),
+                );
 
                 if let Err(e) = publisher.send(&config).await {
                     tracing::error!(
@@ -146,6 +135,19 @@ pub(crate) async fn notify_slaves_master_offline(
                         member.slave_account,
                         new_status,
                         master_account
+                    );
+                }
+
+                if let Err(err) = db
+                    .update_member_runtime_status(master_account, &member.slave_account, new_status)
+                    .await
+                {
+                    tracing::error!(
+                        slave = %member.slave_account,
+                        master = %master_account,
+                        status = new_status,
+                        error = %err,
+                        "Failed to persist runtime status after master disconnect"
                     );
                 }
 

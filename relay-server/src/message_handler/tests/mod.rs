@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
+use crate::runtime_status_updater::RuntimeStatusMetrics;
 use chrono::Utc;
 use std::ops::Deref;
 
@@ -47,6 +48,7 @@ impl TestContext {
             db,
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
+            Arc::new(RuntimeStatusMetrics::default()),
         );
 
         Self {
@@ -116,7 +118,37 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
         db,
         publisher,
         None,
+        Arc::new(RuntimeStatusMetrics::default()),
     )
+}
+
+/// Build a reusable HeartbeatMessage for tests
+pub(crate) fn build_heartbeat(
+    account_id: &str,
+    ea_type: &str,
+    is_trade_allowed: bool,
+) -> HeartbeatMessage {
+    HeartbeatMessage {
+        message_type: "Heartbeat".to_string(),
+        account_id: account_id.to_string(),
+        balance: 10_000.0,
+        equity: 10_000.0,
+        open_positions: 0,
+        timestamp: Utc::now().to_rfc3339(),
+        version: "1.0.0".to_string(),
+        ea_type: ea_type.to_string(),
+        platform: "MT5".to_string(),
+        account_number: 123456,
+        broker: "TestBroker".to_string(),
+        account_name: "TestAccount".to_string(),
+        server: "TestServer".to_string(),
+        currency: "USD".to_string(),
+        leverage: 100,
+        is_trade_allowed,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_map: None,
+    }
 }
 
 /// Create a test TradeSignal

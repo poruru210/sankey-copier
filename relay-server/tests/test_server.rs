@@ -13,6 +13,7 @@ use sankey_copier_relay_server::{
     log_buffer::create_log_buffer,
     message_handler::MessageHandler,
     port_resolver::ResolvedPorts,
+    runtime_status_updater::RuntimeStatusMetrics,
     victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer},
 };
@@ -72,6 +73,8 @@ impl TestServer {
         // Initialize copy engine
         let copy_engine = Arc::new(CopyEngine::new());
 
+        let runtime_status_metrics = Arc::new(RuntimeStatusMetrics::default());
+
         // Create log buffer
         let log_buffer = create_log_buffer();
 
@@ -98,6 +101,7 @@ impl TestServer {
             db.clone(),
             zmq_publisher.clone(),
             handler_vlogs_controller,
+            runtime_status_metrics.clone(),
         ));
 
         // Spawn ZMQ message processing task
@@ -131,6 +135,7 @@ impl TestServer {
             config: Arc::new(Config::default()),
             resolved_ports,
             vlogs_controller,
+            runtime_status_metrics,
         };
 
         // Create router

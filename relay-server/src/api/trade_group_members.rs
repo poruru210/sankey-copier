@@ -11,11 +11,8 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
-use crate::models::{
-    status_engine::{ConnectionSnapshot, MasterClusterSnapshot, MasterIntent, SlaveIntent},
-    MasterSettings, SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG,
-};
+use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
+use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
 
 use super::{AppState, ProblemDetails};
 
@@ -52,7 +49,14 @@ pub async fn list_members(
                 count = members.len(),
                 "Successfully retrieved members"
             );
-            Ok(Json(members))
+
+            let runtime_updater = runtime_status_updater_for(&state);
+            let mut hydrated = Vec::with_capacity(members.len());
+            for member in members {
+                hydrated.push(hydrate_member_runtime(&runtime_updater, member).await);
+            }
+
+            Ok(Json(hydrated))
         }
         Err(e) => {
             tracing::error!(
@@ -156,15 +160,18 @@ pub async fn add_member(
                 .await
             {
                 Ok(Some(member)) => {
+                    let runtime_updater = runtime_status_updater_for(&state);
+                    let hydrated_member = hydrate_member_runtime(&runtime_updater, member).await;
+
                     // Send config to Slave EA via ZMQ
-                    send_config_to_slave(&state, &trade_group_id, &member).await;
+                    send_config_to_slave(&state, &trade_group_id, &hydrated_member).await;
 
                     // Notify via WebSocket
-                    if let Ok(json) = serde_json::to_string(&member) {
+                    if let Ok(json) = serde_json::to_string(&hydrated_member) {
                         let _ = state.tx.send(format!("member_added:{}", json));
                     }
 
-                    Ok((StatusCode::CREATED, Json(member)))
+                    Ok((StatusCode::CREATED, Json(hydrated_member)))
                 }
                 Ok(None) => {
                     tracing::error!(
@@ -247,7 +254,9 @@ pub async fn get_member(
                 config_version = member.slave_settings.config_version,
                 "Successfully retrieved member"
             );
-            Ok(Json(member))
+            let runtime_updater = runtime_status_updater_for(&state);
+            let hydrated_member = hydrate_member_runtime(&runtime_updater, member).await;
+            Ok(Json(hydrated_member))
         }
         Ok(None) => {
             tracing::warn!(
@@ -321,11 +330,14 @@ pub async fn update_member(
 
             // Retrieve updated member for ZMQ notification
             if let Ok(Some(member)) = state.db.get_member(&trade_group_id, &slave_account).await {
+                let runtime_updater = runtime_status_updater_for(&state);
+                let hydrated_member = hydrate_member_runtime(&runtime_updater, member).await;
+
                 // Send updated config to Slave EA via ZMQ
-                send_config_to_slave(&state, &trade_group_id, &member).await;
+                send_config_to_slave(&state, &trade_group_id, &hydrated_member).await;
 
                 // Notify via WebSocket
-                if let Ok(json) = serde_json::to_string(&member) {
+                if let Ok(json) = serde_json::to_string(&hydrated_member) {
                     let _ = state.tx.send(format!("member_updated:{}", json));
                 }
             }
@@ -403,11 +415,14 @@ pub async fn toggle_member_status(
 
             // Retrieve updated member for ZMQ notification
             if let Ok(Some(member)) = state.db.get_member(&trade_group_id, &slave_account).await {
+                let runtime_updater = runtime_status_updater_for(&state);
+                let hydrated_member = hydrate_member_runtime(&runtime_updater, member).await;
+
                 // Send updated config to Slave EA via ZMQ (with updated status)
-                send_config_to_slave(&state, &trade_group_id, &member).await;
+                send_config_to_slave(&state, &trade_group_id, &hydrated_member).await;
 
                 // Notify via WebSocket
-                if let Ok(json) = serde_json::to_string(&member) {
+                if let Ok(json) = serde_json::to_string(&hydrated_member) {
                     let _ = state.tx.send(format!("member_status_changed:{}", json));
                 }
             }
@@ -541,6 +556,38 @@ pub async fn delete_member(
     }
 }
 
+fn runtime_status_updater_for(state: &AppState) -> RuntimeStatusUpdater {
+    RuntimeStatusUpdater::with_metrics(
+        state.db.clone(),
+        state.connection_manager.clone(),
+        state.runtime_status_metrics.clone(),
+    )
+}
+
+async fn hydrate_member_runtime(
+    runtime_updater: &RuntimeStatusUpdater,
+    member: TradeGroupMember,
+) -> TradeGroupMember {
+    let mut member = member;
+    let status_result = runtime_updater
+        .evaluate_slave_runtime_status(
+            SlaveRuntimeTarget {
+                master_account: member.trade_group_id.as_str(),
+                trade_group_id: member.trade_group_id.as_str(),
+                slave_account: member.slave_account.as_str(),
+                enabled_flag: member.enabled_flag,
+                slave_settings: &member.slave_settings,
+            },
+            None,
+        )
+        .await;
+
+    member.runtime_status = status_result.status;
+    member.status = status_result.status;
+    member.warning_codes = status_result.warning_codes;
+    member
+}
+
 /// Send disabled config (status=0) to Slave EA via ZMQ to remove config
 async fn send_disabled_config_to_slave(
     state: &AppState,
@@ -576,6 +623,7 @@ async fn send_disabled_config_to_slave(
         use_pending_order_for_delayed: false,
         // Disabled = no new orders allowed
         allow_new_orders: false,
+        warning_codes: Vec::new(),
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -603,6 +651,7 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
         symbol_suffix: None,
         config_version: 0,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        warning_codes: Vec::new(),
     };
 
     if let Err(e) = state.config_sender.send(&config).await {
@@ -621,73 +670,22 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
 
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
-    // Fetch Master's connection info to calculate status + equity
-    let master_conn = state.connection_manager.get_ea(master_account).await;
-    let master_equity = master_conn.as_ref().map(|conn| conn.equity);
-    let master_snapshot = ConnectionSnapshot {
-        connection_status: master_conn.as_ref().map(|c| c.status),
-        is_trade_allowed: master_conn
-            .as_ref()
-            .map(|c| c.is_trade_allowed)
-            .unwrap_or(false),
-    };
-
-    let master_settings = match state.db.get_trade_group(master_account).await {
-        Ok(Some(tg)) => tg.master_settings,
-        Ok(None) => {
-            tracing::warn!(
-                master_account = %master_account,
-                "TradeGroup missing when building config, using defaults"
-            );
-            MasterSettings::default()
-        }
-        Err(e) => {
-            tracing::error!(
-                master_account = %master_account,
-                error = %e,
-                "Failed to load TradeGroup settings, using defaults"
-            );
-            MasterSettings::default()
-        }
-    };
-
-    let master_context = MasterConfigContext {
-        account_id: master_account.to_string(),
-        intent: MasterIntent {
-            web_ui_enabled: master_settings.enabled,
-        },
-        connection_snapshot: master_snapshot,
-        settings: &master_settings,
-        timestamp: chrono::Utc::now(),
-    };
-
-    let master_bundle = ConfigBuilder::build_master_config(master_context);
-
-    // Fetch Slave connection snapshot and evaluate via engine
-    let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
-    let slave_snapshot = ConnectionSnapshot {
-        connection_status: slave_conn.as_ref().map(|c| c.status),
-        is_trade_allowed: slave_conn
-            .as_ref()
-            .map(|c| c.is_trade_allowed)
-            .unwrap_or(false),
-    };
-
-    let slave_context = SlaveConfigContext {
-        slave_account: member.slave_account.clone(),
-        master_account: master_account.to_string(),
-        trade_group_id: master_account.to_string(),
-        intent: SlaveIntent {
-            web_ui_enabled: member.enabled_flag,
-        },
-        slave_connection_snapshot: slave_snapshot,
-        master_cluster: MasterClusterSnapshot::new(vec![master_bundle.status_result.status]),
-        slave_settings: &member.slave_settings,
-        master_equity,
-        timestamp: chrono::Utc::now(),
-    };
-
-    let slave_bundle = ConfigBuilder::build_slave_config(slave_context);
+    let runtime_updater = runtime_status_updater_for(state);
+    let cluster_snapshot = runtime_updater
+        .master_cluster_snapshot(&member.slave_account)
+        .await;
+    let slave_bundle = runtime_updater
+        .build_slave_bundle(
+            SlaveRuntimeTarget {
+                master_account,
+                trade_group_id: master_account,
+                slave_account: &member.slave_account,
+                enabled_flag: member.enabled_flag,
+                slave_settings: &member.slave_settings,
+            },
+            Some(cluster_snapshot),
+        )
+        .await;
     let slave_status = slave_bundle.status_result.status;
     let config = slave_bundle.config;
 

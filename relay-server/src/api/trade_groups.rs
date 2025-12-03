@@ -14,9 +14,9 @@ use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigConte
 use crate::models::{
     status_engine::{
         evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
-        SlaveIntent,
+        MasterStatusResult, SlaveIntent,
     },
-    MasterSettings, TradeGroup,
+    MasterSettings, TradeGroup, WarningCode,
 };
 
 use super::{AppState, ProblemDetails};
@@ -27,16 +27,18 @@ pub struct TradeGroupRuntimeView {
     pub id: String,
     pub master_settings: MasterSettings,
     pub master_runtime_status: i32,
+    pub master_warning_codes: Vec<WarningCode>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 impl TradeGroupRuntimeView {
-    fn new(trade_group: TradeGroup, master_runtime_status: i32) -> Self {
+    fn new(trade_group: TradeGroup, master_runtime: MasterStatusResult) -> Self {
         Self {
             id: trade_group.id,
             master_settings: trade_group.master_settings,
-            master_runtime_status,
+            master_runtime_status: master_runtime.status,
+            master_warning_codes: master_runtime.warning_codes,
             created_at: trade_group.created_at,
             updated_at: trade_group.updated_at,
         }
@@ -331,11 +333,14 @@ async fn build_trade_group_response(
     state: &AppState,
     trade_group: TradeGroup,
 ) -> TradeGroupRuntimeView {
-    let master_runtime_status = evaluate_master_runtime_status(state, &trade_group).await;
-    TradeGroupRuntimeView::new(trade_group, master_runtime_status)
+    let master_runtime = evaluate_master_runtime_status(state, &trade_group).await;
+    TradeGroupRuntimeView::new(trade_group, master_runtime)
 }
 
-async fn evaluate_master_runtime_status(state: &AppState, trade_group: &TradeGroup) -> i32 {
+async fn evaluate_master_runtime_status(
+    state: &AppState,
+    trade_group: &TradeGroup,
+) -> MasterStatusResult {
     let master_conn = state.connection_manager.get_ea(&trade_group.id).await;
     let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
@@ -351,7 +356,6 @@ async fn evaluate_master_runtime_status(state: &AppState, trade_group: &TradeGro
         },
         master_snapshot,
     )
-    .status
 }
 
 /// Send Master config to Master EA via ZMQ
@@ -421,7 +425,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
         },
         master_snapshot,
     );
-    let master_cluster = MasterClusterSnapshot::new(vec![master_status.status]);
+    let master_cluster = MasterClusterSnapshot::with_status_results(vec![master_status.clone()]);
 
     // Fetch Master's equity for margin_ratio mode
     let master_equity = master_conn.as_ref().map(|conn| conn.equity);

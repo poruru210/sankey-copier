@@ -57,6 +57,7 @@ impl ConfigBuilder {
             symbol_suffix: context.settings.symbol_suffix.clone(),
             config_version: context.settings.config_version,
             timestamp: context.timestamp.to_rfc3339(),
+            warning_codes: status_result.warning_codes.clone(),
         };
 
         MasterConfigBundle {
@@ -102,6 +103,7 @@ impl ConfigBuilder {
             max_signal_delay_ms: settings.max_signal_delay_ms,
             use_pending_order_for_delayed: settings.use_pending_order_for_delayed,
             allow_new_orders: status_result.allow_new_orders,
+            warning_codes: status_result.warning_codes.clone(),
         };
 
         SlaveConfigBundle {
@@ -116,7 +118,8 @@ mod tests {
     use super::*;
     use crate::models::{
         status_engine::{ConnectionSnapshot, MasterClusterSnapshot, MasterIntent, SlaveIntent},
-        ConnectionStatus, MasterSettings, SlaveSettings, STATUS_CONNECTED, STATUS_ENABLED,
+        ConnectionStatus, MasterSettings, SlaveSettings, WarningCode, STATUS_CONNECTED,
+        STATUS_DISABLED, STATUS_ENABLED,
     };
 
     fn online_snapshot() -> ConnectionSnapshot {
@@ -147,8 +150,36 @@ mod tests {
 
         let bundle = ConfigBuilder::build_master_config(context);
         assert_eq!(bundle.status_result.status, STATUS_CONNECTED);
+        assert!(bundle.config.warning_codes.is_empty());
         assert_eq!(bundle.config.symbol_prefix, Some("pre.".to_string()));
         assert_eq!(bundle.config.symbol_suffix, Some(".suf".to_string()));
+    }
+
+    #[test]
+    fn master_builder_includes_warning_codes_when_disabled() {
+        let settings = MasterSettings {
+            enabled: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            config_version: 4,
+        };
+
+        let context = MasterConfigContext {
+            account_id: "MASTER_WARN".into(),
+            intent: MasterIntent {
+                web_ui_enabled: settings.enabled,
+            },
+            connection_snapshot: online_snapshot(),
+            settings: &settings,
+            timestamp: chrono::Utc::now(),
+        };
+
+        let bundle = ConfigBuilder::build_master_config(context);
+        assert_eq!(bundle.status_result.status, STATUS_DISABLED);
+        assert!(bundle
+            .config
+            .warning_codes
+            .contains(&WarningCode::MasterWebUiDisabled));
     }
 
     #[test]
@@ -171,6 +202,7 @@ mod tests {
         let bundle = ConfigBuilder::build_slave_config(context);
         assert_eq!(bundle.status_result.status, STATUS_CONNECTED);
         assert!(bundle.config.allow_new_orders);
+        assert!(bundle.config.warning_codes.is_empty());
 
         let disabled_cluster = MasterClusterSnapshot::new(vec![STATUS_ENABLED]);
         let context = SlaveConfigContext {
@@ -190,5 +222,9 @@ mod tests {
         let bundle = ConfigBuilder::build_slave_config(context);
         assert_eq!(bundle.status_result.status, STATUS_ENABLED);
         assert!(!bundle.config.allow_new_orders);
+        assert!(bundle
+            .config
+            .warning_codes
+            .contains(&WarningCode::MasterClusterDegraded));
     }
 }

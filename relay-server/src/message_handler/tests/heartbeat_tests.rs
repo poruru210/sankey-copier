@@ -152,3 +152,88 @@ async fn test_handle_heartbeat_sends_config_on_trade_allowed_change() {
 
     ctx.cleanup().await;
 }
+
+#[tokio::test]
+async fn test_master_heartbeat_marks_enabled_slaves_connected() {
+    let ctx = create_test_context().await;
+    let master_account = "MASTER_HEARTBEAT_SYNC";
+
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    for slave in ["SLAVE_ONE", "SLAVE_TWO"] {
+        ctx.db
+            .add_member(
+                master_account,
+                slave,
+                crate::models::SlaveSettings::default(),
+                crate::models::STATUS_ENABLED,
+            )
+            .await
+            .unwrap();
+    }
+
+    ctx.handle_heartbeat(build_heartbeat(master_account, "Master", true))
+        .await;
+
+    let members = ctx.db.get_members(master_account).await.unwrap();
+    assert_eq!(members.len(), 2);
+    for member in members {
+        assert_eq!(member.runtime_status, crate::models::STATUS_CONNECTED);
+    }
+
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
+    let ctx = create_test_context().await;
+    let master_account = "MASTER_HEARTBEAT_DEGRADE";
+    let slave_account = "SLAVE_RUNTIME_TRACK";
+
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    ctx.db
+        .add_member(
+            master_account,
+            slave_account,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_CONNECTED,
+        )
+        .await
+        .unwrap();
+
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    let member = ctx
+        .db
+        .get_member(master_account, slave_account)
+        .await
+        .unwrap()
+        .expect("member should exist");
+    assert_eq!(member.runtime_status, crate::models::STATUS_ENABLED);
+
+    ctx.cleanup().await;
+}

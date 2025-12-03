@@ -10,6 +10,8 @@ use crate::{
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
+    models::WarningCode,
+    runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
     victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage},
 };
@@ -35,6 +37,7 @@ pub struct MessageHandler {
     publisher: Arc<ZmqConfigPublisher>,
     /// VictoriaLogs controller for EA config broadcasting
     vlogs_controller: Option<VLogsController>,
+    runtime_status_metrics: Arc<RuntimeStatusMetrics>,
 }
 
 impl MessageHandler {
@@ -45,6 +48,7 @@ impl MessageHandler {
         db: Arc<Database>,
         publisher: Arc<ZmqConfigPublisher>,
         vlogs_controller: Option<VLogsController>,
+        runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     ) -> Self {
         Self {
             connection_manager,
@@ -53,6 +57,7 @@ impl MessageHandler {
             db,
             publisher,
             vlogs_controller,
+            runtime_status_metrics,
         }
     }
 
@@ -68,4 +73,42 @@ impl MessageHandler {
             ZmqMessage::SyncRequest(request) => self.handle_sync_request(request).await,
         }
     }
+
+    fn runtime_status_updater(&self) -> RuntimeStatusUpdater {
+        RuntimeStatusUpdater::with_metrics(
+            self.db.clone(),
+            self.connection_manager.clone(),
+            self.runtime_status_metrics.clone(),
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn log_slave_runtime_trace(
+    source: &'static str,
+    master_account: &str,
+    slave_account: &str,
+    previous_status: i32,
+    new_status: i32,
+    allow_new_orders: bool,
+    warning_codes: &[WarningCode],
+    cluster_size: usize,
+    masters_all_connected: bool,
+) {
+    tracing::event!(
+        target: "status_engine",
+        tracing::Level::INFO,
+        source,
+        master = %master_account,
+        slave = %slave_account,
+        previous_status = previous_status,
+        runtime_status = new_status,
+        status_changed = previous_status != new_status,
+        allow_new_orders = allow_new_orders,
+        warning_count = warning_codes.len(),
+        cluster_size = cluster_size,
+        masters_all_connected = masters_all_connected,
+        warnings = ?warning_codes,
+        "slave runtime evaluation"
+    );
 }

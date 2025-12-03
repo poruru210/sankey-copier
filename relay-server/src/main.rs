@@ -11,6 +11,7 @@ mod models;
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
+mod runtime_status_updater;
 mod victoria_logs;
 mod zeromq;
 
@@ -29,6 +30,7 @@ use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::unregister::notify_slaves_master_offline;
 use message_handler::MessageHandler;
 use models::EaType;
+use runtime_status_updater::RuntimeStatusMetrics;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
@@ -313,6 +315,8 @@ async fn main() -> Result<()> {
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
 
+    let runtime_status_metrics = Arc::new(RuntimeStatusMetrics::default());
+
     // Spawn ZeroMQ message processing task
     tracing::info!("Creating MessageHandler...");
     {
@@ -323,6 +327,7 @@ async fn main() -> Result<()> {
             db.clone(),
             zmq_publisher.clone(),
             vlogs_controller.clone(),
+            runtime_status_metrics.clone(),
         );
         tracing::info!("MessageHandler created, spawning message processing task...");
 
@@ -341,6 +346,7 @@ async fn main() -> Result<()> {
         let db_clone = db.clone();
         let publisher_clone = zmq_publisher.clone();
         let broadcast_clone = broadcast_tx.clone();
+        let metrics_clone = runtime_status_metrics.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
             loop {
@@ -378,6 +384,7 @@ async fn main() -> Result<()> {
                             &db_clone,
                             &publisher_clone,
                             &broadcast_clone,
+                            metrics_clone.clone(),
                             &account_id,
                         )
                         .await;
@@ -403,6 +410,7 @@ async fn main() -> Result<()> {
         config: Arc::new(config.clone()),
         resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
+        runtime_status_metrics,
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");

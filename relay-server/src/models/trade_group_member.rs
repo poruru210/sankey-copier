@@ -3,6 +3,7 @@
 // TradeGroupMember model: Represents a Slave account connected to a Master (TradeGroup).
 // Each member has Slave-specific configuration and connection status.
 
+use super::WarningCode;
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +38,10 @@ pub struct TradeGroupMember {
     /// Runtime status calculated by the status engine: 0=DISABLED, 1=ENABLED, 2=CONNECTED
     #[serde(default)]
     pub runtime_status: i32,
+
+    /// Detailed warning codes provided by runtime status engine (empty when healthy)
+    #[serde(default)]
+    pub warning_codes: Vec<WarningCode>,
 
     /// User intent flag (true when the Web UI toggle is ON)
     #[serde(default)]
@@ -190,6 +195,7 @@ impl TradeGroupMember {
             slave_settings: SlaveSettings::default(),
             status: STATUS_DISABLED,
             runtime_status: STATUS_DISABLED,
+            warning_codes: Vec::new(),
             enabled_flag: false,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),

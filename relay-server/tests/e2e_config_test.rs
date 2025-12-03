@@ -13,7 +13,9 @@
 
 mod test_server;
 
-use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
+use sankey_copier_relay_server::models::{
+    LotCalculationMode, SlaveSettings, SyncMode, STATUS_CONNECTED, STATUS_DISABLED,
+};
 use sankey_copier_zmq::ffi::{
     zmq_context_create, zmq_context_destroy, zmq_socket_connect, zmq_socket_create,
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH,
@@ -501,6 +503,33 @@ impl SlaveEaSimulator {
             }
         }
     }
+}
+
+async fn wait_for_slave_status(
+    sim: &SlaveEaSimulator,
+    expected_status: i32,
+    attempts: usize,
+    delay_ms: u64,
+) -> SlaveConfigMessage {
+    for _ in 0..attempts {
+        sim.send_request_config()
+            .expect("Failed to send follow-up RequestConfig");
+        sleep(Duration::from_millis(delay_ms)).await;
+
+        if let Some(config) = sim
+            .try_receive_config(2000)
+            .expect("Failed to receive config while waiting for status")
+        {
+            if config.status == expected_status {
+                return config;
+            }
+        }
+    }
+
+    panic!(
+        "Timed out waiting for SlaveConfigMessage with status {}",
+        expected_status
+    );
 }
 
 impl Drop for SlaveEaSimulator {
@@ -2432,7 +2461,7 @@ async fn test_allow_new_orders_follows_status() {
     sleep(Duration::from_millis(300)).await;
 
     // Receive config for enabled slave
-    let config_enabled = sim_enabled
+    let mut config_enabled = sim_enabled
         .try_receive_config(2000)
         .expect("Failed to receive config (enabled)")
         .expect("Should receive config for enabled slave");
@@ -2442,6 +2471,23 @@ async fn test_allow_new_orders_follows_status() {
         .try_receive_config(2000)
         .expect("Failed to receive config (disabled)")
         .expect("Should receive config for disabled slave");
+
+    if config_enabled.status != STATUS_CONNECTED {
+        master_sim
+            .send_heartbeat()
+            .expect("Failed to resend master heartbeat");
+        sleep(Duration::from_millis(300)).await;
+        config_enabled = wait_for_slave_status(&sim_enabled, STATUS_CONNECTED, 5, 200).await;
+    }
+
+    assert_eq!(
+        config_enabled.status, STATUS_CONNECTED,
+        "Enabled slave should eventually reach STATUS_CONNECTED"
+    );
+    assert_eq!(
+        config_disabled.status, STATUS_DISABLED,
+        "Disabled slave should remain STATUS_DISABLED"
+    );
 
     // Verify allow_new_orders follows status
     assert!(
