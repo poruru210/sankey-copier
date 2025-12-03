@@ -1115,13 +1115,9 @@ void CGridPanel::UpdateStatusRow(int status, bool allow_new_orders)
    else
       status_label = "UNKNOWN";
 
-   string allow_note = "";
-   if(allow_new_orders && status == STATUS_CONNECTED)
-      allow_note = " (orders allowed)";
-   else if(!allow_new_orders && status == STATUS_CONNECTED)
-      allow_note = " (orders blocked)";
-
-   vals[1] = status_label + allow_note;
+   // Note: allow_new_orders parameter is kept for API compatibility but no longer displayed.
+   // The status itself (CONNECTED vs ENABLED vs DISABLED) is sufficient for users.
+   vals[1] = status_label;
 
    color cols[2];
    cols[0] = PANEL_COLOR_LABEL;

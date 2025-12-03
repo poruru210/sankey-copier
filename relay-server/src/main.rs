@@ -27,7 +27,7 @@ use connection_manager::ConnectionManager;
 use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
-use message_handler::unregister::notify_slaves_master_offline;
+use message_handler::unregister::{notify_slave_offline, notify_slaves_master_offline};
 use message_handler::MessageHandler;
 use models::EaType;
 use runtime_status_updater::RuntimeStatusMetrics;
@@ -353,41 +353,54 @@ async fn main() -> Result<()> {
                 interval.tick().await;
                 let timed_out = conn_mgr.check_timeouts().await;
 
-                // Update database statuses for timed-out Master EAs
+                // Update database statuses for timed-out EAs
                 for (account_id, ea_type) in timed_out {
-                    if ea_type == EaType::Master {
-                        match db_clone
-                            .update_master_statuses_disconnected(&account_id)
-                            .await
-                        {
-                            Ok(count) if count > 0 => {
-                                tracing::info!(
-                                    "Master {} disconnected: updated {} settings to ENABLED",
-                                    account_id,
-                                    count
-                                );
+                    match ea_type {
+                        EaType::Master => {
+                            match db_clone
+                                .update_master_statuses_disconnected(&account_id)
+                                .await
+                            {
+                                Ok(count) if count > 0 => {
+                                    tracing::info!(
+                                        "Master {} timed out: updated {} settings to ENABLED",
+                                        account_id,
+                                        count
+                                    );
+                                }
+                                Ok(_) => {
+                                    // No settings updated
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to update master statuses for {}: {}",
+                                        account_id,
+                                        e
+                                    );
+                                }
                             }
-                            Ok(_) => {
-                                // No settings updated
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Failed to update master statuses for {}: {}",
-                                    account_id,
-                                    e
-                                );
-                            }
-                        }
 
-                        notify_slaves_master_offline(
-                            &conn_mgr,
-                            &db_clone,
-                            &publisher_clone,
-                            &broadcast_clone,
-                            metrics_clone.clone(),
-                            &account_id,
-                        )
-                        .await;
+                            notify_slaves_master_offline(
+                                &conn_mgr,
+                                &db_clone,
+                                &publisher_clone,
+                                &broadcast_clone,
+                                metrics_clone.clone(),
+                                &account_id,
+                            )
+                            .await;
+                        }
+                        EaType::Slave => {
+                            // Slave timed out - update runtime status and notify WebSocket
+                            notify_slave_offline(
+                                &conn_mgr,
+                                &db_clone,
+                                &broadcast_clone,
+                                metrics_clone.clone(),
+                                &account_id,
+                            )
+                            .await;
+                        }
                     }
                 }
             }

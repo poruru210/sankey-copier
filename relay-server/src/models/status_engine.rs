@@ -121,17 +121,25 @@ pub fn evaluate_slave_status(
 ) -> SlaveStatusResult {
     let mut warning_codes = Vec::new();
 
-    if !intent.web_ui_enabled {
+    // Core conditions for Slave to be operational
+    let slave_web_ui_enabled = intent.web_ui_enabled;
+    let slave_online = is_connection_online(slave_conn.connection_status);
+
+    if !slave_web_ui_enabled {
         warning_codes.push(WarningCode::SlaveWebUiDisabled);
     }
-    if !is_connection_online(slave_conn.connection_status) {
+    if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
     if !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
 
-    let mut status = if !warning_codes.is_empty() {
+    // Slave is DISABLED if Web UI is OFF or Slave is offline
+    // Otherwise, status depends on Master cluster state (for display purposes)
+    let slave_disabled = !slave_web_ui_enabled || !slave_online;
+
+    let mut status = if slave_disabled {
         STATUS_DISABLED
     } else if mastered.all_connected() {
         STATUS_CONNECTED
@@ -151,9 +159,17 @@ pub fn evaluate_slave_status(
         }
     }
 
+    // allow_new_orders: Slave can process signals if:
+    // - Web UI is ON
+    // - Slave EA is online
+    // Master's connection state does NOT affect this - if a signal arrives, process it.
+    // Note: is_trade_allowed (MT auto-trading) is not checked here;
+    //       if disabled, the order will simply fail at execution time.
+    let allow_new_orders = slave_web_ui_enabled && slave_online;
+
     SlaveStatusResult {
         status,
-        allow_new_orders: status == STATUS_CONNECTED,
+        allow_new_orders,
         warning_codes,
     }
 }
@@ -201,6 +217,8 @@ mod tests {
 
     #[test]
     fn slave_disabled_when_auto_trade_off() {
+        // is_trade_allowed=false only generates a warning, but does NOT disable slave
+        // Orders will fail at execution time if auto-trading is off
         let result = evaluate_slave_status(
             SlaveIntent {
                 web_ui_enabled: true,
@@ -211,8 +229,11 @@ mod tests {
             },
             MasterClusterSnapshot::new(vec![STATUS_CONNECTED]),
         );
-        assert_eq!(result.status, STATUS_DISABLED);
-        assert!(!result.allow_new_orders);
+        // Status is CONNECTED because Web UI is ON and Slave is online
+        assert_eq!(result.status, STATUS_CONNECTED);
+        // allow_new_orders is true because Slave can receive signals
+        // (actual order execution may fail due to auto-trading being off)
+        assert!(result.allow_new_orders);
         assert!(result
             .warning_codes
             .contains(&WarningCode::SlaveAutoTradingDisabled));
@@ -237,6 +258,8 @@ mod tests {
 
     #[test]
     fn slave_enabled_when_any_master_disabled() {
+        // Slave status reflects Master cluster state for display purposes
+        // but allow_new_orders depends only on Slave's own state
         let result = evaluate_slave_status(
             SlaveIntent {
                 web_ui_enabled: true,
@@ -248,7 +271,9 @@ mod tests {
             MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_ENABLED]),
         );
         assert_eq!(result.status, STATUS_ENABLED);
-        assert!(!result.allow_new_orders);
+        // allow_new_orders is true because Slave's Web UI is ON and Slave is online
+        // Master's connection state does NOT affect this
+        assert!(result.allow_new_orders);
         assert!(result
             .warning_codes
             .contains(&WarningCode::MasterClusterDegraded));
@@ -268,6 +293,8 @@ mod tests {
 
     #[test]
     fn slave_enabled_when_no_master_connection_yet() {
+        // Slave can still allow orders even without Master assigned
+        // If signals somehow arrive, they should be processed
         let result = evaluate_slave_status(
             SlaveIntent {
                 web_ui_enabled: true,
@@ -280,7 +307,8 @@ mod tests {
         );
 
         assert_eq!(result.status, STATUS_ENABLED);
-        assert!(!result.allow_new_orders);
+        // allow_new_orders is true because Slave's Web UI is ON and Slave is online
+        assert!(result.allow_new_orders);
         assert!(result
             .warning_codes
             .contains(&WarningCode::NoMasterAssigned));
@@ -486,12 +514,15 @@ mod tests {
             connection: Option<ConnectionStatus>,
             is_trade_allowed: bool,
             expected_status: i32,
+            expected_allow_new_orders: bool,
             expected_warnings: &'static [WarningCode],
         }
 
         use ConnectionStatus::{Offline, Online};
         let healthy_cluster = MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_CONNECTED]);
 
+        // New spec: allow_new_orders = web_ui_enabled && online
+        // is_trade_allowed only adds warning, doesn't affect status or allow_new_orders
         let cases = [
             SlaveCase {
                 name: "all_green",
@@ -499,6 +530,7 @@ mod tests {
                 connection: Some(Online),
                 is_trade_allowed: true,
                 expected_status: STATUS_CONNECTED,
+                expected_allow_new_orders: true,
                 expected_warnings: &[],
             },
             SlaveCase {
@@ -506,7 +538,8 @@ mod tests {
                 intent_enabled: true,
                 connection: Some(Online),
                 is_trade_allowed: false,
-                expected_status: STATUS_DISABLED,
+                expected_status: STATUS_CONNECTED, // Changed: trade_blocked doesn't disable
+                expected_allow_new_orders: true,   // Slave can still receive signals
                 expected_warnings: &[WarningCode::SlaveAutoTradingDisabled],
             },
             SlaveCase {
@@ -515,6 +548,7 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: true,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[WarningCode::SlaveOffline],
             },
             SlaveCase {
@@ -523,6 +557,7 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -534,6 +569,7 @@ mod tests {
                 connection: None,
                 is_trade_allowed: true,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[WarningCode::SlaveOffline],
             },
             SlaveCase {
@@ -542,6 +578,7 @@ mod tests {
                 connection: None,
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -553,6 +590,7 @@ mod tests {
                 connection: Some(Online),
                 is_trade_allowed: true,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[WarningCode::SlaveWebUiDisabled],
             },
             SlaveCase {
@@ -561,6 +599,7 @@ mod tests {
                 connection: Some(Online),
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -572,6 +611,7 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: true,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[WarningCode::SlaveWebUiDisabled, WarningCode::SlaveOffline],
             },
             SlaveCase {
@@ -580,6 +620,7 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
@@ -592,6 +633,7 @@ mod tests {
                 connection: None,
                 is_trade_allowed: true,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[WarningCode::SlaveWebUiDisabled, WarningCode::SlaveOffline],
             },
             SlaveCase {
@@ -600,6 +642,7 @@ mod tests {
                 connection: None,
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
+                expected_allow_new_orders: false,
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
@@ -622,8 +665,9 @@ mod tests {
 
             assert_eq!(result.status, case.expected_status, "case {}", case.name);
             assert_eq!(
-                result.allow_new_orders,
-                case.expected_status == STATUS_CONNECTED
+                result.allow_new_orders, case.expected_allow_new_orders,
+                "case {} allow_new_orders",
+                case.name
             );
             assert_eq!(
                 result.warning_codes, case.expected_warnings,
@@ -664,7 +708,9 @@ mod tests {
 
         let degraded = evaluate_slave_status(intent, snapshot, degraded_cluster);
         assert_eq!(degraded.status, STATUS_ENABLED);
-        assert!(!degraded.allow_new_orders);
+        // allow_new_orders is true because Slave's Web UI is ON and Slave is online
+        // Master cluster being degraded does NOT block orders
+        assert!(degraded.allow_new_orders);
         assert_eq!(
             degraded.warning_codes,
             &[
@@ -675,7 +721,8 @@ mod tests {
 
         let orphaned = evaluate_slave_status(intent, snapshot, empty_cluster);
         assert_eq!(orphaned.status, STATUS_ENABLED);
-        assert!(!orphaned.allow_new_orders);
+        // allow_new_orders is true - if signals arrive somehow, process them
+        assert!(orphaned.allow_new_orders);
         assert_eq!(orphaned.warning_codes, &[WarningCode::NoMasterAssigned]);
     }
 }

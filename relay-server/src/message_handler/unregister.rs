@@ -2,6 +2,7 @@
 //!
 //! Handles EA unregistration messages, updating connection status and notifying clients.
 //! When a Master EA disconnects, notifies all Slaves so they can update their status.
+//! When a Slave EA disconnects, updates runtime status and notifies WebSocket clients.
 
 use super::MessageHandler;
 use crate::{
@@ -17,6 +18,7 @@ use tokio::sync::broadcast;
 impl MessageHandler {
     /// Handle EA unregistration
     /// When a Master disconnects, notify all Slaves to update their status from CONNECTED to ENABLED
+    /// When a Slave disconnects, update runtime status and notify WebSocket clients
     pub(super) async fn handle_unregister(&self, msg: UnregisterMessage) {
         let account_id = &msg.account_id;
 
@@ -35,44 +37,65 @@ impl MessageHandler {
             .broadcast_tx
             .send(format!("ea_disconnected:{}", account_id));
 
-        // If this was a Master EA, notify all Slaves
-        if ea_type == Some(EaType::Master) {
-            tracing::info!("Master {} disconnected, notifying Slaves", account_id);
+        match ea_type {
+            Some(EaType::Master) => {
+                // Master disconnected - notify all Slaves
+                tracing::info!("Master {} disconnected, notifying Slaves", account_id);
 
-            // Update DB: all CONNECTED slaves should become ENABLED
-            match self
-                .db
-                .update_master_statuses_disconnected(account_id)
-                .await
-            {
-                Ok(count) if count > 0 => {
-                    tracing::info!(
-                        "Master {} disconnected: updated {} settings to ENABLED",
-                        account_id,
-                        count
-                    );
+                // Update DB: all CONNECTED slaves should become ENABLED
+                match self
+                    .db
+                    .update_master_statuses_disconnected(account_id)
+                    .await
+                {
+                    Ok(count) if count > 0 => {
+                        tracing::info!(
+                            "Master {} disconnected: updated {} settings to ENABLED",
+                            account_id,
+                            count
+                        );
+                    }
+                    Ok(_) => {
+                        // No settings updated (no connected settings for this master)
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to update master statuses for disconnect {}: {}",
+                            account_id,
+                            e
+                        );
+                    }
                 }
-                Ok(_) => {
-                    // No settings updated (no connected settings for this master)
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to update master statuses for disconnect {}: {}",
-                        account_id,
-                        e
-                    );
-                }
+
+                notify_slaves_master_offline(
+                    &self.connection_manager,
+                    &self.db,
+                    &self.publisher,
+                    &self.broadcast_tx,
+                    self.runtime_status_metrics.clone(),
+                    account_id,
+                )
+                .await;
             }
+            Some(EaType::Slave) => {
+                // Slave disconnected - update runtime status and notify WebSocket
+                tracing::info!("Slave {} disconnected, updating runtime status", account_id);
 
-            notify_slaves_master_offline(
-                &self.connection_manager,
-                &self.db,
-                &self.publisher,
-                &self.broadcast_tx,
-                self.runtime_status_metrics.clone(),
-                account_id,
-            )
-            .await;
+                notify_slave_offline(
+                    &self.connection_manager,
+                    &self.db,
+                    &self.broadcast_tx,
+                    self.runtime_status_metrics.clone(),
+                    account_id,
+                )
+                .await;
+            }
+            None => {
+                tracing::debug!(
+                    "Unknown EA {} disconnected (not found in connection manager)",
+                    account_id
+                );
+            }
         }
     }
 }
@@ -170,6 +193,117 @@ pub(crate) async fn notify_slaves_master_offline(
                 master_account,
                 e
             );
+        }
+    }
+}
+
+/// Notify WebSocket clients when a Slave EA goes offline
+/// Updates runtime_status in DB and broadcasts to WebSocket clients
+pub(crate) async fn notify_slave_offline(
+    connection_manager: &Arc<ConnectionManager>,
+    db: &Arc<Database>,
+    broadcast_tx: &broadcast::Sender<String>,
+    runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+    slave_account: &str,
+) {
+    let runtime_updater = RuntimeStatusUpdater::with_metrics(
+        db.clone(),
+        connection_manager.clone(),
+        runtime_status_metrics,
+    );
+
+    // Get all trade group memberships for this Slave
+    let settings_list = match db.get_settings_for_slave(slave_account).await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::error!(
+                "Failed to fetch settings for Slave {} during offline notification: {}",
+                slave_account,
+                err
+            );
+            return;
+        }
+    };
+
+    if settings_list.is_empty() {
+        tracing::debug!(
+            "No trade group settings found for Slave {} during offline notification",
+            slave_account
+        );
+        return;
+    }
+
+    let master_snapshot = runtime_updater.master_cluster_snapshot(slave_account).await;
+
+    for settings in settings_list {
+        let slave_bundle = runtime_updater
+            .build_slave_bundle(
+                SlaveRuntimeTarget {
+                    master_account: settings.master_account.as_str(),
+                    trade_group_id: settings.master_account.as_str(),
+                    slave_account: &settings.slave_account,
+                    enabled_flag: settings.enabled_flag,
+                    slave_settings: &settings.slave_settings,
+                },
+                Some(master_snapshot.clone()),
+            )
+            .await;
+
+        let previous_status = settings.runtime_status;
+        let new_status = slave_bundle.status_result.status;
+
+        super::log_slave_runtime_trace(
+            "slave_offline",
+            &settings.master_account,
+            &settings.slave_account,
+            previous_status,
+            new_status,
+            slave_bundle.status_result.allow_new_orders,
+            &slave_bundle.status_result.warning_codes,
+            master_snapshot.master_statuses.len(),
+            master_snapshot.all_connected(),
+        );
+
+        // Update database with new status
+        if let Err(err) = db
+            .update_member_runtime_status(&settings.master_account, slave_account, new_status)
+            .await
+        {
+            tracing::error!(
+                "Failed to persist runtime status for Slave {} (master {}): {}",
+                settings.slave_account,
+                settings.master_account,
+                err
+            );
+        }
+
+        // Broadcast runtime status change to WebSocket clients
+        if new_status != previous_status {
+            tracing::info!(
+                "Slave {} offline: runtime_status changed {} -> {} (master: {})",
+                slave_account,
+                previous_status,
+                new_status,
+                settings.master_account
+            );
+
+            let settings_with_master = SlaveConfigWithMaster {
+                master_account: settings.master_account.clone(),
+                slave_account: settings.slave_account.clone(),
+                status: settings.status,
+                runtime_status: new_status,
+                enabled_flag: settings.enabled_flag,
+                slave_settings: settings.slave_settings.clone(),
+            };
+            if let Ok(json) = serde_json::to_string(&settings_with_master) {
+                let _ = broadcast_tx.send(format!("settings_updated:{}", json));
+                tracing::debug!(
+                    "Broadcasted runtime status change for Slave {} (offline): {} -> {}",
+                    settings.slave_account,
+                    previous_status,
+                    new_status
+                );
+            }
         }
     }
 }

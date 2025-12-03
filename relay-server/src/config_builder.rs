@@ -204,6 +204,8 @@ mod tests {
         assert!(bundle.config.allow_new_orders);
         assert!(bundle.config.warning_codes.is_empty());
 
+        // Master cluster is degraded (STATUS_ENABLED instead of STATUS_CONNECTED)
+        // But Slave's allow_new_orders should still be true because Slave is online with Web UI ON
         let disabled_cluster = MasterClusterSnapshot::new(vec![STATUS_ENABLED]);
         let context = SlaveConfigContext {
             slave_account: "SLAVE_002".into(),
@@ -221,7 +223,8 @@ mod tests {
 
         let bundle = ConfigBuilder::build_slave_config(context);
         assert_eq!(bundle.status_result.status, STATUS_ENABLED);
-        assert!(!bundle.config.allow_new_orders);
+        // New spec: allow_new_orders is based on Slave's own state, not Master cluster
+        assert!(bundle.config.allow_new_orders);
         assert!(bundle
             .config
             .warning_codes

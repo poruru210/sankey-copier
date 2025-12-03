@@ -159,6 +159,20 @@ impl MessageHandler {
                             // When Master's is_trade_allowed changes, we must notify Slave even if Slave's status doesn't change
                             // (e.g., Slave stays ENABLED when Master goes from CONNECTED to DISABLED)
                             let old_slave_status = member.status;
+
+                            // Debug logging to diagnose notification issues
+                            tracing::info!(
+                                slave = %slave_account,
+                                master = %account_id,
+                                old_slave_status = old_slave_status,
+                                new_slave_status = new_slave_status,
+                                is_new_registration = is_new_registration,
+                                trade_allowed_changed = trade_allowed_changed,
+                                all_masters_connected = masters_snapshot.all_connected(),
+                                slave_online = slave_bundle.config.allow_new_orders || new_slave_status != 0,
+                                "Master heartbeat: evaluating Slave notification"
+                            );
+
                             if !is_new_registration
                                 && !trade_allowed_changed
                                 && new_slave_status == old_slave_status
