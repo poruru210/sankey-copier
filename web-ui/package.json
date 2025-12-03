@@ -55,12 +55,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.0.3",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
+    "baseline-browser-mapping": "^2.9.0",
     "eslint": "^9.17.0",
     "eslint-config-next": "^16.0.1",
     "jsdom": "^27.2.0",
@@ -69,6 +71,7 @@
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.3",
-    "vitest": "^1.4.2"
+    "vitest": "^1.4.2",
+    "webpack": "5.99.9"
   }
 }

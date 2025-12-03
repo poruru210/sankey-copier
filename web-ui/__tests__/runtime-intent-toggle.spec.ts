@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import type { CopySettings, TradeGroup, TradeGroupMember } from '@/types';
 import { gotoApp } from './helpers/navigation';
 import { mockConnections, mockSettings } from './mocks/testData';
@@ -156,6 +156,18 @@ function updateMemberRuntime(
   target.status = runtimeStatus;
 }
 
+async function waitForReactHydration(locator: Locator) {
+  await expect
+    .poll(
+      async () =>
+        locator.evaluate((el) =>
+          Object.getOwnPropertyNames(el).some((key) => key.startsWith('__reactFiber$')),
+        ),
+      { timeout: 5000 },
+    )
+    .toBe(true);
+}
+
 async function fulfillJson(route: Route, data: unknown) {
   await route.fulfill({
     status: 200,
@@ -251,6 +263,9 @@ test.describe('Runtime vs intent toggles', () => {
     await expect(receiverCard.getByText('Manual OFF')).toBeVisible();
 
     const toggleSwitch = receiverCard.getByTestId('account-toggle-switch');
+
+    // Ensure React has hydrated the switch before interacting so event handlers exist
+    await waitForReactHydration(toggleSwitch);
     const toggleHandle = await toggleSwitch.elementHandle();
     if (!toggleHandle) {
       throw new Error('Toggle switch element not found');
@@ -271,7 +286,9 @@ test.describe('Runtime vs intent toggles', () => {
 
     await toggleSwitch.click({ force: true });
 
-    await expect.poll(() => toggleCalls.length, { timeout: 3000 }).toBe(1);
+    await expect
+      .poll(() => toggleCalls.length, { timeout: 7000 })
+      .toBe(1);
     expect(toggleCalls[0]).toMatchObject({
       master: TARGET_MASTER,
       slave: TARGET_SLAVE,
