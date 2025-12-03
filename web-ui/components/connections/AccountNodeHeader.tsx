@@ -25,6 +25,7 @@ interface AccountNodeHeaderProps {
   onToggleEnabled?: (enabled: boolean) => void;
   onEditMasterSettings?: () => void;
   onOpenSettingsDrawer?: () => void;
+  isTogglePending?: boolean;
 }
 
 export function AccountNodeHeader({
@@ -33,6 +34,7 @@ export function AccountNodeHeader({
   onToggleEnabled,
   onEditMasterSettings,
   onOpenSettingsDrawer,
+  isTogglePending,
 }: AccountNodeHeaderProps) {
   const content = useIntlayer('account-node-header');
 
@@ -104,46 +106,6 @@ export function AccountNodeHeader({
       );
     }
 
-    if (typeof account.masterIntentEnabled === 'boolean') {
-      badges.push(
-        <TooltipProvider key="master-intent" delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant={account.masterIntentEnabled ? 'default' : 'secondary'}
-                className="text-[10px] px-1.5 py-0"
-              >
-                {account.masterIntentEnabled ? content.masterIntentOn : content.masterIntentOff}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">{content.masterIntentTooltip}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-
-    if (typeof account.slaveIntentEnabled === 'boolean') {
-      badges.push(
-        <TooltipProvider key="slave-intent" delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant={account.slaveIntentEnabled ? 'default' : 'secondary'}
-                className="text-[10px] px-1.5 py-0"
-              >
-                {account.slaveIntentEnabled ? content.slaveIntentOn : content.slaveIntentOff}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">{content.slaveIntentTooltip}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-
     if (badges.length === 0) {
       return null;
     }
@@ -197,13 +159,18 @@ export function AccountNodeHeader({
           )}
         </div>
         {/* Switch - smaller size, vertically centered */}
-        <div className="noDrag flex items-center">
+        <div className="noDrag flex flex-col items-center">
           <Switch
             checked={account.isEnabled}
             onCheckedChange={(checked) => onToggleEnabled?.(checked)}
             className="scale-75 md:scale-80"
+            disabled={isTogglePending}
+            isPending={isTogglePending}
             labelProps={{ 'data-testid': 'account-toggle-switch', 'data-account-id': account.id }}
           />
+          {isTogglePending && (
+            <span className="sr-only">{content.intentSyncing}</span>
+          )}
         </div>
         {/* Settings button - shown for both Master and Slave accounts */}
         {hasSettingsButton && (

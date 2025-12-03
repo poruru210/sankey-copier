@@ -23,29 +23,9 @@ const accountNodeHeaderContent = {
       en: 'Status Engine: {state}',
       ja: 'ステータスエンジン: {state}',
     }),
-    masterIntentOn: t({
-      en: 'Intent:ON',
-      ja: '意図:ON',
-    }),
-    masterIntentOff: t({
-      en: 'Intent:OFF',
-      ja: '意図:OFF',
-    }),
-    masterIntentTooltip: t({
-      en: 'Web UI toggle intent',
-      ja: 'Web UI トグルの意図',
-    }),
-    slaveIntentTooltip: t({
-      en: 'Receiver intent',
-      ja: 'スレーブ側のユーザー意図',
-    }),
-    slaveIntentOn: t({
-      en: 'Intent:ON',
-      ja: '意図:ON',
-    }),
-    slaveIntentOff: t({
-      en: 'Intent:OFF',
-      ja: '意図:OFF',
+    intentSyncing: t({
+      en: 'Applying change…',
+      ja: '変更を反映中…',
     }),
     masterSettingsTitle: t({
       en: 'Master Settings',

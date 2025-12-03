@@ -23,6 +23,7 @@ interface AccountNodeContentProps {
   hoveredReceiverId: string | null;
   selectedSourceId: string | null;
   isMobile: boolean;
+  isTogglePending?: boolean;
   content: {
     settings: string;
     accountInfo: string;
@@ -81,6 +82,7 @@ export const AccountNodeContent = React.memo(
     hoveredReceiverId,
     selectedSourceId,
     isMobile,
+    isTogglePending,
     content,
   }: AccountNodeContentProps) => {
     // Determine visibility based on mobile/desktop and selection/hover state
@@ -111,6 +113,7 @@ export const AccountNodeContent = React.memo(
             account={account}
             onToggle={onToggle}
             onToggleEnabled={onToggleEnabled}
+            isTogglePending={isTogglePending}
             onEditMasterSettings={type === 'source' ? onEditMasterSettings : undefined}
             onOpenSettingsDrawer={type === 'receiver' ? onOpenSettingsDrawer : undefined}
           />

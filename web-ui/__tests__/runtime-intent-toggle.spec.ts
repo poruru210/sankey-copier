@@ -206,7 +206,6 @@ test.describe('Runtime vs intent toggles', () => {
     const receiverCard = page.locator(`[data-account-id="${TARGET_SLAVE}"]`).first();
     await expect(receiverCard).toBeVisible();
 
-    await expect(receiverCard.getByText('Intent:OFF')).toBeVisible();
     await expect(receiverCard.getByText('Manual OFF')).toBeVisible();
 
     const toggleSwitch = receiverCard.getByTestId('account-toggle-switch');
@@ -237,8 +236,8 @@ test.describe('Runtime vs intent toggles', () => {
       body: { enabled: true },
     });
 
-    await expect(receiverCard.getByText('Intent:ON')).toBeVisible();
     await expect(receiverCard.getByText('Manual OFF')).toBeVisible();
+    await expect(toggleSwitch).toHaveAttribute('data-pending', 'true');
 
     updateMemberRuntime(members, TARGET_MASTER, TARGET_SLAVE, 2);
     const masterGroup = tradeGroups.get(TARGET_MASTER);
@@ -250,5 +249,6 @@ test.describe('Runtime vs intent toggles', () => {
     });
 
     await expect(receiverCard.getByText('Streaming')).toBeVisible();
+    await expect.poll(async () => toggleSwitch.getAttribute('data-pending')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
@@ -27,6 +27,8 @@ interface UseFlowDataProps {
   onToggle: (id: number, enabled: boolean) => Promise<void>;
   onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
 }
+
+const MIN_PENDING_DURATION_MS = 800;
 
 // Layout constants - Desktop (horizontal)
 const NODE_WIDTH = 380;
@@ -66,6 +68,38 @@ export function useFlowData({
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
+  const [pendingAccountIds, setPendingAccountIds] = useState<Set<string>>(new Set());
+
+  const setAccountPending = useCallback((accountId: string, isPending: boolean) => {
+    setPendingAccountIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(accountId);
+      } else {
+        next.delete(accountId);
+      }
+      return next;
+    });
+  }, []);
+
+  const runWithPending = useCallback((accountId: string, task: () => Promise<void> | void) => {
+    setAccountPending(accountId, true);
+
+    const execute = async () => {
+      const start = Date.now();
+      try {
+        await task();
+      } catch (error) {
+        console.error(`[Connections] Failed to toggle account ${accountId}`, error);
+      } finally {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, MIN_PENDING_DURATION_MS - elapsed);
+        setTimeout(() => setAccountPending(accountId, false), remaining);
+      }
+    };
+
+    void execute();
+  }, [setAccountPending]);
 
   const toggleSourceExpand = useCallback((accountId: string) => {
     setExpandedSourceIds((prev) =>
@@ -84,9 +118,8 @@ export function useFlowData({
   }, [setExpandedReceiverIds]);
 
   const toggleSourceEnabled = useCallback((accountId: string, enabled: boolean) => {
-    // Call toggle Master API - server handles ZMQ notification to EA
-    onToggleMaster(accountId, enabled);
-  }, [onToggleMaster]);
+    runWithPending(accountId, () => onToggleMaster(accountId, enabled));
+  }, [onToggleMaster, runWithPending]);
 
   const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledReceiverIds)
@@ -99,17 +132,21 @@ export function useFlowData({
 
     // Receiver enabled state is derived from settings, so we just need to update settings
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
-    receiverSettings.forEach((setting) => {
-      const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+    const mutations = receiverSettings
+      .filter((setting) => {
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        return intentEnabled !== enabled;
+      })
+      .map((setting) => onToggle(setting.id, enabled));
 
-      if (intentEnabled === enabled) {
-        return;
-      }
+    if (mutations.length === 0) {
+      return;
+    }
 
-      // Always propagate intent changes so UI can diverge from runtime when needed
-      onToggle(setting.id, enabled);
+    runWithPending(accountId, async () => {
+      await Promise.allSettled(mutations);
     });
-  }, [settings, onToggle, setDisabledReceiverIds]);
+  }, [settings, onToggle, setDisabledReceiverIds, runWithPending]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
@@ -145,6 +182,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
+          isTogglePending: pendingAccountIds.has(account.id),
         } as AccountNodeData & Record<string, unknown>,
       });
     });
@@ -185,6 +223,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
+          isTogglePending: pendingAccountIds.has(account.id),
         } as AccountNodeData & Record<string, unknown>,
       });
     });
@@ -204,6 +243,7 @@ export function useFlowData({
     isAccountHighlighted,
     isMobile,
     content,
+    pendingAccountIds,
     toggleSourceExpand,
     toggleReceiverExpand,
     toggleSourceEnabled,

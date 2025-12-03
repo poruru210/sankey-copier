@@ -19,6 +19,7 @@ export interface AccountNodeData {
   hoveredReceiverId: string | null;
   selectedSourceId: string | null;
   isMobile: boolean;
+  isTogglePending?: boolean;
   content: {
     settings: string;
     accountInfo: string;
@@ -128,6 +129,7 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
         hoveredReceiverId={data.hoveredReceiverId}
         selectedSourceId={data.selectedSourceId}
         isMobile={data.isMobile}
+        isTogglePending={data.isTogglePending}
         content={data.content}
       />
     </div>
