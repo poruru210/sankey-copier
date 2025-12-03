@@ -237,3 +237,190 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
 
     ctx.cleanup().await;
 }
+
+/// Test: Slave heartbeat broadcasts settings_updated when runtime status changes
+#[tokio::test]
+async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
+    let mut ctx = create_test_context().await;
+    let master_account = "MASTER_BROADCAST_TEST";
+    let slave_account = "SLAVE_BROADCAST_TEST";
+
+    // Setup: Create TradeGroup with enabled Master
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Add Slave member with initial status CONNECTED (will change to ENABLED when Master is offline)
+    ctx.db
+        .add_member(
+            master_account,
+            slave_account,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_CONNECTED,
+        )
+        .await
+        .unwrap();
+
+    // Clear any pending broadcast messages
+    ctx.collect_broadcast_messages();
+
+    // Act: Slave sends heartbeat while Master is offline
+    // This should trigger status change: CONNECTED -> ENABLED
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    // Assert: Check that settings_updated was broadcast
+    let messages = ctx.collect_broadcast_messages();
+
+    // Should have at least one settings_updated message
+    let settings_updated_msgs: Vec<_> = messages
+        .iter()
+        .filter(|m| m.starts_with("settings_updated:"))
+        .collect();
+
+    assert!(
+        !settings_updated_msgs.is_empty(),
+        "Expected settings_updated broadcast when Slave runtime status changes. Got messages: {:?}",
+        messages
+    );
+
+    // Verify the broadcast contains correct slave account
+    let msg = settings_updated_msgs[0];
+    assert!(
+        msg.contains(slave_account),
+        "Broadcast should contain slave account: {}. Got: {}",
+        slave_account,
+        msg
+    );
+
+    ctx.cleanup().await;
+}
+
+/// Test: Master heartbeat broadcasts settings_updated when Slave status changes
+#[tokio::test]
+async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_change() {
+    let mut ctx = create_test_context().await;
+    let master_account = "MASTER_BROADCAST_SLAVE";
+    let slave_account = "SLAVE_VIA_MASTER_HB";
+
+    // Setup: Create TradeGroup with enabled Master
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Add Slave member with initial status ENABLED (will change to CONNECTED when Master connects)
+    ctx.db
+        .add_member(
+            master_account,
+            slave_account,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_ENABLED,
+        )
+        .await
+        .unwrap();
+
+    // Register Slave EA first (so it's known to connection_manager)
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    // Clear any pending broadcast messages from Slave registration
+    ctx.collect_broadcast_messages();
+
+    // Act: Master sends heartbeat (this should trigger Slave status change: ENABLED -> CONNECTED)
+    ctx.handle_heartbeat(build_heartbeat(master_account, "Master", true))
+        .await;
+
+    // Assert: Check that settings_updated was broadcast for the Slave
+    let messages = ctx.collect_broadcast_messages();
+
+    let settings_updated_msgs: Vec<_> = messages
+        .iter()
+        .filter(|m| m.starts_with("settings_updated:") && m.contains(slave_account))
+        .collect();
+
+    assert!(
+        !settings_updated_msgs.is_empty(),
+        "Expected settings_updated broadcast for Slave when Master heartbeat triggers status change. Got messages: {:?}",
+        messages
+    );
+
+    ctx.cleanup().await;
+}
+
+/// Test: No broadcast when runtime status doesn't change
+#[tokio::test]
+async fn test_no_broadcast_when_status_unchanged() {
+    let mut ctx = create_test_context().await;
+    let master_account = "MASTER_NO_CHANGE";
+    let slave_account = "SLAVE_NO_CHANGE";
+
+    // Setup: Create TradeGroup with enabled Master
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Add Slave member with status ENABLED (matching what it will evaluate to with offline Master)
+    ctx.db
+        .add_member(
+            master_account,
+            slave_account,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_ENABLED,
+        )
+        .await
+        .unwrap();
+
+    // First heartbeat to stabilize state
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    // Clear messages from first heartbeat
+    ctx.collect_broadcast_messages();
+
+    // Act: Send another heartbeat - status should remain ENABLED
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    // Assert: No settings_updated broadcast for unchanged status
+    let messages = ctx.collect_broadcast_messages();
+
+    let settings_updated_msgs: Vec<_> = messages
+        .iter()
+        .filter(|m| m.starts_with("settings_updated:") && m.contains(slave_account))
+        .collect();
+
+    assert!(
+        settings_updated_msgs.is_empty(),
+        "Should NOT broadcast settings_updated when status is unchanged. Got messages: {:?}",
+        settings_updated_msgs
+    );
+
+    ctx.cleanup().await;
+}

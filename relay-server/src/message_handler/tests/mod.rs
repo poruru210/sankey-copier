@@ -23,6 +23,8 @@ pub(crate) struct TestContext {
     pub handler: MessageHandler,
     // Store Arc references to ensure proper drop order
     _publisher: Arc<ZmqConfigPublisher>,
+    /// Broadcast receiver for testing WebSocket notifications
+    pub broadcast_rx: broadcast::Receiver<String>,
 }
 
 impl TestContext {
@@ -32,7 +34,7 @@ impl TestContext {
         let connection_manager = Arc::new(ConnectionManager::new(30));
         let copy_engine = Arc::new(CopyEngine::new());
 
-        let (broadcast_tx, _) = broadcast::channel::<String>(100);
+        let (broadcast_tx, broadcast_rx) = broadcast::channel::<String>(100);
 
         // Create test database (in-memory)
         let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
@@ -54,7 +56,24 @@ impl TestContext {
         Self {
             handler,
             _publisher: publisher,
+            broadcast_rx,
         }
+    }
+
+    /// Collect all pending broadcast messages (non-blocking)
+    /// Returns messages that were sent via broadcast_tx
+    #[allow(dead_code)]
+    pub fn collect_broadcast_messages(&mut self) -> Vec<String> {
+        let mut messages = Vec::new();
+        loop {
+            match self.broadcast_rx.try_recv() {
+                Ok(msg) => messages.push(msg),
+                Err(broadcast::error::TryRecvError::Empty) => break,
+                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+                Err(broadcast::error::TryRecvError::Closed) => break,
+            }
+        }
+        messages
     }
 
     /// Explicitly cleanup ZeroMQ resources

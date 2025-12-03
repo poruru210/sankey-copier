@@ -242,6 +242,30 @@ impl MessageHandler {
                                     e
                                 );
                             }
+
+                            // Broadcast runtime status change to WebSocket clients (on Master heartbeat)
+                            if old_slave_status != new_slave_status {
+                                let settings_with_master = SlaveConfigWithMaster {
+                                    master_account: account_id.clone(),
+                                    slave_account: slave_account.clone(),
+                                    status: member.status,
+                                    runtime_status: new_slave_status,
+                                    enabled_flag: member.enabled_flag,
+                                    slave_settings: member.slave_settings.clone(),
+                                };
+                                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+                                    let _ = self
+                                        .broadcast_tx
+                                        .send(format!("settings_updated:{}", json));
+                                    tracing::debug!(
+                                        "Broadcasted runtime status change for Slave {} via Master {} heartbeat: {} -> {}",
+                                        slave_account,
+                                        account_id,
+                                        old_slave_status,
+                                        new_slave_status
+                                    );
+                                }
+                            }
                         }
                     }
                     Err(e) => {
@@ -392,6 +416,28 @@ impl MessageHandler {
                     settings.master_account,
                     err
                 );
+            }
+
+            // Broadcast runtime status change to WebSocket clients
+            if evaluated_status != previous_status {
+                let settings_with_master = SlaveConfigWithMaster {
+                    master_account: settings.master_account.clone(),
+                    slave_account: settings.slave_account.clone(),
+                    status: settings.status,
+                    runtime_status: evaluated_status,
+                    enabled_flag: settings.enabled_flag,
+                    slave_settings: settings.slave_settings.clone(),
+                };
+                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+                    let _ = self.broadcast_tx.send(format!("settings_updated:{}", json));
+                    tracing::debug!(
+                        "Broadcasted runtime status change for Slave {} (master {}): {} -> {}",
+                        settings.slave_account,
+                        settings.master_account,
+                        previous_status,
+                        evaluated_status
+                    );
+                }
             }
         }
     }
