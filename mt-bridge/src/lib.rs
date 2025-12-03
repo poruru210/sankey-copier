@@ -14,6 +14,7 @@ pub use types::{
     HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RequestConfigMessage, SlaveConfigMessage, SymbolMapping, SyncMode,
     SyncRequestMessage, TradeFilters, TradeSignalMessage, UnregisterMessage, VLogsConfigMessage,
+    WarningCode,
 };
 
 // Re-export traits for polymorphic config handling

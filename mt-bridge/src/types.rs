@@ -111,6 +111,9 @@ pub struct SlaveConfigMessage {
     /// Allow opening new orders (derived from status: true when status > 0)
     #[serde(default = "default_allow_new_orders")]
     pub allow_new_orders: bool,
+    /// Detailed warning codes to help UI/EA show root causes (empty when healthy)
+    #[serde(default)]
+    pub warning_codes: Vec<WarningCode>,
 }
 
 fn default_max_retries() -> i32 {
@@ -137,6 +140,23 @@ pub struct MasterConfigMessage {
     pub symbol_suffix: Option<String>,
     pub config_version: u32,
     pub timestamp: String, // ISO 8601 format
+    /// Warning codes describing why master is disabled (if any)
+    #[serde(default)]
+    pub warning_codes: Vec<WarningCode>,
+}
+
+/// Warning codes that describe why a runtime status is degraded/disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WarningCode {
+    SlaveWebUiDisabled,
+    SlaveOffline,
+    SlaveAutoTradingDisabled,
+    MasterWebUiDisabled,
+    MasterOffline,
+    MasterAutoTradingDisabled,
+    MasterClusterDegraded,
+    NoMasterAssigned,
 }
 
 /// Unregistration message structure

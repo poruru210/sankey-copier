@@ -231,6 +231,7 @@ fn test_config_message_serialization() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -305,6 +306,7 @@ fn test_master_config_message_serialization() {
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        warning_codes: vec![],
     };
 
     // Serialize
@@ -335,6 +337,7 @@ fn test_master_config_message_with_none_values() {
         symbol_suffix: None,
         config_version: 2,
         timestamp: "2025-01-02T12:30:00Z".to_string(),
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");

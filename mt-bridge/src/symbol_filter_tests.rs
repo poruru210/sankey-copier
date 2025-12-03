@@ -86,6 +86,7 @@ fn test_config_message_none_symbol_filters() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
@@ -132,6 +133,7 @@ fn test_config_message_some_symbol_filters() {
         max_signal_delay_ms: 10000,
         use_pending_order_for_delayed: true,
         allow_new_orders: false,
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&config).expect("Failed to serialize");
