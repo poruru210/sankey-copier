@@ -331,22 +331,6 @@ function ConnectionsViewReactFlowInner({
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
 
-  // Handle node double-click to edit Master settings
-  const onNodeDoubleClick = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      // Only handle source (Master) nodes
-      if (node.id.startsWith('source-')) {
-        const accountId = node.id.replace('source-', '');
-        // Find the corresponding connection to get the full account name
-        const sourceAccount = sourceAccounts.find(acc => acc.id === accountId);
-        if (sourceAccount) {
-          handleEditMasterSettings(sourceAccount.id);
-        }
-      }
-    },
-    [sourceAccounts, handleEditMasterSettings]
-  );
-
   // Get React Flow instance for fitView
   const reactFlowInstance = useReactFlow();
 
@@ -445,7 +429,6 @@ function ConnectionsViewReactFlowInner({
             edgeTypes={edgeTypes}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
-            onNodeDoubleClick={onNodeDoubleClick}
             nodesDraggable={true}
             nodeDragThreshold={1}
             nodesConnectable={false}
