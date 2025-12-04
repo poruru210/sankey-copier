@@ -197,6 +197,7 @@ impl RuntimeStatusUpdater {
 
     /// Build a cluster snapshot for all Masters connected to a Slave.
     /// This is kept for account-level aggregation (e.g., Web UI Slave node badge).
+    #[allow(dead_code)]
     #[instrument(skip(self), fields(slave_account = %slave_account))]
     pub async fn master_cluster_snapshot(&self, slave_account: &str) -> MasterClusterSnapshot {
         match self.db.get_masters_for_slave(slave_account).await {
@@ -251,6 +252,7 @@ impl RuntimeStatusMetrics {
         self.slave_evaluations_total.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn record_slave_eval_failure(&self) {
         self.slave_evaluations_total.fetch_add(1, Ordering::Relaxed);
         self.slave_evaluations_failed

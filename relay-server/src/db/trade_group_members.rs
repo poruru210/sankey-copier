@@ -239,6 +239,7 @@ impl Database {
     ///
     /// # Returns
     /// Vector of master account IDs (trade_group_ids) that this Slave is connected to
+    #[allow(dead_code)]
     pub async fn get_masters_for_slave(&self, slave_account: &str) -> Result<Vec<String>> {
         let rows = sqlx::query(
             "SELECT DISTINCT trade_group_id

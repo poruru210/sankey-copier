@@ -41,6 +41,7 @@ impl MasterClusterSnapshot {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_status_results(results: Vec<MasterStatusResult>) -> Self {
         let mut statuses = Vec::with_capacity(results.len());
         let mut warnings = Vec::with_capacity(results.len());
@@ -55,6 +56,7 @@ impl MasterClusterSnapshot {
     }
 
     /// Returns true when every master is CONNECTED (and at least one master exists).
+    #[allow(dead_code)]
     pub fn all_connected(&self) -> bool {
         !self.master_statuses.is_empty()
             && self
@@ -62,6 +64,8 @@ impl MasterClusterSnapshot {
                 .iter()
                 .all(|status| *status == STATUS_CONNECTED)
     }
+
+    #[allow(dead_code)]
     pub fn aggregated_warning_codes(&self) -> Vec<WarningCode> {
         let mut combined = Vec::new();
         for codes in &self.master_warning_codes {
@@ -98,6 +102,7 @@ pub struct MemberStatusResult {
     pub warning_codes: Vec<WarningCode>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SlaveStatusResult {
     pub status: i32,
@@ -133,6 +138,7 @@ pub fn evaluate_master_status(
     }
 }
 
+#[allow(dead_code)]
 pub fn evaluate_slave_status(
     intent: SlaveIntent,
     slave_conn: ConnectionSnapshot,
