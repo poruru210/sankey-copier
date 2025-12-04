@@ -1660,6 +1660,10 @@ void CGridPanel::ShowCarouselPage(int index)
       AddCenteredRow("nav_row", nav_str, clrSkyBlue);
    }
 
+   // Update status row to reflect the CURRENT carousel page's status
+   // This ensures each Master's individual status is shown when viewing that page
+   UpdateStatusRow(cfg.status, cfg.allow_new_orders);
+
    ChartRedraw();
 }
 
