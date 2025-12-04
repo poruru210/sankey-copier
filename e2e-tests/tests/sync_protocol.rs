@@ -63,7 +63,15 @@ async fn test_position_snapshot_single_slave() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for slave to receive config (which triggers sync/ topic subscription)
+    slave
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Slave should receive CONNECTED status");
+
+    // Give time for ZMQ subscription to become effective
+    sleep(Duration::from_millis(100)).await;
 
     // Master sends PositionSnapshot with test positions
     let positions = vec![
@@ -145,7 +153,19 @@ async fn test_position_snapshot_multiple_slaves() {
     slave1.start().expect("Failed to start slave1");
     slave2.set_trade_allowed(true);
     slave2.start().expect("Failed to start slave2");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for slaves to receive config (which triggers sync/ topic subscription)
+    slave1
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Slave1 should receive CONNECTED status");
+    slave2
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Slave2 should receive CONNECTED status");
+
+    // Give time for ZMQ subscription to become effective
+    sleep(Duration::from_millis(100)).await;
 
     // Master sends PositionSnapshot
     let positions = vec![MasterEaSimulator::create_test_position(
@@ -221,12 +241,25 @@ async fn test_position_snapshot_empty() {
     )
     .expect("Failed to create slave");
 
+    // Subscribe to sync topic early (before start) to avoid slow joiner issues
+    slave
+        .subscribe_to_sync_topic()
+        .expect("Failed to subscribe to sync topic");
+
     // Start EAs with auto-trading enabled
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for slave to receive config
+    slave
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Slave should receive CONNECTED status");
+
+    // Give time for ZMQ subscription to become effective
+    sleep(Duration::from_millis(100)).await;
 
     // Master sends empty PositionSnapshot
     master
@@ -296,14 +329,19 @@ async fn test_sync_request_to_master() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for master to receive config (to ensure it's properly registered)
+    master
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Master should receive CONNECTED status");
 
     // Slave sends SyncRequest
     slave
         .send_sync_request(None)
         .expect("Failed to send SyncRequest");
 
-    // Give time for message routing
+    // Give time for ZMQ sync/ subscription and message routing
     sleep(Duration::from_millis(200)).await;
 
     // Master should receive the SyncRequest
@@ -364,7 +402,12 @@ async fn test_sync_request_with_last_sync_time() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for master to receive config (to ensure it's properly registered)
+    master
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Master should receive CONNECTED status");
 
     // Slave sends SyncRequest with last_sync_time
     let last_sync = chrono::Utc::now().to_rfc3339();
@@ -372,7 +415,7 @@ async fn test_sync_request_with_last_sync_time() {
         .send_sync_request(Some(last_sync.clone()))
         .expect("Failed to send SyncRequest");
 
-    // Give time for message routing
+    // Give time for ZMQ sync/ subscription and message routing
     sleep(Duration::from_millis(200)).await;
 
     // Master should receive the SyncRequest
@@ -504,7 +547,19 @@ async fn test_full_sync_cycle() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+
+    // Wait for both to receive config (ensures master is registered and slave has sync/ subscription)
+    master
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Master should receive CONNECTED status");
+    slave
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .expect("Failed to wait for status")
+        .expect("Slave should receive CONNECTED status");
+
+    // Give time for ZMQ subscription to become effective
+    sleep(Duration::from_millis(100)).await;
 
     // Step 1: Slave sends SyncRequest
     slave

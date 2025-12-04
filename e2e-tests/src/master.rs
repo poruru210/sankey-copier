@@ -246,45 +246,56 @@ impl MasterEaSimulator {
                     }
                 }
 
-                // 4. Config受信 (MQL5 L271-343) - Non-blocking
-                let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-                let received_bytes = unsafe {
-                    sankey_copier_zmq::ffi::zmq_socket_receive(
-                        config_socket,
-                        buffer.as_mut_ptr() as *mut std::ffi::c_char,
-                        crate::types::BUFFER_SIZE as i32,
-                    )
-                };
+                // 4. Config受信 (MQL5 L271-343) - Non-blocking, drain all messages
+                loop {
+                    let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
+                    let received_bytes = unsafe {
+                        sankey_copier_zmq::ffi::zmq_socket_receive(
+                            config_socket,
+                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
+                            crate::types::BUFFER_SIZE as i32,
+                        )
+                    };
 
-                if received_bytes > 0 {
+                    if received_bytes <= 0 {
+                        break; // No more messages
+                    }
+
                     let bytes = &buffer[..received_bytes as usize];
 
                     if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                        let _topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
+                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
                         let payload = &bytes[space_pos + 1..];
 
-                        // Try to parse as MasterConfig (MQL5 L305-323)
-                        if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(payload) {
-                            // Update status and symbol settings
-                            g_server_status.store(config.status, Ordering::SeqCst);
-                            if let Some(prefix) = &config.symbol_prefix {
-                                *g_symbol_prefix.lock().unwrap() = prefix.clone();
+                        // Check if this is a sync/ topic message (SyncRequest)
+                        if topic.starts_with("sync/") {
+                            if let Ok(sync_req) =
+                                rmp_serde::from_slice::<SyncRequestMessage>(payload)
+                            {
+                                // MQL5: ProcessSyncRequest() - キューに格納 (L325-340)
+                                let mut requests = received_sync_requests.lock().unwrap();
+                                requests.push(sync_req);
                             }
-                            if let Some(suffix) = &config.symbol_suffix {
-                                *g_symbol_suffix.lock().unwrap() = suffix.clone();
+                        } else if topic.starts_with("config/") {
+                            // Try to parse as MasterConfig (MQL5 L305-323)
+                            if let Ok(config) =
+                                rmp_serde::from_slice::<MasterConfigMessage>(payload)
+                            {
+                                // Update status and symbol settings
+                                g_server_status.store(config.status, Ordering::SeqCst);
+                                if let Some(prefix) = &config.symbol_prefix {
+                                    *g_symbol_prefix.lock().unwrap() = prefix.clone();
+                                }
+                                if let Some(suffix) = &config.symbol_suffix {
+                                    *g_symbol_suffix.lock().unwrap() = suffix.clone();
+                                }
+                            } else if let Ok(vlogs_config) =
+                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
+                            {
+                                // MQL5: ProcessVLogsConfig() - キューに格納
+                                let mut configs = received_vlogs_configs.lock().unwrap();
+                                configs.push(vlogs_config);
                             }
-                        } else if let Ok(sync_req) =
-                            rmp_serde::from_slice::<SyncRequestMessage>(payload)
-                        {
-                            // MQL5: ProcessSyncRequest() - キューに格納 (L325-340)
-                            let mut requests = received_sync_requests.lock().unwrap();
-                            requests.push(sync_req);
-                        } else if let Ok(vlogs_config) =
-                            rmp_serde::from_slice::<VLogsConfigMessage>(payload)
-                        {
-                            // MQL5: ProcessVLogsConfig() - キューに格納
-                            let mut configs = received_vlogs_configs.lock().unwrap();
-                            configs.push(vlogs_config);
                         }
                     }
                 }
@@ -508,7 +519,8 @@ impl MasterEaSimulator {
 
     /// Subscribe to sync requests for this master
     pub fn subscribe_to_sync_requests(&self) -> Result<()> {
-        let sync_topic = format!("sync/{}", self.base.account_id());
+        // Subscribe to sync/{account_id}/ with prefix to receive all sync requests from slaves
+        let sync_topic = format!("sync/{}/", self.base.account_id());
         self.base.subscribe_to_topic(&sync_topic)
     }
 

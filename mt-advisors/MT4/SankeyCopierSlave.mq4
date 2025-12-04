@@ -61,6 +61,8 @@ bool           g_has_received_config = false;    // Track if we have received at
 //--- Topic strings (generated via FFI)
 string g_config_topic = "";
 string g_vlogs_topic = "";
+bool   g_sync_topic_subscribed = false;  // Track if sync topic has been subscribed
+string g_sync_topic = "";                // Sync topic for receiving PositionSnapshot
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -333,8 +335,13 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Check for VLogs config message first (global broadcast)
-         if(topic == g_vlogs_topic)
+         // Check if this is a sync/ topic message (PositionSnapshot from Master)
+         if(StringFind(topic, "sync/") == 0)
+         {
+            ProcessPositionSnapshot(msgpack_payload, payload_len);
+         }
+         // Check for VLogs config message (global broadcast)
+         else if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle != 0 && vlogs_handle != -1)
@@ -343,32 +350,17 @@ void OnTimer()
                vlogs_config_free(vlogs_handle);
             }
          }
-         // Try to parse as SlaveConfig first
+         // Parse as SlaveConfig (config/{account_id} topic)
          else if(topic == g_config_topic)
          {
-            HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
-            if(config_handle > 0)
+            ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
+                                 g_zmq_context, g_RelayAddress, AccountID);
+            g_has_received_config = true;
+            
+            // Subscribe to sync/{master}/{slave} topic after receiving config
+            if(!g_sync_topic_subscribed && ArraySize(g_configs) > 0)
             {
-               string master_account = slave_config_get_string(config_handle, "master_account");
-               if(master_account != "")
-               {
-                  // Valid SlaveConfig - process it
-                  slave_config_free(config_handle);
-                  ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
-                                       g_zmq_context, g_RelayAddress, AccountID);
-                  g_has_received_config = true;
-               }
-               else
-               {
-                  // Not a SlaveConfig - try PositionSnapshot
-                  slave_config_free(config_handle);
-                  ProcessPositionSnapshot(msgpack_payload, payload_len);
-               }
-            }
-            else
-            {
-               // Failed to parse as SlaveConfig - try PositionSnapshot
-               ProcessPositionSnapshot(msgpack_payload, payload_len);
+               SubscribeToSyncTopic();
             }
          }
          
@@ -580,6 +572,50 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 
    // Free the handle
    trade_signal_free(handle);
+}
+
+//+------------------------------------------------------------------+
+//| Subscribe to sync/{master}/{slave} topic for PositionSnapshot     |
+//| Called after receiving first config to subscribe to sync topic    |
+//+------------------------------------------------------------------+
+void SubscribeToSyncTopic()
+{
+   if(g_sync_topic_subscribed || ArraySize(g_configs) == 0)
+      return;
+
+   // Get master account from first config
+   string master_account = g_configs[0].master_account;
+   if(master_account == "")
+      return;
+
+   // Build sync topic: sync/{master}/{slave}
+   ushort master_utf16[256];
+   ushort slave_utf16[256];
+   ushort sync_topic_buffer[256];
+   
+   StringToShortArray(master_account, master_utf16);
+   StringToShortArray(AccountID, slave_utf16);
+   
+   int sync_len = build_sync_topic_ffi(master_utf16, slave_utf16, sync_topic_buffer, 256);
+   if(sync_len > 0)
+   {
+      g_sync_topic = ShortArrayToString(sync_topic_buffer);
+      Print("Generated sync topic: ", g_sync_topic);
+      
+      if(SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      {
+         Print("Subscribed to sync topic: ", g_sync_topic);
+         g_sync_topic_subscribed = true;
+      }
+      else
+      {
+         Print("WARNING: Failed to subscribe to sync topic: ", g_sync_topic);
+      }
+   }
+   else
+   {
+      Print("WARNING: Failed to generate sync topic");
+   }
 }
 
 //+------------------------------------------------------------------+

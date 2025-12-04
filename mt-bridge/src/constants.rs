@@ -58,6 +58,9 @@ pub const TOPIC_CONFIG_PREFIX: &str = "config/";
 /// Prefix for trade topics (format: "trade/{account_id}")
 pub const TOPIC_TRADE_PREFIX: &str = "trade/";
 
+/// Prefix for sync protocol topics (format: "sync/{master_id}/{slave_id}")
+pub const TOPIC_SYNC_PREFIX: &str = "sync/";
+
 // =============================================================================
 // Order Type Enum
 // =============================================================================
@@ -143,6 +146,13 @@ pub fn build_trade_topic(master_id: &str, slave_id: &str) -> String {
     format!("{}{}/{}", TOPIC_TRADE_PREFIX, master_id, slave_id)
 }
 
+/// Build a sync topic for a specific Master-Slave pair
+/// Returns format: "sync/{master_id}/{slave_id}"
+#[inline]
+pub fn build_sync_topic(master_id: &str, slave_id: &str) -> String {
+    format!("{}{}/{}", TOPIC_SYNC_PREFIX, master_id, slave_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +173,15 @@ mod tests {
             "trade/MASTER_001/SLAVE_001"
         );
         assert_eq!(TOPIC_GLOBAL_CONFIG, "config/global");
+    }
+
+    #[test]
+    fn test_sync_topic_generation() {
+        assert_eq!(
+            build_sync_topic("MASTER_001", "SLAVE_001"),
+            "sync/MASTER_001/SLAVE_001"
+        );
+        assert_eq!(build_sync_topic("M", "S"), "sync/M/S");
     }
 
     #[test]

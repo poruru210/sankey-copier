@@ -63,6 +63,7 @@ uint          g_config_version = 0;       // Current config version
 int           g_server_status = STATUS_NO_CONFIG; // Status from server (DISABLED/CONNECTED)
 string        g_config_topic = "";        // Config topic (generated via FFI)
 string        g_vlogs_topic = "";         // VLogs topic (generated via FFI)
+string        g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -163,6 +164,24 @@ int OnInit()
    if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
    {
       Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
+   // Subscribe to sync/{account_id}/ topic for SyncRequest messages from slaves
+   ushort sync_topic_buffer[256];
+   int sync_len = get_sync_topic_prefix(AccountID, sync_topic_buffer, 256);
+   if(sync_len > 0)
+   {
+      g_sync_topic = ShortArrayToString(sync_topic_buffer);
+      Print("Generated sync topic prefix: ", g_sync_topic);
+      
+      if(!SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      {
+         Print("WARNING: Failed to subscribe to sync topic");
+      }
+   }
+   else
+   {
+      Print("WARNING: Failed to generate sync topic prefix");
    }
 
    // Scan existing positions and orders
@@ -300,8 +319,13 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Check for VLogs config message first (global broadcast)
-         if(topic == g_vlogs_topic)
+         // Check if this is a sync/ topic message (SyncRequest from Slave)
+         if(StringFind(topic, "sync/") == 0)
+         {
+            ProcessSyncRequest(msgpack_payload, payload_len);
+         }
+         // Check for VLogs config message (global broadcast)
+         else if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle != 0 && vlogs_handle != -1)
@@ -310,31 +334,10 @@ void OnTimer()
                vlogs_config_free(vlogs_handle);
             }
          }
-         // Try to parse as MasterConfig
+         // Parse as MasterConfig (config/{account_id} topic)
          else if(topic == g_config_topic)
          {
-            HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
-            if(config_handle > 0)
-            {
-               string account_id = master_config_get_string(config_handle, "account_id");
-               if(account_id != "")
-               {
-                  // Valid MasterConfig
-                  master_config_free(config_handle);
-                  ProcessMasterConfigMessage(msgpack_payload, payload_len);
-               }
-               else
-               {
-                  // No account_id - try SyncRequest
-                  master_config_free(config_handle);
-                  ProcessSyncRequest(msgpack_payload, payload_len);
-               }
-            }
-            else
-            {
-               // Failed to parse as MasterConfig - try SyncRequest
-               ProcessSyncRequest(msgpack_payload, payload_len);
-            }
+            ProcessMasterConfigMessage(msgpack_payload, payload_len);
          }
       }
    }

@@ -321,85 +321,105 @@ impl SlaveEaSimulator {
                     }
                 }
 
-                // 5. Config受信 (MQL5 L320-418) - Non-blocking
-                let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-                let received_bytes = unsafe {
-                    sankey_copier_zmq::ffi::zmq_socket_receive(
-                        config_socket,
-                        buffer.as_mut_ptr() as *mut std::ffi::c_char,
-                        crate::types::BUFFER_SIZE as i32,
-                    )
-                };
+                // 5. Config受信 (MQL5 L320-418) - Non-blocking, drain all messages
+                loop {
+                    let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
+                    let received_bytes = unsafe {
+                        sankey_copier_zmq::ffi::zmq_socket_receive(
+                            config_socket,
+                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
+                            crate::types::BUFFER_SIZE as i32,
+                        )
+                    };
 
-                if received_bytes > 0 {
+                    if received_bytes <= 0 {
+                        break; // No more messages
+                    }
+
                     let bytes = &buffer[..received_bytes as usize];
 
                     // Parse topic + space + payload (MQL5 L326-337)
                     if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                        let _topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
+                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
                         let payload = &bytes[space_pos + 1..];
 
-                        // Try to parse as SlaveConfig (MQL5 L365-377)
-                        if let Ok(config) = rmp_serde::from_slice::<SlaveConfig>(payload) {
-                            // Update g_configs (MQL5: ProcessConfigMessage)
+                        // Check if this is a sync/ topic message (PositionSnapshot)
+                        if topic.starts_with("sync/") {
+                            if let Ok(snapshot) =
+                                rmp_serde::from_slice::<PositionSnapshotMessage>(payload)
                             {
-                                let mut configs = g_configs.lock().unwrap();
-                                // Replace or add config for this master
-                                if let Some(existing) = configs
-                                    .iter_mut()
-                                    .find(|c| c.master_account == config.master_account)
+                                // MQL5: ProcessPositionSnapshot() - キューに格納
+                                let mut snapshots = received_position_snapshots.lock().unwrap();
+                                snapshots.push(snapshot);
+                            }
+                        } else if topic.starts_with("config/") {
+                            // Try to parse as SlaveConfig (MQL5 L365-377)
+                            if let Ok(config) = rmp_serde::from_slice::<SlaveConfig>(payload) {
+                                // Update g_configs (MQL5: ProcessConfigMessage)
                                 {
-                                    *existing = config.clone();
-                                } else {
-                                    configs.push(config.clone());
+                                    let mut configs = g_configs.lock().unwrap();
+                                    // Replace or add config for this master
+                                    if let Some(existing) = configs
+                                        .iter_mut()
+                                        .find(|c| c.master_account == config.master_account)
+                                    {
+                                        *existing = config.clone();
+                                    } else {
+                                        configs.push(config.clone());
+                                    }
                                 }
-                            }
 
-                            // Update status
-                            last_received_status.store(config.status, Ordering::SeqCst);
-                            g_has_received_config.store(true, Ordering::SeqCst);
+                                // Update status
+                                last_received_status.store(config.status, Ordering::SeqCst);
+                                g_has_received_config.store(true, Ordering::SeqCst);
 
-                            // 動的にtrade topicを購読 (ProcessConfigMessage内の動作)
-                            // MQL5: SubscribeToTradeTopic(g_zmq_trade_socket, trade_topic)
-                            // Trade topic is subscribed on trade_socket (not config_socket)
-                            let master_acc = &config.master_account;
-                            let mut subscribed = subscribed_masters.lock().unwrap();
-                            if !subscribed.contains(master_acc) {
-                                // Use FFI build_trade_topic (same as MQL5 EA)
-                                let master_utf16: Vec<u16> =
-                                    master_acc.encode_utf16().chain(Some(0)).collect();
-                                let slave_utf16: Vec<u16> =
-                                    account_id.encode_utf16().chain(Some(0)).collect();
-                                let mut topic_utf16 = vec![0u16; 256];
-                                unsafe {
-                                    sankey_copier_zmq::ffi::build_trade_topic(
-                                        master_utf16.as_ptr(),
-                                        slave_utf16.as_ptr(),
-                                        topic_utf16.as_mut_ptr(),
-                                        256,
-                                    );
+                                // 動的にtrade topicとsync topicを購読 (ProcessConfigMessage内の動作)
+                                let master_acc = &config.master_account;
+                                let mut subscribed = subscribed_masters.lock().unwrap();
+                                if !subscribed.contains(master_acc) {
+                                    // Use FFI build_trade_topic (same as MQL5 EA)
+                                    let master_utf16: Vec<u16> =
+                                        master_acc.encode_utf16().chain(Some(0)).collect();
+                                    let slave_utf16: Vec<u16> =
+                                        account_id.encode_utf16().chain(Some(0)).collect();
+                                    let mut topic_utf16 = vec![0u16; 256];
+                                    unsafe {
+                                        sankey_copier_zmq::ffi::build_trade_topic(
+                                            master_utf16.as_ptr(),
+                                            slave_utf16.as_ptr(),
+                                            topic_utf16.as_mut_ptr(),
+                                            256,
+                                        );
+                                    }
+                                    unsafe {
+                                        // Subscribe on trade_socket (MQL5: g_zmq_trade_socket)
+                                        sankey_copier_zmq::ffi::zmq_socket_subscribe(
+                                            trade_socket,
+                                            topic_utf16.as_ptr(),
+                                        );
+                                    }
+
+                                    // Subscribe to sync/{master}/{slave} topic for PositionSnapshot
+                                    let sync_topic =
+                                        format!("sync/{}/{}", master_acc, account_id);
+                                    let sync_topic_utf16: Vec<u16> =
+                                        sync_topic.encode_utf16().chain(Some(0)).collect();
+                                    unsafe {
+                                        sankey_copier_zmq::ffi::zmq_socket_subscribe(
+                                            config_socket,
+                                            sync_topic_utf16.as_ptr(),
+                                        );
+                                    }
+
+                                    subscribed.push(master_acc.clone());
                                 }
-                                unsafe {
-                                    // Subscribe on trade_socket (MQL5: g_zmq_trade_socket)
-                                    sankey_copier_zmq::ffi::zmq_socket_subscribe(
-                                        trade_socket,
-                                        topic_utf16.as_ptr(),
-                                    );
-                                }
-                                subscribed.push(master_acc.clone());
+                            } else if let Ok(vlogs_config) =
+                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
+                            {
+                                // MQL5: ProcessVLogsConfig() - キューに格納
+                                let mut configs = received_vlogs_configs.lock().unwrap();
+                                configs.push(vlogs_config);
                             }
-                        } else if let Ok(snapshot) =
-                            rmp_serde::from_slice::<PositionSnapshotMessage>(payload)
-                        {
-                            // MQL5: ProcessPositionSnapshot() - キューに格納
-                            let mut snapshots = received_position_snapshots.lock().unwrap();
-                            snapshots.push(snapshot);
-                        } else if let Ok(vlogs_config) =
-                            rmp_serde::from_slice::<VLogsConfigMessage>(payload)
-                        {
-                            // MQL5: ProcessVLogsConfig() - キューに格納
-                            let mut configs = received_vlogs_configs.lock().unwrap();
-                            configs.push(vlogs_config);
                         }
                     }
                 }
@@ -626,6 +646,20 @@ impl SlaveEaSimulator {
     // =========================================================================
     // Legacy methods for backward compatibility during migration
     // =========================================================================
+
+    /// Subscribe to sync topic for receiving PositionSnapshot from Master
+    ///
+    /// This subscribes to sync/{master}/{slave} topic on the config socket.
+    /// Can be called early in tests to ensure subscription is active before
+    /// messages are sent (avoids ZMQ "slow joiner" issues).
+    pub fn subscribe_to_sync_topic(&self) -> Result<()> {
+        let sync_topic = format!(
+            "sync/{}/{}",
+            self.master_account,
+            self.base.account_id()
+        );
+        self.base.subscribe_to_topic(&sync_topic)
+    }
 
     /// Subscribe to trade signals for a specific Master account
     ///
