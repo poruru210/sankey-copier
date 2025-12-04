@@ -3,8 +3,8 @@ use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 
 use crate::models::{
     status_engine::{
-        evaluate_master_status, evaluate_slave_status, ConnectionSnapshot, MasterClusterSnapshot,
-        MasterIntent, MasterStatusResult, SlaveIntent, SlaveStatusResult,
+        evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,
+        MasterStatusResult, MemberStatusResult, SlaveIntent,
     },
     MasterSettings, SlaveSettings,
 };
@@ -18,14 +18,15 @@ pub struct MasterConfigContext<'a> {
     pub timestamp: DateTime<Utc>,
 }
 
-/// Context needed to build a SlaveConfigMessage.
+/// Context needed to build a SlaveConfigMessage for a single Member (Master-Slave connection).
 pub struct SlaveConfigContext<'a> {
     pub slave_account: String,
     pub master_account: String,
     pub trade_group_id: String,
     pub intent: SlaveIntent,
     pub slave_connection_snapshot: ConnectionSnapshot,
-    pub master_cluster: MasterClusterSnapshot,
+    /// The specific Master's status result (not the entire cluster)
+    pub master_status_result: MasterStatusResult,
     pub slave_settings: &'a SlaveSettings,
     pub master_equity: Option<f64>,
     pub timestamp: DateTime<Utc>,
@@ -40,7 +41,7 @@ pub struct MasterConfigBundle {
 /// Bundle returned when building a Slave config. Includes the calculated status/result.
 pub struct SlaveConfigBundle {
     pub config: SlaveConfigMessage,
-    pub status_result: SlaveStatusResult,
+    pub status_result: MemberStatusResult,
 }
 
 /// Helper that centralizes Master/Slave config message creation.
@@ -66,12 +67,13 @@ impl ConfigBuilder {
         }
     }
 
-    /// Build a SlaveConfigMessage and return the evaluation result for reuse.
+    /// Build a SlaveConfigMessage for a single Member (Master-Slave connection).
+    /// Uses `evaluate_member_status` to evaluate based on the specific Master's state.
     pub fn build_slave_config(context: SlaveConfigContext) -> SlaveConfigBundle {
-        let status_result = evaluate_slave_status(
+        let status_result = evaluate_member_status(
             context.intent,
             context.slave_connection_snapshot,
-            context.master_cluster,
+            &context.master_status_result,
         );
 
         let settings = context.slave_settings;
@@ -117,7 +119,7 @@ impl ConfigBuilder {
 mod tests {
     use super::*;
     use crate::models::{
-        status_engine::{ConnectionSnapshot, MasterClusterSnapshot, MasterIntent, SlaveIntent},
+        status_engine::{ConnectionSnapshot, MasterIntent, SlaveIntent},
         ConnectionStatus, MasterSettings, SlaveSettings, WarningCode, STATUS_CONNECTED,
         STATUS_DISABLED, STATUS_ENABLED,
     };
@@ -126,6 +128,20 @@ mod tests {
         ConnectionSnapshot {
             connection_status: Some(ConnectionStatus::Online),
             is_trade_allowed: true,
+        }
+    }
+
+    fn connected_master() -> MasterStatusResult {
+        MasterStatusResult {
+            status: STATUS_CONNECTED,
+            warning_codes: vec![],
+        }
+    }
+
+    fn offline_master() -> MasterStatusResult {
+        MasterStatusResult {
+            status: STATUS_DISABLED,
+            warning_codes: vec![WarningCode::MasterOffline],
         }
     }
 
@@ -183,8 +199,8 @@ mod tests {
     }
 
     #[test]
-    fn slave_builder_enforces_allow_new_orders_logic() {
-        let master_bundle = MasterClusterSnapshot::new(vec![STATUS_CONNECTED]);
+    fn slave_builder_connected_when_master_connected() {
+        // Master is connected, Slave is online with Web UI ON
         let context = SlaveConfigContext {
             slave_account: "SLAVE_001".into(),
             master_account: "MASTER_001".into(),
@@ -193,7 +209,7 @@ mod tests {
                 web_ui_enabled: true,
             },
             slave_connection_snapshot: online_snapshot(),
-            master_cluster: master_bundle,
+            master_status_result: connected_master(),
             slave_settings: &SlaveSettings::default(),
             master_equity: Some(1000.0),
             timestamp: chrono::Utc::now(),
@@ -203,10 +219,13 @@ mod tests {
         assert_eq!(bundle.status_result.status, STATUS_CONNECTED);
         assert!(bundle.config.allow_new_orders);
         assert!(bundle.config.warning_codes.is_empty());
+    }
 
-        // Master cluster is degraded (STATUS_ENABLED instead of STATUS_CONNECTED)
-        // But Slave's allow_new_orders should still be true because Slave is online with Web UI ON
-        let disabled_cluster = MasterClusterSnapshot::new(vec![STATUS_ENABLED]);
+    #[test]
+    fn slave_builder_enabled_when_master_offline() {
+        // Master is offline, Slave is online with Web UI ON
+        // Member status should be ENABLED (waiting for Master)
+        // But allow_new_orders should still be true (Slave can process signals if they arrive)
         let context = SlaveConfigContext {
             slave_account: "SLAVE_002".into(),
             master_account: "MASTER_001".into(),
@@ -215,7 +234,7 @@ mod tests {
                 web_ui_enabled: true,
             },
             slave_connection_snapshot: online_snapshot(),
-            master_cluster: disabled_cluster,
+            master_status_result: offline_master(),
             slave_settings: &SlaveSettings::default(),
             master_equity: Some(500.0),
             timestamp: chrono::Utc::now(),
@@ -223,11 +242,43 @@ mod tests {
 
         let bundle = ConfigBuilder::build_slave_config(context);
         assert_eq!(bundle.status_result.status, STATUS_ENABLED);
-        // New spec: allow_new_orders is based on Slave's own state, not Master cluster
+        // allow_new_orders is based on Slave's own state, not Master
         assert!(bundle.config.allow_new_orders);
+        // Master's warning code should be propagated
         assert!(bundle
             .config
             .warning_codes
-            .contains(&WarningCode::MasterClusterDegraded));
+            .contains(&WarningCode::MasterOffline));
+    }
+
+    #[test]
+    fn slave_builder_disabled_when_slave_offline() {
+        // Master is connected, but Slave is offline
+        let offline_slave = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Offline),
+            is_trade_allowed: true,
+        };
+
+        let context = SlaveConfigContext {
+            slave_account: "SLAVE_003".into(),
+            master_account: "MASTER_001".into(),
+            trade_group_id: "MASTER_001".into(),
+            intent: SlaveIntent {
+                web_ui_enabled: true,
+            },
+            slave_connection_snapshot: offline_slave,
+            master_status_result: connected_master(),
+            slave_settings: &SlaveSettings::default(),
+            master_equity: Some(500.0),
+            timestamp: chrono::Utc::now(),
+        };
+
+        let bundle = ConfigBuilder::build_slave_config(context);
+        assert_eq!(bundle.status_result.status, STATUS_DISABLED);
+        assert!(!bundle.config.allow_new_orders);
+        assert!(bundle
+            .config
+            .warning_codes
+            .contains(&WarningCode::SlaveOffline));
     }
 }

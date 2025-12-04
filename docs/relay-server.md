@@ -215,33 +215,35 @@ Status Engine は Master/Slave の実効ステータスを算出する中核ロ�
 
 **実装**: `relay-server/src/models/status_engine.rs` の `evaluate_master_status()`
 
-### 4.3 Slave 判定ロジック
+### 4.3 Member (接続単位) 判定ロジック
 
 **判定要素**:
 1. **Slave自体の条件**: Web UI Switch、接続状態
-2. **接続Masterの状態**: 各Masterが `CONNECTED` か `DISABLED` か
+2. **接続先Masterの状態**: 対象Masterが `CONNECTED` か `DISABLED` か
+
+> **重要**: v2.0より、ステータス評価は「Slaveに接続されているすべてのMasterのクラスター」ではなく、「各Master-Slave接続 (Member) 単位」で行われます。これにより、同じSlaveでも接続先Masterごとに異なるステータスを持つことができます。
 
 **判定ルール**:
 
-| Slave条件 | Masterクラスター状態 | Slaveステータス | 説明 |
-|-----------|---------------------|:---------------:|------|
+| Slave条件 | 接続先Masterの状態 | Memberステータス | 説明 |
+|-----------|-------------------|:---------------:|------|
 | Switch❌ または オフライン | - | `DISABLED (0)` | Slave自体が無効 |
-| Switch✅ かつ オンライン | 少なくとも1つのMasterが DISABLED | `ENABLED (1)` | Slave準備完了、シグナル待ち |
-| Switch✅ かつ オンライン | すべてのMasterが CONNECTED | `CONNECTED (2)` | コピー取引実行可能 |
+| Switch✅ かつ オンライン | Master が DISABLED | `ENABLED (1)` | Slave準備完了、シグナル待ち |
+| Switch✅ かつ オンライン | Master が CONNECTED | `CONNECTED (2)` | コピー取引実行可能 |
 
 > **補足**: `is_trade_allowed=false`（MTの自動売買OFF）は Slave では**警告のみ**。ステータスには影響せず、注文は実行時に失敗する。
 
-**N:N接続の例** (Slave Aが Master1, Master2, Master3 に接続):
+**接続単位評価の例** (Slave Aが Master1, Master2, Master3 に接続):
 
-| Master1 | Master2 | Master3 | Slave Aのステータス |
-|:-------:|:-------:|:-------:|:------------------:|
-| CONNECTED | CONNECTED | CONNECTED | `CONNECTED (2)` |
-| CONNECTED | CONNECTED | DISABLED | `ENABLED (1)` |
-| DISABLED | DISABLED | DISABLED | `ENABLED (1)` |
+| Master1 | Master2 | Master3 | Member(Slave A - Master1) | Member(Slave A - Master2) | Member(Slave A - Master3) |
+|:-------:|:-------:|:-------:|:-------------------------:|:-------------------------:|:-------------------------:|
+| CONNECTED | CONNECTED | CONNECTED | `CONNECTED (2)` | `CONNECTED (2)` | `CONNECTED (2)` |
+| CONNECTED | CONNECTED | DISABLED | `CONNECTED (2)` | `CONNECTED (2)` | `ENABLED (1)` |
+| DISABLED | DISABLED | DISABLED | `ENABLED (1)` | `ENABLED (1)` | `ENABLED (1)` |
 
-**ルール**: **すべてのMasterが `CONNECTED` の場合のみ Slaveは `CONNECTED (2)`**
+**ルール**: **各Member は接続先Master の状態のみで評価される**
 
-**実装**: `relay-server/src/models/status_engine.rs` の `evaluate_slave_status()`
+**実装**: `relay-server/src/models/status_engine.rs` の `evaluate_member_status()`
 
 ### 4.4 allow_new_orders の決定
 
@@ -265,18 +267,20 @@ allow_new_orders = web_ui_enabled && online
 
 ### 4.5 Warning Codes リファレンス
 
-Status Engine は問題を検出すると `warning_codes` 配列に警告を追加します。
+Status Engine は問題を検出すると `warning_codes` 配列に警告を追加します。警告は**優先度順にソート**されて返されます。
 
-| コード | 発生条件 | 推奨対応 |
-|--------|----------|----------|
-| `slave_web_ui_disabled` | Web UI で Slave が OFF | UI でトグルを ON に戻す |
-| `slave_offline` | Slave Heartbeat を受信できていない | 端末/ネットワークを確認 |
-| `slave_auto_trading_disabled` | MT4/MT5 の AlgoTrading が OFF | 「Algo Trading」ボタンを有効に |
-| `master_web_ui_disabled` | Master が OFF | Master ノードを ON に戻す |
-| `master_offline` | Master Heartbeat が失われた | Master EA を起動 |
-| `master_auto_trading_disabled` | Master 側の自動売買が OFF | Master の Algo 設定を修正 |
-| `master_cluster_degraded` | マルチ Master の一部が未接続 | すべての Master を接続 |
-| `no_master_assigned` | Slave に紐付く Master が 0 件 | Web UI で TradeGroup に Slave を追加 |
+| コード | 優先度 | 発生条件 | 推奨対応 |
+|--------|:------:|----------|----------|
+| `slave_web_ui_disabled` | 10 | Web UI で Slave が OFF | UI でトグルを ON に戻す |
+| `slave_offline` | 20 | Slave Heartbeat を受信できていない | 端末/ネットワークを確認 |
+| `slave_auto_trading_disabled` | 30 | MT4/MT5 の AlgoTrading が OFF | 「Algo Trading」ボタンを有効に |
+| `no_master_assigned` | 40 | Slave に紐付く Master が 0 件 | Web UI で TradeGroup に Slave を追加 |
+| `master_web_ui_disabled` | 50 | Master が OFF | Master ノードを ON に戻す |
+| `master_offline` | 60 | Master Heartbeat が失われた | Master EA を起動 |
+| `master_auto_trading_disabled` | 70 | Master 側の自動売買が OFF | Master の Algo 設定を修正 |
+| `master_cluster_degraded` | 80 | マルチ Master の一部が未接続 | すべての Master を接続 |
+
+> **優先度について**: 値が小さいほど高優先度。UI は配列の先頭の警告を主要メッセージとして表示できます。
 
 ---
 
@@ -292,9 +296,14 @@ Status Engine は問題を検出すると `warning_codes` 配列に警告を追�
 
 **処理フロー**:
 1. Heartbeat / Timeout / Intent API / RequestConfig / Unregister がトリガー
-2. `master_cluster_snapshot` と `slave_connection_snapshot` を取得
-3. Status Engine で `runtime_status` と `warning_codes` を算出
+2. `master_status_result` (接続先Masterの評価結果) と `slave_connection_snapshot` を取得
+3. `evaluate_member_status()` で Member 単位の `runtime_status` と `warning_codes` を算出
 4. DB 更新、ZMQ 配信、WebSocket broadcast を一括実行
+
+**主要関数**:
+- `evaluate_master_runtime_status()`: Master の接続状態を評価
+- `evaluate_member_runtime_status()`: 特定 Master-Slave 接続のステータスを評価
+- `build_slave_bundle()`: 評価結果を含む `SlaveConfigBundle` を生成
 
 **メトリクス**: 評価回数・失敗率は `RuntimeStatusMetrics` に記録され、API で公開されます。
 

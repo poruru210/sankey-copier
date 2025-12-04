@@ -116,20 +116,14 @@ pub(crate) async fn notify_slaves_master_offline(
     match db.get_members(master_account).await {
         Ok(members) => {
             for member in members {
-                let cluster_snapshot = runtime_updater
-                    .master_cluster_snapshot(&member.slave_account)
-                    .await;
                 let slave_bundle = runtime_updater
-                    .build_slave_bundle(
-                        SlaveRuntimeTarget {
-                            master_account,
-                            trade_group_id: master_account,
-                            slave_account: &member.slave_account,
-                            enabled_flag: member.enabled_flag,
-                            slave_settings: &member.slave_settings,
-                        },
-                        Some(cluster_snapshot.clone()),
-                    )
+                    .build_slave_bundle(SlaveRuntimeTarget {
+                        master_account,
+                        trade_group_id: master_account,
+                        slave_account: &member.slave_account,
+                        enabled_flag: member.enabled_flag,
+                        slave_settings: &member.slave_settings,
+                    })
                     .await;
                 let config = slave_bundle.config;
                 let new_status = slave_bundle.status_result.status;
@@ -142,8 +136,8 @@ pub(crate) async fn notify_slaves_master_offline(
                     new_status,
                     slave_bundle.status_result.allow_new_orders,
                     &slave_bundle.status_result.warning_codes,
-                    cluster_snapshot.master_statuses.len(),
-                    cluster_snapshot.all_connected(),
+                    1, // per-connection: always 1 Master
+                    new_status == crate::models::STATUS_CONNECTED,
                 );
 
                 if let Err(e) = publisher.send(&config).await {
@@ -233,20 +227,15 @@ pub(crate) async fn notify_slave_offline(
         return;
     }
 
-    let master_snapshot = runtime_updater.master_cluster_snapshot(slave_account).await;
-
     for settings in settings_list {
         let slave_bundle = runtime_updater
-            .build_slave_bundle(
-                SlaveRuntimeTarget {
-                    master_account: settings.master_account.as_str(),
-                    trade_group_id: settings.master_account.as_str(),
-                    slave_account: &settings.slave_account,
-                    enabled_flag: settings.enabled_flag,
-                    slave_settings: &settings.slave_settings,
-                },
-                Some(master_snapshot.clone()),
-            )
+            .build_slave_bundle(SlaveRuntimeTarget {
+                master_account: settings.master_account.as_str(),
+                trade_group_id: settings.master_account.as_str(),
+                slave_account: &settings.slave_account,
+                enabled_flag: settings.enabled_flag,
+                slave_settings: &settings.slave_settings,
+            })
             .await;
 
         let previous_status = settings.runtime_status;
@@ -260,8 +249,8 @@ pub(crate) async fn notify_slave_offline(
             new_status,
             slave_bundle.status_result.allow_new_orders,
             &slave_bundle.status_result.warning_codes,
-            master_snapshot.master_statuses.len(),
-            master_snapshot.all_connected(),
+            1, // per-connection: always 1 Master
+            new_status == crate::models::STATUS_CONNECTED,
         );
 
         // Update database with new status

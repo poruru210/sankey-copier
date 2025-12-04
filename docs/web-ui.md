@@ -322,14 +322,15 @@ class ApiClient {
 | フィールド | 役割 | 更新トリガー |
 |------------|------|--------------|
 | `enabled_flag` | ユーザーの意図。スイッチ操作で `true/false` を切り替える。 | Web UI の `POST /api/trade-groups/{master}/members/{slave}/toggle`、またはマスタートグル (`POST /api/trade-groups/{master}/toggle`) |
-| `runtime_status` | リレーサーバーの Status Engine が算出する実効ステータス。`0=Manual OFF / 1=Standby / 2=Streaming`。 | サーバー側で計算後、`member_*` WebSocket イベント → `GET /trade-groups` + `GET /trade-groups/{master}/members` の再取得 |
+| `runtime_status` | リレーサーバーの Status Engine が算出する実効ステータス。`0=Manual OFF / 1=Standby / 2=Streaming`。**接続単位 (Member) で評価**される。 | サーバー側で計算後、`member_*` WebSocket イベント → `GET /trade-groups` + `GET /trade-groups/{master}/members` の再取得 |
 | `master_runtime_status` | Master 単位の実効ステータス。Master ノードのバッジや React Flow ノード色分けに使用。 | Status Engine 更新後に `TradeGroup` レスポンスへ書き戻し |
-| `warning_codes` | Status Engine が付与する警告配列。`slave_offline` や `master_cluster_degraded` を含み、Nord バーやツールチップの優先色決定に使う。 | Heartbeat / Timeout / Intent API / RequestConfig / Unregister の各イベント後、WebSocket・REST フェッチで受信 |
+| `warning_codes` | Status Engine が付与する警告配列。**優先度順にソート済み**（配列先頭が最重要）。`slave_offline` や `master_offline` を含み、Nord バーやツールチップの優先色決定に使う。 | Heartbeat / Timeout / Intent API / RequestConfig / Unregister の各イベント後、WebSocket・REST フェッチで受信 |
 
 - Web UI はトグル操作で **intent (`enabled_flag`) のみ** を即時更新し、`runtime_status` は WebSocket 経由の再フェッチまで待機する。<br>
 - Master ノードの `master_settings.enabled` は最後に送信したトグルの意図を保持し、`master_runtime_status` が 2 (Streaming) になるまで待機表示を続ける。<br>
 - Slave ノードの `Intent` バッジと `Runtime` バッジを分離し、ユーザー操作と Status Engine 判定の差分を明示する。
-- `warning_codes` が空でない場合は `StatusIndicatorBar` が黄色 (`bg-yellow-500`) を優先し、ツールチップで `warning_codes` の `snake_case` を Intlayer 経由で翻訳表示する。`AccountNodeHeader` も同じ配列を受け取り、警告アイコンの表示を制御する。
+- `warning_codes` は配列先頭が最も優先度の高い警告。`StatusIndicatorBar` が黄色 (`bg-yellow-500`) を優先し、ツールチップで先頭の警告を主要メッセージとして表示する。`AccountNodeHeader` も同じ配列を受け取り、警告アイコンの表示を制御する。
+- **接続単位評価**: 同じ Slave でも接続先 Master ごとに異なる `runtime_status` と `warning_codes` を持つ。UI は各 Member (エッジ) ごとにステータスを表示する。
 
 ### Warning 表示ルール
 

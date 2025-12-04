@@ -387,7 +387,7 @@ sequenceDiagram
 - Symbol Prefix/Suffix
 
 ### Slave表示項目
-- Status: CONNECTED / ENABLED / DISABLED
+- Status: CONNECTED / ENABLED / DISABLED （接続先Masterごとに評価）
 - Server: localhost:5555
 - Master: IC_Markets_123... (複数Master対応)
 - Lot Mode: Multiplier / MarginRatio
@@ -402,6 +402,8 @@ sequenceDiagram
 | 0 | DISABLED | ユーザーが無効化 |
 | 1 | ENABLED | 有効だがMasterオフライン |
 | 2 | CONNECTED | 完全に有効 |
+
+> **注意**: Slaveのステータスは接続先Master単位 (Member) で評価されます。同じSlaveでもMasterごとに異なるステータスを持つ可能性があります。
 
 `allow_new_orders`フラグ:
 - `status == 2` かつ Masterの`is_trade_allowed == true`の場合のみ新規注文を実行

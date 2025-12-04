@@ -79,6 +79,25 @@ pub struct MasterStatusResult {
     pub warning_codes: Vec<WarningCode>,
 }
 
+impl Default for MasterStatusResult {
+    fn default() -> Self {
+        Self {
+            status: STATUS_DISABLED,
+            warning_codes: vec![WarningCode::MasterOffline],
+        }
+    }
+}
+
+/// Result for a single Member (Master-Slave connection) status evaluation.
+/// Unlike SlaveStatusResult which aggregates all Masters, this evaluates
+/// the status of a specific Master-Slave pair.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberStatusResult {
+    pub status: i32,
+    pub allow_new_orders: bool,
+    pub warning_codes: Vec<WarningCode>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SlaveStatusResult {
     pub status: i32,
@@ -168,6 +187,76 @@ pub fn evaluate_slave_status(
     let allow_new_orders = slave_web_ui_enabled && slave_online;
 
     SlaveStatusResult {
+        status,
+        allow_new_orders,
+        warning_codes,
+    }
+}
+
+/// Evaluate the status of a single Member (Master-Slave connection).
+///
+/// Unlike `evaluate_slave_status` which takes a cluster of all Masters,
+/// this function evaluates the status based on a single Master's state.
+/// This allows each connection to have its own independent status.
+///
+/// # Arguments
+/// * `intent` - User's intent for this Slave (Web UI toggle)
+/// * `slave_conn` - Slave's connection snapshot (online/offline, is_trade_allowed)
+/// * `master_result` - The specific Master's status result
+///
+/// # Returns
+/// `MemberStatusResult` containing:
+/// - `status`: 0=DISABLED, 1=ENABLED, 2=CONNECTED
+/// - `allow_new_orders`: Whether the Slave can process new trade signals
+/// - `warning_codes`: Detailed reasons for non-CONNECTED status
+pub fn evaluate_member_status(
+    intent: SlaveIntent,
+    slave_conn: ConnectionSnapshot,
+    master_result: &MasterStatusResult,
+) -> MemberStatusResult {
+    let mut warning_codes = Vec::new();
+
+    // Core conditions for Slave to be operational
+    let slave_web_ui_enabled = intent.web_ui_enabled;
+    let slave_online = is_connection_online(slave_conn.connection_status);
+
+    // Collect Slave-side warnings
+    if !slave_web_ui_enabled {
+        warning_codes.push(WarningCode::SlaveWebUiDisabled);
+    }
+    if !slave_online {
+        warning_codes.push(WarningCode::SlaveOffline);
+    }
+    if !slave_conn.is_trade_allowed {
+        warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
+    }
+
+    // Slave is DISABLED if Web UI is OFF or Slave is offline
+    let slave_disabled = !slave_web_ui_enabled || !slave_online;
+
+    // Determine status based on Slave and Master state
+    let status = if slave_disabled {
+        STATUS_DISABLED
+    } else if master_result.status == STATUS_CONNECTED {
+        // Master is healthy, this connection is CONNECTED
+        STATUS_CONNECTED
+    } else {
+        // Master is not connected, this connection is ENABLED (waiting)
+        // Add Master's warning codes to explain why
+        for code in &master_result.warning_codes {
+            push_warning(&mut warning_codes, code.clone());
+        }
+        STATUS_ENABLED
+    };
+
+    // allow_new_orders: Slave can process signals if Web UI is ON and Slave is online.
+    // Master's connection state does NOT affect this - if a signal arrives, process it.
+    let allow_new_orders = slave_web_ui_enabled && slave_online;
+
+    // Sort warning codes by priority for consistent display
+    WarningCode::sort_by_priority(&mut warning_codes);
+
+    MemberStatusResult {
         status,
         allow_new_orders,
         warning_codes,
@@ -724,5 +813,141 @@ mod tests {
         // allow_new_orders is true - if signals arrive somehow, process them
         assert!(orphaned.allow_new_orders);
         assert_eq!(orphaned.warning_codes, &[WarningCode::NoMasterAssigned]);
+    }
+
+    // ========================================
+    // Tests for evaluate_member_status (per-connection)
+    // ========================================
+
+    #[test]
+    fn member_connected_when_master_connected_and_slave_ok() {
+        let intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: true,
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_CONNECTED,
+            warning_codes: vec![],
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        assert_eq!(result.status, STATUS_CONNECTED);
+        assert!(result.allow_new_orders);
+        assert!(result.warning_codes.is_empty());
+    }
+
+    #[test]
+    fn member_enabled_when_master_offline() {
+        let intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: true,
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_DISABLED,
+            warning_codes: vec![WarningCode::MasterOffline],
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        assert_eq!(result.status, STATUS_ENABLED);
+        // allow_new_orders is true - Slave can process signals if they arrive
+        assert!(result.allow_new_orders);
+        // Master's warning code should be propagated
+        assert!(result.warning_codes.contains(&WarningCode::MasterOffline));
+    }
+
+    #[test]
+    fn member_disabled_when_slave_offline() {
+        let intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Offline),
+            is_trade_allowed: true,
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_CONNECTED,
+            warning_codes: vec![],
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        assert_eq!(result.status, STATUS_DISABLED);
+        assert!(!result.allow_new_orders);
+        assert!(result.warning_codes.contains(&WarningCode::SlaveOffline));
+    }
+
+    #[test]
+    fn member_disabled_when_slave_web_ui_off() {
+        let intent = SlaveIntent {
+            web_ui_enabled: false,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: true,
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_CONNECTED,
+            warning_codes: vec![],
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        assert_eq!(result.status, STATUS_DISABLED);
+        assert!(!result.allow_new_orders);
+        assert!(result
+            .warning_codes
+            .contains(&WarningCode::SlaveWebUiDisabled));
+    }
+
+    #[test]
+    fn member_warning_codes_sorted_by_priority() {
+        let intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: false, // generates SlaveAutoTradingDisabled
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_DISABLED,
+            warning_codes: vec![WarningCode::MasterOffline], // priority 50
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        // SlaveAutoTradingDisabled (priority 30) should come before MasterOffline (priority 50)
+        assert_eq!(result.warning_codes.len(), 2);
+        assert_eq!(
+            result.warning_codes[0],
+            WarningCode::SlaveAutoTradingDisabled
+        );
+        assert_eq!(result.warning_codes[1], WarningCode::MasterOffline);
+    }
+
+    #[test]
+    fn member_connected_with_auto_trading_off_shows_warning() {
+        // Slave can still be CONNECTED if Master is CONNECTED
+        // Auto-trading off just generates a warning
+        let intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+        let slave_snapshot = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: false,
+        };
+        let master_result = MasterStatusResult {
+            status: STATUS_CONNECTED,
+            warning_codes: vec![],
+        };
+
+        let result = evaluate_member_status(intent, slave_snapshot, &master_result);
+        assert_eq!(result.status, STATUS_CONNECTED);
+        assert!(result.allow_new_orders);
+        assert!(result
+            .warning_codes
+            .contains(&WarningCode::SlaveAutoTradingDisabled));
     }
 }

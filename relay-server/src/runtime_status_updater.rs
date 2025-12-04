@@ -10,11 +10,11 @@ use crate::{
     db::Database,
     models::{
         status_engine::{
-            evaluate_master_status, evaluate_slave_status, ConnectionSnapshot,
-            MasterClusterSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
-            SlaveStatusResult,
+            evaluate_master_status, evaluate_member_status, ConnectionSnapshot,
+            MasterClusterSnapshot, MasterIntent, MasterStatusResult, MemberStatusResult,
+            SlaveIntent,
         },
-        SlaveSettings, WarningCode, STATUS_DISABLED,
+        SlaveSettings,
     },
 };
 
@@ -57,35 +57,6 @@ impl RuntimeStatusUpdater {
                 .as_ref()
                 .map(|conn| conn.is_trade_allowed)
                 .unwrap_or(false),
-        }
-    }
-
-    #[instrument(skip(self), fields(slave_account = %slave_account))]
-    pub async fn master_cluster_snapshot(&self, slave_account: &str) -> MasterClusterSnapshot {
-        match self.db.get_masters_for_slave(slave_account).await {
-            Ok(master_accounts) => {
-                let mut results = Vec::with_capacity(master_accounts.len());
-                for master in master_accounts {
-                    let result = self
-                        .evaluate_master_runtime_status(&master)
-                        .await
-                        .unwrap_or_else(|| MasterStatusResult {
-                            status: STATUS_DISABLED,
-                            warning_codes: vec![WarningCode::MasterOffline],
-                        });
-                    results.push(result);
-                }
-                MasterClusterSnapshot::with_status_results(results)
-            }
-            Err(err) => {
-                tracing::error!(
-                    slave_account = %slave_account,
-                    error = %err,
-                    "Failed to build master cluster snapshot"
-                );
-                self.metrics.record_slave_eval_failure();
-                MasterClusterSnapshot::default()
-            }
         }
     }
 
@@ -142,16 +113,13 @@ impl RuntimeStatusUpdater {
         Some(result)
     }
 
-    #[instrument(skip(self, target, master_cluster), fields(slave_account = %target.slave_account, master_account = %target.master_account))]
-    pub async fn build_slave_bundle(
-        &self,
-        target: SlaveRuntimeTarget<'_>,
-        master_cluster: Option<MasterClusterSnapshot>,
-    ) -> SlaveConfigBundle {
-        let cluster = match master_cluster {
-            Some(snapshot) => snapshot,
-            None => self.master_cluster_snapshot(target.slave_account).await,
-        };
+    #[instrument(skip(self, target), fields(slave_account = %target.slave_account, master_account = %target.master_account))]
+    pub async fn build_slave_bundle(&self, target: SlaveRuntimeTarget<'_>) -> SlaveConfigBundle {
+        // Get the specific Master's status (not the entire cluster)
+        let master_result = self
+            .evaluate_master_runtime_status(target.master_account)
+            .await
+            .unwrap_or_default();
 
         let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
         let master_equity = self
@@ -160,7 +128,6 @@ impl RuntimeStatusUpdater {
             .await
             .map(|conn| conn.equity);
 
-        let cluster_size = cluster.master_statuses.len();
         let bundle = ConfigBuilder::build_slave_config(SlaveConfigContext {
             slave_account: target.slave_account.to_string(),
             master_account: target.master_account.to_string(),
@@ -169,7 +136,7 @@ impl RuntimeStatusUpdater {
                 web_ui_enabled: target.enabled_flag,
             },
             slave_connection_snapshot: slave_snapshot,
-            master_cluster: cluster.clone(),
+            master_status_result: master_result.clone(),
             slave_settings: target.slave_settings,
             master_equity,
             timestamp: Utc::now(),
@@ -182,33 +149,35 @@ impl RuntimeStatusUpdater {
             runtime_status = bundle.status_result.status,
             allow_new_orders = bundle.status_result.allow_new_orders,
             warning_count = bundle.status_result.warning_codes.len(),
-            cluster_size = cluster_size,
-            "built slave config bundle"
+            master_status = master_result.status,
+            "built slave config bundle (per-connection)"
         );
-        self.metrics.record_slave_bundle(cluster_size as u64);
+        self.metrics.record_slave_bundle(1);
 
         bundle
     }
 
-    #[instrument(skip(self, target, master_cluster), fields(slave_account = %target.slave_account, master_account = %target.master_account))]
-    pub async fn evaluate_slave_runtime_status(
+    /// Evaluate the runtime status of a specific Member (Master-Slave connection).
+    /// Unlike the old cluster-based evaluation, this evaluates based on the specific Master only.
+    #[instrument(skip(self, target), fields(slave_account = %target.slave_account, master_account = %target.master_account))]
+    pub async fn evaluate_member_runtime_status(
         &self,
         target: SlaveRuntimeTarget<'_>,
-        master_cluster: Option<MasterClusterSnapshot>,
-    ) -> SlaveStatusResult {
-        let cluster = match master_cluster {
-            Some(snapshot) => snapshot,
-            None => self.master_cluster_snapshot(target.slave_account).await,
-        };
+    ) -> MemberStatusResult {
+        // Get the specific Master's status
+        let master_result = self
+            .evaluate_master_runtime_status(target.master_account)
+            .await
+            .unwrap_or_default();
 
         let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
 
-        let result = evaluate_slave_status(
+        let result = evaluate_member_status(
             SlaveIntent {
                 web_ui_enabled: target.enabled_flag,
             },
             slave_snapshot,
-            cluster,
+            &master_result,
         );
 
         tracing::debug!(
@@ -218,11 +187,40 @@ impl RuntimeStatusUpdater {
             runtime_status = result.status,
             allow_new_orders = result.allow_new_orders,
             warning_count = result.warning_codes.len(),
-            "evaluated slave runtime status"
+            master_status = master_result.status,
+            "evaluated member runtime status (per-connection)"
         );
         self.metrics.record_slave_eval_success();
 
         result
+    }
+
+    /// Build a cluster snapshot for all Masters connected to a Slave.
+    /// This is kept for account-level aggregation (e.g., Web UI Slave node badge).
+    #[instrument(skip(self), fields(slave_account = %slave_account))]
+    pub async fn master_cluster_snapshot(&self, slave_account: &str) -> MasterClusterSnapshot {
+        match self.db.get_masters_for_slave(slave_account).await {
+            Ok(master_accounts) => {
+                let mut results = Vec::with_capacity(master_accounts.len());
+                for master in master_accounts {
+                    let result = self
+                        .evaluate_master_runtime_status(&master)
+                        .await
+                        .unwrap_or_default();
+                    results.push(result);
+                }
+                MasterClusterSnapshot::with_status_results(results)
+            }
+            Err(err) => {
+                tracing::error!(
+                    slave_account = %slave_account,
+                    error = %err,
+                    "Failed to build master cluster snapshot"
+                );
+                self.metrics.record_slave_eval_failure();
+                MasterClusterSnapshot::default()
+            }
+        }
     }
 }
 

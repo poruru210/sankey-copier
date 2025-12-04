@@ -93,7 +93,6 @@ impl MessageHandler {
                 }
 
                 let runtime_updater = self.runtime_status_updater();
-                let cluster_snapshot = runtime_updater.master_cluster_snapshot(account_id).await;
 
                 for settings in settings_list {
                     let master_account = settings.master_account.clone();
@@ -108,16 +107,13 @@ impl MessageHandler {
                     );
 
                     let slave_bundle = runtime_updater
-                        .build_slave_bundle(
-                            SlaveRuntimeTarget {
-                                master_account: master_account.as_str(),
-                                trade_group_id: master_account.as_str(),
-                                slave_account: account_id,
-                                enabled_flag: settings.enabled_flag,
-                                slave_settings: &settings.slave_settings,
-                            },
-                            Some(cluster_snapshot.clone()),
-                        )
+                        .build_slave_bundle(SlaveRuntimeTarget {
+                            master_account: master_account.as_str(),
+                            trade_group_id: master_account.as_str(),
+                            slave_account: account_id,
+                            enabled_flag: settings.enabled_flag,
+                            slave_settings: &settings.slave_settings,
+                        })
                         .await;
                     let config = slave_bundle.config;
                     let new_status = slave_bundle.status_result.status;

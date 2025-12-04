@@ -136,21 +136,14 @@ impl MessageHandler {
                             }
                             processed_slaves.insert(slave_account.clone());
 
-                            let masters_snapshot = runtime_updater
-                                .master_cluster_snapshot(&slave_account)
-                                .await;
-
                             let slave_bundle = runtime_updater
-                                .build_slave_bundle(
-                                    SlaveRuntimeTarget {
-                                        master_account: account_id.as_str(),
-                                        trade_group_id: account_id.as_str(),
-                                        slave_account: &slave_account,
-                                        enabled_flag: member.enabled_flag,
-                                        slave_settings: &member.slave_settings,
-                                    },
-                                    Some(masters_snapshot.clone()),
-                                )
+                                .build_slave_bundle(SlaveRuntimeTarget {
+                                    master_account: account_id.as_str(),
+                                    trade_group_id: account_id.as_str(),
+                                    slave_account: &slave_account,
+                                    enabled_flag: member.enabled_flag,
+                                    slave_settings: &member.slave_settings,
+                                })
                                 .await;
                             let new_slave_status = slave_bundle.status_result.status;
 
@@ -159,6 +152,7 @@ impl MessageHandler {
                             // When Master's is_trade_allowed changes, we must notify Slave even if Slave's status doesn't change
                             // (e.g., Slave stays ENABLED when Master goes from CONNECTED to DISABLED)
                             let old_slave_status = member.status;
+                            let is_connected = new_slave_status == crate::models::STATUS_CONNECTED;
 
                             // Debug logging to diagnose notification issues
                             tracing::info!(
@@ -168,9 +162,9 @@ impl MessageHandler {
                                 new_slave_status = new_slave_status,
                                 is_new_registration = is_new_registration,
                                 trade_allowed_changed = trade_allowed_changed,
-                                all_masters_connected = masters_snapshot.all_connected(),
+                                is_connected = is_connected,
                                 slave_online = slave_bundle.config.allow_new_orders || new_slave_status != 0,
-                                "Master heartbeat: evaluating Slave notification"
+                                "Master heartbeat: evaluating Slave notification (per-connection)"
                             );
 
                             if !is_new_registration
@@ -186,8 +180,6 @@ impl MessageHandler {
                                 continue;
                             }
 
-                            let master_cluster_size = masters_snapshot.master_statuses.len();
-                            let masters_all_connected = masters_snapshot.all_connected();
                             super::log_slave_runtime_trace(
                                 "master_heartbeat",
                                 &account_id,
@@ -196,8 +188,8 @@ impl MessageHandler {
                                 new_slave_status,
                                 slave_bundle.status_result.allow_new_orders,
                                 &slave_bundle.status_result.warning_codes,
-                                master_cluster_size,
-                                masters_all_connected,
+                                1, // per-connection: always 1 Master
+                                is_connected,
                             );
 
                             // Status changed, trade_allowed changed, or new registration - send SlaveConfigMessage
@@ -366,24 +358,20 @@ impl MessageHandler {
             return;
         }
 
-        let master_snapshot = runtime_updater.master_cluster_snapshot(slave_account).await;
-
         for settings in settings_list {
             let slave_bundle = runtime_updater
-                .build_slave_bundle(
-                    SlaveRuntimeTarget {
-                        master_account: settings.master_account.as_str(),
-                        trade_group_id: settings.master_account.as_str(),
-                        slave_account: &settings.slave_account,
-                        enabled_flag: settings.enabled_flag,
-                        slave_settings: &settings.slave_settings,
-                    },
-                    Some(master_snapshot.clone()),
-                )
+                .build_slave_bundle(SlaveRuntimeTarget {
+                    master_account: settings.master_account.as_str(),
+                    trade_group_id: settings.master_account.as_str(),
+                    slave_account: &settings.slave_account,
+                    enabled_flag: settings.enabled_flag,
+                    slave_settings: &settings.slave_settings,
+                })
                 .await;
 
             let previous_status = settings.runtime_status;
             let evaluated_status = slave_bundle.status_result.status;
+            let is_connected = evaluated_status == crate::models::STATUS_CONNECTED;
 
             super::log_slave_runtime_trace(
                 "slave_heartbeat",
@@ -393,8 +381,8 @@ impl MessageHandler {
                 evaluated_status,
                 slave_bundle.status_result.allow_new_orders,
                 &slave_bundle.status_result.warning_codes,
-                master_snapshot.master_statuses.len(),
-                master_snapshot.all_connected(),
+                1, // per-connection: always 1 Master
+                is_connected,
             );
 
             if evaluated_status != previous_status {

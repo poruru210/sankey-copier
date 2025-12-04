@@ -146,6 +146,7 @@ pub struct MasterConfigMessage {
 }
 
 /// Warning codes that describe why a runtime status is degraded/disabled.
+/// Lower priority values indicate higher severity (displayed first in UI).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum WarningCode {
@@ -157,6 +158,32 @@ pub enum WarningCode {
     MasterAutoTradingDisabled,
     MasterClusterDegraded,
     NoMasterAssigned,
+}
+
+impl WarningCode {
+    /// Returns the display priority of this warning code.
+    /// Lower values = higher priority (should be displayed first).
+    /// Slave-side issues have higher priority than Master-side issues.
+    pub fn priority(&self) -> u8 {
+        match self {
+            // Slave-side issues (highest priority - user can fix these directly)
+            WarningCode::SlaveWebUiDisabled => 10,
+            WarningCode::SlaveOffline => 20,
+            WarningCode::SlaveAutoTradingDisabled => 30,
+            // Master-side issues (medium priority)
+            WarningCode::MasterWebUiDisabled => 40,
+            WarningCode::MasterOffline => 50,
+            WarningCode::MasterAutoTradingDisabled => 60,
+            // Configuration issues (lowest priority)
+            WarningCode::NoMasterAssigned => 70,
+            WarningCode::MasterClusterDegraded => 80,
+        }
+    }
+
+    /// Sort warning codes by priority (lowest priority value first).
+    pub fn sort_by_priority(codes: &mut [WarningCode]) {
+        codes.sort_by_key(|c| c.priority());
+    }
 }
 
 /// Unregistration message structure

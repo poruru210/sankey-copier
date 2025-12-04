@@ -13,8 +13,7 @@ use serde::Serialize;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
 use crate::models::{
     status_engine::{
-        evaluate_master_status, ConnectionSnapshot, MasterClusterSnapshot, MasterIntent,
-        MasterStatusResult, SlaveIntent,
+        evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
     },
     MasterSettings, TradeGroup, WarningCode,
 };
@@ -425,7 +424,6 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
         },
         master_snapshot,
     );
-    let master_cluster = MasterClusterSnapshot::with_status_results(vec![master_status.clone()]);
 
     // Fetch Master's equity for margin_ratio mode
     let master_equity = master_conn.as_ref().map(|conn| conn.equity);
@@ -463,7 +461,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
                 web_ui_enabled: member.enabled_flag,
             },
             slave_connection_snapshot: slave_snapshot,
-            master_cluster: master_cluster.clone(),
+            master_status_result: master_status.clone(),
             slave_settings: &member.slave_settings,
             master_equity,
             timestamp: chrono::Utc::now(),

@@ -570,16 +570,13 @@ async fn hydrate_member_runtime(
 ) -> TradeGroupMember {
     let mut member = member;
     let status_result = runtime_updater
-        .evaluate_slave_runtime_status(
-            SlaveRuntimeTarget {
-                master_account: member.trade_group_id.as_str(),
-                trade_group_id: member.trade_group_id.as_str(),
-                slave_account: member.slave_account.as_str(),
-                enabled_flag: member.enabled_flag,
-                slave_settings: &member.slave_settings,
-            },
-            None,
-        )
+        .evaluate_member_runtime_status(SlaveRuntimeTarget {
+            master_account: member.trade_group_id.as_str(),
+            trade_group_id: member.trade_group_id.as_str(),
+            slave_account: member.slave_account.as_str(),
+            enabled_flag: member.enabled_flag,
+            slave_settings: &member.slave_settings,
+        })
         .await;
 
     member.runtime_status = status_result.status;
@@ -671,20 +668,14 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
 /// Send Slave config to Slave EA via ZMQ
 async fn send_config_to_slave(state: &AppState, master_account: &str, member: &TradeGroupMember) {
     let runtime_updater = runtime_status_updater_for(state);
-    let cluster_snapshot = runtime_updater
-        .master_cluster_snapshot(&member.slave_account)
-        .await;
     let slave_bundle = runtime_updater
-        .build_slave_bundle(
-            SlaveRuntimeTarget {
-                master_account,
-                trade_group_id: master_account,
-                slave_account: &member.slave_account,
-                enabled_flag: member.enabled_flag,
-                slave_settings: &member.slave_settings,
-            },
-            Some(cluster_snapshot),
-        )
+        .build_slave_bundle(SlaveRuntimeTarget {
+            master_account,
+            trade_group_id: master_account,
+            slave_account: &member.slave_account,
+            enabled_flag: member.enabled_flag,
+            slave_settings: &member.slave_settings,
+        })
         .await;
     let slave_status = slave_bundle.status_result.status;
     let config = slave_bundle.config;
