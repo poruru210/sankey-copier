@@ -158,7 +158,10 @@ mod tests {
     #[test]
     fn test_topic_generation() {
         assert_eq!(build_config_topic("12345"), "config/12345");
-        assert_eq!(build_trade_topic("MASTER_001", "SLAVE_001"), "trade/MASTER_001/SLAVE_001");
+        assert_eq!(
+            build_trade_topic("MASTER_001", "SLAVE_001"),
+            "trade/MASTER_001/SLAVE_001"
+        );
         assert_eq!(TOPIC_GLOBAL_CONFIG, "config/global");
     }
 

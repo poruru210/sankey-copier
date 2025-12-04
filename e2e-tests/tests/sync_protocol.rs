@@ -53,11 +53,6 @@ async fn test_position_snapshot_single_slave() {
     )
     .expect("Failed to create slave");
 
-    // Subscribe to position snapshots
-    slave
-        .subscribe_to_position_snapshots()
-        .expect("Failed to subscribe to position snapshots");
-
     // Subscribe master to sync requests
     master
         .subscribe_to_sync_requests()
@@ -143,14 +138,6 @@ async fn test_position_snapshot_multiple_slaves() {
     )
     .expect("Failed to create slave2");
 
-    // Subscribe to position snapshots
-    slave1
-        .subscribe_to_position_snapshots()
-        .expect("Failed to subscribe");
-    slave2
-        .subscribe_to_position_snapshots()
-        .expect("Failed to subscribe");
-
     // Start EAs with auto-trading enabled
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -233,11 +220,6 @@ async fn test_position_snapshot_empty() {
         master_account,
     )
     .expect("Failed to create slave");
-
-    // Subscribe to position snapshots
-    slave
-        .subscribe_to_position_snapshots()
-        .expect("Failed to subscribe");
 
     // Start EAs with auto-trading enabled
     master.set_trade_allowed(true);
@@ -515,9 +497,6 @@ async fn test_full_sync_cycle() {
     // Setup subscriptions
     master
         .subscribe_to_sync_requests()
-        .expect("Failed to subscribe");
-    slave
-        .subscribe_to_position_snapshots()
         .expect("Failed to subscribe");
 
     // Start EAs with auto-trading enabled

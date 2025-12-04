@@ -591,12 +591,6 @@ impl SlaveEaSimulator {
         Ok(None)
     }
 
-    /// Subscribe to position snapshots from master
-    pub fn subscribe_to_position_snapshots(&self) -> Result<()> {
-        let sync_topic = format!("sync/{}/{}", self.master_account, self.base.account_id());
-        self.base.subscribe_to_topic(&sync_topic)
-    }
-
     // =========================================================================
     // VLogs Config methods (テスト用)
     // =========================================================================
