@@ -26,7 +26,9 @@ use sankey_copier_zmq::ffi::{
     zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH,
     ZMQ_SUB,
 };
-use sankey_copier_zmq::{HeartbeatMessage, SymbolMapping, TradeFilters, TradeSignalMessage};
+use sankey_copier_zmq::{
+    HeartbeatMessage, SymbolMapping, TradeFilters, TradeSignalMessage, STATUS_CONNECTED,
+};
 use std::ffi::c_char;
 use test_server::TestServer;
 use tokio::time::{sleep, Duration};
@@ -35,7 +37,6 @@ use tokio::time::{sleep, Duration};
 // Constants
 // =============================================================================
 
-const STATUS_CONNECTED: i32 = 2;
 const BUFFER_SIZE: usize = 65536;
 
 // =============================================================================

@@ -124,8 +124,8 @@ int OnInit()
    }
    else 
    {
-      g_vlogs_topic = "vlogs_config"; // Fallback
-      Print("WARNING: Failed to generate vlogs topic, using fallback: ", g_vlogs_topic);
+      Print("CRITICAL: Failed to generate vlogs topic from mt-bridge");
+      return INIT_FAILED;
    }
 
    // Initialize ZMQ context

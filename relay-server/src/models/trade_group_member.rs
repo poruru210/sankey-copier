@@ -4,18 +4,8 @@
 // Each member has Slave-specific configuration and connection status.
 
 use super::WarningCode;
-use sankey_copier_zmq::{SymbolMapping, TradeFilters};
+use sankey_copier_zmq::{SymbolMapping, TradeFilters, STATUS_CONNECTED, STATUS_DISABLED};
 use serde::{Deserialize, Serialize};
-
-/// Status constants for TradeGroupMember
-#[allow(dead_code)]
-pub const STATUS_DISABLED: i32 = 0;
-#[allow(dead_code)]
-pub const STATUS_ENABLED: i32 = 1;
-#[allow(dead_code)]
-pub const STATUS_CONNECTED: i32 = 2;
-#[allow(dead_code)]
-pub const STATUS_NO_CONFIG: i32 = -1;
 
 /// TradeGroupMember represents a Slave account connected to a TradeGroup (Master)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,6 +212,7 @@ impl TradeGroupMember {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sankey_copier_zmq::STATUS_ENABLED;
 
     #[test]
     fn test_member_creation() {

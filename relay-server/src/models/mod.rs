@@ -12,7 +12,10 @@ pub use trade_group::*;
 pub use trade_group_member::*;
 
 // Re-export shared types from DLL
-pub use sankey_copier_zmq::{SymbolMapping, TradeFilters, WarningCode};
+pub use sankey_copier_zmq::{
+    SymbolMapping, TradeFilters, WarningCode, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
+    STATUS_NO_CONFIG,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

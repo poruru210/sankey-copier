@@ -317,7 +317,7 @@ pub struct SyncRequestMessage {
 // =============================================================================
 
 /// VictoriaLogs configuration message
-/// Broadcasted to all EAs on "vlogs_config" topic
+/// Broadcasted to all EAs on "config/global" topic
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VLogsConfigMessage {
     /// Whether VictoriaLogs logging is enabled

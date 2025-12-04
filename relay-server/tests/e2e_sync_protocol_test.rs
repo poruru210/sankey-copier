@@ -22,6 +22,7 @@ use sankey_copier_zmq::ffi::{
 };
 use sankey_copier_zmq::{
     HeartbeatMessage, PositionInfo, PositionSnapshotMessage, SyncRequestMessage, TradeFilters,
+    STATUS_CONNECTED,
 };
 use std::ffi::c_char;
 use test_server::TestServer;
@@ -31,7 +32,6 @@ use tokio::time::{sleep, Duration};
 // Constants
 // =============================================================================
 
-const STATUS_CONNECTED: i32 = 2;
 const BUFFER_SIZE: usize = 65536;
 
 // =============================================================================
