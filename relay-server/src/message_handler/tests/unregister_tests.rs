@@ -47,3 +47,62 @@ async fn test_handle_unregister() {
 
     ctx.cleanup().await;
 }
+
+#[tokio::test]
+async fn test_master_unregister_updates_slave_runtime_status() {
+    let ctx = create_test_context().await;
+    let master_account = "MASTER_UNREGISTER_TRIGGER";
+    let slave_account = "SLAVE_RUNTIME_SYNC";
+
+    ctx.db.create_trade_group(master_account).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            master_account,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..crate::models::MasterSettings::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    ctx.db
+        .add_member(
+            master_account,
+            slave_account,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_CONNECTED,
+        )
+        .await
+        .unwrap();
+
+    ctx.handle_heartbeat(build_heartbeat(master_account, "Master", true))
+        .await;
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    ctx.handle_unregister(UnregisterMessage {
+        message_type: "Unregister".to_string(),
+        account_id: master_account.to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    })
+    .await;
+
+    let member = ctx
+        .db
+        .get_member(master_account, slave_account)
+        .await
+        .unwrap()
+        .expect("member should exist");
+    assert_eq!(member.runtime_status, crate::models::STATUS_ENABLED);
+
+    let master_conn = ctx
+        .connection_manager
+        .get_ea(master_account)
+        .await
+        .expect("master should remain tracked");
+    assert_eq!(master_conn.status, crate::models::ConnectionStatus::Offline);
+
+    ctx.cleanup().await;
+}

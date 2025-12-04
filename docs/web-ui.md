@@ -114,6 +114,7 @@ classDiagram
     class CopySettings {
         +number id
         +number status
+        +number runtime_status
         +string master_account
         +string slave_account
         +LotCalculationMode lot_calculation_mode
@@ -124,11 +125,13 @@ classDiagram
         +SyncMode sync_mode
         +number max_slippage
         +number max_retries
+        +boolean enabled_flag
     }
 
     class TradeGroup {
         +string id
         +MasterSettings master_settings
+        +number master_runtime_status
         +string created_at
         +string updated_at
     }
@@ -139,6 +142,8 @@ classDiagram
         +string slave_account
         +SlaveSettings slave_settings
         +number status
+        +number runtime_status
+        +boolean enabled_flag
     }
 
     class Site {
@@ -312,6 +317,32 @@ class ApiClient {
 }
 ```
 
+### ステータスフィールド (runtime / intent)
+
+| フィールド | 役割 | 更新トリガー |
+|------------|------|--------------|
+| `enabled_flag` | ユーザーの意図。スイッチ操作で `true/false` を切り替える。 | Web UI の `POST /api/trade-groups/{master}/members/{slave}/toggle`、またはマスタートグル (`POST /api/trade-groups/{master}/toggle`) |
+| `runtime_status` | リレーサーバーの Status Engine が算出する実効ステータス。`0=Manual OFF / 1=Standby / 2=Streaming`。**接続単位 (Member) で評価**される。 | サーバー側で計算後、`member_*` WebSocket イベント → `GET /trade-groups` + `GET /trade-groups/{master}/members` の再取得 |
+| `master_runtime_status` | Master 単位の実効ステータス。Master ノードのバッジや React Flow ノード色分けに使用。 | Status Engine 更新後に `TradeGroup` レスポンスへ書き戻し |
+| `warning_codes` | Status Engine が付与する警告配列。**優先度順にソート済み**（配列先頭が最重要）。`slave_offline` や `master_offline` を含み、Nord バーやツールチップの優先色決定に使う。 | Heartbeat / Timeout / Intent API / RequestConfig / Unregister の各イベント後、WebSocket・REST フェッチで受信 |
+
+- Web UI はトグル操作で **intent (`enabled_flag`) のみ** を即時更新し、`runtime_status` は WebSocket 経由の再フェッチまで待機する。<br>
+- Master ノードの `master_settings.enabled` は最後に送信したトグルの意図を保持し、`master_runtime_status` が 2 (Streaming) になるまで待機表示を続ける。<br>
+- Slave ノードの `Intent` バッジと `Runtime` バッジを分離し、ユーザー操作と Status Engine 判定の差分を明示する。
+- `warning_codes` は配列先頭が最も優先度の高い警告。`StatusIndicatorBar` が黄色 (`bg-yellow-500`) を優先し、ツールチップで先頭の警告を主要メッセージとして表示する。`AccountNodeHeader` も同じ配列を受け取り、警告アイコンの表示を制御する。
+- **接続単位評価**: 同じ Slave でも接続先 Master ごとに異なる `runtime_status` と `warning_codes` を持つ。UI は各 Member (エッジ) ごとにステータスを表示する。
+
+### Warning 表示ルール
+
+| 優先度 | 判定条件 | 表示 | 参照コンポーネント |
+|--------|----------|------|------------------|
+| 1 | `warning_codes.length > 0` | Nord バーを黄、ノードヘッダに警告ツールチップ | `StatusIndicatorBar.tsx`, `AccountNodeHeader.tsx` |
+| 2 | `runtime_status === 2` | Master: `配信中`, Slave: `受信中` (緑) | 同上 |
+| 3 | `runtime_status === 1` | `待機中` (琥珀) | 同上 |
+| 4 | `runtime_status === 0` | `手動OFF` (グレー) | 同上 |
+
+`web-ui/hooks/connections/useAccountData.ts` と `web-ui/utils/tradeGroupAdapter.ts` が REST 応答の `warning_codes` をストアへ保持し、`StatusIndicatorBar.tsx` / `AccountNodeHeader.tsx` に流す。実装の参照先をドキュメント内に明示することで、設計とコードの同期がしやすくなった。
+
 ### WebSocket
 
 ```typescript
@@ -325,7 +356,7 @@ ws.onmessage = (event) => {
         // トレードイベント
         refreshConnections();
     } else if (data.startsWith('member_')) {
-        // 設定変更イベント
+        // 設定変更イベント (runtime_status / warning_codes を含む)
         refreshSettings();
     } else if (data.startsWith('settings_')) {
         // グローバル設定変更
@@ -456,8 +487,51 @@ try {
 }
 ```
 
+## Status Engine UI 表示ルール
+
+relay-server の Status Engine が算出した `runtime_status` と `warning_codes` を UI に反映するルールを定義します。
+
+### ステータスバッジ
+
+`AccountNodeHeader.tsx` でノードヘッダーに表示:
+
+| `runtime_status` | ラベル | バッジ色 | 条件 |
+|------------------|--------|----------|------|
+| 2 (CONNECTED) | Master: `配信中` / Slave: `受信中` | `bg-emerald-500` | `account.isActive` が true |
+| 1 (ENABLED) | `待機中` | `bg-amber-100` | Slave のみ。Master 未接続 |
+| 0 (DISABLED) | `手動OFF` | `bg-gray-200` | Web UI OFF またはオフライン |
+
+### Nord ステータスバー
+
+`StatusIndicatorBar.tsx` でノード下部に表示:
+
+| 判定要素 | バー色 | 優先度 |
+|----------|--------|--------|
+| `hasWarning=true` | `bg-yellow-500` | 最優先 |
+| `runtime_status=2` | `bg-green-500` | 2番目 |
+| `runtime_status=1` | `bg-amber-500` | 3番目 |
+| `runtime_status=0` | `bg-gray-300` | 最低 |
+
+> `warning_codes` が空でない場合、`hasWarning=true` となりバーが黄色に強制変更されます。
+
+### Warning Codes のツールチップ表示
+
+`warning_codes` 配列の各コードを翻訳してツールチップに表示:
+
+```typescript
+// 例: warning_codes = ["master_cluster_degraded", "slave_auto_trading_disabled"]
+// → ツールチップ: "一部のMasterが未接続です / 自動売買がOFFです"
+```
+
+### 状態更新フロー
+
+1. WebSocket で `member_updated` / `trade_group_updated` を受信
+2. `connectionsAtom` / `settingsAtom` を更新
+3. React Flow ノードが再レンダリング
+4. バッジ・バー色が新しい `runtime_status` / `warning_codes` を反映
+
 ## 関連コンポーネント
 
-- [relay-server](./relay-server.md): バックエンドAPI
+- [relay-server](./relay-server.md): バックエンドAPI・Status Engine
 - [mt-bridge](./mt-bridge.md): EA通信DLL
 - [mt-advisors](./mt-advisors.md): MT4/MT5 EA

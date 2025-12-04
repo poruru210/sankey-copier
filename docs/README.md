@@ -49,7 +49,7 @@ graph TB
 
 | コンポーネント | 説明 | 技術 |
 |---------------|------|------|
-| [relay-server](./relay-server.md) | 中継サーバー | Rust, Axum, ZeroMQ, SQLite |
+| [relay-server](./relay-server.md) | 中継サーバー（API仕様・Status Engine含む） | Rust, Axum, ZeroMQ, SQLite |
 | [mt-bridge](./mt-bridge.md) | EA-サーバー通信DLL | Rust, ZeroMQ, MessagePack |
 | [mt-advisors](./mt-advisors.md) | MT4/MT5用EA | MQL4/MQL5 |
 | [web-ui](./web-ui.md) | 設定・監視UI | Next.js, React, TypeScript |
@@ -553,12 +553,14 @@ flowchart LR
 
 ## ステータス
 
-| 値 | 名称 | 説明 |
-|----|------|------|
-| 0 | DISABLED | ユーザーが無効化 |
-| 1 | ENABLED | 有効だがMasterオフライン |
-| 2 | CONNECTED | 完全に有効 |
-| 4 | REMOVED | 削除済み |
+| 値 | 名称 | 対象 | 説明 |
+|----|------|------|------|
+| -1 | NO_CONFIG | Master/Slave | 設定未受信またはリセット状態 |
+| 0 | DISABLED | Master/Slave | 無効化（Web UI OFF または EA自動売買OFF） |
+| 1 | ENABLED | Slave専用 | Slave準備完了だがMasterが未接続 |
+| 2 | CONNECTED | Master/Slave | 完全に有効（トレード実行可能） |
+
+詳細は [relay-server.md](./relay-server.md#4-status-engine) を参照。
 
 ## ポート構成
 

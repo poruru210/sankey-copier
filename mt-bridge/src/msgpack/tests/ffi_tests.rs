@@ -15,6 +15,7 @@ fn test_parse_master_config_ffi() {
         symbol_suffix: Some(".m".to_string()),
         config_version: 5,
         timestamp: "2025-01-15T10:30:00Z".to_string(),
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -63,6 +64,7 @@ fn test_parse_master_config_ffi_with_none_values() {
         symbol_suffix: None,
         config_version: 0,
         timestamp: "2025-01-15T11:00:00Z".to_string(),
+        warning_codes: vec![],
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");

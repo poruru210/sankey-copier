@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
@@ -24,9 +24,11 @@ interface UseFlowDataProps {
   isAccountHighlighted: (accountId: string, type: 'source' | 'receiver') => boolean;
   isMobile: boolean;
   content: any;
-  onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggle: (id: number, enabled: boolean) => Promise<void>;
   onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
 }
+
+const MIN_PENDING_DURATION_MS = 800;
 
 // Layout constants - Desktop (horizontal)
 const NODE_WIDTH = 380;
@@ -66,6 +68,38 @@ export function useFlowData({
   const [expandedSourceIds, setExpandedSourceIds] = useAtom(expandedSourceIdsAtom);
   const [expandedReceiverIds, setExpandedReceiverIds] = useAtom(expandedReceiverIdsAtom);
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
+  const [pendingAccountIds, setPendingAccountIds] = useState<Set<string>>(new Set());
+
+  const setAccountPending = useCallback((accountId: string, isPending: boolean) => {
+    setPendingAccountIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(accountId);
+      } else {
+        next.delete(accountId);
+      }
+      return next;
+    });
+  }, []);
+
+  const runWithPending = useCallback((accountId: string, task: () => Promise<void> | void) => {
+    setAccountPending(accountId, true);
+
+    const execute = async () => {
+      const start = Date.now();
+      try {
+        await task();
+      } catch (error) {
+        console.error(`[Connections] Failed to toggle account ${accountId}`, error);
+      } finally {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, MIN_PENDING_DURATION_MS - elapsed);
+        setTimeout(() => setAccountPending(accountId, false), remaining);
+      }
+    };
+
+    void execute();
+  }, [setAccountPending]);
 
   const toggleSourceExpand = useCallback((accountId: string) => {
     setExpandedSourceIds((prev) =>
@@ -84,41 +118,35 @@ export function useFlowData({
   }, [setExpandedReceiverIds]);
 
   const toggleSourceEnabled = useCallback((accountId: string, enabled: boolean) => {
-    // Call toggle Master API - server handles ZMQ notification to EA
-    onToggleMaster(accountId, enabled);
-  }, [onToggleMaster]);
+    runWithPending(accountId, () => onToggleMaster(accountId, enabled));
+  }, [onToggleMaster, runWithPending]);
 
   const toggleReceiverEnabled = useCallback((accountId: string, enabled: boolean) => {
     // Update local state (disabledReceiverIds)
     setDisabledReceiverIds((prev) => {
       if (enabled) {
         return prev.filter((id) => id !== accountId);
-      } else {
-        return prev.includes(accountId) ? prev : [...prev, accountId];
       }
+      return prev.includes(accountId) ? prev : [...prev, accountId];
     });
 
     // Receiver enabled state is derived from settings, so we just need to update settings
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
-    receiverSettings.forEach((setting) => {
-      const isCurrentlyEnabled = setting.status !== 0;
+    const mutations = receiverSettings
+      .filter((setting) => {
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        return intentEnabled !== enabled;
+      })
+      .map((setting) => onToggle(setting.id, enabled));
 
-      if (enabled) {
-        // Slave is being enabled
-        // Only enable connection if Master is ALSO enabled
-        const masterAccount = sourceAccounts.find((acc) => acc.id === setting.master_account);
-        const isMasterEnabled = masterAccount?.isEnabled ?? true;
-        if (isMasterEnabled && !isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
-        }
-      } else {
-        // Slave is being disabled -> Always disable connection
-        if (isCurrentlyEnabled) {
-          onToggle(setting.id, setting.status);
-        }
-      }
+    if (mutations.length === 0) {
+      return;
+    }
+
+    runWithPending(accountId, async () => {
+      await Promise.allSettled(mutations);
     });
-  }, [settings, onToggle, setDisabledReceiverIds, sourceAccounts]);
+  }, [settings, onToggle, setDisabledReceiverIds, runWithPending]);
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
@@ -154,6 +182,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
+          isTogglePending: pendingAccountIds.has(account.id),
         } as AccountNodeData & Record<string, unknown>,
       });
     });
@@ -194,6 +223,7 @@ export function useFlowData({
           selectedSourceId,
           isMobile,
           content,
+          isTogglePending: pendingAccountIds.has(account.id),
         } as AccountNodeData & Record<string, unknown>,
       });
     });
@@ -213,6 +243,7 @@ export function useFlowData({
     isAccountHighlighted,
     isMobile,
     content,
+    pendingAccountIds,
     toggleSourceExpand,
     toggleReceiverExpand,
     toggleSourceEnabled,
@@ -233,12 +264,11 @@ export function useFlowData({
 
       if (!sourceAccount || !receiverAccount) return;
 
-      // Edge is active only if both source and receiver are active (green)
-      // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
-      const isActive =
-        setting.status !== 0 &&
-        sourceAccount.isActive &&
-        receiverAccount.isActive;
+      // Edge animation and color is based solely on this specific connection's runtime_status
+      // A connection is "active" when runtime_status === 2 (CONNECTED)
+      // This means the Master is online and actively sending signals to this Slave
+      const runtimeStatus = setting.runtime_status ?? setting.status ?? 0;
+      const isConnected = runtimeStatus === 2;
 
       // Direct edge from source to receiver with settings button
       edgeList.push({
@@ -246,11 +276,11 @@ export function useFlowData({
         source: `source-${setting.master_account}`,
         target: `receiver-${setting.slave_account}`,
         type: 'settingsEdge',
-        animated: isActive,
+        animated: isConnected,
         style: {
-          stroke: isActive ? '#22c55e' : '#d1d5db',
+          stroke: isConnected ? '#22c55e' : '#d1d5db',
           strokeWidth: 2,
-          strokeDasharray: isActive ? undefined : '5,5',
+          strokeDasharray: isConnected ? undefined : '5,5',
         },
         data: {
           setting,

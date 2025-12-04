@@ -3,6 +3,8 @@
 // Handler for PositionSnapshot messages from Master EAs.
 // Routes position snapshots to all connected Slave EAs for synchronization.
 
+use sankey_copier_zmq::build_sync_topic;
+
 use super::MessageHandler;
 use crate::models::PositionSnapshotMessage;
 
@@ -46,9 +48,9 @@ impl MessageHandler {
             return;
         }
 
-        // Route snapshot to each connected slave via config publisher
+        // Route snapshot to each connected slave via sync topic
         for member in &members {
-            let topic = format!("config/{}", member.slave_account);
+            let topic = build_sync_topic(&snapshot.source_account, &member.slave_account);
             if let Err(e) = self.publisher.publish_to_topic(&topic, &snapshot).await {
                 tracing::error!(
                     "Failed to send PositionSnapshot to slave {}: {}",
@@ -57,9 +59,10 @@ impl MessageHandler {
                 );
             } else {
                 tracing::debug!(
-                    "Sent PositionSnapshot to slave {} ({} positions)",
+                    "Sent PositionSnapshot to slave {} ({} positions) on topic '{}'",
                     member.slave_account,
-                    snapshot.positions.len()
+                    snapshot.positions.len(),
+                    topic
                 );
             }
         }

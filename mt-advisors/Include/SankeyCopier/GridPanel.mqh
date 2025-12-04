@@ -285,7 +285,7 @@ public:
    void     UpdateConfigList(CopyConfig &configs[]);
 
    // Common helpers
-   void     UpdateStatusRow(int status);
+   void     UpdateStatusRow(int status, bool allow_new_orders = false);
    void     UpdatePanelStatusFromConfigs(CopyConfig &configs[]);
    void     UpdateMasterRow(string master_name);
    void     UpdateLotMultiplierRow(double multiplier);
@@ -1098,32 +1098,26 @@ void CGridPanel::HideMessage()
 //| Update status row (4 states)                                     |
 //| status: 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED, -1=NO_CONFIG |
 //+------------------------------------------------------------------+
-void CGridPanel::UpdateStatusRow(int status)
+void CGridPanel::UpdateStatusRow(int status, bool allow_new_orders)
 {
    string vals[2];
    vals[0] = "Status:";
 
-   // Determine status text and color based on status value
+   string status_label;
    if(status == STATUS_DISABLED)
-   {
-      vals[1] = "DISABLED";
-   }
+      status_label = "DISABLED";
    else if(status == STATUS_ENABLED)
-   {
-      vals[1] = "ENABLED";
-   }
+      status_label = "ENABLED";
    else if(status == STATUS_CONNECTED)
-   {
-      vals[1] = "CONNECTED";
-   }
+      status_label = "CONNECTED";
    else if(status == STATUS_NO_CONFIG)
-   {
-      vals[1] = "NO CONFIG";
-   }
+      status_label = "NO CONFIG";
    else
-   {
-      vals[1] = "UNKNOWN";
-   }
+      status_label = "UNKNOWN";
+
+   // Note: allow_new_orders parameter is kept for API compatibility but no longer displayed.
+   // The status itself (CONNECTED vs ENABLED vs DISABLED) is sufficient for users.
+   vals[1] = status_label;
 
    color cols[2];
    cols[0] = PANEL_COLOR_LABEL;
@@ -1167,9 +1161,14 @@ void CGridPanel::UpdatePanelStatusFromConfigs(CopyConfig &configs[])
 
    bool any_connected = false;
    bool all_disabled = true;
+   bool any_allow_new_orders = false;
 
    for(int i=0; i<ArraySize(configs); i++)
    {
+      if(configs[i].allow_new_orders)
+      {
+         any_allow_new_orders = true;
+      }
       if(configs[i].status == STATUS_CONNECTED)
       {
          any_connected = true;
@@ -1180,14 +1179,18 @@ void CGridPanel::UpdatePanelStatusFromConfigs(CopyConfig &configs[])
       {
          all_disabled = false;
       }
+      if(configs[i].allow_new_orders)
+      {
+         any_allow_new_orders = true;
+      }
    }
 
    if(any_connected)
-      UpdateStatusRow(STATUS_CONNECTED);
+      UpdateStatusRow(STATUS_CONNECTED, any_allow_new_orders);
    else if(all_disabled)
       UpdateStatusRow(STATUS_DISABLED);
    else
-      UpdateStatusRow(STATUS_ENABLED);
+      UpdateStatusRow(STATUS_ENABLED, any_allow_new_orders);
 }
 
 //+------------------------------------------------------------------+
@@ -1656,6 +1659,10 @@ void CGridPanel::ShowCarouselPage(int index)
       string nav_str = "< " + IntegerToString(index + 1) + "/" + IntegerToString(m_carousel_count) + " >";
       AddCenteredRow("nav_row", nav_str, clrSkyBlue);
    }
+
+   // Update status row to reflect the CURRENT carousel page's status
+   // This ensures each Master's individual status is shown when viewing that page
+   UpdateStatusRow(cfg.status, cfg.allow_new_orders);
 
    ChartRedraw();
 }

@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod config;
+pub mod config_builder;
 pub mod connection_manager;
 pub mod db;
 pub mod engine;
@@ -12,5 +13,6 @@ pub mod models;
 pub mod mt_detector;
 pub mod mt_installer;
 pub mod port_resolver;
+pub mod runtime_status_updater;
 pub mod victoria_logs;
 pub mod zeromq;

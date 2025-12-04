@@ -72,3 +72,7 @@ yarn-error.log*
 target/
 **/*.rs.bk
 Cargo.lock
+
+# Certificates (dynamically generated)
+**/certs/
+certs/

@@ -30,7 +30,9 @@ export function convertMembersToCopySettings(
     for (const member of members) {
       copySettings.push({
         id: member.id,
-        status: member.status,
+        status: member.runtime_status ?? member.status,
+        runtime_status: member.runtime_status ?? member.status,
+        enabled_flag: member.enabled_flag,
         master_account: member.trade_group_id,
         slave_account: member.slave_account,
         lot_calculation_mode: member.slave_settings.lot_calculation_mode,

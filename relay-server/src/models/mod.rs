@@ -1,7 +1,7 @@
 mod connection;
 mod global_settings;
 mod mt_installation;
-pub mod status;
+pub mod status_engine;
 mod trade_group;
 mod trade_group_member;
 
@@ -12,7 +12,10 @@ pub use trade_group::*;
 pub use trade_group_member::*;
 
 // Re-export shared types from DLL
-pub use sankey_copier_zmq::{MasterConfigMessage, SymbolMapping, TradeFilters};
+pub use sankey_copier_zmq::{
+    OrderType, SymbolMapping, TradeAction, TradeFilters, WarningCode, STATUS_CONNECTED,
+    STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,24 +27,11 @@ pub struct SlaveConfigWithMaster {
     pub master_account: String,
     pub slave_account: String,
     pub status: i32,
+    #[serde(default)]
+    pub runtime_status: i32,
+    #[serde(default)]
+    pub enabled_flag: bool,
     pub slave_settings: SlaveSettings,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum OrderType {
-    Buy,
-    Sell,
-    BuyLimit,
-    SellLimit,
-    BuyStop,
-    SellStop,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum TradeAction {
-    Open,
-    Close,
-    Modify,
 }
 
 /// Trade signal message structure

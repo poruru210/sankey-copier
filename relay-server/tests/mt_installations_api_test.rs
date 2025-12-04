@@ -11,6 +11,7 @@ use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
 use sankey_copier_relay_server::port_resolver::ResolvedPorts;
+use sankey_copier_relay_server::runtime_status_updater::RuntimeStatusMetrics;
 use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
@@ -28,6 +29,7 @@ async fn create_test_app() -> axum::Router {
 
     // 2-port architecture: receiver and unified publisher
     let resolved_ports = Arc::new(ResolvedPorts {
+        http_port: 3000,
         receiver_port: 5555,
         sender_port: 5556,
         is_dynamic: false,
@@ -45,6 +47,7 @@ async fn create_test_app() -> axum::Router {
         config: Arc::new(sankey_copier_relay_server::config::Config::default()),
         resolved_ports,
         vlogs_controller: None,
+        runtime_status_metrics: Arc::new(RuntimeStatusMetrics::default()),
     };
 
     create_router(app_state)

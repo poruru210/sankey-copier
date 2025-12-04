@@ -51,7 +51,9 @@ export function MasterAccountFilter({
 
     return masters.map((master): MasterAccountInfo => {
       const connectionCount = settings.filter(
-        (s) => s.master_account === master.account_id && s.status !== 0
+        (s) =>
+          s.master_account === master.account_id &&
+          (s.enabled_flag ?? (s.status !== 0))
       ).length;
 
       const isOnline = master.status === 'Online';
@@ -73,7 +75,7 @@ export function MasterAccountFilter({
 
   // Count total connections for "All Accounts"
   const totalConnections = useMemo(() => {
-    return settings.filter((s) => s.status !== 0).length;
+    return settings.filter((s) => s.enabled_flag ?? (s.status !== 0)).length;
   }, [settings]);
 
   // Get current selection display text
@@ -101,12 +103,16 @@ export function MasterAccountFilter({
           <Button
             variant="outline"
             className="flex items-center gap-2 min-w-[200px] justify-between"
+            data-testid="master-filter-trigger"
           >
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <span className="text-sm truncate">{currentSelection}</span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              <span
+                className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full"
+                data-testid="master-filter-count"
+              >
                 {currentCount}
               </span>
               <ChevronDown className="h-4 w-4 opacity-50" />
@@ -114,7 +120,11 @@ export function MasterAccountFilter({
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" className="w-[280px]">
+        <DropdownMenuContent
+          align="start"
+          className="w-[280px]"
+          data-testid="master-filter-menu"
+        >
           <DropdownMenuLabel>{content.filterAccounts}</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
@@ -125,6 +135,7 @@ export function MasterAccountFilter({
               'flex items-center justify-between gap-2',
               selectedMaster === 'all' && 'bg-accent font-medium'
             )}
+            data-testid="master-filter-option-all"
           >
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="w-2 h-2 rounded-full bg-muted-foreground flex-shrink-0" />
@@ -151,6 +162,7 @@ export function MasterAccountFilter({
                   'flex items-center gap-2',
                   selectedMaster === master.id && 'bg-accent font-medium'
                 )}
+                data-testid={`master-filter-option-${master.id}`}
               >
                 {/* Status Indicator */}
                 <div

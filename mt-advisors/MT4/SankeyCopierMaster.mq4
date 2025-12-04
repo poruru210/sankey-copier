@@ -38,6 +38,7 @@ int    g_server_status = STATUS_NO_CONFIG; // Status from server (DISABLED/CONNE
 //--- Topic strings (generated via FFI)
 string g_config_topic = "";
 string g_vlogs_topic = "";
+string g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 
 //--- Order tracking structure
 struct OrderInfo
@@ -144,6 +145,24 @@ int OnInit()
    if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
    {
       Print("WARNING: Failed to subscribe to vlogs_config topic");
+   }
+
+   // Subscribe to sync/{account_id}/ topic for SyncRequest messages from slaves
+   ushort sync_topic_buffer[256];
+   int sync_len = get_sync_topic_prefix(AccountID, sync_topic_buffer, 256);
+   if(sync_len > 0)
+   {
+      g_sync_topic = ShortArrayToString(sync_topic_buffer);
+      Print("Generated sync topic prefix: ", g_sync_topic);
+      
+      if(!SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      {
+         Print("WARNING: Failed to subscribe to sync topic");
+      }
+   }
+   else
+   {
+      Print("WARNING: Failed to generate sync topic prefix");
    }
 
    // Scan existing orders
@@ -280,8 +299,13 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
-         // Check for VLogs config message first (global broadcast)
-         if(topic == g_vlogs_topic)
+         // Check if this is a sync/ topic message (SyncRequest from Slave)
+         if(StringFind(topic, "sync/") == 0)
+         {
+            ProcessSyncRequest(msgpack_payload, payload_len);
+         }
+         // Check for VLogs config message (global broadcast)
+         else if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle != 0 && vlogs_handle != -1)
@@ -290,20 +314,10 @@ void OnTimer()
                vlogs_config_free(vlogs_handle);
             }
          }
-         // Try to parse as MasterConfig
+         // Parse as MasterConfig (config/{account_id} topic)
          else if(topic == g_config_topic)
          {
-            HANDLE_TYPE config_handle = parse_master_config(msgpack_payload, payload_len);
-            if(config_handle != 0 && config_handle != -1)
-            {
-               // Valid MasterConfig
-               ProcessMasterConfigMessage(msgpack_payload, payload_len);
-            }
-            else
-            {
-               // Not MasterConfig - try SyncRequest
-               ProcessSyncRequest(msgpack_payload, payload_len);
-            }
+            ProcessMasterConfigMessage(msgpack_payload, payload_len);
          }
       }
    }

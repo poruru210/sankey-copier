@@ -1,6 +1,7 @@
 mod api;
 mod cert;
 mod config;
+mod config_builder;
 mod connection_manager;
 mod db;
 mod engine;
@@ -10,6 +11,7 @@ mod models;
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
+mod runtime_status_updater;
 mod victoria_logs;
 mod zeromq;
 
@@ -25,8 +27,10 @@ use connection_manager::ConnectionManager;
 use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
+use message_handler::unregister::{notify_slave_offline, notify_slaves_master_offline};
 use message_handler::MessageHandler;
 use models::EaType;
+use runtime_status_updater::RuntimeStatusMetrics;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
@@ -122,10 +126,31 @@ async fn main() -> Result<()> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // Determine config directory from CONFIG_DIR environment variable
+    // If CONFIG_DIR is set, use that directory
+    // Otherwise, use the directory containing the executable (for Windows service support)
+    // Fallback to current directory if executable path cannot be determined
+    let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| ".".to_string())
+    });
+    let config_base = format!("{}/config", config_dir);
+
+    // Log the resolved config path for debugging
+    eprintln!(
+        "Config directory: {}, config base: {}",
+        config_dir, config_base
+    );
+
     // Load configuration first (needed for file logging setup)
     // Loads config.toml, config.dev.toml, and config.local.toml (if they exist)
-    let config = match Config::from_file("config") {
-        Ok(cfg) => cfg,
+    let config = match Config::from_file(&config_base) {
+        Ok(cfg) => {
+            eprintln!("Configuration loaded successfully from {}", config_base);
+            cfg
+        }
         Err(e) => {
             eprintln!("Failed to load configuration: {}, using defaults", e);
             Config::default()
@@ -232,11 +257,20 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Resolve ZeroMQ ports (dynamic or fixed)
+    // Resolve ports (HTTP and ZeroMQ, dynamic or fixed)
+    // runtime.toml is stored in CONFIG_DIR (or current directory)
+    let runtime_toml_path = format!("{}/runtime.toml", config_dir);
     let resolved_ports =
-        port_resolver::resolve_ports(&config.zeromq, port_resolver::RUNTIME_CONFIG_PATH)?;
+        port_resolver::resolve_ports(&config.server, &config.zeromq, &runtime_toml_path)?;
 
-    tracing::info!("Server will listen on: {}", config.server_address());
+    // Update server address if port was dynamically assigned
+    let server_address = if resolved_ports.is_dynamic && config.server.port == 0 {
+        format!("{}:{}", config.server.host, resolved_ports.http_port)
+    } else {
+        config.server_address()
+    };
+
+    tracing::info!("Server will listen on: {}", server_address);
     tracing::info!(
         "ZMQ Receiver: {} (port {})",
         resolved_ports.receiver_address(),
@@ -260,8 +294,11 @@ async fn main() -> Result<()> {
     tracing::info!("TLS certificate ready");
 
     // Initialize database
-    let db = Arc::new(Database::new(&config.database.url).await?);
-    tracing::info!("Database initialized");
+    // DATABASE_URL environment variable overrides config.toml setting
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| config.database.url.clone());
+    let db = Arc::new(Database::new(&database_url).await?);
+    tracing::info!("Database initialized: {}", database_url);
 
     // Create VLogsController if VictoriaLogs is configured
     // Uses config.toml settings directly (no DB override)
@@ -311,6 +348,8 @@ async fn main() -> Result<()> {
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
 
+    let runtime_status_metrics = Arc::new(RuntimeStatusMetrics::default());
+
     // Spawn ZeroMQ message processing task
     tracing::info!("Creating MessageHandler...");
     {
@@ -321,6 +360,7 @@ async fn main() -> Result<()> {
             db.clone(),
             zmq_publisher.clone(),
             vlogs_controller.clone(),
+            runtime_status_metrics.clone(),
         );
         tracing::info!("MessageHandler created, spawning message processing task...");
 
@@ -337,36 +377,62 @@ async fn main() -> Result<()> {
     {
         let conn_mgr = connection_manager.clone();
         let db_clone = db.clone();
+        let publisher_clone = zmq_publisher.clone();
+        let broadcast_clone = broadcast_tx.clone();
+        let metrics_clone = runtime_status_metrics.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
             loop {
                 interval.tick().await;
                 let timed_out = conn_mgr.check_timeouts().await;
 
-                // Update database statuses for timed-out Master EAs
+                // Update database statuses for timed-out EAs
                 for (account_id, ea_type) in timed_out {
-                    if ea_type == EaType::Master {
-                        match db_clone
-                            .update_master_statuses_disconnected(&account_id)
-                            .await
-                        {
-                            Ok(count) if count > 0 => {
-                                tracing::info!(
-                                    "Master {} disconnected: updated {} settings to ENABLED",
-                                    account_id,
-                                    count
-                                );
+                    match ea_type {
+                        EaType::Master => {
+                            match db_clone
+                                .update_master_statuses_disconnected(&account_id)
+                                .await
+                            {
+                                Ok(count) if count > 0 => {
+                                    tracing::info!(
+                                        "Master {} timed out: updated {} settings to ENABLED",
+                                        account_id,
+                                        count
+                                    );
+                                }
+                                Ok(_) => {
+                                    // No settings updated
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to update master statuses for {}: {}",
+                                        account_id,
+                                        e
+                                    );
+                                }
                             }
-                            Ok(_) => {
-                                // No settings updated
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Failed to update master statuses for {}: {}",
-                                    account_id,
-                                    e
-                                );
-                            }
+
+                            notify_slaves_master_offline(
+                                &conn_mgr,
+                                &db_clone,
+                                &publisher_clone,
+                                &broadcast_clone,
+                                metrics_clone.clone(),
+                                &account_id,
+                            )
+                            .await;
+                        }
+                        EaType::Slave => {
+                            // Slave timed out - update runtime status and notify WebSocket
+                            notify_slave_offline(
+                                &conn_mgr,
+                                &db_clone,
+                                &broadcast_clone,
+                                metrics_clone.clone(),
+                                &account_id,
+                            )
+                            .await;
                         }
                     }
                 }
@@ -390,6 +456,7 @@ async fn main() -> Result<()> {
         config: Arc::new(config.clone()),
         resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
+        runtime_status_metrics,
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");
@@ -408,7 +475,8 @@ async fn main() -> Result<()> {
 
     // Start HTTPS server
     tracing::info!("Getting bind address...");
-    let bind_address = config.server_address();
+    // Use the resolved address (which handles dynamic port assignment)
+    let bind_address = server_address;
     tracing::info!("Bind address: {}, loading TLS certificate...", bind_address);
 
     // Load TLS certificate and key

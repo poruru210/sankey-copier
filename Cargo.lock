@@ -1681,7 +1681,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2022,6 +2022,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "sankey-copier-e2e-tests"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "reqwest",
+ "rmp-serde",
+ "sankey-copier-mt-bridge",
+ "sankey-copier-relay-server",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "sankey-copier-mt-bridge"
 version = "1.0.0"
 dependencies = [
@@ -2047,6 +2068,7 @@ dependencies = [
  "cargo-husky",
  "chrono",
  "config",
+ "http-body-util",
  "mockito",
  "rcgen",
  "reqwest",

@@ -6,7 +6,9 @@ export type SyncMode = 'skip' | 'limit_order' | 'market_order';
 
 export interface CopySettings {
   id: number;
-  status: number; // 0=OFF (user disabled), 1=ON (user enabled)
+  status: number; // Runtime status from server (0=DISABLED,1=ENABLED,2=CONNECTED)
+  runtime_status?: number; // Explicit runtime field (mirrors status for now)
+  enabled_flag?: boolean; // User intent flag managed by Web UI toggle
   master_account: string;
   slave_account: string;
   lot_calculation_mode?: LotCalculationMode;
@@ -99,14 +101,19 @@ export interface CreateSettingsRequest {
 export interface AccountInfo {
   id: string;
   name: string;
+  accountType: 'master' | 'slave';
   platform?: 'MT4' | 'MT5';
   isOnline: boolean;
-  isEnabled: boolean; // User's switch state (status > 0)
+  isEnabled: boolean; // User's switch state (enabled_flag)
   isActive: boolean; // Calculated active state (ready for trading)
   hasError: boolean;
   hasWarning: boolean;
   errorMsg: string;
   isExpanded: boolean;
+  masterRuntimeStatus?: number;
+  masterIntentEnabled?: boolean;
+  slaveIntentEnabled?: boolean;
+  runtimeStatus?: number; // Effective runtime status (0/1/2) used for badges/colors
 }
 
 // MT4/MT5 Installation types
@@ -175,6 +182,7 @@ export interface MasterSettings {
 export interface TradeGroup {
   id: string; // Master account ID
   master_settings: MasterSettings;
+  master_runtime_status?: number; // Actual status evaluated by server
   created_at: string;
   updated_at: string;
 }
@@ -209,7 +217,9 @@ export interface TradeGroupMember {
   trade_group_id: string; // Master account ID
   slave_account: string;
   slave_settings: SlaveSettings;
-  status: number; // 0=DISABLED, 1=ENABLED, 2=CONNECTED
+  status: number; // Legacy field kept for backwards compatibility (mirrors runtime_status)
+  runtime_status: number; // Actual status evaluated by server (0/1/2)
+  enabled_flag: boolean; // User intent flag (true when switch is ON)
   created_at: string;
   updated_at: string;
 }

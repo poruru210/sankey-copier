@@ -1,9 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './helpers/navigation';
+import { setupDefaultApiMocks, installBasicWebSocketMock } from './helpers/api';
 
 test.describe('React Flow Node Dragging', () => {
   test.beforeEach(async ({ page }) => {
+    await setupDefaultApiMocks(page);
+    await installBasicWebSocketMock(page);
+
     // Start at home page
-    await page.goto('http://localhost:5173');
+    await gotoApp(page);
 
     // Wait for React Flow to load
     await page.waitForSelector('.react-flow', { timeout: 10000 });
@@ -21,13 +26,12 @@ test.describe('React Flow Node Dragging', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  test('should show RelayServer node', async ({ page }) => {
-    const relayServer = page.locator('.relay-server-node');
-    await expect(relayServer).toBeVisible();
-
-    // Get position
-    const box = await relayServer.boundingBox();
-    console.log('RelayServer position:', box);
+  test('should render expected master nodes', async ({ page }) => {
+    const masterIds = ['FxPro_12345001', 'OANDA_67890002', 'XM_11111003'];
+    for (const id of masterIds) {
+      const node = page.locator(`[data-account-id="${id}"]`).first();
+      await expect(node, `Missing account node for ${id}`).toBeVisible();
+    }
   });
 
   test('should allow dragging account nodes', async ({ page }) => {

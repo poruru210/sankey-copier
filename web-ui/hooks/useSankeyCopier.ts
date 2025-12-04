@@ -192,7 +192,7 @@ export function useSankeyCopier() {
   }, []);
 
   // Toggle status (DISABLED ⇄ ENABLED)
-  const toggleEnabled = useCallback(async (id: number, currentStatus: number) => {
+  const toggleEnabled = useCallback(async (id: number, nextEnabled: boolean) => {
     if (!apiClient) return;
 
     // Find the setting to get master_account and slave_account for API call
@@ -202,12 +202,17 @@ export function useSankeyCopier() {
       return;
     }
 
-    // Optimistically update UI
+    // Optimistically update intent flag only; runtime status comes from server heartbeat
     setSettings((prev) =>
-      prev.map(s => s.id === id ? { ...s, status: s.status === 0 ? 1 : 0 } : s)
+      prev.map(s =>
+        s.id === id
+          ? {
+              ...s,
+              enabled_flag: nextEnabled,
+            }
+          : s
+      )
     );
-
-    const newStatus = currentStatus === 0 ? 1 : 0;
 
     // Get or create debounced function for this specific ID
     let debouncedFn = debouncedCallsRef.current.get(id);
@@ -231,7 +236,7 @@ export function useSankeyCopier() {
     }
 
     // Call the debounced function for this ID (using slave_account for API)
-    debouncedFn(setting.master_account, setting.slave_account, newStatus === 1);
+    debouncedFn(setting.master_account, setting.slave_account, nextEnabled);
   }, [apiClient, fetchSettings, setSettings, settings]);
 
   // Create new setting

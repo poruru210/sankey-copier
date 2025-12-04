@@ -151,6 +151,8 @@
    int         build_config_topic(string account_id, ushort &output[], int output_len);
    int         build_trade_topic(string master_id, string slave_id, ushort &output[], int output_len);
    int         get_global_config_topic(ushort &output[], int output_len);
+   int         build_sync_topic_ffi(ushort &master_id[], ushort &slave_id[], ushort &output[], int output_len);
+   int         get_sync_topic_prefix(string account_id, ushort &output[], int output_len);
 #import
 
 //--- Common structures

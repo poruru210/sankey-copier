@@ -88,6 +88,12 @@ export function SimpleAccountSelector({
     ? strings.noConnectedMasterAccounts
     : strings.noConnectedSlaveAccounts;
 
+  const testId = filterType === 'Master'
+    ? 'master-selector'
+    : filterType === 'Slave'
+    ? 'slave-selector'
+    : undefined;
+
   // Find selected connection for display
   const selectedConnection = sortedConnections.find((conn) => conn.account_id === value);
   const selectedDisplay = selectedConnection
@@ -105,7 +111,7 @@ export function SimpleAccountSelector({
         </Label>
       )}
       <Select value={value} onValueChange={onChange} required={required}>
-        <SelectTrigger className="h-auto py-2">
+        <SelectTrigger className="h-auto py-2" data-testid={testId}>
           <div className="flex items-center gap-2 w-full overflow-hidden">
             {selectedDisplay ? (
               <>

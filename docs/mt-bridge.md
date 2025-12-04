@@ -46,15 +46,16 @@ graph LR
 mt-bridge/
 ├── src/
 │   ├── lib.rs                    # ZMQ FFIラッパー (メインエントリ)
+│   ├── ffi.rs                    # ZMQ/MessagePack 統合FFI
+│   ├── ffi_helpers.rs            # UTF-16変換・ハンドル管理ヘルパー
+│   ├── types.rs                  # メッセージ型定義
+│   ├── traits.rs                 # ConfigMessageトレイト
 │   ├── victoria_logs.rs          # VictoriaLogsクライアント
+│   ├── symbol_filter_tests.rs    # シンボルフィルターテスト
 │   └── msgpack/
 │       ├── mod.rs                # モジュール定義
-│       ├── types.rs              # メッセージ型定義
-│       ├── traits.rs             # ConfigMessageトレイト
 │       ├── serialization.rs      # シリアライズ関数
-│       ├── ffi.rs                # MessagePack FFI (1153行)
-│       ├── helpers.rs            # UTF-16変換ヘルパー
-│       └── tests/
+│       └── tests/                # シリアライズテスト
 ├── build.rs                      # バージョン埋め込み
 └── Cargo.toml
 ```
@@ -170,6 +171,18 @@ classDiagram
 | `zmq_socket_receive(handle, buf, size)` | 受信 | bytes / 0 / -1 |
 | `zmq_socket_subscribe_all(handle)` | 全トピック購読 | 0 / -1 |
 | `zmq_socket_subscribe(handle, topic)` | トピック購読 | 0 / -1 |
+
+### トピックヘルパー (constants.rs / ffi.rs)
+
+| 関数 | 説明 | 戻り値 |
+|------|------|--------|
+| `build_sync_topic_ffi(master, slave)` | sync/トピック生成 | UTF-16文字列 |
+| `get_sync_topic_prefix()` | sync/プレフィックス取得 | UTF-16文字列 |
+
+**トピック形式**:
+- Config: `config/{account_id}`
+- Trade: `trade/{master_id}/{slave_id}`
+- Sync: `sync/{master_id}/{slave_id}`
 
 ソケットタイプ:
 - `ZMQ_PUB` = 1

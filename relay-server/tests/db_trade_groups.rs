@@ -14,6 +14,15 @@ async fn create_test_db() -> Database {
     Database::new("sqlite::memory:").await.unwrap()
 }
 
+async fn set_member_status(db: &Database, master_account: &str, slave_account: &str, status: i32) {
+    db.update_member_enabled_flag(master_account, slave_account, status > 0)
+        .await
+        .unwrap();
+    db.update_member_runtime_status(master_account, slave_account, status)
+        .await
+        .unwrap();
+}
+
 // ============================================================================
 // TradeGroup CRUD Operations Tests
 // ============================================================================
@@ -280,7 +289,7 @@ async fn test_update_member_settings() {
 }
 
 #[tokio::test]
-async fn test_update_member_status() {
+async fn test_update_member_runtime_status() {
     let db = create_test_db().await;
 
     db.create_trade_group("MASTER_001").await.unwrap();
@@ -288,7 +297,10 @@ async fn test_update_member_status() {
         .await
         .unwrap();
 
-    db.update_member_status("MASTER_001", "SLAVE_001", 2)
+    db.update_member_enabled_flag("MASTER_001", "SLAVE_001", true)
+        .await
+        .unwrap();
+    db.update_member_runtime_status("MASTER_001", "SLAVE_001", 2)
         .await
         .unwrap();
 
@@ -298,6 +310,7 @@ async fn test_update_member_status() {
         .unwrap()
         .unwrap();
     assert_eq!(member.status, 2);
+    assert!(member.enabled_flag);
 }
 
 #[tokio::test]
@@ -474,15 +487,9 @@ async fn test_update_master_statuses_connected() {
         .unwrap();
 
     // Set statuses: DISABLED, ENABLED, ENABLED
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
-        .await
-        .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1)
-        .await
-        .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 1)
-        .await
-        .unwrap();
+    set_member_status(&db, "MASTER_001", "SLAVE_001", 0).await;
+    set_member_status(&db, "MASTER_001", "SLAVE_002", 1).await;
+    set_member_status(&db, "MASTER_001", "SLAVE_003", 1).await;
 
     // Update to CONNECTED
     let count = db
@@ -532,15 +539,9 @@ async fn test_update_master_statuses_disconnected() {
         .unwrap();
 
     // Set statuses: DISABLED, ENABLED, CONNECTED
-    db.update_member_status("MASTER_001", "SLAVE_001", 0)
-        .await
-        .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_002", 1)
-        .await
-        .unwrap();
-    db.update_member_status("MASTER_001", "SLAVE_003", 2)
-        .await
-        .unwrap();
+    set_member_status(&db, "MASTER_001", "SLAVE_001", 0).await;
+    set_member_status(&db, "MASTER_001", "SLAVE_002", 1).await;
+    set_member_status(&db, "MASTER_001", "SLAVE_003", 2).await;
 
     // Update to ENABLED (disconnected)
     let count = db

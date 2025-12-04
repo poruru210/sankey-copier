@@ -13,6 +13,7 @@ mod tests {
             symbol_suffix: None,
             config_version: 1,
             timestamp: "2023-01-01".to_string(),
+            warning_codes: vec![],
         };
 
         // Serialize it (simulating what happens when EA receives it)

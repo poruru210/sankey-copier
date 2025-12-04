@@ -3,6 +3,8 @@
 // Handler for SyncRequest messages from Slave EAs.
 // Routes sync requests to the specified Master EA.
 
+use sankey_copier_zmq::build_sync_topic;
+
 use super::MessageHandler;
 use crate::models::SyncRequestMessage;
 
@@ -50,8 +52,8 @@ impl MessageHandler {
             return;
         }
 
-        // Route sync request to Master EA via config publisher
-        let topic = format!("config/{}", request.master_account);
+        // Route sync request to Master EA via sync topic
+        let topic = build_sync_topic(&request.master_account, &request.slave_account);
         if let Err(e) = self.publisher.publish_to_topic(&topic, &request).await {
             tracing::error!(
                 "Failed to send SyncRequest to master {}: {}",

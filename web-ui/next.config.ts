@@ -8,6 +8,8 @@ const buildMode = process.env.NEXT_BUILD_MODE;
 const isProd = process.env.NODE_ENV === 'production';
 const internalHost = process.env.TAURI_DEV_HOST || 'localhost';
 
+const forcedAssetPrefix = process.env.NEXT_ASSET_PREFIX;
+
 const nextConfig: NextConfig = {
   // Output mode: export for Tauri desktop app, default for Vercel
   output: buildMode === 'export' ? 'export' : undefined,
@@ -23,8 +25,9 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // For Tauri dev mode - use localhost:8080, for production use relative paths
-  assetPrefix: isProd ? undefined : `http://${internalHost}:8080`,
+  // Allow Playwright/desktop tooling to override the asset prefix, otherwise
+  // fall back to the legacy localhost:8080 behavior for dev-only workflows.
+  assetPrefix: forcedAssetPrefix ?? (isProd ? undefined : `http://${internalHost}:8080`),
 
   webpack: (config) => {
     // Filter out problematic environment variables

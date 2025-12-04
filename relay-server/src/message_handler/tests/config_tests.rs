@@ -1,7 +1,7 @@
 //! Tests for configuration request handling
 
 use super::*;
-use crate::models::{LotCalculationMode, RequestConfigMessage, SlaveSettings};
+use crate::models::{LotCalculationMode, MasterSettings, RequestConfigMessage, SlaveSettings};
 
 #[tokio::test]
 async fn test_handle_request_config_master() {
@@ -143,5 +143,87 @@ async fn test_handle_request_config_unknown_ea_type() {
     ctx.handle_message(zmq_msg).await;
 
     // Should handle gracefully (log warning, no panic)
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_slave_request_config_updates_runtime_status() {
+    let ctx = create_test_context().await;
+    let master_account = "MASTER_STATUS_A".to_string();
+    let slave_account = "SLAVE_STATUS_A".to_string();
+
+    ctx.db.create_trade_group(&master_account).await.unwrap();
+
+    let master_settings = MasterSettings {
+        enabled: true,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        config_version: 1,
+    };
+    ctx.db
+        .update_master_settings(&master_account, master_settings)
+        .await
+        .unwrap();
+
+    ctx.db
+        .add_member(&master_account, &slave_account, SlaveSettings::default(), 0)
+        .await
+        .unwrap();
+
+    ctx.db
+        .update_member_enabled_flag(&master_account, &slave_account, true)
+        .await
+        .unwrap();
+
+    let before = ctx
+        .db
+        .get_member(&master_account, &slave_account)
+        .await
+        .unwrap()
+        .expect("member missing");
+    assert_eq!(before.runtime_status, 0);
+
+    ctx.connection_manager
+        .update_heartbeat(HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
+            account_id: slave_account.clone(),
+            balance: 1000.0,
+            equity: 1000.0,
+            open_positions: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            version: "test-slave".to_string(),
+            ea_type: "Slave".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 42,
+            broker: "TestBroker".to_string(),
+            account_name: "SlaveStatus".to_string(),
+            server: "TestServer".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            is_trade_allowed: true,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        })
+        .await;
+
+    let request_msg = RequestConfigMessage {
+        message_type: "RequestConfig".to_string(),
+        account_id: slave_account.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        ea_type: "Slave".to_string(),
+    };
+    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    ctx.handle_message(zmq_msg).await;
+
+    let after = ctx
+        .db
+        .get_member(&master_account, &slave_account)
+        .await
+        .unwrap()
+        .expect("member missing");
+    assert_eq!(after.runtime_status, 1);
+    assert_eq!(after.status, 1);
+
     ctx.cleanup().await;
 }

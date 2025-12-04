@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { mockConnections, mockSettings } from './mocks/testData';
+import type { Page, Locator } from '@playwright/test';
+import { gotoApp } from './helpers/navigation';
+import { mockConnections, mockSettings, mockTradeGroups } from './mocks/testData';
 
 /**
  * Create Connection Wizard - E2E Tests
@@ -22,6 +24,49 @@ interface ApiCall {
   body?: unknown;
 }
 
+const CREATE_BUTTON_TEST_ID = 'create-connection-button';
+
+async function openCreateDialog(page: Page) {
+  const createButton = page.getByTestId(CREATE_BUTTON_TEST_ID);
+  await expect(createButton).toBeVisible({ timeout: 10_000 });
+  await createButton.click();
+  await page.waitForTimeout(300);
+}
+
+async function selectFirstOption(page: Page, locator: Locator) {
+  if (!(await locator.isVisible())) {
+    return;
+  }
+
+  const tagName = await locator.evaluate((node) => node.tagName?.toLowerCase());
+  if (tagName === 'select') {
+    // Prefer the first non-empty option if possible
+    const options = locator.locator('option');
+    const optionCount = await options.count();
+    if (optionCount === 0) {
+      return;
+    }
+    for (let i = 0; i < optionCount; i += 1) {
+      const value = await options.nth(i).getAttribute('value');
+      if (value) {
+        await locator.selectOption(value);
+        return;
+      }
+    }
+    await locator.selectOption({ index: 0 });
+    return;
+  }
+
+  await locator.click({ force: true });
+  await page.waitForTimeout(100);
+  const openOption = page.locator('[data-state="open"] [role="option"]').first();
+  if (await openOption.count()) {
+    await openOption.click();
+    return;
+  }
+  await page.locator('[role="option"]').first().click();
+}
+
 test.describe('Create Connection Wizard', () => {
   let apiCalls: ApiCall[] = [];
   let createdMember: unknown = null;
@@ -39,24 +84,18 @@ test.describe('Create Connection Wizard', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: mockConnections,
-        }),
+        body: JSON.stringify(mockConnections),
       });
     });
 
-    // Mock settings API
+    // Legacy settings endpoint fallback (still used by old code paths)
     await page.route('**/api/settings', async (route) => {
       apiCalls.push({ method: route.request().method(), url: route.request().url() });
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: mockSettings,
-          }),
+          body: JSON.stringify({ success: true, data: mockSettings }),
         });
       } else if (route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
@@ -64,16 +103,23 @@ test.describe('Create Connection Wizard', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: { id: 999, ...body },
-          }),
+          body: JSON.stringify({ success: true, data: { id: 999, ...body } }),
         });
       }
     });
 
-    // Mock trade_groups API - Return 404 for new TradeGroup (simulate first-time creation)
-    await page.route('**/api/trade_groups/*', async (route) => {
+    // Trade groups list endpoint
+    await page.route('**/api/trade-groups', async (route) => {
+      apiCalls.push({ method: route.request().method(), url: route.request().url() });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockTradeGroups),
+      });
+    });
+
+    // Mock trade-groups API - Return 404 for new TradeGroup (simulate first-time creation)
+    await page.route('**/api/trade-groups/*', async (route) => {
       const url = route.request().url();
       const method = route.request().method();
       apiCalls.push({ method, url });
@@ -104,15 +150,12 @@ test.describe('Create Connection Wizard', () => {
     });
 
     // Mock trade_group_members API
-    await page.route('**/api/trade_groups/*/members', async (route) => {
+    await page.route('**/api/trade-groups/*/members', async (route) => {
       apiCalls.push({ method: route.request().method(), url: route.request().url() });
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: [],
-        }),
+        body: JSON.stringify([]),
       });
     });
 
@@ -140,47 +183,29 @@ test.describe('Create Connection Wizard', () => {
       (window as unknown as { WebSocket: typeof MockWebSocket }).WebSocket = MockWebSocket;
     });
 
-    await page.goto('http://localhost:5173');
+    await gotoApp(page);
     await page.waitForLoadState('networkidle');
   });
 
   test('should open create connection dialog', async ({ page }) => {
-    // Look for the "Create Connection" button
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await expect(createButton).toBeVisible({ timeout: 10000 });
-
-    await createButton.click();
-    await page.waitForTimeout(300);
+    await openCreateDialog(page);
 
     // Dialog should be open with Step 1 visible
-    await expect(page.getByText(/Master.*Account|マスター/i)).toBeVisible();
-    await expect(page.getByText(/Slave.*Account|スレーブ/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Master Account/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Slave Account|Slave/i })).toBeVisible();
   });
 
   test('should not call updateTradeGroupSettings when TradeGroup does not exist (Step 1 → Step 2)', async ({ page }) => {
-    // Open create dialog
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await createButton.click();
-    await page.waitForTimeout(500);
+    await openCreateDialog(page);
 
     // Step 1: Select Master and Slave accounts
     // Find and click the Master account selector
-    const masterSelector = page.locator('[data-testid="master-selector"], select, [role="combobox"]').first();
-    if (await masterSelector.isVisible()) {
-      await masterSelector.click();
-      await page.waitForTimeout(200);
-      // Select first Master account
-      await page.locator('[role="option"]').first().click();
-    }
+    const masterSelector = page.getByTestId('master-selector');
+    await selectFirstOption(page, masterSelector);
 
     // Find and click the Slave account selector
-    const slaveSelector = page.locator('[data-testid="slave-selector"], select, [role="combobox"]').nth(1);
-    if (await slaveSelector.isVisible()) {
-      await slaveSelector.click();
-      await page.waitForTimeout(200);
-      // Select first Slave account
-      await page.locator('[role="option"]').first().click();
-    }
+    const slaveSelector = page.getByTestId('slave-selector');
+    await selectFirstOption(page, slaveSelector);
 
     // Click Next to go to Step 2 (Master Settings)
     await page.getByRole('button', { name: /next|次へ/i }).click();
@@ -197,39 +222,28 @@ test.describe('Create Connection Wizard', () => {
     await page.getByRole('button', { name: /next|次へ/i }).click();
     await page.waitForTimeout(500);
 
-    // Verify no PUT/PATCH to trade_groups was made during step transition
+    // Verify no PUT/PATCH to trade-groups was made during step transition
     // (Only GET requests should happen when checking if TradeGroup exists)
     const tradeGroupUpdates = apiCalls.filter(
-      (call) => call.url.includes('trade_groups') && (call.method === 'PUT' || call.method === 'PATCH')
+      (call) => call.url.includes('trade-groups') && (call.method === 'PUT' || call.method === 'PATCH')
     );
 
     // Should not have called updateTradeGroupSettings yet
     expect(tradeGroupUpdates.length).toBe(0);
 
     // Should be on Step 3 (no error dialog should appear)
-    await expect(page.getByText(/Slave.*Settings|スレーブ.*設定|Lot/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Slave Settings|Lot Filter/i })).toBeVisible();
   });
 
   test('should create member with status 2 when "有効化する" checkbox is checked', async ({ page }) => {
-    // Open create dialog
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await createButton.click();
-    await page.waitForTimeout(500);
+    await openCreateDialog(page);
 
     // Step 1: Select accounts (simplified - just need to proceed)
-    const masterSelector = page.locator('[data-testid="master-selector"], [role="combobox"]').first();
-    if (await masterSelector.isVisible()) {
-      await masterSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const masterSelector = page.getByTestId('master-selector');
+    await selectFirstOption(page, masterSelector);
 
-    const slaveSelector = page.locator('[data-testid="slave-selector"], [role="combobox"]').nth(1);
-    if (await slaveSelector.isVisible()) {
-      await slaveSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const slaveSelector = page.getByTestId('slave-selector');
+    await selectFirstOption(page, slaveSelector);
 
     // Step 1 → Step 2
     await page.getByRole('button', { name: /next|次へ/i }).click();
@@ -270,25 +284,14 @@ test.describe('Create Connection Wizard', () => {
   });
 
   test('should create member with status 0 when "有効化する" checkbox is NOT checked', async ({ page }) => {
-    // Open create dialog
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await createButton.click();
-    await page.waitForTimeout(500);
+    await openCreateDialog(page);
 
     // Step 1: Select accounts
-    const masterSelector = page.locator('[role="combobox"]').first();
-    if (await masterSelector.isVisible()) {
-      await masterSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const masterSelector = page.getByTestId('master-selector');
+    await selectFirstOption(page, masterSelector);
 
-    const slaveSelector = page.locator('[role="combobox"]').nth(1);
-    if (await slaveSelector.isVisible()) {
-      await slaveSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const slaveSelector = page.getByTestId('slave-selector');
+    await selectFirstOption(page, slaveSelector);
 
     // Step 1 → Step 2 → Step 3
     await page.getByRole('button', { name: /next|次へ/i }).click();
@@ -310,25 +313,14 @@ test.describe('Create Connection Wizard', () => {
   });
 
   test('should save master settings after member creation for new connections', async ({ page }) => {
-    // Open create dialog
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await createButton.click();
-    await page.waitForTimeout(500);
+    await openCreateDialog(page);
 
     // Step 1: Select accounts
-    const masterSelector = page.locator('[role="combobox"]').first();
-    if (await masterSelector.isVisible()) {
-      await masterSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const masterSelector = page.getByTestId('master-selector');
+    await selectFirstOption(page, masterSelector);
 
-    const slaveSelector = page.locator('[role="combobox"]').nth(1);
-    if (await slaveSelector.isVisible()) {
-      await slaveSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const slaveSelector = page.getByTestId('slave-selector');
+    await selectFirstOption(page, slaveSelector);
 
     // Step 1 → Step 2
     await page.getByRole('button', { name: /next|次へ/i }).click();
@@ -364,27 +356,29 @@ test.describe('Create Connection Wizard - Error Handling', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: mockConnections,
-        }),
+        body: JSON.stringify(mockConnections),
       });
     });
 
-    // Mock settings API
+    // Legacy settings endpoint fallback
     await page.route('**/api/settings', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: mockSettings,
-        }),
+        body: JSON.stringify({ success: true, data: mockSettings }),
       });
     });
 
-    // Mock trade_groups API - Return 404 (TradeGroup not found)
-    await page.route('**/api/trade_groups/*', async (route) => {
+    await page.route('**/api/trade-groups', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockTradeGroups),
+      });
+    });
+
+    // Mock trade-groups API - Return 404 (TradeGroup not found)
+    await page.route('**/api/trade-groups/*', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 404,
@@ -403,11 +397,11 @@ test.describe('Create Connection Wizard - Error Handling', () => {
       }
     });
 
-    await page.route('**/api/trade_groups/*/members', async (route) => {
+    await page.route('**/api/trade-groups/*/members', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ success: true, data: [] }),
+        body: JSON.stringify([]),
       });
     });
 
@@ -426,7 +420,7 @@ test.describe('Create Connection Wizard - Error Handling', () => {
       (window as unknown as { WebSocket: typeof MockWebSocket }).WebSocket = MockWebSocket;
     });
 
-    await page.goto('http://localhost:5173');
+    await gotoApp(page);
     await page.waitForLoadState('networkidle');
   });
 
@@ -434,25 +428,14 @@ test.describe('Create Connection Wizard - Error Handling', () => {
     // This is a regression test for the bug where Step 2 → Step 3 transition
     // would show "Failed to update master settings: TradeGroup not found"
 
-    // Open create dialog
-    const createButton = page.getByRole('button', { name: /新しい紐づけを作成|create.*connection/i });
-    await createButton.click();
-    await page.waitForTimeout(500);
+    await openCreateDialog(page);
 
     // Step 1: Select accounts
-    const masterSelector = page.locator('[role="combobox"]').first();
-    if (await masterSelector.isVisible()) {
-      await masterSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const masterSelector = page.getByTestId('master-selector');
+    await selectFirstOption(page, masterSelector);
 
-    const slaveSelector = page.locator('[role="combobox"]').nth(1);
-    if (await slaveSelector.isVisible()) {
-      await slaveSelector.click();
-      await page.waitForTimeout(200);
-      await page.locator('[role="option"]').first().click();
-    }
+    const slaveSelector = page.getByTestId('slave-selector');
+    await selectFirstOption(page, slaveSelector);
 
     // Step 1 → Step 2
     await page.getByRole('button', { name: /next|次へ/i }).click();
@@ -483,6 +466,6 @@ test.describe('Create Connection Wizard - Error Handling', () => {
     expect(tradeGroupErrors.length).toBe(0);
 
     // Should successfully reach Step 3
-    await expect(page.getByText(/Slave.*Settings|スレーブ.*設定|Lot/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Slave Settings|Lot Filter/i })).toBeVisible();
   });
 });

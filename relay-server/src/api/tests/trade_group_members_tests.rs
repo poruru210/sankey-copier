@@ -303,7 +303,12 @@ async fn test_toggle_member_status_disable() {
     // First enable the member
     state
         .db
-        .update_member_status("MASTER_001", "SLAVE_001", 1)
+        .update_member_enabled_flag("MASTER_001", "SLAVE_001", true)
+        .await
+        .unwrap();
+    state
+        .db
+        .update_member_runtime_status("MASTER_001", "SLAVE_001", 1)
         .await
         .unwrap();
 
@@ -334,6 +339,7 @@ async fn test_toggle_member_status_disable() {
         .unwrap()
         .unwrap();
 
+    assert!(!member.enabled_flag);
     assert_eq!(member.status, 0); // DISABLED
 }
 
@@ -385,7 +391,8 @@ async fn test_toggle_member_status_enable() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(member.status, 1); // ENABLED
+    assert!(member.enabled_flag);
+    assert_eq!(member.status, 0); // runtime stays DISABLED until heartbeat evaluates
 }
 
 #[tokio::test]

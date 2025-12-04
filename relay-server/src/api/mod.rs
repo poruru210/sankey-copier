@@ -14,6 +14,7 @@ mod trade_groups;
 mod connections;
 mod logs;
 mod middleware;
+mod runtime_metrics;
 mod victoria_logs_settings;
 mod websocket;
 mod zeromq_settings;
@@ -38,7 +39,8 @@ use tower_http::LatencyUnit;
 
 use crate::{
     config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
-    port_resolver::ResolvedPorts, victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
+    port_resolver::ResolvedPorts, runtime_status_updater::RuntimeStatusMetrics,
+    victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
 };
 
 // Import handlers from submodules
@@ -60,6 +62,8 @@ pub struct AppState {
     pub resolved_ports: Arc<ResolvedPorts>,
     /// Controller for runtime VictoriaLogs toggle (None if not configured in config.toml)
     pub vlogs_controller: Option<VLogsController>,
+    /// Shared runtime status metrics (Heartbeat, API, ZMQ handlers)
+    pub runtime_status_metrics: Arc<RuntimeStatusMetrics>,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -174,6 +178,10 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/zeromq-config",
             get(zeromq_settings::get_zeromq_config),
+        )
+        .route(
+            "/api/runtime-status-metrics",
+            get(runtime_metrics::get_runtime_metrics),
         )
         .layer(trace_layer)
         .layer(cors)

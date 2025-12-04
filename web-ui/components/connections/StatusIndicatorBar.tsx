@@ -19,12 +19,17 @@ export function StatusIndicatorBar({ account, type, isMobile = false }: StatusIn
   // Base dimensions: vertical (desktop) or horizontal (mobile)
   const dimensionClasses = isMobile ? 'h-1 w-full' : 'w-2 flex-shrink-0';
 
-  // Determine color based on account state (same logic for both source and receiver)
+  const runtimeStatus = account.runtimeStatus;
+  const isConnected = runtimeStatus === 2 || (runtimeStatus === undefined && account.isActive);
+  const isWaiting = runtimeStatus === 1;
+
   const colorClass = account.hasWarning
-    ? 'bg-yellow-500'  // Auto-trading OFF
-    : account.isActive
-    ? 'bg-green-500'   // Active (ready for trading)
-    : 'bg-gray-300';   // Inactive or disabled
+    ? 'bg-yellow-500' // Auto-trading OFF
+    : isConnected
+    ? 'bg-green-500'  // Connected
+    : isWaiting
+    ? 'bg-amber-500'  // Waiting (runtime status 1)
+    : 'bg-gray-300';  // Disabled or unknown
 
   return <div className={`${dimensionClasses} ${colorClass}`}></div>;
 }

@@ -4,7 +4,7 @@
 // 2-port architecture: This single PUB socket handles all Server → EA messages
 
 use anyhow::{Context, Result};
-use sankey_copier_zmq::ConfigMessage; // Trait
+use sankey_copier_zmq::{build_trade_topic, ConfigMessage}; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -83,9 +83,9 @@ impl ZmqPublisher {
     where
         T: ConfigMessage,
     {
-        // Serialize to MessagePack
-        let payload =
-            rmp_serde::to_vec(message).context("Failed to serialize message to MessagePack")?;
+        // Serialize to MessagePack (Map format for field-name based deserialization)
+        let payload = rmp_serde::to_vec_named(message)
+            .context("Failed to serialize message to MessagePack")?;
 
         let serialized = SerializedMessage {
             topic: message.zmq_topic().to_string(),
@@ -160,7 +160,7 @@ impl ZmqPublisher {
             .context("Failed to serialize TradeSignal to MessagePack")?;
 
         let serialized = SerializedMessage {
-            topic: format!("trade/{}/{}", master_id, slave_id),
+            topic: build_trade_topic(master_id, slave_id),
             payload,
         };
 
@@ -234,6 +234,7 @@ mod tests {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
             allow_new_orders: true,
+            warning_codes: Vec::new(),
         };
 
         // This should succeed (message is queued for sending)
@@ -257,6 +258,7 @@ mod tests {
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            warning_codes: Vec::new(),
         };
 
         // This should succeed (message is queued for sending)
@@ -308,6 +310,7 @@ mod tests {
                     max_signal_delay_ms: 5000,
                     use_pending_order_for_delayed: false,
                     allow_new_orders: true,
+                    warning_codes: Vec::new(),
                 };
                 pub_clone.send(&config).await
             });

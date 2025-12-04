@@ -9,6 +9,7 @@ import {
   Edge,
 } from '@xyflow/react';
 import { Settings } from 'lucide-react';
+import { useIntlayer } from 'next-intlayer';
 import type { CopySettings } from '@/types';
 
 export interface SettingsEdgeData {
@@ -34,6 +35,7 @@ export const SettingsEdge = memo(({
   style,
   markerEnd,
 }: EdgeProps<SettingsEdgeType>) => {
+  const content = useIntlayer('settings-edge');
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -56,8 +58,11 @@ export const SettingsEdge = memo(({
   }
   const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
 
-  // Determine if edge is active
-  const isActive = setting?.status !== 0;
+  // Determine edge state based on runtime_status:
+  // 0 = DISABLED (gray), 1 = ENABLED/waiting (yellow), 2 = CONNECTED (green)
+  const runtimeStatus = setting?.runtime_status ?? setting?.status;
+  const isConnected = runtimeStatus === 2;
+  const isEnabled = runtimeStatus === 1;
 
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -87,7 +92,11 @@ export const SettingsEdge = memo(({
             {labelText && (
               <span
                 className={`text-xs font-semibold ${
-                  isActive ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+                  isConnected
+                    ? 'text-green-600 dark:text-green-400'
+                    : isEnabled
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-gray-500 dark:text-gray-400'
                 }`}
               >
                 {labelText}
@@ -96,7 +105,7 @@ export const SettingsEdge = memo(({
             <button
               onClick={handleSettingsClick}
               className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400"
-              title="Connection Settings"
+              title={content.connectionSettingsTitle}
             >
               <Settings className="w-3.5 h-3.5" />
             </button>

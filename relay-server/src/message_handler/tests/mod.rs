@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
+use crate::runtime_status_updater::RuntimeStatusMetrics;
 use chrono::Utc;
 use std::ops::Deref;
 
@@ -22,6 +23,8 @@ pub(crate) struct TestContext {
     pub handler: MessageHandler,
     // Store Arc references to ensure proper drop order
     _publisher: Arc<ZmqConfigPublisher>,
+    /// Broadcast receiver for testing WebSocket notifications
+    pub broadcast_rx: broadcast::Receiver<String>,
 }
 
 impl TestContext {
@@ -31,7 +34,7 @@ impl TestContext {
         let connection_manager = Arc::new(ConnectionManager::new(30));
         let copy_engine = Arc::new(CopyEngine::new());
 
-        let (broadcast_tx, _) = broadcast::channel::<String>(100);
+        let (broadcast_tx, broadcast_rx) = broadcast::channel::<String>(100);
 
         // Create test database (in-memory)
         let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
@@ -47,12 +50,30 @@ impl TestContext {
             db,
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
+            Arc::new(RuntimeStatusMetrics::default()),
         );
 
         Self {
             handler,
             _publisher: publisher,
+            broadcast_rx,
         }
+    }
+
+    /// Collect all pending broadcast messages (non-blocking)
+    /// Returns messages that were sent via broadcast_tx
+    #[allow(dead_code)]
+    pub fn collect_broadcast_messages(&mut self) -> Vec<String> {
+        let mut messages = Vec::new();
+        loop {
+            match self.broadcast_rx.try_recv() {
+                Ok(msg) => messages.push(msg),
+                Err(broadcast::error::TryRecvError::Empty) => break,
+                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+                Err(broadcast::error::TryRecvError::Closed) => break,
+            }
+        }
+        messages
     }
 
     /// Explicitly cleanup ZeroMQ resources
@@ -116,7 +137,37 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
         db,
         publisher,
         None,
+        Arc::new(RuntimeStatusMetrics::default()),
     )
+}
+
+/// Build a reusable HeartbeatMessage for tests
+pub(crate) fn build_heartbeat(
+    account_id: &str,
+    ea_type: &str,
+    is_trade_allowed: bool,
+) -> HeartbeatMessage {
+    HeartbeatMessage {
+        message_type: "Heartbeat".to_string(),
+        account_id: account_id.to_string(),
+        balance: 10_000.0,
+        equity: 10_000.0,
+        open_positions: 0,
+        timestamp: Utc::now().to_rfc3339(),
+        version: "1.0.0".to_string(),
+        ea_type: ea_type.to_string(),
+        platform: "MT5".to_string(),
+        account_number: 123456,
+        broker: "TestBroker".to_string(),
+        account_name: "TestAccount".to_string(),
+        server: "TestServer".to_string(),
+        currency: "USD".to_string(),
+        leverage: 100,
+        is_trade_allowed,
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_map: None,
+    }
 }
 
 /// Create a test TradeSignal

@@ -5,11 +5,19 @@
 // For Master (source) nodes: shows Master settings button
 // For Slave (receiver) nodes: shows connection settings button
 
+import type { ReactNode } from 'react';
 import { ChevronDown, Settings } from 'lucide-react';
+import { useIntlayer } from 'next-intlayer';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { BrokerIcon } from '@/components/BrokerIcon';
 import type { AccountInfo } from '@/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 
 interface AccountNodeHeaderProps {
   account: AccountInfo;
@@ -17,6 +25,7 @@ interface AccountNodeHeaderProps {
   onToggleEnabled?: (enabled: boolean) => void;
   onEditMasterSettings?: () => void;
   onOpenSettingsDrawer?: () => void;
+  isTogglePending?: boolean;
 }
 
 export function AccountNodeHeader({
@@ -25,7 +34,25 @@ export function AccountNodeHeader({
   onToggleEnabled,
   onEditMasterSettings,
   onOpenSettingsDrawer,
+  isTogglePending,
 }: AccountNodeHeaderProps) {
+  const content = useIntlayer('account-node-header');
+
+  const resolveContent = (value: unknown, replacements?: Record<string, string>) => {
+    if (typeof value === 'function') {
+      return value(replacements ?? {});
+    }
+    if (typeof value === 'string') {
+      if (!replacements) {
+        return value;
+      }
+      return Object.entries(replacements).reduce(
+        (acc, [key, replacement]) => acc.replace(`{${key}}`, replacement),
+        value
+      );
+    }
+    return '';
+  };
 
   // Split account name into broker name and account number
   // Format: "Broker_Name_AccountNumber"
@@ -41,6 +68,52 @@ export function AccountNodeHeader({
   };
 
   const { brokerName, accountNumber } = splitAccountName();
+
+  const renderStatusBadges = () => {
+    const runtimeStatus = account.runtimeStatus ?? account.masterRuntimeStatus;
+    const badges: ReactNode[] = [];
+
+    if (runtimeStatus !== undefined) {
+      const runtimeLabels: Record<number, string> = {
+        0: content.runtimeManualOff,
+        1: content.runtimeStandby,
+        2: account.accountType === 'slave' ? content.runtimeReceiving : content.runtimeStreaming,
+      };
+      const runtimeLabel =
+        runtimeLabels[runtimeStatus] ??
+        resolveContent(content.runtimeUnknownState, { code: runtimeStatus.toString() });
+      const runtimeColors: Record<number, string> = {
+        0: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+        1: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
+        2: 'bg-emerald-500 text-white',
+      };
+
+      badges.push(
+        <TooltipProvider key="runtime" delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className={`text-[10px] px-1.5 py-0 ${runtimeColors[runtimeStatus] ?? 'bg-gray-200'}`}>
+                {runtimeLabel}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">
+                {resolveContent(content.runtimeTooltip, { state: runtimeLabel })}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (badges.length === 0) {
+      return null;
+    }
+
+    return <div className="flex flex-wrap gap-1">{badges}</div>;
+  };
+
+  const statusBadges = renderStatusBadges();
 
   // Determine which settings button to show
   const hasSettingsButton = onEditMasterSettings || onOpenSettingsDrawer;
@@ -79,14 +152,25 @@ export function AccountNodeHeader({
               <span className="truncate">{accountNumber}</span>
             </div>
           )}
+          {statusBadges && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {statusBadges}
+            </div>
+          )}
         </div>
         {/* Switch - smaller size, vertically centered */}
-        <div className="noDrag flex items-center">
+        <div className="noDrag flex flex-col items-center">
           <Switch
             checked={account.isEnabled}
             onCheckedChange={(checked) => onToggleEnabled?.(checked)}
             className="scale-75 md:scale-80"
+            disabled={isTogglePending}
+            isPending={isTogglePending}
+            labelProps={{ 'data-testid': 'account-toggle-switch', 'data-account-id': account.id }}
           />
+          {isTogglePending && (
+            <span className="sr-only">{content.intentSyncing}</span>
+          )}
         </div>
         {/* Settings button - shown for both Master and Slave accounts */}
         {hasSettingsButton && (
@@ -96,7 +180,7 @@ export function AccountNodeHeader({
               handleSettingsClick?.();
             }}
             className="noDrag p-2 md:p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-            title={onEditMasterSettings ? "Master Settings" : "Connection Settings"}
+            title={onEditMasterSettings ? content.masterSettingsTitle : content.connectionSettingsTitle}
           >
             <Settings className="w-4 h-4" />
           </button>

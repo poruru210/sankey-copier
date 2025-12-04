@@ -546,6 +546,7 @@ mod tests {
 
         let installer = MtInstaller::new(temp_mt.path().to_path_buf());
         let resolved_ports = ResolvedPorts {
+            http_port: 3000,
             receiver_port: 15555,
             sender_port: 15556,
             is_dynamic: true,
@@ -570,6 +571,7 @@ mod tests {
     /// Helper function to create test ResolvedPorts (2-port architecture)
     fn create_test_resolved_ports() -> ResolvedPorts {
         ResolvedPorts {
+            http_port: 3000,
             receiver_port: 5555,
             sender_port: 5556,
             is_dynamic: false,

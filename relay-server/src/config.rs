@@ -243,7 +243,14 @@ impl ZeroMqConfig {
 /// Stored in runtime.toml and persisted across restarts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeConfig {
+    pub server: RuntimeServerConfig,
     pub zeromq: RuntimeZeromqConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeServerConfig {
+    pub http_port: u16,
+    pub generated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,24 +393,52 @@ impl Default for Config {
     }
 }
 
-/// Update VictoriaLogs enabled setting in config.toml
-/// Uses toml_edit to preserve comments, formatting, and structure
+/// Resolve the config file path for writing based on environment variables.
 ///
-/// Safety measures:
-/// 1. Creates backup before write
-/// 2. Validates content after write
-/// 3. Restores from backup if validation fails
+/// The resolution follows the same logic as `Config::from_file`:
+/// - If `CONFIG_ENV` is set, writes to `{base_name}.{CONFIG_ENV}.toml`
+/// - Otherwise, writes to `{base_name}.toml`
 ///
-/// Update VictoriaLogs enabled setting in config.toml
-/// Uses toml_edit to preserve comments, formatting, and structure
-pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_path: P) -> Result<()> {
-    let config_path = config_path.as_ref();
+/// Note: Does NOT write to `.local.toml` as that is for personal overrides only.
+///
+/// # Arguments
+/// * `base_name` - Base name without extension (e.g., "config" for config.toml)
+///
+/// # Returns
+/// The resolved file path as a String (e.g., "config.test.toml" or "config.toml")
+pub fn resolve_writable_config_path<P: AsRef<Path>>(base_name: P) -> String {
+    let base_str = base_name.as_ref().to_string_lossy();
+
+    if let Ok(env) = std::env::var("CONFIG_ENV") {
+        format!("{}.{}.toml", base_str, env)
+    } else {
+        format!("{}.toml", base_str)
+    }
+}
+
+/// Update VictoriaLogs enabled setting in the appropriate config file.
+///
+/// Automatically resolves the correct config file based on `CONFIG_ENV`:
+/// - If `CONFIG_ENV=test`, updates `config.test.toml`
+/// - If `CONFIG_ENV=dev`, updates `config.dev.toml`
+/// - Otherwise, updates `config.toml`
+///
+/// Uses toml_edit to preserve comments, formatting, and structure.
+///
+/// # Arguments
+/// * `enabled` - The new enabled state for VictoriaLogs
+/// * `config_base` - Base config path without extension (e.g., "config" or "/path/to/config")
+pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_base: P) -> Result<()> {
+    let config_path = resolve_writable_config_path(&config_base);
 
     // Read existing config file
-    let content = std::fs::read_to_string(config_path).context("Failed to read config file")?;
+    let content = std::fs::read_to_string(&config_path)
+        .with_context(|| format!("Failed to read config file: {}", config_path))?;
 
     // Parse as editable document (preserves comments and formatting)
-    let mut doc: toml_edit::DocumentMut = content.parse().context("Failed to parse config.toml")?;
+    let mut doc: toml_edit::DocumentMut = content
+        .parse()
+        .with_context(|| format!("Failed to parse {}", config_path))?;
 
     // Update victoria_logs.enabled
     if let Some(vlogs) = doc.get_mut("victoria_logs") {
@@ -418,12 +453,13 @@ pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_path: 
     }
 
     // Write back to file (preserves original formatting)
-    std::fs::write(config_path, doc.to_string()).context("Failed to write config.toml")?;
+    std::fs::write(&config_path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", config_path))?;
 
     tracing::info!(
-        "Successfully updated config.toml (victoria_logs.enabled = {}) at {:?}",
-        enabled,
-        config_path
+        config_path = %config_path,
+        enabled = enabled,
+        "Successfully updated victoria_logs.enabled in config file"
     );
 
     Ok(())
@@ -523,9 +559,11 @@ timeout_seconds = 45
     fn test_update_victoria_logs_enabled() {
         use std::io::Write;
 
-        // Create a temporary config file
+        // Create a temporary config file with a unique name
         let temp_dir = std::env::temp_dir();
-        let config_path = temp_dir.join(format!("test_config_{}.toml", uuid::Uuid::new_v4()));
+        let unique_id = uuid::Uuid::new_v4();
+        let config_base = temp_dir.join(format!("test_config_{}", unique_id));
+        let config_path = temp_dir.join(format!("test_config_{}.toml", unique_id));
 
         // Write initial content
         let initial_content = r#"
@@ -573,8 +611,12 @@ source = "relay-server"
         let mut file = std::fs::File::create(&config_path).unwrap();
         file.write_all(initial_content.as_bytes()).unwrap();
 
-        // Update enabled to true
-        update_victoria_logs_enabled(true, &config_path).unwrap();
+        // Clear CONFIG_ENV to ensure we write to base config.toml
+        // SAFETY: Test runs in a single-threaded context
+        unsafe { std::env::remove_var("CONFIG_ENV") };
+
+        // Update enabled to true (passing config_base without extension)
+        update_victoria_logs_enabled(true, &config_base).unwrap();
 
         // Verify update
         let content = std::fs::read_to_string(&config_path).unwrap();
@@ -583,5 +625,33 @@ source = "relay-server"
 
         // Cleanup
         let _ = std::fs::remove_file(config_path);
+    }
+
+    #[test]
+    fn test_resolve_writable_config_path() {
+        // Note: This test modifies environment variables which is unsafe in multi-threaded tests.
+        // Run with `cargo test -- --test-threads=1` if flaky.
+
+        // Without CONFIG_ENV set
+        // SAFETY: Test runs in isolation
+        unsafe { std::env::remove_var("CONFIG_ENV") };
+        let path = resolve_writable_config_path("config");
+        assert_eq!(path, "config.toml");
+
+        let path = resolve_writable_config_path("/path/to/config");
+        assert_eq!(path, "/path/to/config.toml");
+
+        // With CONFIG_ENV set
+        // SAFETY: Test runs in isolation
+        unsafe { std::env::set_var("CONFIG_ENV", "test") };
+        let path = resolve_writable_config_path("config");
+        assert_eq!(path, "config.test.toml");
+
+        let path = resolve_writable_config_path("/path/to/config");
+        assert_eq!(path, "/path/to/config.test.toml");
+
+        // Cleanup
+        // SAFETY: Test runs in isolation
+        unsafe { std::env::remove_var("CONFIG_ENV") };
     }
 }

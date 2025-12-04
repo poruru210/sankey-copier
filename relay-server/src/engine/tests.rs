@@ -31,6 +31,9 @@ fn create_test_member() -> TradeGroupMember {
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings::default(),
         status: 2, // STATUS_CONNECTED
+        runtime_status: 2,
+        warning_codes: Vec::new(),
+        enabled_flag: true,
         created_at: Utc::now().to_rfc3339(),
         updated_at: Utc::now().to_rfc3339(),
     }

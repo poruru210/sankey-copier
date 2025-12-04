@@ -62,6 +62,8 @@ CopyConfig     g_configs[];                      // Array of active configuratio
 bool           g_has_received_config = false;    // Track if we have received at least one config
 string         g_config_topic = "";              // Config topic (generated via FFI)
 string         g_vlogs_topic = "";               // VLogs topic (generated via FFI)
+bool           g_sync_topic_subscribed = false;  // Track if sync topic has been subscribed
+string         g_sync_topic = "";                // Sync topic for receiving PositionSnapshot
 
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
@@ -122,8 +124,8 @@ int OnInit()
    }
    else 
    {
-      g_vlogs_topic = "vlogs_config"; // Fallback
-      Print("WARNING: Failed to generate vlogs topic, using fallback: ", g_vlogs_topic);
+      Print("CRITICAL: Failed to generate vlogs topic from mt-bridge");
+      return INIT_FAILED;
    }
 
    // Initialize ZMQ context
@@ -347,8 +349,13 @@ void OnTimer()
          ArrayResize(msgpack_payload, payload_len);
          ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
 
+         // Check if this is a sync/ topic message (PositionSnapshot from Master)
+         if(StringFind(topic, "sync/") == 0)
+         {
+            ProcessPositionSnapshot(msgpack_payload, payload_len);
+         }
          // Handle VictoriaLogs configuration message
-         if(topic == g_vlogs_topic)
+         else if(topic == g_vlogs_topic)
          {
             HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
             if(vlogs_handle > 0)
@@ -360,62 +367,47 @@ void OnTimer()
             {
                Print("[ERROR] Failed to parse vlogs_config message");
             }
-            // Continue to next message (don't process as SlaveConfig)
          }
-         // Try to parse as SlaveConfig first
+         // Parse as SlaveConfig (config/{account_id} topic)
          else if(topic == g_config_topic)
          {
-         HANDLE_TYPE config_handle = parse_slave_config(msgpack_payload, payload_len);
-         if(config_handle > 0)
-         {
-            string master_account = slave_config_get_string(config_handle, "master_account");
-            if(master_account != "")
+            ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
+                                 g_zmq_context, g_RelayAddress, AccountID);
+            g_has_received_config = true;
+            
+            // Subscribe to sync/{master}/{slave} topic after receiving config
+            // This is done dynamically when we learn the master_account
+            if(!g_sync_topic_subscribed && ArraySize(g_configs) > 0)
             {
-               // Valid SlaveConfig - process it
-               slave_config_free(config_handle);
-               ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
-                                    g_zmq_context, g_RelayAddress, AccountID);
-               g_has_received_config = true;
+               SubscribeToSyncTopic();
             }
-            else
-            {
-               // Not a SlaveConfig - try PositionSnapshot
-               slave_config_free(config_handle);
-               ProcessPositionSnapshot(msgpack_payload, payload_len);
-            }
-         }
-         else
-         {
-            // Failed to parse as SlaveConfig - try PositionSnapshot
-            ProcessPositionSnapshot(msgpack_payload, payload_len);
-         }
          
-         if(ArraySize(g_configs) != g_last_config_count)
-         {
-            g_last_config_count = ArraySize(g_configs);
-         }
-
-         // Update configuration panel
-         if(ShowConfigPanel)
-         {
-            // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
-            bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-            if(!local_trade_allowed)
+            if(ArraySize(g_configs) != g_last_config_count)
             {
-               // Local auto-trading OFF -> show DISABLED (Slave cannot trade)
-               g_config_panel.UpdateStatusRow(STATUS_DISABLED);
-            }
-            else
-            {
-               // Local auto-trading ON -> show actual config status from server
-               g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
+               g_last_config_count = ArraySize(g_configs);
             }
 
-            // Update carousel display with detailed copy settings
-            g_config_panel.UpdateCarouselConfigs(g_configs);
-            ChartRedraw();
-         }
-         } // end else (non-vlogs_config topic)
+            // Update configuration panel
+            if(ShowConfigPanel)
+            {
+               // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
+               bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+               if(!local_trade_allowed)
+               {
+                  // Local auto-trading OFF -> show DISABLED (Slave cannot trade)
+                  g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+               }
+               else
+               {
+                  // Local auto-trading ON -> show actual config status from server
+                  g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
+               }
+
+               // Update carousel display with detailed copy settings
+               g_config_panel.UpdateCarouselConfigs(g_configs);
+               ChartRedraw();
+            }
+         } // end else (config/ topic)
       }
    }
 }
@@ -582,17 +574,15 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
    bool allow_new_orders = g_configs[config_index].allow_new_orders;
 
-   // Check if connected to Master for Open signals only
-   // Close/Modify signals are allowed even when disconnected (to close existing positions)
-   if(action == "Open" && g_configs[config_index].status != STATUS_CONNECTED)
+   if(action == "Open")
    {
-      Print("Open signal rejected: Not connected to Master (status=", g_configs[config_index].status, "). Master ticket #", master_ticket);
-      trade_signal_free(handle);
-      return;
-   }
+      if(!allow_new_orders)
+      {
+         Print("Open signal rejected: allow_new_orders=false (status=", g_configs[config_index].status, ") for master #", master_ticket);
+         trade_signal_free(handle);
+         return;
+      }
 
-   if(action == "Open" && allow_new_orders)
-   {
       // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
       // We process all signals received here
 
@@ -622,6 +612,50 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 
    // Free the handle
    trade_signal_free(handle);
+}
+
+//+------------------------------------------------------------------+
+//| Subscribe to sync/{master}/{slave} topic for PositionSnapshot     |
+//| Called after receiving first config to subscribe to sync topic    |
+//+------------------------------------------------------------------+
+void SubscribeToSyncTopic()
+{
+   if(g_sync_topic_subscribed || ArraySize(g_configs) == 0)
+      return;
+
+   // Get master account from first config
+   string master_account = g_configs[0].master_account;
+   if(master_account == "")
+      return;
+
+   // Build sync topic: sync/{master}/{slave}
+   ushort master_utf16[256];
+   ushort slave_utf16[256];
+   ushort sync_topic_buffer[256];
+   
+   StringToShortArray(master_account, master_utf16);
+   StringToShortArray(AccountID, slave_utf16);
+   
+   int sync_len = build_sync_topic_ffi(master_utf16, slave_utf16, sync_topic_buffer, 256);
+   if(sync_len > 0)
+   {
+      g_sync_topic = ShortArrayToString(sync_topic_buffer);
+      Print("Generated sync topic: ", g_sync_topic);
+      
+      if(SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      {
+         Print("Subscribed to sync topic: ", g_sync_topic);
+         g_sync_topic_subscribed = true;
+      }
+      else
+      {
+         Print("WARNING: Failed to subscribe to sync topic: ", g_sync_topic);
+      }
+   }
+   else
+   {
+      Print("WARNING: Failed to generate sync topic");
+   }
 }
 
 //+------------------------------------------------------------------+

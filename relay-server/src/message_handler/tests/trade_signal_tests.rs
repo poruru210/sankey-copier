@@ -136,7 +136,7 @@ async fn test_handle_trade_signal_disabled_setting() {
         .await
         .unwrap();
     ctx.db
-        .update_member_status("MASTER_001", "SLAVE_001", 0)
+        .update_member_runtime_status("MASTER_001", "SLAVE_001", 0)
         .await
         .unwrap(); // STATUS_DISABLED = 0
 

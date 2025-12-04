@@ -43,7 +43,7 @@ export function useMasterFilter({
         (s) =>
           s.master_account === selectedMaster &&
           s.slave_account === acc.id &&
-          s.status !== 0
+          (s.enabled_flag ?? (s.status !== 0))
       )
     );
   }, [selectedMaster, receiverAccounts, settings]);

@@ -170,8 +170,9 @@ Tests run on:
 
 ## Notes
 
-- Tests assume the app runs on `http://localhost:5173`
-- Dev server is automatically started by Playwright if not running
+- Tests assume the app runs on `http://localhost:8080`
+- `playwright.config.ts` has `webServer` enabled, so `pnpm dev` is自動起動されます（`PLAYWRIGHT_BASE_URL` で接続先を上書き可能）
+- 自動起動時は空きポートが検出されます。特定ポートで起動したい場合は `PLAYWRIGHT_PORT` を指定してください。
 - Tests use mocked data, so **no actual MT4/MT5 environment is needed**
 - Animation timeouts are included to wait for transitions (300-500ms)
 

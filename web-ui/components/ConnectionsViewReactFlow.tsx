@@ -38,7 +38,7 @@ interface ConnectionsViewReactFlowProps {
   connections: EaConnection[];
   settings: CopySettings[];
   tradeGroups: TradeGroup[];
-  onToggle: (id: number, currentStatus: number) => Promise<void>;
+  onToggle: (id: number, enabled: boolean) => Promise<void>;
   onToggleMaster: (masterAccount: string, enabled: boolean) => Promise<void>;
   onCreate: (data: CreateSettingsRequest) => Promise<void>;
   onUpdate: (id: number, data: CopySettings) => Promise<void>;
@@ -331,22 +331,6 @@ function ConnectionsViewReactFlowInner({
     }
   }, [isMobile, setHoveredSource, setHoveredReceiver]);
 
-  // Handle node double-click to edit Master settings
-  const onNodeDoubleClick = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      // Only handle source (Master) nodes
-      if (node.id.startsWith('source-')) {
-        const accountId = node.id.replace('source-', '');
-        // Find the corresponding connection to get the full account name
-        const sourceAccount = sourceAccounts.find(acc => acc.id === accountId);
-        if (sourceAccount) {
-          handleEditMasterSettings(sourceAccount.id);
-        }
-      }
-    },
-    [sourceAccounts, handleEditMasterSettings]
-  );
-
   // Get React Flow instance for fitView
   const reactFlowInstance = useReactFlow();
 
@@ -383,7 +367,11 @@ function ConnectionsViewReactFlowInner({
             <RefreshCw className="h-4 w-4 mr-2" />
             {content.refresh}
           </Button>
-          <Button size="sm" onClick={handleOpenCreateDialog}>
+          <Button
+            size="sm"
+            onClick={handleOpenCreateDialog}
+            data-testid="create-connection-button"
+          >
             <Plus className="h-4 w-4 mr-2" />
             {content.createNewLink}
           </Button>
@@ -405,7 +393,10 @@ function ConnectionsViewReactFlowInner({
             : selectedMasterName.substring(lastUnderscoreIndex + 1);
 
           return (
-            <div className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300">
+            <div
+              className="mb-4 flex items-center justify-between px-4 py-2 bg-accent rounded-lg border border-border animate-in fade-in slide-in-from-top-2 duration-300"
+              data-testid="master-filter-indicator"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{sidebarContent.viewingAccount}:</span>
                 <div className="flex flex-col">
@@ -438,7 +429,6 @@ function ConnectionsViewReactFlowInner({
             edgeTypes={edgeTypes}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
-            onNodeDoubleClick={onNodeDoubleClick}
             nodesDraggable={true}
             nodeDragThreshold={1}
             nodesConnectable={false}

@@ -1,4 +1,4 @@
-import type { EaConnection, CopySettings } from '@/types';
+import type { EaConnection, CopySettings, TradeGroup, TradeGroupMember } from '@/types';
 
 /**
  * Mock data for Playwright tests
@@ -139,6 +139,8 @@ export const mockSettings: CopySettings[] = [
   {
     id: 1,
     status: 2, // STATUS_CONNECTED
+    runtime_status: 2,
+    enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'FxPro_22222004',
     lot_multiplier: 1.5,
@@ -153,7 +155,9 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 2,
-    status: 2, // STATUS_CONNECTED
+    status: 1, // STATUS_ENABLED (waiting)
+    runtime_status: 1,
+    enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'OANDA_33333005',
     lot_multiplier: 0.5,
@@ -170,7 +174,9 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 3,
-    status: 2, // STATUS_CONNECTED
+    status: 1,
+    runtime_status: 1,
+    enabled_flag: true,
     master_account: 'OANDA_67890002',
     slave_account: 'XM_44444006',
     lot_multiplier: 2.0,
@@ -185,7 +191,9 @@ export const mockSettings: CopySettings[] = [
   },
   {
     id: 4,
-    status: 2, // STATUS_CONNECTED
+    status: 0, // STATUS_DISABLED
+    runtime_status: 0,
+    enabled_flag: false,
     master_account: 'XM_11111003',
     slave_account: 'FxPro_55555007',
     lot_multiplier: 1.0,
@@ -197,5 +205,114 @@ export const mockSettings: CopySettings[] = [
       allowed_magic_numbers: null,
       blocked_magic_numbers: null,
     },
+  },
+];
+
+const now = new Date().toISOString();
+
+function toTradeGroupMember(setting: CopySettings): TradeGroupMember {
+  return {
+    id: setting.id,
+    trade_group_id: setting.master_account,
+    slave_account: setting.slave_account,
+    slave_settings: {
+      lot_calculation_mode: setting.lot_calculation_mode ?? 'multiplier',
+      lot_multiplier: setting.lot_multiplier ?? 1,
+      reverse_trade: setting.reverse_trade ?? false,
+      symbol_prefix: setting.symbol_prefix ?? null,
+      symbol_suffix: setting.symbol_suffix ?? null,
+      symbol_mappings: setting.symbol_mappings ?? [],
+      filters: setting.filters,
+      config_version: 1,
+      source_lot_min: setting.source_lot_min ?? null,
+      source_lot_max: setting.source_lot_max ?? null,
+      sync_mode: setting.sync_mode,
+      limit_order_expiry_min: setting.limit_order_expiry_min ?? null,
+      market_sync_max_pips: setting.market_sync_max_pips ?? null,
+      max_slippage: setting.max_slippage ?? null,
+      copy_pending_orders: setting.copy_pending_orders ?? false,
+      max_retries: setting.max_retries,
+      max_signal_delay_ms: setting.max_signal_delay_ms,
+      use_pending_order_for_delayed: setting.use_pending_order_for_delayed ?? false,
+    },
+    status: setting.status,
+    runtime_status: setting.runtime_status ?? setting.status,
+    enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+const masterAccounts = Array.from(
+  new Set([
+    ...mockConnections.filter((conn) => conn.ea_type === 'Master').map((conn) => conn.account_id),
+    ...mockSettings.map((setting) => setting.master_account),
+  ])
+);
+
+const membersMap: Record<string, TradeGroupMember[]> = {};
+
+for (const setting of mockSettings) {
+  const member = toTradeGroupMember(setting);
+  if (!membersMap[setting.master_account]) {
+    membersMap[setting.master_account] = [];
+  }
+  membersMap[setting.master_account].push(member);
+}
+
+export const mockTradeGroupMembers: Record<string, TradeGroupMember[]> = membersMap;
+
+export const mockTradeGroups: TradeGroup[] = masterAccounts.map((masterAccount) => {
+  const members = membersMap[masterAccount] ?? [];
+  const masterEnabled = members.some((member) => member.enabled_flag);
+  const highestRuntime = members.reduce((max, member) => Math.max(max, member.runtime_status ?? 0), 0);
+
+  return {
+    id: masterAccount,
+    master_settings: {
+      enabled: masterEnabled,
+      symbol_prefix: null,
+      symbol_suffix: null,
+      config_version: 1,
+    },
+    master_runtime_status: highestRuntime,
+    created_at: now,
+    updated_at: now,
+  };
+});
+
+export const mockVictoriaLogsConfig = {
+  configured: true,
+  config: {
+    host: 'http://localhost:9428',
+    batch_size: 100,
+    flush_interval_secs: 5,
+    source: 'playwright-tests',
+  },
+  enabled: true,
+};
+
+export const mockVictoriaLogsSettings = {
+  enabled: true,
+  endpoint: 'http://localhost:9428/api/v1/write',
+  batch_size: 100,
+  flush_interval_secs: 5,
+};
+
+export const mockServerLogs = [
+  {
+    timestamp: now,
+    level: 'INFO',
+    message: 'Relay server boot completed',
+  },
+  {
+    timestamp: new Date(Date.now() - 15_000).toISOString(),
+    level: 'WARN',
+    message: 'MT5 heartbeat delayed for account FxPro_12345001',
+  },
+  {
+    timestamp: new Date(Date.now() - 30_000).toISOString(),
+    level: 'INFO',
+    message: 'VictoriaLogs flush completed (batch=250)',
   },
 ];

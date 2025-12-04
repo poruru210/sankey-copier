@@ -3,20 +3,22 @@
 //! Provides shared test utilities for creating test objects
 //! like connections, app state, heartbeats, and settings.
 
+mod runtime_metrics_tests;
 mod trade_group_members_tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use crate::api::AppState;
-use crate::port_resolver::ResolvedPorts;
-use crate::victoria_logs::VLogsController;
 use crate::{
+    api::AppState,
     config::{Config, VictoriaLogsConfig},
     connection_manager::ConnectionManager,
     db::Database,
     log_buffer::LogBuffer,
+    port_resolver::ResolvedPorts,
+    runtime_status_updater::RuntimeStatusMetrics,
+    victoria_logs::VLogsController,
     zeromq::ZmqConfigPublisher,
 };
 
@@ -59,6 +61,7 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
 
     // Create default resolved ports for testing (2-port architecture)
     let resolved_ports = Arc::new(ResolvedPorts {
+        http_port: 3000,
         receiver_port: 5555,
         sender_port: port, // Use the same port as the config_sender/publisher
         is_dynamic: false,
@@ -76,5 +79,6 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         config,
         resolved_ports,
         vlogs_controller,
+        runtime_status_metrics: Arc::new(RuntimeStatusMetrics::default()),
     }
 }

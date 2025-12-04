@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './helpers/navigation';
+import { setupDefaultApiMocks, installBasicWebSocketMock } from './helpers/api';
 
 test('Check WebSocket connection errors in console', async ({ page }) => {
   const consoleMessages: string[] = [];
@@ -21,8 +23,11 @@ test('Check WebSocket connection errors in console', async ({ page }) => {
     }
   });
 
+  await setupDefaultApiMocks(page);
+  await installBasicWebSocketMock(page);
+
   // Navigate to the app
-  await page.goto('http://localhost:8080/en/connections');
+  await gotoApp(page, '/en/connections');
 
   // Wait for page to load
   await page.waitForTimeout(3000);

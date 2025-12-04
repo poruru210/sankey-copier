@@ -1,4 +1,5 @@
-use sankey_copier_relay_server::models::{SlaveConfigMessage, SymbolMapping, TradeFilters};
+use sankey_copier_relay_server::models::{SymbolMapping, TradeFilters};
+use sankey_copier_zmq::SlaveConfigMessage;
 use sankey_copier_zmq::{LotCalculationMode, SyncMode};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
@@ -42,6 +43,7 @@ async fn test_config_message_size_benchmark() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: Vec::new(),
     };
 
     let minimal_json = serde_json::to_string(&minimal_config).unwrap();
@@ -101,6 +103,7 @@ async fn test_config_message_size_benchmark() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: Vec::new(),
     };
 
     let moderate_json = serde_json::to_string(&moderate_config).unwrap();
@@ -199,6 +202,7 @@ async fn test_config_message_size_benchmark() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: Vec::new(),
     };
 
     let max_json = serde_json::to_string(&max_config).unwrap();
@@ -281,6 +285,7 @@ async fn test_estimate_parsing_performance() {
         max_signal_delay_ms: 5000,
         use_pending_order_for_delayed: false,
         allow_new_orders: true,
+        warning_codes: Vec::new(),
     };
 
     let json = serde_json::to_string(&config).unwrap();

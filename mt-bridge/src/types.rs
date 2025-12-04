@@ -111,6 +111,9 @@ pub struct SlaveConfigMessage {
     /// Allow opening new orders (derived from status: true when status > 0)
     #[serde(default = "default_allow_new_orders")]
     pub allow_new_orders: bool,
+    /// Detailed warning codes to help UI/EA show root causes (empty when healthy)
+    #[serde(default)]
+    pub warning_codes: Vec<WarningCode>,
 }
 
 fn default_max_retries() -> i32 {
@@ -137,6 +140,50 @@ pub struct MasterConfigMessage {
     pub symbol_suffix: Option<String>,
     pub config_version: u32,
     pub timestamp: String, // ISO 8601 format
+    /// Warning codes describing why master is disabled (if any)
+    #[serde(default)]
+    pub warning_codes: Vec<WarningCode>,
+}
+
+/// Warning codes that describe why a runtime status is degraded/disabled.
+/// Lower priority values indicate higher severity (displayed first in UI).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WarningCode {
+    SlaveWebUiDisabled,
+    SlaveOffline,
+    SlaveAutoTradingDisabled,
+    MasterWebUiDisabled,
+    MasterOffline,
+    MasterAutoTradingDisabled,
+    MasterClusterDegraded,
+    NoMasterAssigned,
+}
+
+impl WarningCode {
+    /// Returns the display priority of this warning code.
+    /// Lower values = higher priority (should be displayed first).
+    /// Slave-side issues have higher priority than Master-side issues.
+    pub fn priority(&self) -> u8 {
+        match self {
+            // Slave-side issues (highest priority - user can fix these directly)
+            WarningCode::SlaveWebUiDisabled => 10,
+            WarningCode::SlaveOffline => 20,
+            WarningCode::SlaveAutoTradingDisabled => 30,
+            // Master-side issues (medium priority)
+            WarningCode::MasterWebUiDisabled => 40,
+            WarningCode::MasterOffline => 50,
+            WarningCode::MasterAutoTradingDisabled => 60,
+            // Configuration issues (lowest priority)
+            WarningCode::NoMasterAssigned => 70,
+            WarningCode::MasterClusterDegraded => 80,
+        }
+    }
+
+    /// Sort warning codes by priority (lowest priority value first).
+    pub fn sort_by_priority(codes: &mut [WarningCode]) {
+        codes.sort_by_key(|c| c.priority());
+    }
 }
 
 /// Unregistration message structure
@@ -270,7 +317,7 @@ pub struct SyncRequestMessage {
 // =============================================================================
 
 /// VictoriaLogs configuration message
-/// Broadcasted to all EAs on "vlogs_config" topic
+/// Broadcasted to all EAs on "config/global" topic
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VLogsConfigMessage {
     /// Whether VictoriaLogs logging is enabled
