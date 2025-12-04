@@ -97,7 +97,7 @@ impl SlaveEaSimulator {
     /// ## MQL5 Socket Architecture
     /// - `g_zmq_trade_socket` (SUB): Trade signals from server
     /// - `g_zmq_config_socket` (SUB): Config/VLogs/PositionSnapshot from server
-    /// Both connect to the same unified PUB address (port 5556).
+    ///   Both connect to the same unified PUB address (port 5556).
     pub fn new(
         push_address: &str,
         config_address: &str,
@@ -220,7 +220,7 @@ impl SlaveEaSimulator {
 
                 // 3. Heartbeat判定 (MQL5 L251-252)
                 let now = Instant::now();
-                let last_hb = g_last_heartbeat.lock().unwrap().clone();
+                let last_hb = *g_last_heartbeat.lock().unwrap();
                 let should_send_heartbeat = match last_hb {
                     None => true, // 最初のHeartbeat
                     Some(last) => {
@@ -400,8 +400,7 @@ impl SlaveEaSimulator {
                                     }
 
                                     // Subscribe to sync/{master}/{slave} topic for PositionSnapshot
-                                    let sync_topic =
-                                        format!("sync/{}/{}", master_acc, account_id);
+                                    let sync_topic = format!("sync/{}/{}", master_acc, account_id);
                                     let sync_topic_utf16: Vec<u16> =
                                         sync_topic.encode_utf16().chain(Some(0)).collect();
                                     unsafe {
@@ -653,11 +652,7 @@ impl SlaveEaSimulator {
     /// Can be called early in tests to ensure subscription is active before
     /// messages are sent (avoids ZMQ "slow joiner" issues).
     pub fn subscribe_to_sync_topic(&self) -> Result<()> {
-        let sync_topic = format!(
-            "sync/{}/{}",
-            self.master_account,
-            self.base.account_id()
-        );
+        let sync_topic = format!("sync/{}/{}", self.master_account, self.base.account_id());
         self.base.subscribe_to_topic(&sync_topic)
     }
 

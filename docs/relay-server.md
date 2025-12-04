@@ -478,12 +478,14 @@ sequenceDiagram
 |------------|------|--------|
 | `config/{account_id}` | Master/Slave設定配布 | 特定EA |
 | `trade/{master_account}/{slave_account}` | トレードシグナル配信 | 特定Slave |
+| `sync/{master_account}/{slave_account}` | PositionSnapshot/SyncRequest | 特定Master-Slave間 |
 | `config/global` | VictoriaLogs設定等 | 全EA |
 
 **例**:
 - Master設定: `config/IC_Markets_123456`
 - Slave設定: `config/XM_789012`
 - トレードシグナル: `trade/IC_Markets_123456/XM_789012`
+- 同期プロトコル: `sync/IC_Markets_123456/XM_789012`
 
 ### 8.3 メッセージフォーマット
 
