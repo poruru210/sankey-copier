@@ -184,6 +184,8 @@ classDiagram
 - Trade: `trade/{master_id}/{slave_id}`
 - Sync: `sync/{master_id}/{slave_id}`
 
+注: 同一の PUB ソケット (unified PUB) で複数のトピックを配信する方式を採っています。トピックは論理的なルーティング文字列です。
+
 ソケットタイプ:
 - `ZMQ_PUB` = 1
 - `ZMQ_SUB` = 2

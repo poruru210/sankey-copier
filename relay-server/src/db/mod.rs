@@ -9,6 +9,7 @@ use sqlx::{sqlite::SqlitePool, Row};
 // Submodule declarations
 mod config_distribution;
 mod global_settings;
+mod send_failures;
 mod trade_group_members;
 mod trade_groups;
 
@@ -128,6 +129,41 @@ impl Database {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create failed_outgoing_messages table to persist ZMQ send failures
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS failed_outgoing_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                error TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                processed INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create failed_outgoing_dead_letters table to store items that reached max retries
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS failed_outgoing_dead_letters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER NOT NULL,
+                topic TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                error TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                moved_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             "#,
         )
