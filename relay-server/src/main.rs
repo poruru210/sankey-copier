@@ -127,14 +127,30 @@ async fn main() -> Result<()> {
         .expect("Failed to install rustls crypto provider");
 
     // Determine config directory from CONFIG_DIR environment variable
-    // If CONFIG_DIR is set, use that directory; otherwise use current directory
-    let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| ".".to_string());
+    // If CONFIG_DIR is set, use that directory
+    // Otherwise, use the directory containing the executable (for Windows service support)
+    // Fallback to current directory if executable path cannot be determined
+    let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| ".".to_string())
+    });
     let config_base = format!("{}/config", config_dir);
+
+    // Log the resolved config path for debugging
+    eprintln!(
+        "Config directory: {}, config base: {}",
+        config_dir, config_base
+    );
 
     // Load configuration first (needed for file logging setup)
     // Loads config.toml, config.dev.toml, and config.local.toml (if they exist)
     let config = match Config::from_file(&config_base) {
-        Ok(cfg) => cfg,
+        Ok(cfg) => {
+            eprintln!("Configuration loaded successfully from {}", config_base);
+            cfg
+        }
         Err(e) => {
             eprintln!("Failed to load configuration: {}, using defaults", e);
             Config::default()
