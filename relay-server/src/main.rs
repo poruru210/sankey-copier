@@ -126,9 +126,14 @@ async fn main() -> Result<()> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // Determine config directory from CONFIG_DIR environment variable
+    // If CONFIG_DIR is set, use that directory; otherwise use current directory
+    let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| ".".to_string());
+    let config_base = format!("{}/config", config_dir);
+
     // Load configuration first (needed for file logging setup)
     // Loads config.toml, config.dev.toml, and config.local.toml (if they exist)
-    let config = match Config::from_file("config") {
+    let config = match Config::from_file(&config_base) {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("Failed to load configuration: {}, using defaults", e);
@@ -236,11 +241,20 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Resolve ZeroMQ ports (dynamic or fixed)
+    // Resolve ports (HTTP and ZeroMQ, dynamic or fixed)
+    // runtime.toml is stored in CONFIG_DIR (or current directory)
+    let runtime_toml_path = format!("{}/runtime.toml", config_dir);
     let resolved_ports =
-        port_resolver::resolve_ports(&config.zeromq, port_resolver::RUNTIME_CONFIG_PATH)?;
+        port_resolver::resolve_ports(&config.server, &config.zeromq, &runtime_toml_path)?;
 
-    tracing::info!("Server will listen on: {}", config.server_address());
+    // Update server address if port was dynamically assigned
+    let server_address = if resolved_ports.is_dynamic && config.server.port == 0 {
+        format!("{}:{}", config.server.host, resolved_ports.http_port)
+    } else {
+        config.server_address()
+    };
+
+    tracing::info!("Server will listen on: {}", server_address);
     tracing::info!(
         "ZMQ Receiver: {} (port {})",
         resolved_ports.receiver_address(),
@@ -264,8 +278,10 @@ async fn main() -> Result<()> {
     tracing::info!("TLS certificate ready");
 
     // Initialize database
-    let db = Arc::new(Database::new(&config.database.url).await?);
-    tracing::info!("Database initialized");
+    // DATABASE_URL environment variable overrides config.toml setting
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| config.database.url.clone());
+    let db = Arc::new(Database::new(&database_url).await?);
+    tracing::info!("Database initialized: {}", database_url);
 
     // Create VLogsController if VictoriaLogs is configured
     // Uses config.toml settings directly (no DB override)
@@ -442,7 +458,8 @@ async fn main() -> Result<()> {
 
     // Start HTTPS server
     tracing::info!("Getting bind address...");
-    let bind_address = config.server_address();
+    // Use the resolved address (which handles dynamic port assignment)
+    let bind_address = server_address;
     tracing::info!("Bind address: {}, loading TLS certificate...", bind_address);
 
     // Load TLS certificate and key

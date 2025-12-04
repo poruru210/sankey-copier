@@ -122,9 +122,23 @@ impl MessageHandler {
                     );
                 }
 
+                tracing::info!(
+                    master = %account_id,
+                    is_new_registration = is_new_registration,
+                    trade_allowed_changed = trade_allowed_changed,
+                    "Master heartbeat: notifying connected Slaves"
+                );
+
                 // Get all Slaves connected to this Master
                 match self.db.get_members(&account_id).await {
                     Ok(members) => {
+                        tracing::info!(
+                            master = %account_id,
+                            member_count = members.len(),
+                            "Found {} Slaves connected to this Master",
+                            members.len()
+                        );
+
                         // Track which Slaves we've already processed to avoid duplicates
                         let mut processed_slaves = std::collections::HashSet::new();
 
@@ -280,13 +294,17 @@ impl MessageHandler {
                 }
             }
 
-            // Update DB status for all slaves based on master connection state
-            // Only if master is now CONNECTED
+            // Safety net: Bulk update DB status for all enabled slaves when Master is CONNECTED
+            // This handles edge cases where per-connection evaluation is skipped:
+            // - is_new_registration=false (Master already in connection_manager)
+            // - trade_allowed_changed=false (same value as before)
+            // TODO: Consider extending per-connection evaluation to always run when Master is CONNECTED,
+            //       which would make this bulk update redundant.
             if master_status == STATUS_CONNECTED {
                 match self.db.update_master_statuses_connected(&account_id).await {
                     Ok(count) if count > 0 => {
                         tracing::info!(
-                            "Master {} connected: updated {} settings to CONNECTED",
+                            "Master {} connected: updated {} settings to CONNECTED (bulk update)",
                             account_id,
                             count
                         );

@@ -115,21 +115,27 @@ pub async fn toggle_vlogs_enabled(
         "Updated VictoriaLogs runtime state"
     );
 
-    // Save enabled state to config.toml for persistence across restarts
-    if let Err(e) = update_victoria_logs_enabled(request.enabled, "config.toml") {
+    // Save enabled state to config file for persistence across restarts
+    // Respects CONFIG_DIR and CONFIG_ENV environment variables
+    let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| ".".to_string());
+    let config_base = format!("{}/config", config_dir);
+    
+    if let Err(e) = update_victoria_logs_enabled(request.enabled, &config_base) {
         tracing::error!(
             error = %e,
-            "Failed to persist VictoriaLogs enabled state to config.toml"
+            config_base = %config_base,
+            "Failed to persist VictoriaLogs enabled state to config file"
         );
         return Err(ProblemDetails::internal_error(format!(
-            "Failed to update config.toml: {}",
+            "Failed to update config file: {}",
             e
         )));
     }
 
     tracing::info!(
         enabled = request.enabled,
-        "VictoriaLogs enabled state saved to config.toml"
+        config_base = %config_base,
+        "VictoriaLogs enabled state saved to config file"
     );
 
     // Build settings for broadcast

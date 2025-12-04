@@ -61,6 +61,7 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
 
     // Create default resolved ports for testing (2-port architecture)
     let resolved_ports = Arc::new(ResolvedPorts {
+        http_port: 3000,
         receiver_port: 5555,
         sender_port: port, // Use the same port as the config_sender/publisher
         is_dynamic: false,

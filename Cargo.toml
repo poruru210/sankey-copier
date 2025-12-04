@@ -2,7 +2,7 @@
 # Root configuration for all Rust projects in the monorepo
 
 [workspace]
-members = ["mt-bridge", "relay-server"]
+members = ["mt-bridge", "relay-server", "e2e-tests"]
 exclude = ["tray-app", "desktop-app/src-tauri"]
 resolver = "2"
 

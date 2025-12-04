@@ -35,6 +35,7 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
 
     // 2-port architecture: receiver and unified publisher
     let resolved_ports = Arc::new(ResolvedPorts {
+        http_port: 3000,
         receiver_port: 5555,
         sender_port: 5556,
         is_dynamic: false,

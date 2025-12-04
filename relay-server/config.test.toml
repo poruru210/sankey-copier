@@ -1,0 +1,43 @@
+# E2E Test Configuration
+# Usage: CONFIG_ENV=test cargo run -p sankey-copier-relay-server
+#
+# This configuration is optimized for E2E testing:
+# - In-memory SQLite database (no persistence between runs)
+# - Dynamic port allocation (avoids port conflicts in parallel tests)
+# - Minimal logging (faster test execution)
+# - CORS disabled (simplifies test setup)
+
+[server]
+host = "127.0.0.1"
+port = 0  # Dynamic port allocation
+
+[webui]
+host = "127.0.0.1"
+port = 0
+url = "http://localhost:8080"
+
+[database]
+# File-based SQLite for E2E tests (allows test process to seed data)
+# The test harness will delete this file before/after tests
+url = "sqlite://e2e_test.db?mode=rwc"
+
+[zeromq]
+receiver_port = 0    # Dynamic port allocation
+sender_port = 0      # Dynamic port allocation
+timeout_seconds = 5  # Shorter timeout for faster test failures
+
+[cors]
+disable = true
+
+[logging]
+enabled = false  # Disable file logging for tests
+
+[tls]
+# Use default auto-generated certificates
+cert_path = "certs/server.pem"
+key_path = "certs/server-key.pem"
+validity_days = 1  # Short validity for tests
+
+[victoria_logs]
+enabled = false  # Disable VictoriaLogs for tests
+host = "http://localhost:9428"  # Dummy host for API tests (no actual VLogs server needed)
