@@ -16,9 +16,9 @@ mod victoria_logs;
 mod zeromq;
 
 use anyhow::Result;
+use chrono::TimeZone;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::TimeZone;
 use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -34,7 +34,7 @@ use models::EaType;
 use runtime_status_updater::RuntimeStatusMetrics;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
-use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer, SendFailure};
+use zeromq::{SendFailure, ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -343,9 +343,10 @@ async fn main() -> Result<()> {
     // Create a failure channel to persist send failures into the database
     let (failure_tx, mut failure_rx) = mpsc::unbounded_channel::<SendFailure>();
 
-    let zmq_publisher = Arc::new(
-        ZmqConfigPublisher::new_with_failure_sender(&resolved_ports.sender_address(), failure_tx)?,
-    );
+    let zmq_publisher = Arc::new(ZmqConfigPublisher::new_with_failure_sender(
+        &resolved_ports.sender_address(),
+        failure_tx,
+    )?);
     tracing::info!(
         "ZeroMQ unified publisher started on {}",
         resolved_ports.sender_address()
@@ -357,10 +358,19 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             while let Some(failure) = failure_rx.recv().await {
                 match db_clone
-                    .record_failed_send(&failure.topic, &failure.payload, &failure.error, failure.attempts)
+                    .record_failed_send(
+                        &failure.topic,
+                        &failure.payload,
+                        &failure.error,
+                        failure.attempts,
+                    )
                     .await
                 {
-                    Ok(id) => tracing::info!("Persisted failed ZMQ send id={} topic={}", id, failure.topic),
+                    Ok(id) => tracing::info!(
+                        "Persisted failed ZMQ send id={} topic={}",
+                        id,
+                        failure.topic
+                    ),
                     Err(e) => tracing::error!("Failed to persist ZMQ send failure: {}", e),
                 }
             }
@@ -396,14 +406,20 @@ async fn main() -> Result<()> {
                             }
 
                             // Parse updated_at (SQLite CURRENT_TIMESTAMP format: "YYYY-MM-DD HH:MM:SS")
-                            let ok_to_try = if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(&updated_at, "%Y-%m-%d %H:%M:%S") {
+                            let ok_to_try = if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(
+                                &updated_at,
+                                "%Y-%m-%d %H:%M:%S",
+                            ) {
                                 let last = chrono::Utc.from_utc_datetime(&naive);
-                                let elapsed_secs = chrono::Utc::now().signed_duration_since(last).num_seconds();
+                                let elapsed_secs =
+                                    chrono::Utc::now().signed_duration_since(last).num_seconds();
                                 // exponential backoff: BASE * 2^(attempts)
                                 let pow = attempts.max(0) as u32;
                                 let factor = 2u64.pow(pow);
                                 let mut backoff = BASE_BACKOFF_SECS.saturating_mul(factor);
-                                if backoff > MAX_BACKOFF_SECS { backoff = MAX_BACKOFF_SECS; }
+                                if backoff > MAX_BACKOFF_SECS {
+                                    backoff = MAX_BACKOFF_SECS;
+                                }
                                 elapsed_secs >= backoff as i64
                             } else {
                                 // If parsing fails, be permissive and try
@@ -417,17 +433,29 @@ async fn main() -> Result<()> {
                             // Try to resend preserved MessagePack payload
                             match publisher_clone.publish_raw(&topic, &payload).await {
                                 Ok(_) => {
-                                    if let Ok(rows) = db_clone.mark_failed_send_processed(id).await {
+                                    if let Ok(rows) = db_clone.mark_failed_send_processed(id).await
+                                    {
                                         if rows > 0 {
                                             tracing::info!("Retried and cleared failed send id={} topic={} attempts={}", id, topic, attempts);
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::warn!("Retrying failed send id={} topic={} failed: {}", id, topic, e);
+                                    tracing::warn!(
+                                        "Retrying failed send id={} topic={} failed: {}",
+                                        id,
+                                        topic,
+                                        e
+                                    );
                                     // Record that we attempted another retry
-                                    if let Err(err) = db_clone.increment_failed_send_attempts(id).await {
-                                        tracing::error!("Failed to increment retry attempts for id={} : {}", id, err);
+                                    if let Err(err) =
+                                        db_clone.increment_failed_send_attempts(id).await
+                                    {
+                                        tracing::error!(
+                                            "Failed to increment retry attempts for id={} : {}",
+                                            id,
+                                            err
+                                        );
                                     }
                                 }
                             }

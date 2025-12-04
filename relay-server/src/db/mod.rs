@@ -9,8 +9,8 @@ use sqlx::{sqlite::SqlitePool, Row};
 // Submodule declarations
 mod config_distribution;
 mod global_settings;
-mod trade_group_members;
 mod send_failures;
+mod trade_group_members;
 mod trade_groups;
 
 // Re-export all public items

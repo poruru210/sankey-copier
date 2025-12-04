@@ -13,13 +13,17 @@ async fn test_failure_persist_and_retry_flow() {
     let (failure_tx, mut failure_rx) = tokio::sync::mpsc::unbounded_channel::<SendFailure>();
 
     // Create publisher (bind to ephemeral address)
-    let publisher = Arc::new(ZmqConfigPublisher::new_with_failure_sender("tcp://127.0.0.1:*", failure_tx).unwrap());
+    let publisher = Arc::new(
+        ZmqConfigPublisher::new_with_failure_sender("tcp://127.0.0.1:*", failure_tx).unwrap(),
+    );
 
     // Spawn persister task (similar to main.rs wiring)
     let db_clone = db.clone();
     let persister = tokio::spawn(async move {
         while let Some(fail) = failure_rx.recv().await {
-            let _ = db_clone.record_failed_send(&fail.topic, &fail.payload, &fail.error, fail.attempts).await;
+            let _ = db_clone
+                .record_failed_send(&fail.topic, &fail.payload, &fail.error, fail.attempts)
+                .await;
         }
     });
 
@@ -44,7 +48,15 @@ async fn test_failure_persist_and_retry_flow() {
 
     // Send failure via a plain mpsc::unbounded channel is done by the publisher in runtime.
     // Instead, simulate by calling record_failed_send directly to assert the persistence and retry flow.
-    let id = db.record_failed_send(&simulated.topic, &simulated.payload, &simulated.error, simulated.attempts).await.unwrap();
+    let id = db
+        .record_failed_send(
+            &simulated.topic,
+            &simulated.payload,
+            &simulated.error,
+            simulated.attempts,
+        )
+        .await
+        .unwrap();
     assert!(id > 0);
 
     // Ensure the item is present

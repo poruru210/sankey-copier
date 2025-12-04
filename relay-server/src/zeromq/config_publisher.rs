@@ -5,11 +5,11 @@
 
 use anyhow::{Context, Result};
 use sankey_copier_zmq::{build_trade_topic, ConfigMessage}; // Trait
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 use crate::models::TradeSignal;
 
@@ -99,7 +99,12 @@ impl ZmqPublisher {
                             break;
                         }
                         Err(e) => {
-                            tracing::error!("Failed to send ZMQ message to topic '{}' (attempt={}): {}", msg.topic, attempt, e);
+                            tracing::error!(
+                                "Failed to send ZMQ message to topic '{}' (attempt={}): {}",
+                                msg.topic,
+                                attempt,
+                                e
+                            );
                             if attempt <= MAX_RETRIES {
                                 std::thread::sleep(Duration::from_millis(50));
                                 continue;
@@ -111,7 +116,11 @@ impl ZmqPublisher {
                 }
 
                 if !sent_ok {
-                    tracing::error!("ZMQ message to topic '{}' failed after {} attempts", msg.topic, MAX_RETRIES + 1);
+                    tracing::error!(
+                        "ZMQ message to topic '{}' failed after {} attempts",
+                        msg.topic,
+                        MAX_RETRIES + 1
+                    );
                 }
             }
 
@@ -186,7 +195,12 @@ impl ZmqPublisher {
                             break;
                         }
                         Err(e) => {
-                            tracing::error!("Failed to send ZMQ message to topic '{}' (attempt={}): {}", msg.topic, attempt, e);
+                            tracing::error!(
+                                "Failed to send ZMQ message to topic '{}' (attempt={}): {}",
+                                msg.topic,
+                                attempt,
+                                e
+                            );
                             if attempt <= MAX_RETRIES {
                                 std::thread::sleep(Duration::from_millis(50));
                                 continue;
@@ -206,7 +220,11 @@ impl ZmqPublisher {
                 }
 
                 if !sent_ok {
-                    tracing::error!("ZMQ message to topic '{}' failed after {} attempts", msg.topic, MAX_RETRIES + 1);
+                    tracing::error!(
+                        "ZMQ message to topic '{}' failed after {} attempts",
+                        msg.topic,
+                        MAX_RETRIES + 1
+                    );
                 }
             }
 

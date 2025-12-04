@@ -25,7 +25,10 @@ impl Database {
         Ok(res.last_insert_rowid())
     }
 
-    pub async fn fetch_pending_failed_sends(&self, limit: i64) -> Result<Vec<(i64, String, Vec<u8>, i32, String)>> {
+    pub async fn fetch_pending_failed_sends(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<(i64, String, Vec<u8>, i32, String)>> {
         let rows = sqlx::query(
             "SELECT id, topic, payload, attempts, updated_at FROM failed_outgoing_messages WHERE processed = 0 ORDER BY created_at LIMIT ?",
         )
@@ -47,7 +50,6 @@ impl Database {
     }
 
     pub async fn move_failed_to_dead_letter(&self, id: i64) -> Result<usize> {
-
         // Insert a copy into dead letters and mark original as processed
         sqlx::query(
             "INSERT INTO failed_outgoing_dead_letters (original_id, topic, payload, error, attempts) SELECT id, topic, payload, error, attempts FROM failed_outgoing_messages WHERE id = ?",
