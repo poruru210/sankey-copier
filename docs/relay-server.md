@@ -2,7 +2,9 @@
 
 トレードコピーシステムの中核となるRust製サーバー。MT4/MT5のEAとweb-ui間の仲介役として、設定管理・トレードシグナルの中継・接続管理を行う。
 
-## 責務
+## 1. 概要
+
+### 1.1 責務
 
 1. **EA接続管理**: Master/Slave EAのHeartbeatを受信し、接続状態を追跡
 2. **設定配布**: web-uiからの設定変更をEAにリアルタイム配信
@@ -10,7 +12,7 @@
 4. **REST API提供**: web-uiへの設定・接続情報APIを提供
 5. **WebSocket通知**: リアルタイムイベントをweb-uiにブロードキャスト
 
-## アーキテクチャ
+### 1.2 アーキテクチャ
 
 ```mermaid
 graph TB
@@ -57,11 +59,17 @@ graph TB
     WS -->|Events| UI
 ```
 
-## ディレクトリ構造
+---
+
+## 2. ディレクトリ構造
 
 ```
 relay-server/
+├── src/
+│   ├── main.rs                    # エントリポイント
 │   ├── config.rs                  # TOML設定管理
+│   ├── config_builder.rs          # ConfigMessage生成
+│   ├── runtime_status_updater.rs  # Status Engine サービス
 │   ├── cert.rs                    # TLS証明書管理
 │   ├── api/                       # REST APIエンドポイント
 │   │   ├── mod.rs                 # ルータ定義
@@ -73,7 +81,8 @@ relay-server/
 │   ├── models/                    # データモデル
 │   │   ├── connection.rs          # EaConnection
 │   │   ├── trade_group.rs         # TradeGroup (Master)
-│   │   └── trade_group_member.rs  # TradeGroupMember (Slave)
+│   │   ├── trade_group_member.rs  # TradeGroupMember (Slave)
+│   │   └── status_engine.rs       # Status Engine ロジック
 │   ├── db/                        # データベース操作
 │   │   ├── trade_groups.rs        # TradeGroup CRUD
 │   │   ├── trade_group_members.rs # Member CRUD
@@ -89,13 +98,16 @@ relay-server/
 │       ├── mod.rs                 # MessageHandler
 │       ├── heartbeat.rs           # Heartbeat処理
 │       ├── trade_signal.rs        # トレードシグナル処理
-│       └── config_request.rs      # 設定リクエスト処理
+│       ├── config_request.rs      # 設定リクエスト処理
+│       └── unregister.rs          # 切断処理
 ├── config.toml                    # 本番設定
 ├── config.dev.toml                # 開発環境設定
 └── Cargo.toml
 ```
 
-## データモデル
+---
+
+## 3. データモデル
 
 ```mermaid
 classDiagram
@@ -116,7 +128,9 @@ classDiagram
     class TradeGroup {
         +String id
         +MasterSettings master_settings
+        +bool enabled_flag
         +i32 master_runtime_status
+        +Vec~WarningCode~ warning_codes
         +String created_at
         +String updated_at
     }
@@ -132,9 +146,9 @@ classDiagram
         +String trade_group_id
         +String slave_account
         +SlaveSettings slave_settings
-        +i32 status
-        +i32 runtime_status
         +bool enabled_flag
+        +i32 runtime_status
+        +Vec~WarningCode~ warning_codes
         +String created_at
         +String updated_at
     }
@@ -153,26 +167,132 @@ classDiagram
         +u32 config_version
     }
 
-    class TradeSignal {
-        +TradeAction action
-        +i64 ticket
-        +Option~String~ symbol
-        +Option~OrderType~ order_type
-        +Option~f64~ lots
-        +Option~f64~ open_price
-        +Option~f64~ stop_loss
-        +Option~f64~ take_profit
-        +String source_account
-    }
-
     TradeGroup "1" --> "1" MasterSettings
     TradeGroup "1" --> "*" TradeGroupMember
     TradeGroupMember "1" --> "1" SlaveSettings
-
-    note for EaConnection "status: 0=DISABLED, 1=ENABLED, 2=CONNECTED"
 ```
 
-## REST APIエンドポイント
+---
+
+## 4. Status Engine
+
+Status Engine は Master/Slave の実効ステータスを算出する中核ロジックです。ユーザー意図 (`enabled_flag`) と接続状態 (Heartbeat) を組み合わせて `runtime_status` を決定します。
+
+### 4.1 ステータス値の定義
+
+| 値 | 名称 | 対象 | 説明 |
+|----|------|------|------|
+| -1 | NO_CONFIG | Master/Slave | 設定未受信またはリセット状態 |
+| 0 | DISABLED | Master/Slave | 無効化（Web UI OFF または EA自動売買OFF） |
+| 1 | ENABLED | Slave専用 | Slave準備完了だがMasterが未接続 |
+| 2 | CONNECTED | Master/Slave | 完全に有効（トレード実行可能） |
+
+### 4.2 Master 判定ロジック
+
+**判定要素**:
+1. **Web UI Switch**: `enabled_flag` が ON/OFF か
+2. **EA接続状態**: Heartbeat を受信しているか（オンライン/オフライン）
+3. **EA自動売買許可**: MT4/MT5で自動売買が許可されているか (`is_trade_allowed`)
+
+**判定ルール**:
+
+| Web UI Switch | 接続状態 | EA自動売買 | ステータス | 説明 |
+|:-------------:|:--------:|:----------:|:----------:|------|
+| ❌ OFF | - | - | `DISABLED (0)` | Web UIでOFF |
+| ✅ ON | オフライン | - | `DISABLED (0)` | EA未接続 |
+| ✅ ON | オンライン | ❌ OFF | `DISABLED (0)` | EA自動売買がOFF |
+| ✅ ON | オンライン | ✅ ON | `CONNECTED (2)` | トレードシグナル送信可能 |
+
+**実装**: `relay-server/src/models/status_engine.rs` の `evaluate_master_status()`
+
+### 4.3 Slave 判定ロジック
+
+**判定要素**:
+1. **Slave自体の条件**: Web UI Switch、接続状態
+2. **接続Masterの状態**: 各Masterが `CONNECTED` か `DISABLED` か
+
+**判定ルール**:
+
+| Slave条件 | Masterクラスター状態 | Slaveステータス | 説明 |
+|-----------|---------------------|:---------------:|------|
+| Switch❌ または オフライン | - | `DISABLED (0)` | Slave自体が無効 |
+| Switch✅ かつ オンライン | 少なくとも1つのMasterが DISABLED | `ENABLED (1)` | Slave準備完了、シグナル待ち |
+| Switch✅ かつ オンライン | すべてのMasterが CONNECTED | `CONNECTED (2)` | コピー取引実行可能 |
+
+> **補足**: `is_trade_allowed=false`（MTの自動売買OFF）は Slave では**警告のみ**。ステータスには影響せず、注文は実行時に失敗する。
+
+**N:N接続の例** (Slave Aが Master1, Master2, Master3 に接続):
+
+| Master1 | Master2 | Master3 | Slave Aのステータス |
+|:-------:|:-------:|:-------:|:------------------:|
+| CONNECTED | CONNECTED | CONNECTED | `CONNECTED (2)` |
+| CONNECTED | CONNECTED | DISABLED | `ENABLED (1)` |
+| DISABLED | DISABLED | DISABLED | `ENABLED (1)` |
+
+**ルール**: **すべてのMasterが `CONNECTED` の場合のみ Slaveは `CONNECTED (2)`**
+
+**実装**: `relay-server/src/models/status_engine.rs` の `evaluate_slave_status()`
+
+### 4.4 allow_new_orders の決定
+
+`allow_new_orders` は Slave が新規注文を処理できるかを示すフラグです。
+
+**決定ロジック**:
+```
+allow_new_orders = web_ui_enabled && online
+```
+
+| 条件 | 説明 |
+|------|------|
+| `web_ui_enabled` | Slave の `enabled_flag` が true |
+| `online` | Slave の Heartbeat が有効（タイムアウトしていない） |
+
+> **重要**: `allow_new_orders` は **Master クラスター状態に依存しない**。シグナルが届けば処理する方針。
+
+**`runtime_status` との違い**:
+- `runtime_status`: 表示用。Master クラスター状態に依存
+- `allow_new_orders`: 実行判定用。Slave 自身の状態のみで決定
+
+### 4.5 Warning Codes リファレンス
+
+Status Engine は問題を検出すると `warning_codes` 配列に警告を追加します。
+
+| コード | 発生条件 | 推奨対応 |
+|--------|----------|----------|
+| `slave_web_ui_disabled` | Web UI で Slave が OFF | UI でトグルを ON に戻す |
+| `slave_offline` | Slave Heartbeat を受信できていない | 端末/ネットワークを確認 |
+| `slave_auto_trading_disabled` | MT4/MT5 の AlgoTrading が OFF | 「Algo Trading」ボタンを有効に |
+| `master_web_ui_disabled` | Master が OFF | Master ノードを ON に戻す |
+| `master_offline` | Master Heartbeat が失われた | Master EA を起動 |
+| `master_auto_trading_disabled` | Master 側の自動売買が OFF | Master の Algo 設定を修正 |
+| `master_cluster_degraded` | マルチ Master の一部が未接続 | すべての Master を接続 |
+| `no_master_assigned` | Slave に紐付く Master が 0 件 | Web UI で TradeGroup に Slave を追加 |
+
+---
+
+## 5. Config Builder
+
+### 5.1 概要
+
+`config_builder.rs` は `MasterConfigMessage` / `SlaveConfigMessage` の生成を担当します。Heartbeat・REST API・config_request・unregister のすべての経路で同じステータス計算ロジックを使用します。
+
+### 5.2 RuntimeStatusUpdater サービス
+
+`runtime_status_updater.rs` は Status Engine のエントリポイントです。
+
+**処理フロー**:
+1. Heartbeat / Timeout / Intent API / RequestConfig / Unregister がトリガー
+2. `master_cluster_snapshot` と `slave_connection_snapshot` を取得
+3. Status Engine で `runtime_status` と `warning_codes` を算出
+4. DB 更新、ZMQ 配信、WebSocket broadcast を一括実行
+
+**メトリクス**: 評価回数・失敗率は `RuntimeStatusMetrics` に記録され、API で公開されます。
+
+---
+
+## 6. REST API
+
+### 6.1 エンドポイント一覧
 
 | メソッド | パス | 説明 |
 |---------|------|------|
@@ -182,6 +302,7 @@ classDiagram
 | GET | `/api/trade-groups/:id` | TradeGroup詳細取得 |
 | PUT | `/api/trade-groups/:id` | Master設定更新 |
 | DELETE | `/api/trade-groups/:id` | TradeGroup削除 |
+| POST | `/api/trade-groups/:id/toggle` | Master有効/無効切替 |
 | GET | `/api/trade-groups/:id/members` | Slave一覧取得 |
 | POST | `/api/trade-groups/:id/members` | Slave追加 |
 | PUT | `/api/trade-groups/:id/members/:slave_id` | Slave設定更新 |
@@ -189,37 +310,135 @@ classDiagram
 | POST | `/api/trade-groups/:id/members/:slave_id/toggle` | Slave有効/無効切替 |
 | GET | `/api/logs` | サーバーログ取得 |
 | GET | `/api/mt-installations` | MTインストール検出 |
-| GET | `/api/runtime-status-metrics` | RuntimeStatusUpdater が計測した評価回数/失敗率/クラスターサイズのスナップショット |
+| GET | `/api/runtime-status-metrics` | Status Engine メトリクス |
 
-### Status Engine によるフィールドの分担
+### 6.2 オブジェクトスキーマ
 
-| フィールド | 役割 | 更新主体 |
-|------------|------|-----------|
-| `enabled_flag` | ユーザー意図 (UI トグル状態)。Master/Slave とも `POST /toggle` API でのみ変更。 | Web UI / API クライアント |
-| `runtime_status` | Status Engine が算出する実効ステータス (`0=Manual OFF / 1=Standby / 2=Streaming`)。 | Relay Server (Status Engine) |
-| `master_runtime_status` | Master 単位の実効ステータス。Master ノード可視化や ZMQ Config builder に利用。 | Relay Server |
-| `warning_codes` | Master/Slave ごとの警告配列。`enum WarningCode` で型付けされ、Config/REST/WebSocket が同じ内容を返す。 | Relay Server |
+#### TradeGroup (Master)
 
-- `enabled_flag` を書き換えた後、Status Engine は最新の接続状況や EA からの Heartbeat を参照して `runtime_status`/`master_runtime_status` を再計算し、DBへ書き戻す。<br>
-- Web UI や EA は `runtime_status` 系フィールドを観測値として扱い、意図 (`enabled_flag`) と実行 (`runtime_status`) のギャップを UI/ログで可視化する。<br>
-- ZeroMQ の `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となり、Master クラスター状態には依存しない。シグナルが届けば処理する方針。
-- `warning_codes` は Nord バーの色決定や CS ログの根拠として使われ、Master 側の `MasterOffline` などクラスタ情報が含まれる。
+```jsonc
+{
+  "master_account": "MASTER_001",
+  "display_name": "My Master",
+  "enabled_flag": true,
+  "master_runtime_status": 2,
+  "warning_codes": [],
+  "members": [ ... ]
+}
+```
 
-## WebSocketイベント
+| フィールド | 説明 |
+|------------|------|
+| `enabled_flag` | ユーザー意図。`POST /toggle` で更新 |
+| `master_runtime_status` | Status Engine の結果 (0 or 2) |
+| `warning_codes` | 警告配列。空なら正常 |
 
-| イベント | 説明 |
-|---------|------|
-| `trade_received:{account}:{symbol}:{lots}` | トレード受信 |
-| `trade_copied:{account}:{symbol}:{lots}:{member}` | トレード複製完了 |
-| `ea_disconnected:{account}` | EA切断 |
-| `trade_group_updated:{json}` | TradeGroup更新 |
-| `member_added:{json}` | Member追加 |
-| `member_updated:{json}` | Member更新 |
-| `member_deleted:{id}` | Member削除 |
+#### TradeGroupMember (Slave)
 
-## ZeroMQ通信
+```jsonc
+{
+  "trade_group_id": "MASTER_001",
+  "slave_account": "SLAVE_TYO_01",
+  "enabled_flag": true,
+  "runtime_status": 1,
+  "warning_codes": ["master_cluster_degraded"],
+  "slave_settings": { ... }
+}
+```
 
-### ポート構成
+| フィールド | 説明 |
+|------------|------|
+| `enabled_flag` | ユーザー意図。`POST /toggle` で更新 |
+| `runtime_status` | Status Engine の結果 (0/1/2) |
+| `warning_codes` | Slave 用警告配列 |
+
+### 6.3 Toggle API の挙動
+
+```http
+POST /api/trade-groups/{master_account}/members/{slave_account}/toggle
+Content-Type: application/json
+
+{ "enabled": true }
+```
+
+1. `enabled_flag` を即時更新し 200 を返す
+2. Status Engine が Heartbeat/接続状況から `runtime_status` を再計算
+3. WebSocket で `member_updated` を配信
+4. Config Builder が `allow_new_orders` を含む設定を EA に送信
+
+### 6.4 Runtime Status Metrics API
+
+```http
+GET /api/runtime-status-metrics
+```
+
+**レスポンス例**:
+```json
+{
+  "master_evaluations_total": 420,
+  "master_evaluations_failed": 0,
+  "slave_evaluations_total": 1380,
+  "slave_evaluations_failed": 2,
+  "slave_bundles_built": 512,
+  "last_cluster_size": 2
+}
+```
+
+| フィールド | 説明 |
+|------------|------|
+| `master_evaluations_total` | Master 評価回数 |
+| `master_evaluations_failed` | Master 評価失敗回数 |
+| `slave_evaluations_total` | Slave 評価回数 |
+| `slave_evaluations_failed` | Slave 評価失敗回数 |
+| `slave_bundles_built` | Slave Config 生成回数 |
+| `last_cluster_size` | 直近の Master クラスターサイズ |
+
+---
+
+## 7. WebSocket
+
+### 7.1 イベント一覧
+
+| イベント | ペイロード | 説明 |
+|---------|------------|------|
+| `trade_received:{account}:{symbol}:{lots}` | - | トレード受信 |
+| `trade_copied:{account}:{symbol}:{lots}:{member}` | - | トレード複製完了 |
+| `ea_disconnected:{account}` | - | EA切断 |
+| `trade_group_updated` | `TradeGroup` JSON | Master更新 |
+| `member_added` | `TradeGroupMember` JSON | Member追加 |
+| `member_updated` | `TradeGroupMember` JSON | Member更新 |
+| `member_deleted` | `{id}` | Member削除 |
+| `settings_updated` | `SlaveConfigWithMaster` | Config再配信 |
+
+### 7.2 状態遷移タイミング
+
+```mermaid
+sequenceDiagram
+    participant User as ユーザー
+    participant UI as Web UI
+    participant API as REST API
+    participant SE as Status Engine
+    participant WS as WebSocket
+    participant EA as Slave EA
+
+    User->>UI: トグル操作
+    UI->>API: POST /toggle
+    API->>API: enabled_flag 更新
+    API->>UI: 200 OK
+
+    Note over SE: Heartbeat受信時
+    SE->>SE: runtime_status 再計算
+    SE->>WS: member_updated 配信
+    WS->>UI: runtime_status 更新
+
+    SE->>EA: Config (allow_new_orders) 送信
+```
+
+---
+
+## 8. ZeroMQ 通信
+
+### 8.1 ポート構成
 
 2ポートアーキテクチャ: Receiver (PULL) と Publisher (統合PUB) のみ使用。
 
@@ -228,71 +447,32 @@ classDiagram
 | 5555 | PULL | EA→サーバー (Heartbeat, TradeSignal等) |
 | 5556 | PUB | サーバー→EA (TradeSignal + Config 統合配信) |
 
-### メッセージフォーマット
+### 8.2 トピックルーティング
+
+| トピック形式 | 用途 | 配信先 |
+|------------|------|--------|
+| `config/{account_id}` | Master/Slave設定配布 | 特定EA |
+| `trade/{master_account}/{slave_account}` | トレードシグナル配信 | 特定Slave |
+| `config/global` | VictoriaLogs設定等 | 全EA |
+
+**例**:
+- Master設定: `config/IC_Markets_123456`
+- Slave設定: `config/XM_789012`
+- トレードシグナル: `trade/IC_Markets_123456/XM_789012`
+
+### 8.3 メッセージフォーマット
 
 すべてのメッセージはMessagePack形式でシリアライズ。
 
 ```
 PUB/SUB トピック形式: "{topic} {MessagePack payload}"
-例: "config/IC_Markets_12345 <binary data>"
 ```
 
-### トピックルーティング
-
-2ポートアーキテクチャでは、統合PUBソケット(5556)から全メッセージを配信し、トピックでフィルタリングします。
-
-#### トピック形式と用途
-
-| トピック形式 | 用途 | 配信先 | 実装箇所 |
-|------------|------|--------|---------|
-| `config/{account_id}` | Master/Slave設定配布 | 特定EA<br>※account_id = master_accountまたはslave_account | `trade_groups.rs` L311, `trade_group_members.rs` L628 |
-| `trade/{master_account}/{slave_account}` | トレードシグナル配信 | 特定Slave | `config_publisher.rs` L163 |
-| `config/global` | VictoriaLogs設定等 | 全EA | `config_publisher.rs` L138 |
-
-**例**:
-- Master設定: `config/IC_Markets_123456` (account_id = master_account)
-- Slave設定: `config/XM_789012` (account_id = slave_account)
-- トレードシグナル: `trade/IC_Markets_123456/XM_789012`
-- グローバル設定: `config/global`
-
-**注**: 
-- `account_id`は`{BrokerName}_{AccountNumber}`形式（例: `IC_Markets_123456`）
-- Master/Slaveとも同じ`config/{account_id}`形式を使用（EA側で自身のaccount_idでフィルタリング）
-
-#### 動的トピック生成（EA側）
-
-EA側ではFFI関数を使用してトピックを動的に生成します (`mt-bridge/src/ffi.rs`):
-
-```mql5
-// Master/Slave設定トピック生成
-ushort topic_buffer[256];
-int len = build_config_topic(AccountID, topic_buffer, 256);
-// 結果: "config/{AccountID}"
-// AccountID形式: "IC_Markets_123456" (BrokerName_AccountNumber)
-
-// トレードシグナルトピック生成 (Slave側)
-int len = build_trade_topic(MasterAccountID, SlaveAccountID, topic_buffer, 256);
-// 結果: "trade/{MasterAccountID}/{SlaveAccountID}"
-// 例: "trade/IC_Markets_123456/XM_789012"
-
-// グローバル設定トピック取得
-int len = get_global_config_topic(topic_buffer, 256);
-// 結果: "config/global"
-```
-
-#### ConfigMessageトレイト
-
-Relay Server側では`ConfigMessage`トレイトでトピック生成を統一 (`sankey_copier_zmq` crate):
+### 8.4 ConfigMessage トレイト
 
 ```rust
 pub trait ConfigMessage: serde::Serialize {
     fn zmq_topic(&self) -> String;
-}
-
-impl ConfigMessage for MasterConfigMessage {
-    fn zmq_topic(&self) -> String {
-        format!("config/{}", self.account_id)
-    }
 }
 
 impl ConfigMessage for SlaveConfigMessage {
@@ -302,49 +482,38 @@ impl ConfigMessage for SlaveConfigMessage {
 }
 ```
 
+---
 
-## Config Builder
+## 9. 処理フロー
 
-- `relay-server/src/config_builder.rs` が `MasterConfigMessage`/`SlaveConfigMessage` の生成を一手に引き受け、Heartbeat・REST API・config_request・unregister のすべての経路で同じステータス計算ロジックを再利用しています。
-- `status_engine.rs` から返される `MasterStatusResult`/`SlaveStatusResult` をビルダーが受け取り、Slave 設定メッセージの `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となります。Master クラスター状態は `runtime_status` の表示用のみに影響します。
-- API やハンドラはビルダーのステータス結果をデータベースの `runtime_status` に書き戻し、Web UI は `enabled_flag`（ユーザー意図）と `runtime_status`（サーバ側判定）の 2 層情報で表示しつつ、EA には `allow_new_orders` をそのまま渡せるようになりました。
-
-### RuntimeStatusUpdater サービス
-
-- `relay-server/src/runtime_status_updater.rs` に `RuntimeStatusUpdater` が追加され、Heartbeat / Timeout / Intent API / RequestConfig / Unregister のすべてがこのサービスを経由して `trade_group_members.runtime_status` を再計算します。
-- `master_cluster_snapshot` と `slave_connection_snapshot` をまとめて取得し、Config Builder で使われる `SlaveConfigBundle` を生成すると同時に DB 更新・ZMQ 配信・`warning_codes` 算出まで一貫して扱います。
-- Master/Slave 双方の評価結果は `RuntimeStatusMetrics` に記録され、`GET /api/runtime-status-metrics` エンドポイントも同じスナップショットを返します。Grafana や VictoriaLogs から呼び出すことで、Heartbeat スパイクや評価失敗を即座に検知できます。
-- `warning_codes` は Master/Slave 用の enum に整理され、`config` メッセージ / REST 応答 / WebSocket で同じ配列が共有されます。Nord バーは `warning_codes` が空でない場合に黄色へフォールバックし、EA も原因をログできるようになりました。
-
-
-## 処理フロー
-
-### Heartbeat処理
+### 9.1 Heartbeat処理
 
 ```mermaid
 sequenceDiagram
     participant EA as Master/Slave EA
     participant DLL as mt-bridge DLL
     participant RS as relay-server
-    participant CM as ConnectionManager
+    participant SE as Status Engine
     participant DB as SQLite
+    participant WS as WebSocket
 
     EA->>DLL: Heartbeat data
     DLL->>RS: ZMQ PUSH (MessagePack)
     RS->>RS: parse HeartbeatMessage
-    RS->>CM: update_heartbeat()
 
     alt 新規EA
-        CM->>CM: auto-register
-        CM->>DB: create TradeGroup (if Master)
+        RS->>DB: auto-register
     else 既存EA
-        CM->>CM: update last_heartbeat
+        RS->>RS: update last_heartbeat
     end
 
-    RS->>EA: send VLogsConfig (ZMQ PUB 5556)
+    RS->>SE: evaluate_status()
+    SE->>DB: update runtime_status
+    SE->>WS: broadcast update
+    RS->>EA: send Config (ZMQ PUB)
 ```
 
-### トレードシグナル処理
+### 9.2 トレードシグナル処理
 
 ```mermaid
 sequenceDiagram
@@ -363,7 +532,7 @@ sequenceDiagram
 
         alt フィルター通過
             CE->>CE: transform_signal()
-            Note right of CE: シンボル変換<br/>prefix/suffix適用
+            Note right of CE: シンボル変換
             RS->>SEA: ZMQ PUB (5556)
         else フィルター除外
             Note right of CE: スキップ
@@ -371,115 +540,49 @@ sequenceDiagram
     end
 ```
 
-### 設定更新フロー
+### 9.3 設定更新フロー
 
 ```mermaid
 sequenceDiagram
     participant UI as web-ui
     participant API as REST API
     participant DB as SQLite
-    participant ZMQ as ZmqConfigPublisher
+    participant SE as Status Engine
     participant EA as Slave EA
 
     UI->>API: PUT /api/trade-groups/{id}/members/{slave}
     API->>DB: update slave_settings
     API->>DB: increment config_version
-    API->>ZMQ: send_config_to_slave()
-
-    ZMQ->>ZMQ: build SlaveConfigMessage
-    Note right of ZMQ: effective_status計算<br/>Master接続状態確認
-    ZMQ->>EA: ZMQ PUB (5556 unified)
-
-    EA->>EA: 設定適用
+    API->>SE: build SlaveConfigMessage
+    SE->>SE: evaluate_status()
+    SE->>EA: ZMQ PUB (config)
 ```
 
-## ステータス判定ロジック
+---
 
-### ステータス値の定義
+## 10. CopyEngine フィルタリング
 
-| 値 | 名称 | 対象 | 説明 |
-|----|------|------|------|
-| -1 | NO_CONFIG | Master/Slave | 設定未受信またはリセット状態 |
-| 0 | DISABLED | Master/Slave | 無効化（Web UI OFF または EA自動売買OFF） |
-| 1 | ENABLED | Slave専用 | Slave有効だがMasterが未接続 |
-| 2 | CONNECTED | Master/Slave | 完全に有効（トレード実行可能） |
+### 10.1 should_copy_trade()
 
-### Masterのステータス判定
-
-**判定要素**:
-1. **Web UI Switch**: Web UI上でON/OFFが切り替えられているか
-2. **EA自動売買許可**: MT4/MT5のEA側で自動売買が許可されているか (`is_trade_allowed`)
-
-**判定ルール**:
-
-| Web UI Switch | EA自動売買 | ステータス | 説明 |
-|:-------------:|:----------:|:----------:|------|
-| ✅ ON | ✅ ON | `CONNECTED (2)` | トレードシグナル送信可能 |
-| ❌ OFF | - | `DISABLED (0)` | Web UIでOFF |
-| ✅ ON | ❌ OFF | `DISABLED (0)` | EA自動売買がOFF |
-
-**実装の所在**: `relay-server/src/models/status_engine.rs`
-
-`MasterIntent` (Web UI のトグル状態) と `ConnectionSnapshot` (Heartbeat が持つ接続状態 / `is_trade_allowed`) を `evaluate_master_status(intent, snapshot)` に渡す。Status Engine が `MasterStatusResult { status }` を返し、その値が `master_runtime_status` として DB/WebSocket に書き込まれる。
-
-### Slaveのステータス判定
-
-**判定要素**:
-1. **Slave自体の条件**:
-   - Web UI Switch (ON/OFF)
-   - EA自動売買許可 (`is_trade_allowed`)
-2. **接続Masterの状態**:
-   - 接続している各Masterが `CONNECTED` か `DISABLED` か
-
-**判定ルール**:
-
-| Slave自体の条件 | 接続Masterの状態 | Slaveのステータス | `allow_new_orders` | 説明 |
-|----------------|------------------|:----------------:|:------------------:|------|
-| Switch❌ または オフライン | - | `DISABLED (0)` | `false` | Slave自体が無効 |
-| Switch✅ かつ オンライン | **少なくとも1つのMasterが DISABLED** | `ENABLED (1)` | `true` | Slave準備完了、シグナルが届けば処理可能 |
-| Switch✅ かつ オンライン | **すべてのMasterが CONNECTED** | `CONNECTED (2)` | `true` | コピー取引実行可能 |
-
-> **重要**: `is_trade_allowed=false`（MTの自動売買OFF）は Slave では警告のみで、ステータスや `allow_new_orders` には影響しない。注文は試行され、実行時に失敗する。
-
-**実装の所在**: `relay-server/src/models/status_engine.rs`
-
-`SlaveIntent` と Slave の `ConnectionSnapshot` に加え、関連する Master の `runtime_status` を `MasterClusterSnapshot::new(vec![...])` に詰めて `evaluate_slave_status(intent, slave_conn, cluster)` を呼び出す。Cluster 内のすべてが `STATUS_CONNECTED` なら Slave も `CONNECTED`、それ以外は `ENABLED`。Status Engine は `allow_new_orders` を同時に算出し（Slave 自身の `web_ui_enabled && online` で決定）、Config Builder (`config_builder.rs`) 経由で EA に届ける。
-
-### N:N接続のサポート
-
-このシステムはMasterとSlaveのN:N接続を完全にサポートします。
-
-**例**: Slave Aが Master1, Master2, Master3 に接続している場合
-
-| Master1 | Master2 | Master3 | Slave Aのステータス |
-|:-------:|:-------:|:-------:|:------------------:|
-| CONNECTED | CONNECTED | CONNECTED | `CONNECTED (2)` |
-| CONNECTED | CONNECTED | DISABLED | `ENABLED (1)` |
-| DISABLED | DISABLED | DISABLED | `ENABLED (1)` |
-
-**ルール**: **すべてのMasterが `CONNECTED` の場合のみ Slaveは `CONNECTED (2)`、それ以外は `ENABLED (1)`**
-
-### STATUS_NO_CONFIG (-1) の用途
-
-1. **EA起動直後の初期状態**: 設定メッセージ未受信
-2. **Member削除時のリセット通知**: EAに設定削除を通知
-3. **設定エラー時のフォールバック**: 異常状態からのリカバリ
-
-## CopyEngine フィルタリング
-
-`should_copy_trade()`で以下を検証:
-1. Slaveが`CONNECTED`状態か
+以下を検証:
+1. Slaveが`CONNECTED`または`ENABLED`状態か
 2. `copy_pending_orders`設定（指値注文の場合）
 3. `source_lot_min` / `source_lot_max`
 4. `allowed_symbols` / `blocked_symbols`
 5. `allowed_magic_numbers` / `blocked_magic_numbers`
 
-`transform_signal()`で以下を変換:
+### 10.2 transform_signal()
+
+以下を変換:
 1. Masterの`symbol_prefix`/`symbol_suffix`を削除
 2. `symbol_mappings`を適用
 3. Slaveの`symbol_prefix`/`symbol_suffix`を追加
 
-## 設定ファイル
+---
+
+## 11. 設定ファイル
+
+### 11.1 config.toml
 
 ```toml
 [server]
@@ -489,7 +592,6 @@ port = 3000
 [database]
 url = "sqlite://sankey_copier.db?mode=rwc"
 
-# 2-port architecture: receiver (PULL) and sender (unified PUB)
 [zeromq]
 receiver_port = 5555
 sender_port = 5556
@@ -509,97 +611,67 @@ cert_path = "certs/server.pem"
 key_path = "certs/server-key.pem"
 ```
 
-環境別設定の優先順:
+### 11.2 環境別設定の優先順
+
 1. `config.toml` (ベース)
 2. `config.{CONFIG_ENV}.toml` (環境別)
 3. `config.local.toml` (ローカル上書き)
 
-## 動的ポート割り当て
+### 11.3 動的ポート割り当て
 
 ZeroMQポートを `0` に設定すると、OSが利用可能なポートを自動的に割り当てます。
-これにより、ポート競合を回避し、複数インスタンスの同時実行が可能になります。
-
-### 動作フロー
-
-```mermaid
-sequenceDiagram
-    participant Config as config.toml
-    participant Runtime as runtime.toml
-    participant Server as relay-server
-    participant EA as MT EA
-
-    Note over Config: receiver_port = 0<br/>sender_port = 0
-
-    Server->>Config: 設定読み込み
-    Server->>Server: ポート0検出 → 動的割り当て
-
-    alt runtime.toml存在
-        Server->>Runtime: 既存ポート読み込み
-        Server->>Server: 既存ポート再利用を試行
-        alt ポート使用可能
-            Server->>Server: 既存ポートでバインド
-        else ポート競合
-            Server->>Server: 新規ポート割り当て
-            Server->>Runtime: 新ポート保存
-        end
-    else runtime.toml不在
-        Server->>Server: 新規ポート割り当て
-        Server->>Runtime: ポート保存
-    end
-
-    Server->>EA: EAインストール時にINI生成
-    Note over EA: sankey_copier.ini<br/>ReceiverPort=xxxxx<br/>PublisherPort=xxxxx
-```
-
-### runtime.toml
-
-動的に割り当てられたポートは `runtime.toml` に永続化されます。
-次回起動時に同じポートを再利用し、EAとの設定整合性を維持します。
 
 ```toml
-# Auto-generated - DO NOT EDIT
-# Dynamic port configuration for ZeroMQ
-
 [zeromq]
-receiver_port = 15555
-sender_port = 15556
-generated_at = "2024-01-15T10:30:00Z"
+receiver_port = 0  # OS自動割り当て
+sender_port = 0    # OS自動割り当て
 ```
 
-### 設定例
+割り当てられたポートは `runtime.toml` に永続化され、次回起動時に再利用されます。
 
-**固定ポート（デフォルト）**:
-```toml
-[zeromq]
-receiver_port = 5555
-sender_port = 5556
-```
+---
 
-**動的ポート（自動割り当て）**:
-```toml
-[zeromq]
-receiver_port = 0
-sender_port = 0
-```
+## 12. 監視 Runbook
 
-### Web-UIでのポート表示
+### 12.1 Grafana 連携
 
-Settings画面のZeroMQ設定セクションで、現在使用中のポートと動的割り当て状態を確認できます。
-- `is_dynamic: true` - 動的に割り当てられたポート
-- `generated_at` - ポート生成日時（動的の場合のみ）
+1. relay-server の 3000 番ポートを監視ネットワークから疎通可能にする
+2. Grafana の JSON API データソースで設定:
+   - URL: `http://<relay-host>:3000/api/runtime-status-metrics`
+   - Method: `GET`
+   - Cache TTL: 10s
 
-### EAとの連携
+**パネル例**:
+- **Stat**: `slave_evaluations_failed` (threshold: >0 → 赤)
+- **Time series**: `slave_evaluations_total` を微分して 1 秒あたり評価回数を表示
+- **Table**: `last_cluster_size` をマルチ Master の期待値と比較
 
-MTインストール時に `sankey_copier.ini` が生成され、EAはこのファイルからポート設定を読み込みます。
-ポート変更時はEAの再インストールが必要です（Web-UI Installationsページから実行）。
+### 12.2 アラートポリシー
 
-## Phase4: MT EA のステータス同期 (P9)
+| シグナル | 条件 | 初動 |
+|----------|------|------|
+| Slave 評価失敗 | `increase(slave_evaluations_failed[5m]) > 0` | VictoriaLogs で同時刻のログを検索 |
+| Master 評価失敗連続 | `increase(master_evaluations_failed[5m]) >= 3` | `connections` API で Heartbeat 確認 |
+| クラスターサイズ急変 | `last_cluster_size` が 0 または期待値から ±2 以上 | TradeGroup 構成を確認 |
 
-- Relay Server の Status Engine は `runtime_status`/`allow_new_orders` を `ConfigBuilder` 経由で統一しているため、MT4/MT5 側はこの値をそのまま表示・実行条件として扱うべきです。
-- 詳細な作業手順・テスト計画は `plan/p9-mt-advisor-plan.md` を参照してください。現フェーズでは `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となり、`status` は Web UI に合わせた状態表示用として維持されています。
-- MT EA では `ProcessConfigMessage` で受信した `CopyConfig.status`/`allow_new_orders` を `GridPanel` に反映しつつ、`Open` シグナルは `allow_new_orders` を起点に、`Close`/`Modify` は常に許可する動作でサーバ側判定と整合させます。
+### 12.3 トリアージ手順
 
-## 関連コンポーネント
+1. **API 健全性**: `curl http://localhost:3000/api/runtime-status-metrics` で 200/JSON を確認
+2. **ログ確認**: `relay-server/logs/*.log` または VictoriaLogs で `target="runtime_status"` を検索
+3. **ZeroMQ/DB**: `RuntimeStatusUpdater` のログで `db_pool` や `connection_manager` の警告を確認
+4. **再評価トリガ**: `RequestConfig` を Slave から手動送信し、RuntimeStatusUpdater が反映されるか観測
+
+### 12.4 既知の閾値
+
+| メトリクス | 閾値 | 対応 |
+|------------|------|------|
+| `slave_evaluations_total` | 1秒あたり 20 回超 | 過剰。原因調査 |
+| `master_evaluations_failed` | > 1 | Slack #alert-runtime-status に通知 |
+| `last_cluster_size` | 0 が 30 秒継続 | `no_master_assigned` の可能性 |
+
+---
+
+## 13. 関連ドキュメント
 
 - [mt-bridge](./mt-bridge.md): EA↔サーバー通信用DLL
 - [mt-advisors](./mt-advisors.md): MT4/MT5用EA

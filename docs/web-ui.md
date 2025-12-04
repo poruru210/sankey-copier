@@ -486,8 +486,51 @@ try {
 }
 ```
 
+## Status Engine UI 表示ルール
+
+relay-server の Status Engine が算出した `runtime_status` と `warning_codes` を UI に反映するルールを定義します。
+
+### ステータスバッジ
+
+`AccountNodeHeader.tsx` でノードヘッダーに表示:
+
+| `runtime_status` | ラベル | バッジ色 | 条件 |
+|------------------|--------|----------|------|
+| 2 (CONNECTED) | Master: `配信中` / Slave: `受信中` | `bg-emerald-500` | `account.isActive` が true |
+| 1 (ENABLED) | `待機中` | `bg-amber-100` | Slave のみ。Master 未接続 |
+| 0 (DISABLED) | `手動OFF` | `bg-gray-200` | Web UI OFF またはオフライン |
+
+### Nord ステータスバー
+
+`StatusIndicatorBar.tsx` でノード下部に表示:
+
+| 判定要素 | バー色 | 優先度 |
+|----------|--------|--------|
+| `hasWarning=true` | `bg-yellow-500` | 最優先 |
+| `runtime_status=2` | `bg-green-500` | 2番目 |
+| `runtime_status=1` | `bg-amber-500` | 3番目 |
+| `runtime_status=0` | `bg-gray-300` | 最低 |
+
+> `warning_codes` が空でない場合、`hasWarning=true` となりバーが黄色に強制変更されます。
+
+### Warning Codes のツールチップ表示
+
+`warning_codes` 配列の各コードを翻訳してツールチップに表示:
+
+```typescript
+// 例: warning_codes = ["master_cluster_degraded", "slave_auto_trading_disabled"]
+// → ツールチップ: "一部のMasterが未接続です / 自動売買がOFFです"
+```
+
+### 状態更新フロー
+
+1. WebSocket で `member_updated` / `trade_group_updated` を受信
+2. `connectionsAtom` / `settingsAtom` を更新
+3. React Flow ノードが再レンダリング
+4. バッジ・バー色が新しい `runtime_status` / `warning_codes` を反映
+
 ## 関連コンポーネント
 
-- [relay-server](./relay-server.md): バックエンドAPI
+- [relay-server](./relay-server.md): バックエンドAPI・Status Engine
 - [mt-bridge](./mt-bridge.md): EA通信DLL
 - [mt-advisors](./mt-advisors.md): MT4/MT5 EA
