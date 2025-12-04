@@ -25,6 +25,7 @@ struct SerializedMessage {
 /// - VLogs config broadcasts (to all EAs via vlogs_config topic)
 ///
 /// Snapshot of ZMQ publisher metrics
+#[allow(dead_code)]
 pub struct ZmqPublisherMetrics {
     pub sends_total: u64,
     pub send_failures_total: u64,
@@ -39,6 +40,7 @@ pub struct SendFailure {
     pub attempts: i32,
 }
 
+#[allow(dead_code)]
 pub struct ZmqPublisher {
     tx: mpsc::UnboundedSender<SerializedMessage>,
     _handle: JoinHandle<()>,
@@ -50,6 +52,7 @@ pub struct ZmqPublisher {
 pub type ZmqConfigPublisher = ZmqPublisher;
 
 impl ZmqPublisher {
+    #[allow(dead_code)]
     pub fn new(bind_address: &str) -> Result<Self> {
         let context = zmq::Context::new();
         let socket = context
@@ -244,6 +247,7 @@ impl ZmqPublisher {
     }
 
     /// Return a snapshot of the current ZMQ send metrics
+    #[allow(dead_code)]
     pub fn metrics_snapshot(&self) -> ZmqPublisherMetrics {
         ZmqPublisherMetrics {
             sends_total: self.sends_total.load(Ordering::Relaxed),
