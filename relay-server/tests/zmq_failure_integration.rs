@@ -57,7 +57,7 @@ async fn test_failure_persist_and_retry_flow() {
     let worker = tokio::spawn(async move {
         // Run a single retry iteration
         let items = db_clone2.fetch_pending_failed_sends(10).await.unwrap();
-        for (id, topic, payload, _) in items {
+        for (id, topic, payload, _, _updated) in items {
             // try publish
             let _ = pub_clone.publish_raw(&topic, &payload).await;
             let _ = db_clone2.mark_failed_send_processed(id).await;

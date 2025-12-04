@@ -153,6 +153,23 @@ impl Database {
         .execute(&pool)
         .await?;
 
+        // Create failed_outgoing_dead_letters table to store items that reached max retries
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS failed_outgoing_dead_letters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER NOT NULL,
+                topic TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                error TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                moved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
         Ok(Self { pool })
     }
 }

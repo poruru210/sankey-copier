@@ -18,6 +18,7 @@ mod zeromq;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
+use chrono::TimeZone;
 use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -376,9 +377,43 @@ async fn main() -> Result<()> {
             loop {
                 interval.tick().await;
 
+                // Backoff and dead-letter policy
+                const MAX_RETRY_ATTEMPTS: i32 = 5;
+                const BASE_BACKOFF_SECS: u64 = 1;
+                const MAX_BACKOFF_SECS: u64 = 60;
+
                 match db_clone.fetch_pending_failed_sends(100).await {
                     Ok(items) if !items.is_empty() => {
-                        for (id, topic, payload, attempts) in items {
+                        for (id, topic, payload, attempts, updated_at) in items {
+                            // If we've reached max attempts, archive to dead-letter storage
+                            if attempts >= MAX_RETRY_ATTEMPTS {
+                                if let Ok(rows) = db_clone.move_failed_to_dead_letter(id).await {
+                                    if rows > 0 {
+                                        tracing::warn!("Moved failed send id={} topic={} to dead-letter after attempts={}", id, topic, attempts);
+                                    }
+                                }
+                                continue;
+                            }
+
+                            // Parse updated_at (SQLite CURRENT_TIMESTAMP format: "YYYY-MM-DD HH:MM:SS")
+                            let ok_to_try = if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(&updated_at, "%Y-%m-%d %H:%M:%S") {
+                                let last = chrono::Utc.from_utc_datetime(&naive);
+                                let elapsed_secs = chrono::Utc::now().signed_duration_since(last).num_seconds();
+                                // exponential backoff: BASE * 2^(attempts)
+                                let pow = attempts.max(0) as u32;
+                                let factor = 2u64.pow(pow);
+                                let mut backoff = BASE_BACKOFF_SECS.saturating_mul(factor);
+                                if backoff > MAX_BACKOFF_SECS { backoff = MAX_BACKOFF_SECS; }
+                                elapsed_secs >= backoff as i64
+                            } else {
+                                // If parsing fails, be permissive and try
+                                true
+                            };
+
+                            if !ok_to_try {
+                                continue;
+                            }
+
                             // Try to resend preserved MessagePack payload
                             match publisher_clone.publish_raw(&topic, &payload).await {
                                 Ok(_) => {
