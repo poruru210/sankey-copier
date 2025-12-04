@@ -136,11 +136,11 @@ pub fn build_config_topic(account_id: &str) -> String {
     format!("{}{}", TOPIC_CONFIG_PREFIX, account_id)
 }
 
-/// Build a trade topic for a specific account
-/// Returns format: "trade/{account_id}"
+/// Build a trade topic for a specific Master-Slave pair
+/// Returns format: "trade/{master_id}/{slave_id}"
 #[inline]
-pub fn build_trade_topic(account_id: &str) -> String {
-    format!("{}{}", TOPIC_TRADE_PREFIX, account_id)
+pub fn build_trade_topic(master_id: &str, slave_id: &str) -> String {
+    format!("{}{}/{}", TOPIC_TRADE_PREFIX, master_id, slave_id)
 }
 
 #[cfg(test)]
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn test_topic_generation() {
         assert_eq!(build_config_topic("12345"), "config/12345");
-        assert_eq!(build_trade_topic("12345"), "trade/12345");
+        assert_eq!(build_trade_topic("MASTER_001", "SLAVE_001"), "trade/MASTER_001/SLAVE_001");
         assert_eq!(TOPIC_GLOBAL_CONFIG, "config/global");
     }
 

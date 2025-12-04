@@ -4,7 +4,7 @@
 // 2-port architecture: This single PUB socket handles all Server → EA messages
 
 use anyhow::{Context, Result};
-use sankey_copier_zmq::ConfigMessage; // Trait
+use sankey_copier_zmq::{build_trade_topic, ConfigMessage}; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -160,7 +160,7 @@ impl ZmqPublisher {
             .context("Failed to serialize TradeSignal to MessagePack")?;
 
         let serialized = SerializedMessage {
-            topic: format!("trade/{}/{}", master_id, slave_id),
+            topic: build_trade_topic(master_id, slave_id),
             payload,
         };
 
