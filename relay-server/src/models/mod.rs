@@ -13,8 +13,8 @@ pub use trade_group_member::*;
 
 // Re-export shared types from DLL
 pub use sankey_copier_zmq::{
-    SymbolMapping, TradeFilters, WarningCode, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
-    STATUS_NO_CONFIG,
+    OrderType, SymbolMapping, TradeAction, TradeFilters, WarningCode, STATUS_CONNECTED,
+    STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
 };
 
 use chrono::{DateTime, Utc};
@@ -32,23 +32,6 @@ pub struct SlaveConfigWithMaster {
     #[serde(default)]
     pub enabled_flag: bool,
     pub slave_settings: SlaveSettings,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum OrderType {
-    Buy,
-    Sell,
-    BuyLimit,
-    SellLimit,
-    BuyStop,
-    SellStop,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum TradeAction {
-    Open,
-    Close,
-    Modify,
 }
 
 /// Trade signal message structure
