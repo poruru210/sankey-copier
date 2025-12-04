@@ -119,7 +119,7 @@ pub async fn toggle_vlogs_enabled(
     // Respects CONFIG_DIR and CONFIG_ENV environment variables
     let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| ".".to_string());
     let config_base = format!("{}/config", config_dir);
-    
+
     if let Err(e) = update_victoria_logs_enabled(request.enabled, &config_base) {
         tracing::error!(
             error = %e,

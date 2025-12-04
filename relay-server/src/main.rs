@@ -279,7 +279,8 @@ async fn main() -> Result<()> {
 
     // Initialize database
     // DATABASE_URL environment variable overrides config.toml setting
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| config.database.url.clone());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| config.database.url.clone());
     let db = Arc::new(Database::new(&database_url).await?);
     tracing::info!("Database initialized: {}", database_url);
 

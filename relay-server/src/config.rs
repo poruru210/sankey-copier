@@ -408,7 +408,7 @@ impl Default for Config {
 /// The resolved file path as a String (e.g., "config.test.toml" or "config.toml")
 pub fn resolve_writable_config_path<P: AsRef<Path>>(base_name: P) -> String {
     let base_str = base_name.as_ref().to_string_lossy();
-    
+
     if let Ok(env) = std::env::var("CONFIG_ENV") {
         format!("{}.{}.toml", base_str, env)
     } else {
@@ -417,7 +417,7 @@ pub fn resolve_writable_config_path<P: AsRef<Path>>(base_name: P) -> String {
 }
 
 /// Update VictoriaLogs enabled setting in the appropriate config file.
-/// 
+///
 /// Automatically resolves the correct config file based on `CONFIG_ENV`:
 /// - If `CONFIG_ENV=test`, updates `config.test.toml`
 /// - If `CONFIG_ENV=dev`, updates `config.dev.toml`

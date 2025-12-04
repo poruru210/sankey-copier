@@ -2,7 +2,9 @@
 //
 // Dynamic port resolution and runtime configuration management
 
-use crate::config::{RuntimeConfig, RuntimeServerConfig, RuntimeZeromqConfig, ServerConfig, ZeroMqConfig};
+use crate::config::{
+    RuntimeConfig, RuntimeServerConfig, RuntimeZeromqConfig, ServerConfig, ZeroMqConfig,
+};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use std::net::TcpListener;
@@ -65,19 +67,25 @@ pub fn resolve_ports<P: AsRef<Path>>(
     // 2. Check if dynamic port assignment is needed
     let needs_dynamic_http = server_config.port == 0;
     let needs_dynamic_zmq = zmq_config.has_dynamic_ports();
-    
+
     if needs_dynamic_http || needs_dynamic_zmq {
         tracing::info!("Dynamic port assignment enabled, finding available ports...");
-        
+
         // Count how many ports we need to find
         let mut port_count = 0;
-        if needs_dynamic_http { port_count += 1; }
-        if zmq_config.receiver_port == 0 { port_count += 1; }
-        if zmq_config.sender_port == 0 { port_count += 1; }
-        
+        if needs_dynamic_http {
+            port_count += 1;
+        }
+        if zmq_config.receiver_port == 0 {
+            port_count += 1;
+        }
+        if zmq_config.sender_port == 0 {
+            port_count += 1;
+        }
+
         let dynamic_ports = find_available_ports(port_count)?;
         let mut port_iter = dynamic_ports.into_iter();
-        
+
         let http_port = if needs_dynamic_http {
             port_iter.next().unwrap()
         } else {

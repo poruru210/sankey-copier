@@ -83,9 +83,9 @@ impl ZmqPublisher {
     where
         T: ConfigMessage,
     {
-        // Serialize to MessagePack
-        let payload =
-            rmp_serde::to_vec(message).context("Failed to serialize message to MessagePack")?;
+        // Serialize to MessagePack (Map format for field-name based deserialization)
+        let payload = rmp_serde::to_vec_named(message)
+            .context("Failed to serialize message to MessagePack")?;
 
         let serialized = SerializedMessage {
             topic: message.zmq_topic().to_string(),
