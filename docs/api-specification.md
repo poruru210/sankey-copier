@@ -25,7 +25,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 | `enabled_flag` | boolean | Web UI / API | ユーザーがトグルで指定した意図。true のとき「コピーしたい」。Status Engine の入力値になる。 |
 | `runtime_status` | number (0/1/2) | Status Engine | Slave 実効ステータス。0=DISABLED, 1=ENABLED (Slave準備完了だが Master 未接続), 2=CONNECTED。 |
 | `master_runtime_status` | number (0/2) | Status Engine | Master の実効ステータス。Master は ENABLED を取らないため 0 (DISABLED) or 2 (CONNECTED)。 |
-| `allow_new_orders` | boolean | Status Engine | Slave runtime_status が 2 の場合のみ true。EA へ設定を送る際に参照される。 |
+| `allow_new_orders` | boolean | Status Engine | Slave の Web UI が ON かつオンライン接続時に true。Master クラスター状態には依存しない。 |
 | `warning_codes` | WarningCode[] | Status Engine | RuntimeStatusUpdater が付与する警告配列。`snake_case` 文字列 (`slave_offline` など) を返し、原因を UI/EA/CS で共有する。 |
 
 > **重要:** `status` カラムは後方互換目的で DB に残っているが値は常に `runtime_status` と一致する。API / WebSocket では `runtime_status` を参照すること。
@@ -70,7 +70,7 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 | `enabled_flag` | Slave の意図。`POST /api/trade-groups/{master}/members/{slave}/toggle` で更新。 |
 | `runtime_status` | Status Engine の実効ステータス。`member_updated` WebSocket で配信。 |
 | `status` | 互換用ミラー。クライアントは `runtime_status` を使う。 |
-| `allow_new_orders` | Slave 設定 (`send_config_to_slave`) 内に含まれる。`runtime_status === 2` のときのみ true。 |
+| `allow_new_orders` | Slave 設定 (`send_config_to_slave`) 内に含まれる。Slave 自身が `web_ui_enabled && online` のときに true（Master クラスター状態は影響しない）。 |
 | `warning_codes` | Slave 用の警告配列。`slave_offline` や `master_cluster_degraded` など原因を示す。 |
 
 ## REST エンドポイント
@@ -156,6 +156,6 @@ Status Engine リファクタリング後の REST / WebSocket API で公開さ�
 
 - REST ハンドラの単体テスト (`relay-server/src/api/tests`) では `enabled_flag` と `runtime_status` が JSON に含まれることを検証する。
 - Web UI の Playwright テスト (`web-ui/__tests__/runtime-intent-toggle.spec.ts`) は「トグル操作 → runtime_status は WS 通知後に変わる」流れを再現する。
-- Python プロトコルテスト (`tests/test_zmq_communication.py`) は、`allow_new_orders` が `runtime_status == 2` のときのみ true になることを確認する予定。
+- Python プロトコルテスト (`tests/test_zmq_communication.py`) は、`allow_new_orders` が Slave の `web_ui_enabled && online` のときに true になることを確認する予定。
 
 必要に応じて本ドキュメントを拡張し、API 変更時は最初に更新する。

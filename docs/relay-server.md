@@ -202,7 +202,7 @@ classDiagram
 
 - `enabled_flag` を書き換えた後、Status Engine は最新の接続状況や EA からの Heartbeat を参照して `runtime_status`/`master_runtime_status` を再計算し、DBへ書き戻す。<br>
 - Web UI や EA は `runtime_status` 系フィールドを観測値として扱い、意図 (`enabled_flag`) と実行 (`runtime_status`) のギャップを UI/ログで可視化する。<br>
-- ZeroMQ の `allow_new_orders` は `runtime_status == 2` のときのみ `true` となり、EA サイドのコピー可否フラグと同期する。
+- ZeroMQ の `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となり、Master クラスター状態には依存しない。シグナルが届けば処理する方針。
 - `warning_codes` は Nord バーの色決定や CS ログの根拠として使われ、Master 側の `MasterOffline` などクラスタ情報が含まれる。
 
 ## WebSocketイベント
@@ -306,7 +306,7 @@ impl ConfigMessage for SlaveConfigMessage {
 ## Config Builder
 
 - `relay-server/src/config_builder.rs` が `MasterConfigMessage`/`SlaveConfigMessage` の生成を一手に引き受け、Heartbeat・REST API・config_request・unregister のすべての経路で同じステータス計算ロジックを再利用しています。
-- `status_engine.rs` から返される `MasterStatusResult`/`SlaveStatusResult` をビルダーが受け取り、Slave 設定メッセージの `allow_new_orders` は `runtime_status == CONNECTED` のときだけ `true` になるようにしています。
+- `status_engine.rs` から返される `MasterStatusResult`/`SlaveStatusResult` をビルダーが受け取り、Slave 設定メッセージの `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となります。Master クラスター状態は `runtime_status` の表示用のみに影響します。
 - API やハンドラはビルダーのステータス結果をデータベースの `runtime_status` に書き戻し、Web UI は `enabled_flag`（ユーザー意図）と `runtime_status`（サーバ側判定）の 2 層情報で表示しつつ、EA には `allow_new_orders` をそのまま渡せるようになりました。
 
 ### RuntimeStatusUpdater サービス
@@ -433,15 +433,17 @@ sequenceDiagram
 
 **判定ルール**:
 
-| Slave自体の条件 | 接続Masterの状態 | Slaveのステータス | 説明 |
-|----------------|------------------|:----------------:|------|
-| Switch❌ または 自動売買❌ | - | `DISABLED (0)` | Slave自体が無効 |
-| Switch✅ かつ 自動売買✅ | **少なくとも1つのMasterが DISABLED** | `ENABLED (1)` | Slave準備完了だがMaster未接続 |
-| Switch✅ かつ 自動売買✅ | **すべてのMasterが CONNECTED** | `CONNECTED (2)` | コピー取引実行可能 |
+| Slave自体の条件 | 接続Masterの状態 | Slaveのステータス | `allow_new_orders` | 説明 |
+|----------------|------------------|:----------------:|:------------------:|------|
+| Switch❌ または オフライン | - | `DISABLED (0)` | `false` | Slave自体が無効 |
+| Switch✅ かつ オンライン | **少なくとも1つのMasterが DISABLED** | `ENABLED (1)` | `true` | Slave準備完了、シグナルが届けば処理可能 |
+| Switch✅ かつ オンライン | **すべてのMasterが CONNECTED** | `CONNECTED (2)` | `true` | コピー取引実行可能 |
+
+> **重要**: `is_trade_allowed=false`（MTの自動売買OFF）は Slave では警告のみで、ステータスや `allow_new_orders` には影響しない。注文は試行され、実行時に失敗する。
 
 **実装の所在**: `relay-server/src/models/status_engine.rs`
 
-`SlaveIntent` と Slave の `ConnectionSnapshot` に加え、関連する Master の `runtime_status` を `MasterClusterSnapshot::new(vec![...])` に詰めて `evaluate_slave_status(intent, slave_conn, cluster)` を呼び出す。Cluster 内のすべてが `STATUS_CONNECTED` なら Slave も `CONNECTED`、それ以外は `ENABLED`。Status Engine は `allow_new_orders` を同時に算出し、Config Builder (`config_builder.rs`) 経由で EA に届ける。
+`SlaveIntent` と Slave の `ConnectionSnapshot` に加え、関連する Master の `runtime_status` を `MasterClusterSnapshot::new(vec![...])` に詰めて `evaluate_slave_status(intent, slave_conn, cluster)` を呼び出す。Cluster 内のすべてが `STATUS_CONNECTED` なら Slave も `CONNECTED`、それ以外は `ENABLED`。Status Engine は `allow_new_orders` を同時に算出し（Slave 自身の `web_ui_enabled && online` で決定）、Config Builder (`config_builder.rs`) 経由で EA に届ける。
 
 ### N:N接続のサポート
 
@@ -594,7 +596,7 @@ MTインストール時に `sankey_copier.ini` が生成され、EAはこのフ�
 ## Phase4: MT EA のステータス同期 (P9)
 
 - Relay Server の Status Engine は `runtime_status`/`allow_new_orders` を `ConfigBuilder` 経由で統一しているため、MT4/MT5 側はこの値をそのまま表示・実行条件として扱うべきです。
-- 詳細な作業手順・テスト計画は `plan/p9-mt-advisor-plan.md` を参照してください。現フェーズでは `allow_new_orders` が `CONNECTED` 時のみ `true` となり、`status` は Web UI に合わせた状態表示用として維持されています。
+- 詳細な作業手順・テスト計画は `plan/p9-mt-advisor-plan.md` を参照してください。現フェーズでは `allow_new_orders` は Slave 自身が `web_ui_enabled && online` のときに `true` となり、`status` は Web UI に合わせた状態表示用として維持されています。
 - MT EA では `ProcessConfigMessage` で受信した `CopyConfig.status`/`allow_new_orders` を `GridPanel` に反映しつつ、`Open` シグナルは `allow_new_orders` を起点に、`Close`/`Modify` は常に許可する動作でサーバ側判定と整合させます。
 
 ## 関連コンポーネント

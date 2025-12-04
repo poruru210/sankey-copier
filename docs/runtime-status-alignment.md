@@ -30,9 +30,9 @@ Web UI、EA パネル、relay-server の 3 者で Runtime Status が同じ意味
 
 | 値 | 名称 | サーバー判定条件 (簡略) | Web UI 表示 | Nord バー色 | 代表シナリオ |
 | --- | --- | --- | --- | --- | --- |
-| 2 | Connected | Master/Slave: Intent ON ∧ 接続 Online ∧ `is_trade_allowed` true。Slave は全 Master Connected が必須。 | Master: `配信中`、Slave: `受信中` (エメラルド) | `bg-green-500` (警告なしの場合) | 両 EA が稼働し、コピー配信中。 |
+| 2 | Connected | Master: Intent ON ∧ 接続 Online ∧ `is_trade_allowed` true。Slave: Intent ON ∧ 接続 Online ∧ 全 Master Connected。 | Master: `配信中`、Slave: `受信中` (エメラルド) | `bg-green-500` (警告なしの場合) | 両 EA が稼働し、コピー配信中。 |
 | 1 | Standby | Slave: 自身は送受信可能だが関連 Master が未接続。Master 側では事実上未使用。 | `待機中` (琥珀) | `bg-amber-500` | Slave が接続済みだが Master を待っている。 |
-| 0 | ManualOff | Intent OFF / 接続 Offline / `is_trade_allowed` false 等で evaluate が失敗。 | `手動OFF` (グレー) | `bg-gray-300` | ユーザーが停止、Algo OFF、未接続など。 |
+| 0 | ManualOff | Intent OFF / 接続 Offline で evaluate が失敗。Master では `is_trade_allowed` false も該当。Slave では `is_trade_allowed` false は警告のみ。 | `手動OFF` (グレー) | `bg-gray-300` | ユーザーが停止、未接続など。 |
 | Warning override | — | `hasWarning=true` | バッジは runtime_status 表示 + 警告ツールチップ | `bg-yellow-500` へ強制 | Algo Trading OFF や証拠金警告。 |
 
 > 補足: `StatusIndicatorBar` は `hasWarning` を最優先し、次に `runtime_status`→`isActive` の順で色を決定する。ノードヘッダーのバッジは `runtime_status` と `isActive` を基に Intlayer の文言を選択する。
@@ -48,6 +48,7 @@ Web UI、EA パネル、relay-server の 3 者で Runtime Status が同じ意味
 1. Heartbeat/Timeout/Unregister/API Toggle の各経路で `RuntimeStatusUpdater::evaluate_master_runtime_status` を呼び、Intent/Online/TradeAllowed を判定して `STATUS_CONNECTED (2)` か `STATUS_DISABLED (0)` を返す。
 2. 結果は `ConfigBuilder::build_master_config` と VictoriaLogs ブロードキャストで共有され、`warning_codes` と `allow_new_orders` も同じ値になる。
 3. `RuntimeStatusUpdater` が `trade_group_members` へ Master 集約結果を反映し、全 Slave のクラスター評価に再利用される。
+4. Master のオフライン時（Timeout/Unregister）は `notify_slaves_master_offline` が全 Slave の `runtime_status` を再評価し、WebSocket broadcast で Web UI に即時通知する。
 
 ### 4.2 Slave
 
@@ -55,6 +56,20 @@ Web UI、EA パネル、relay-server の 3 者で Runtime Status が同じ意味
 2. 呼び出しトリガーは Slave/Master Heartbeat, Timeout, RequestConfig, Intent Toggle, Unregister の全イベントで、`message_handler` と `trade_group_members` API が共通のヘルパーを使用する。
 3. `send_config_to_slave` は `RuntimeStatusUpdater::build_slave_bundle` を通じて Config + DB 更新 + メトリクス記録をまとめて実行するため、ZMQ に載る `status` と DB の `runtime_status` が常に一致する。
 4. Slave Heartbeat も `RuntimeStatusUpdater` を通すようになったため、Algo ON へ戻した瞬間に Standby(1) または Connected(2) が DB に反映される。Master 不在時でも `RequestConfig`/Heartbeat どちらでも同じ結果を得られる。
+5. Slave のオフライン時（Timeout/Unregister）は `notify_slave_offline` が `runtime_status` を再評価し、WebSocket broadcast (`settings_updated`) で Web UI に即時通知する。
+
+### 4.3 allow_new_orders の決定ロジック
+
+`allow_new_orders` は Slave 自身の状態のみで決定される：
+
+- **条件**: `web_ui_enabled && online`（Slave の Web UI がON かつ接続中）
+- **Master クラスター状態に依存しない**: シグナルが届けば処理する方針
+- **`is_trade_allowed=false`**: 警告のみで `allow_new_orders` には影響しない（注文は実行時に失敗）
+
+`runtime_status` は表示用で、Master クラスター状態に依存する：
+- すべての Master が CONNECTED → Slave は `CONNECTED (2)`
+- 一部の Master が未接続 → Slave は `ENABLED (1)`（警告表示）
+- Slave 自身がオフラインまたは Web UI OFF → `DISABLED (0)`
 
 ---
 
@@ -63,7 +78,7 @@ Web UI、EA パネル、relay-server の 3 者で Runtime Status が同じ意味
 | シナリオ | EA パネル | `runtime_status` | Web UI 表示 | 原因 | 対処方針 |
 | --- | --- | --- | --- | --- | --- |
 | Algo OFF → ON を素早く切り替え | Enabled に戻る | 1 (Standby) に遷移するが `warning_codes` が 1 ティック残る | `待機中` + 黄色バー (警告優先) | Heartbeat→RuntimeStatusUpdater→Config の間に 1 ティック遅延がある | 監視ログで `warning_codes=[]` を確認後に UI 更新。今後は UI 側で `warning_codes` 解除イベントを待つ。 |
-| Intent ON だが `is_trade_allowed=false` | Enabled | 0 | `手動OFF` | Status Engine が TradeAllowed を優先し 0 を返す仕様。 | ドキュメント/サポートで「Algo を許可 or AutoTrading ON が必要」と明記済み。 |
+| Slave の Intent ON だが `is_trade_allowed=false` | Enabled | 1 or 2 + 警告 | `待機中` または `受信中` (黄色バー) | Slave では `is_trade_allowed=false` は警告のみで status には影響しない。実際の注文は失敗する。 | EA パネルに警告表示、UI は警告バッジで注意喚起。 |
 | Multi-Master で 1 台だけ Offline | Enabled | 1 (Standby) | `待機中` | MasterClusterSnapshot が完全接続になるまで 2 に上がらない。 | RuntimeStatus の仕様通り。UI に「Master 復帰待ち」ツールチップを表示。 |
 
 ---
