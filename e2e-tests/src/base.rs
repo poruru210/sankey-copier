@@ -286,24 +286,6 @@ impl EaSimulatorBase {
         Ok(())
     }
 
-    /// Subscribe to a trade topic on the trade socket (Slave only)
-    ///
-    /// MQL5: SubscribeToTradeTopic() called from ProcessConfigMessage
-    /// Subscribes to "trade/{master_account}/{slave_account}" on g_zmq_trade_socket
-    pub(crate) fn subscribe_to_trade_topic(&self, topic: &str) -> Result<()> {
-        if let Some(ts) = self.trade_socket_handle {
-            let topic_utf16: Vec<u16> = topic.encode_utf16().chain(Some(0)).collect();
-            unsafe {
-                if zmq_socket_subscribe(ts, topic_utf16.as_ptr()) != 1 {
-                    anyhow::bail!("Failed to subscribe to trade topic: {}", topic);
-                }
-            }
-            Ok(())
-        } else {
-            anyhow::bail!("Trade socket not available (Master EA doesn't have trade socket)")
-        }
-    }
-
     /// Get trade socket handle (for passing to OnTimer thread)
     pub(crate) fn trade_socket_handle(&self) -> Option<i32> {
         self.trade_socket_handle
@@ -332,19 +314,6 @@ impl EaSimulatorBase {
     /// Returns (topic, payload) if data is available, None otherwise.
     pub(crate) fn try_receive_raw_nonblocking(&self) -> Result<Option<(String, Vec<u8>)>> {
         Self::receive_from_socket(self.config_socket_handle)
-    }
-
-    /// Try to receive raw bytes from trade socket (non-blocking, single attempt)
-    ///
-    /// MQL5: zmq_socket_receive(g_zmq_trade_socket, ...) in ProcessTradeSignals
-    /// Returns (topic, payload) if data is available, None otherwise.
-    /// Returns error if called on Master EA (no trade socket).
-    pub(crate) fn try_receive_from_trade_socket(&self) -> Result<Option<(String, Vec<u8>)>> {
-        if let Some(ts) = self.trade_socket_handle {
-            Self::receive_from_socket(ts)
-        } else {
-            anyhow::bail!("Trade socket not available (Master EA doesn't have trade socket)")
-        }
     }
 
     /// Internal helper to receive from any socket

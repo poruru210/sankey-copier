@@ -361,10 +361,20 @@ impl SlaveEaSimulator {
                             let master_acc = &config.master_account;
                             let mut subscribed = subscribed_masters.lock().unwrap();
                             if !subscribed.contains(master_acc) {
-                                let trade_topic =
-                                    format!("trade/{}/{}", master_acc, account_id);
-                                let topic_utf16: Vec<u16> =
-                                    trade_topic.encode_utf16().chain(Some(0)).collect();
+                                // Use FFI build_trade_topic (same as MQL5 EA)
+                                let master_utf16: Vec<u16> =
+                                    master_acc.encode_utf16().chain(Some(0)).collect();
+                                let slave_utf16: Vec<u16> =
+                                    account_id.encode_utf16().chain(Some(0)).collect();
+                                let mut topic_utf16 = vec![0u16; 256];
+                                unsafe {
+                                    sankey_copier_zmq::ffi::build_trade_topic(
+                                        master_utf16.as_ptr(),
+                                        slave_utf16.as_ptr(),
+                                        topic_utf16.as_mut_ptr(),
+                                        256,
+                                    );
+                                }
                                 unsafe {
                                     // Subscribe on trade_socket (MQL5: g_zmq_trade_socket)
                                     sankey_copier_zmq::ffi::zmq_socket_subscribe(
@@ -621,7 +631,22 @@ impl SlaveEaSimulator {
     /// config is received. This method is kept for backward compatibility.
     #[deprecated(note = "Trade topic subscription is now automatic on config reception")]
     pub fn subscribe_to_master(&self, master_account: &str) -> Result<()> {
-        let trade_topic = format!("trade/{}/{}", master_account, self.base.account_id());
+        // Use FFI build_trade_topic (same as MQL5 EA)
+        let master_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
+        let slave_utf16: Vec<u16> = self.base.account_id().encode_utf16().chain(Some(0)).collect();
+        let mut topic_buffer = vec![0u16; 256];
+        let topic_len = unsafe {
+            sankey_copier_zmq::ffi::build_trade_topic(
+                master_utf16.as_ptr(),
+                slave_utf16.as_ptr(),
+                topic_buffer.as_mut_ptr(),
+                256,
+            )
+        };
+        if topic_len <= 0 {
+            anyhow::bail!("Failed to build trade topic");
+        }
+        let trade_topic = String::from_utf16_lossy(&topic_buffer[..topic_len as usize]);
         self.base.subscribe_to_topic(&trade_topic)
     }
 }
