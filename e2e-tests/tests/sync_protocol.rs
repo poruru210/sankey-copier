@@ -44,7 +44,11 @@ async fn test_position_snapshot_single_slave() {
     )
     .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave");
@@ -121,12 +125,20 @@ async fn test_position_snapshot_multiple_slaves() {
     )
     .expect("Failed to create master");
 
-    let mut slave1 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_accounts[0],
+    let mut slave1 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_accounts[0],
         master_account,
     )
     .expect("Failed to create slave1");
 
-    let mut slave2 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_accounts[1],
+    let mut slave2 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_accounts[1],
         master_account,
     )
     .expect("Failed to create slave2");
@@ -213,7 +225,11 @@ async fn test_position_snapshot_empty() {
     )
     .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave");
@@ -279,7 +295,11 @@ async fn test_sync_request_to_master() {
     )
     .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave");
@@ -343,7 +363,11 @@ async fn test_sync_request_with_last_sync_time() {
     )
     .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave");
@@ -409,7 +433,11 @@ async fn test_sync_request_non_member_rejected() {
     .expect("Failed to create master");
 
     // Create non-member slave (not registered in trade group)
-    let mut non_member = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), non_member_slave,
+    let mut non_member = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        non_member_slave,
         master_account,
     )
     .expect("Failed to create non-member slave");
@@ -475,7 +503,11 @@ async fn test_full_sync_cycle() {
     )
     .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave");
@@ -543,4 +575,3 @@ async fn test_full_sync_cycle() {
     assert_eq!(snapshot.positions[1].symbol, "AUDUSD");
     assert_eq!(snapshot.positions[1].order_type, "Sell");
 }
-

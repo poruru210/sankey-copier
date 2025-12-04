@@ -273,11 +273,15 @@ impl MasterEaSimulator {
                             if let Some(suffix) = &config.symbol_suffix {
                                 *g_symbol_suffix.lock().unwrap() = suffix.clone();
                             }
-                        } else if let Ok(sync_req) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
+                        } else if let Ok(sync_req) =
+                            rmp_serde::from_slice::<SyncRequestMessage>(payload)
+                        {
                             // MQL5: ProcessSyncRequest() - キューに格納 (L325-340)
                             let mut requests = received_sync_requests.lock().unwrap();
                             requests.push(sync_req);
-                        } else if let Ok(vlogs_config) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
+                        } else if let Ok(vlogs_config) =
+                            rmp_serde::from_slice::<VLogsConfigMessage>(payload)
+                        {
                             // MQL5: ProcessVLogsConfig() - キューに格納
                             let mut configs = received_vlogs_configs.lock().unwrap();
                             configs.push(vlogs_config);

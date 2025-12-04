@@ -100,12 +100,20 @@ async fn test_multi_master_signal_isolation() {
     )
     .expect("Failed to create master2 simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave1_account,
+    let mut slave1 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave1_account,
         master1_account,
     )
     .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave2_account,
+    let mut slave2 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave2_account,
         master2_account,
     )
     .expect("Failed to create slave2 simulator");
@@ -132,7 +140,9 @@ async fn test_multi_master_signal_isolation() {
         None,
         0,
     );
-    master1.send_trade_signal(&sig1).expect("Failed to send signal");
+    master1
+        .send_trade_signal(&sig1)
+        .expect("Failed to send signal");
 
     // Master2 sends ticket 200
     let sig2 = master2.create_open_signal(
@@ -145,14 +155,14 @@ async fn test_multi_master_signal_isolation() {
         None,
         0,
     );
-    master2.send_trade_signal(&sig2).expect("Failed to send signal");
+    master2
+        .send_trade_signal(&sig2)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
 
-    let signals1 = collect_trade_signals(&slave1, 2000, 2)
-        .expect("Failed to collect signals");
-    let signals2 = collect_trade_signals(&slave2, 2000, 2)
-        .expect("Failed to collect signals");
+    let signals1 = collect_trade_signals(&slave1, 2000, 2).expect("Failed to collect signals");
+    let signals2 = collect_trade_signals(&slave2, 2000, 2).expect("Failed to collect signals");
 
     // Slave1 should only receive ticket 100 from Master1
     assert_eq!(signals1.len(), 1, "Slave1 should receive only 1 signal");
@@ -205,12 +215,20 @@ async fn test_multi_master_same_symbol_open() {
     )
     .expect("Failed to create master2 simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave1_account,
+    let mut slave1 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave1_account,
         master1_account,
     )
     .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave2_account,
+    let mut slave2 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave2_account,
         master2_account,
     )
     .expect("Failed to create slave2 simulator");
@@ -230,8 +248,12 @@ async fn test_multi_master_same_symbol_open() {
     let sig1 = master1.create_open_signal(100, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
     let sig2 = master2.create_open_signal(200, "EURUSD", "Sell", 0.2, 1.0850, None, None, 0);
 
-    master1.send_trade_signal(&sig1).expect("Failed to send signal");
-    master2.send_trade_signal(&sig2).expect("Failed to send signal");
+    master1
+        .send_trade_signal(&sig1)
+        .expect("Failed to send signal");
+    master2
+        .send_trade_signal(&sig2)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -285,17 +307,29 @@ async fn test_signal_broadcast_to_all_slaves() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave1_account,
+    let mut slave1 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave1_account,
         master_account,
     )
     .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave2_account,
+    let mut slave2 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave2_account,
         master_account,
     )
     .expect("Failed to create slave2 simulator");
 
-    let mut slave3 = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave3_account,
+    let mut slave3 = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave3_account,
         master_account,
     )
     .expect("Failed to create slave3 simulator");
@@ -313,7 +347,9 @@ async fn test_signal_broadcast_to_all_slaves() {
 
     // Master sends one signal
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
-    master.send_trade_signal(&signal).expect("Failed to send signal");
+    master
+        .send_trade_signal(&signal)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -378,7 +414,11 @@ async fn test_slave_individual_lot_multiplier() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -392,7 +432,9 @@ async fn test_slave_individual_lot_multiplier() {
 
     // Master sends 0.1 lot
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
-    master.send_trade_signal(&signal).expect("Failed to send signal");
+    master
+        .send_trade_signal(&signal)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -440,7 +482,11 @@ async fn test_signal_latency_measurement() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -458,9 +504,15 @@ async fn test_signal_latency_measurement() {
     for i in 1..=10 {
         let send_time = std::time::Instant::now();
         let signal = master.create_open_signal(i, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
-        master.send_trade_signal(&signal).expect("Failed to send signal");
+        master
+            .send_trade_signal(&signal)
+            .expect("Failed to send signal");
 
-        if slave.try_receive_trade_signal(1000).expect("Failed to receive").is_some() {
+        if slave
+            .try_receive_trade_signal(1000)
+            .expect("Failed to receive")
+            .is_some()
+        {
             let latency = send_time.elapsed();
             latencies.push(latency.as_millis() as f64);
         }
@@ -473,7 +525,9 @@ async fn test_signal_latency_measurement() {
 
     println!(
         "Latency stats: avg={:.2}ms, max={:.2}ms, samples={}",
-        avg_latency, max_latency, latencies.len()
+        avg_latency,
+        max_latency,
+        latencies.len()
     );
 
     // Assert reasonable latency (should be < 50ms in local test)
@@ -516,7 +570,11 @@ async fn test_delayed_signal_immediate() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -531,10 +589,14 @@ async fn test_delayed_signal_immediate() {
     // Create signal with 100ms old timestamp
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
     let delayed_signal = master.create_delayed_signal(signal, 100);
-    master.send_trade_signal(&delayed_signal).expect("Failed to send delayed signal");
+    master
+        .send_trade_signal(&delayed_signal)
+        .expect("Failed to send delayed signal");
 
     sleep(Duration::from_millis(200)).await;
-    let received = slave.try_receive_trade_signal(3000).expect("Failed to receive signal");
+    let received = slave
+        .try_receive_trade_signal(3000)
+        .expect("Failed to receive signal");
 
     // Should still be delivered (server doesn't filter by timestamp)
     assert!(
@@ -570,7 +632,11 @@ async fn test_delayed_signal_acceptable() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -585,10 +651,14 @@ async fn test_delayed_signal_acceptable() {
     // Create signal with 3 second old timestamp
     let signal = master.create_open_signal(12346, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
     let delayed_signal = master.create_delayed_signal(signal, 3000);
-    master.send_trade_signal(&delayed_signal).expect("Failed to send delayed signal");
+    master
+        .send_trade_signal(&delayed_signal)
+        .expect("Failed to send delayed signal");
 
     sleep(Duration::from_millis(200)).await;
-    let received = slave.try_receive_trade_signal(3000).expect("Failed to receive signal");
+    let received = slave
+        .try_receive_trade_signal(3000)
+        .expect("Failed to receive signal");
 
     // Server doesn't filter by timestamp - should be delivered
     assert!(
@@ -626,7 +696,11 @@ async fn test_stale_signal_too_old() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -641,10 +715,14 @@ async fn test_stale_signal_too_old() {
     // Create signal with 10 second old timestamp
     let signal = master.create_open_signal(12347, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
     let stale_signal = master.create_delayed_signal(signal, 10000);
-    master.send_trade_signal(&stale_signal).expect("Failed to send stale signal");
+    master
+        .send_trade_signal(&stale_signal)
+        .expect("Failed to send stale signal");
 
     sleep(Duration::from_millis(200)).await;
-    let received = slave.try_receive_trade_signal(3000).expect("Failed to receive signal");
+    let received = slave
+        .try_receive_trade_signal(3000)
+        .expect("Failed to receive signal");
 
     // Server delivers all signals - EA is responsible for timestamp validation
     assert!(
@@ -660,7 +738,7 @@ async fn test_stale_signal_too_old() {
         .with_timezone(&Utc);
     let now = Utc::now();
     let signal_age = now - signal_time;
-    
+
     assert!(
         signal_age.num_seconds() >= 10,
         "Signal should have 10+ second old timestamp, got {} seconds",
@@ -670,4 +748,3 @@ async fn test_stale_signal_too_old() {
     println!("✅ test_stale_signal_too_old passed");
     println!("   Signal age: {} seconds", signal_age.num_seconds());
 }
-

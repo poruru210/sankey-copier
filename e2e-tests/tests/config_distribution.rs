@@ -54,7 +54,11 @@ async fn test_slave_config_distribution() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -141,7 +145,11 @@ async fn test_multiple_slaves_same_master() {
     // Create 3 Slave EA simulators
     let mut slave_simulators = Vec::new();
     for slave_account in &slave_accounts {
-        let simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+        let simulator = SlaveEaSimulator::new(
+            &server.zmq_pull_address(),
+            &server.zmq_pub_address(),
+            &server.zmq_pub_address(),
+            slave_account,
             master_account,
         )
         .expect("Failed to create Slave EA simulator");
@@ -158,9 +166,7 @@ async fn test_multiple_slaves_same_master() {
 
     // All Slaves start (auto heartbeat + request config)
     for simulator in &mut slave_simulators {
-        simulator
-            .start()
-            .expect("Failed to start Slave simulator");
+        simulator.start().expect("Failed to start Slave simulator");
     }
     sleep(Duration::from_millis(500)).await;
 
@@ -240,7 +246,11 @@ async fn test_new_member_initial_status_disabled() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -269,7 +279,7 @@ async fn test_new_member_initial_status_disabled() {
 }
 
 /// Test full status transition: DISABLED -> ENABLED -> CONNECTED
-/// 
+///
 /// This test verifies the complete Status Engine behavior:
 /// 1. DISABLED: Slave Web UI is OFF or Slave EA is offline
 /// 2. ENABLED: Slave Web UI is ON, Slave EA online, but Master not CONNECTED
@@ -317,7 +327,11 @@ async fn test_status_transition_to_connected() {
     )
     .expect("Failed to create Master EA simulator");
 
-    let mut slave_ea = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave_ea = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -337,7 +351,8 @@ async fn test_status_transition_to_connected() {
         .expect("Failed to receive initial config");
     assert!(disabled_config.is_some(), "Should receive config");
     assert_eq!(
-        disabled_config.unwrap().status, STATUS_DISABLED,
+        disabled_config.unwrap().status,
+        STATUS_DISABLED,
         "Phase 1: Status should be DISABLED (Web UI OFF)"
     );
     println!("✅ Phase 1: DISABLED (Web UI OFF)");
@@ -356,7 +371,8 @@ async fn test_status_transition_to_connected() {
         .expect("Failed to receive updated config");
     assert!(enabled_config.is_some(), "Should receive config");
     assert_eq!(
-        enabled_config.unwrap().status, STATUS_ENABLED,
+        enabled_config.unwrap().status,
+        STATUS_ENABLED,
         "Phase 2: Status should be ENABLED (Master not connected yet)"
     );
     println!("✅ Phase 2: ENABLED (Web UI ON, Master offline)");
@@ -369,7 +385,7 @@ async fn test_status_transition_to_connected() {
     // config to all online Slaves with their new status
     master_ea.set_trade_allowed(true);
     master_ea.start().expect("Failed to start Master EA");
-    
+
     // Wait for server to process Master heartbeat and send Slave configs
     sleep(Duration::from_millis(500)).await;
 
@@ -425,7 +441,11 @@ async fn test_sync_policy_skip_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -486,7 +506,11 @@ async fn test_sync_policy_limit_order_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -558,7 +582,11 @@ async fn test_sync_policy_market_order_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -647,7 +675,11 @@ async fn test_trade_execution_settings() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -762,19 +794,31 @@ async fn test_multiple_masters_multiple_slaves() {
     .expect("Failed to add slave3 to master2");
 
     // Create Slave EA simulators
-    let mut slave1_sim = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave1,
+    let mut slave1_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave1,
         master1,
     )
     .expect("Failed to create Slave1 simulator");
     slave1_sim.set_trade_allowed(true);
 
-    let mut slave2_sim = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave2,
+    let mut slave2_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave2,
         master1,
     )
     .expect("Failed to create Slave2 simulator");
     slave2_sim.set_trade_allowed(true);
 
-    let mut slave3_sim = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave3,
+    let mut slave3_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave3,
         master2,
     )
     .expect("Failed to create Slave3 simulator");
@@ -790,34 +834,55 @@ async fn test_multiple_masters_multiple_slaves() {
     sleep(Duration::from_millis(500)).await;
 
     // Verify Slave1 receives config from Master1
-    let slave1_config = slave1_sim.wait_for_status(STATUS_DISABLED, 5000).expect("Failed to receive config");
+    let slave1_config = slave1_sim
+        .wait_for_status(STATUS_DISABLED, 5000)
+        .expect("Failed to receive config");
     assert!(slave1_config.is_some(), "Slave1 should receive config");
     let slave1_config = slave1_config.unwrap();
     assert_eq!(slave1_config.account_id, slave1);
-    assert_eq!(slave1_config.master_account, master1, "Slave1 should belong to Master1");
+    assert_eq!(
+        slave1_config.master_account, master1,
+        "Slave1 should belong to Master1"
+    );
     assert_eq!(slave1_config.lot_multiplier, Some(1.0));
     assert_eq!(slave1_config.symbol_prefix, Some("M1_".to_string()));
 
     // Verify Slave2 receives config from Master1
-    let slave2_config = slave2_sim.wait_for_status(STATUS_DISABLED, 5000).expect("Failed to receive config");
+    let slave2_config = slave2_sim
+        .wait_for_status(STATUS_DISABLED, 5000)
+        .expect("Failed to receive config");
     assert!(slave2_config.is_some(), "Slave2 should receive config");
     let slave2_config = slave2_config.unwrap();
     assert_eq!(slave2_config.account_id, slave2);
-    assert_eq!(slave2_config.master_account, master1, "Slave2 should belong to Master1");
+    assert_eq!(
+        slave2_config.master_account, master1,
+        "Slave2 should belong to Master1"
+    );
     assert_eq!(slave2_config.lot_multiplier, Some(2.0));
 
     // Verify Slave3 receives config from Master2
-    let slave3_config = slave3_sim.wait_for_status(STATUS_DISABLED, 5000).expect("Failed to receive config");
+    let slave3_config = slave3_sim
+        .wait_for_status(STATUS_DISABLED, 5000)
+        .expect("Failed to receive config");
     assert!(slave3_config.is_some(), "Slave3 should receive config");
     let slave3_config = slave3_config.unwrap();
     assert_eq!(slave3_config.account_id, slave3);
-    assert_eq!(slave3_config.master_account, master2, "Slave3 should belong to Master2");
+    assert_eq!(
+        slave3_config.master_account, master2,
+        "Slave3 should belong to Master2"
+    );
     assert_eq!(slave3_config.lot_multiplier, Some(0.5));
-    assert!(slave3_config.reverse_trade, "Slave3 should have reverse_trade enabled");
+    assert!(
+        slave3_config.reverse_trade,
+        "Slave3 should have reverse_trade enabled"
+    );
     assert_eq!(slave3_config.symbol_prefix, Some("M2_".to_string()));
 
     println!("✅ Multiple Masters/Slaves E2E test passed:");
-    println!("   Master1 ({}) → Slave1 ({}) + Slave2 ({})", master1, slave1, slave2);
+    println!(
+        "   Master1 ({}) → Slave1 ({}) + Slave2 ({})",
+        master1, slave1, slave2
+    );
     println!("   Master2 ({}) → Slave3 ({})", master2, slave3);
 }
 
@@ -900,7 +965,10 @@ async fn test_master_config_distribution() {
 
     println!("✅ test_master_config_distribution passed");
     println!("   Master: {}", config.account_id);
-    println!("   Prefix: {:?}, Suffix: {:?}", config.symbol_prefix, config.symbol_suffix);
+    println!(
+        "   Prefix: {:?}, Suffix: {:?}",
+        config.symbol_prefix, config.symbol_suffix
+    );
 }
 
 /// Test Master EA config distribution with non-existent account
@@ -967,7 +1035,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     db.create_trade_group(master_account)
         .await
         .expect("Failed to create trade group");
-    
+
     let master_settings = MasterSettings {
         enabled: true,
         ..Default::default()
@@ -1000,12 +1068,16 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
-    
+
     // Give Master time to register and become CONNECTED
     sleep(Duration::from_millis(500)).await;
 
     // Create and start Slave EA simulator
-    let mut slave_sim = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave_sim = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -1017,12 +1089,17 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     let initial_config = slave_sim
         .wait_for_status(STATUS_CONNECTED, 5000)
         .expect("Failed to receive initial config");
-    
-    assert!(initial_config.is_some(), "Should receive initial config from Status Engine");
+
+    assert!(
+        initial_config.is_some(),
+        "Should receive initial config from Status Engine"
+    );
     let initial_config = initial_config.unwrap();
-    
-    println!("Initial config received: status={}, allow_new_orders={}", 
-             initial_config.status, initial_config.allow_new_orders);
+
+    println!(
+        "Initial config received: status={}, allow_new_orders={}",
+        initial_config.status, initial_config.allow_new_orders
+    );
 
     // For the toggle test, we just need to verify that toggling OFF sends DISABLED
     // The initial status can be ENABLED or CONNECTED depending on timing
@@ -1097,7 +1174,11 @@ async fn test_delete_member_sends_disabled_config() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -1142,9 +1223,8 @@ async fn test_delete_member_sends_disabled_config() {
     // Step 3: Slave should receive config with status=-1 (NO_CONFIG)
     // Note: We use a generic wait since NO_CONFIG is -1
     sleep(Duration::from_millis(1000)).await;
-    let _disabled_config = simulator
-        .has_received_config();
-    
+    let _disabled_config = simulator.has_received_config();
+
     // The simulator should have received a NO_CONFIG status after member deletion
     // Since wait_for_status expects a specific status, we check if config was received
     println!("✅ test_delete_member_sends_disabled_config passed - member deletion triggered config distribution");
@@ -1185,12 +1265,21 @@ async fn test_slave_config_prefix_distribution() {
         ..Default::default()
     };
 
-    db.add_member(master_account, slave_account, slave_settings, STATUS_DISABLED)
-        .await
-        .expect("Failed to add member");
+    db.add_member(
+        master_account,
+        slave_account,
+        slave_settings,
+        STATUS_DISABLED,
+    )
+    .await
+    .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut simulator = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create Slave EA simulator");
@@ -1222,7 +1311,10 @@ async fn test_slave_config_prefix_distribution() {
     assert!(config.symbol_suffix.is_none());
 
     println!("✅ test_slave_config_prefix_distribution passed");
-    println!("   Master prefix: MASTER_, Slave received: {:?}", config.symbol_prefix);
+    println!(
+        "   Master prefix: MASTER_, Slave received: {:?}",
+        config.symbol_prefix
+    );
 }
 
 /// Test allow_new_orders is correctly derived from member status
@@ -1286,17 +1378,25 @@ async fn test_allow_new_orders_follows_status() {
     .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
-    
+
     // Give Master time to register
     sleep(Duration::from_millis(300)).await;
 
     // Create and start Slave EA simulators
-    let mut sim_enabled = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_enabled,
+    let mut sim_enabled = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_enabled,
         master_account,
     )
     .expect("Failed to create enabled slave simulator");
 
-    let mut sim_disabled = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_disabled,
+    let mut sim_disabled = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_disabled,
         master_account,
     )
     .expect("Failed to create disabled slave simulator");
@@ -1307,16 +1407,24 @@ async fn test_allow_new_orders_follows_status() {
     let config_enabled = sim_enabled
         .wait_for_status(STATUS_CONNECTED, 5000)
         .expect("Failed to receive config for enabled slave");
-    assert!(config_enabled.is_some(), "Enabled slave should receive CONNECTED config");
+    assert!(
+        config_enabled.is_some(),
+        "Enabled slave should receive CONNECTED config"
+    );
     let config_enabled = config_enabled.unwrap();
 
     // Start disabled slave and wait for DISABLED status
     sim_disabled.set_trade_allowed(true);
-    sim_disabled.start().expect("Failed to start disabled slave");
+    sim_disabled
+        .start()
+        .expect("Failed to start disabled slave");
     let config_disabled = sim_disabled
         .wait_for_status(STATUS_DISABLED, 5000)
         .expect("Failed to receive config for disabled slave");
-    assert!(config_disabled.is_some(), "Disabled slave should receive DISABLED config");
+    assert!(
+        config_disabled.is_some(),
+        "Disabled slave should receive DISABLED config"
+    );
     let config_disabled = config_disabled.unwrap();
 
     // Verify allow_new_orders
@@ -1330,7 +1438,12 @@ async fn test_allow_new_orders_follows_status() {
     );
 
     println!("✅ test_allow_new_orders_follows_status passed");
-    println!("   Enabled slave: allow_new_orders={}", config_enabled.allow_new_orders);
-    println!("   Disabled slave: allow_new_orders={}", config_disabled.allow_new_orders);
+    println!(
+        "   Enabled slave: allow_new_orders={}",
+        config_enabled.allow_new_orders
+    );
+    println!(
+        "   Disabled slave: allow_new_orders={}",
+        config_disabled.allow_new_orders
+    );
 }
-

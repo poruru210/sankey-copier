@@ -145,7 +145,9 @@ impl SlaveEaSimulator {
         let push_socket = self.base.push_socket_handle;
         let config_socket = self.base.config_socket_handle;
         // MQL5: g_zmq_trade_socket - Slave EA always has trade_socket
-        let trade_socket = self.base.trade_socket_handle()
+        let trade_socket = self
+            .base
+            .trade_socket_handle()
             .expect("Slave EA must have trade_socket");
         let account_id = self.base.account_id().to_string();
         let _master_account = self.master_account.clone(); // Reserved for future use
@@ -200,7 +202,9 @@ impl SlaveEaSimulator {
 
                             // Only process trade signals (MQL5: ProcessTradeSignal)
                             if topic.starts_with("trade/") {
-                                if let Ok(signal) = rmp_serde::from_slice::<TradeSignalMessage>(payload) {
+                                if let Ok(signal) =
+                                    rmp_serde::from_slice::<TradeSignalMessage>(payload)
+                                {
                                     let mut signals = received_trade_signals.lock().unwrap();
                                     signals.push(signal);
                                 }
@@ -384,11 +388,15 @@ impl SlaveEaSimulator {
                                 }
                                 subscribed.push(master_acc.clone());
                             }
-                        } else if let Ok(snapshot) = rmp_serde::from_slice::<PositionSnapshotMessage>(payload) {
+                        } else if let Ok(snapshot) =
+                            rmp_serde::from_slice::<PositionSnapshotMessage>(payload)
+                        {
                             // MQL5: ProcessPositionSnapshot() - キューに格納
                             let mut snapshots = received_position_snapshots.lock().unwrap();
                             snapshots.push(snapshot);
-                        } else if let Ok(vlogs_config) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
+                        } else if let Ok(vlogs_config) =
+                            rmp_serde::from_slice::<VLogsConfigMessage>(payload)
+                        {
                             // MQL5: ProcessVLogsConfig() - キューに格納
                             let mut configs = received_vlogs_configs.lock().unwrap();
                             configs.push(vlogs_config);
@@ -558,7 +566,7 @@ impl SlaveEaSimulator {
     }
 
     /// Try to receive a PositionSnapshot message with timeout
-    /// 
+    ///
     /// PositionSnapshots are received by OnTimer thread on config_socket and
     /// queued in received_position_snapshots. This method reads from that queue.
     ///
@@ -633,7 +641,12 @@ impl SlaveEaSimulator {
     pub fn subscribe_to_master(&self, master_account: &str) -> Result<()> {
         // Use FFI build_trade_topic (same as MQL5 EA)
         let master_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
-        let slave_utf16: Vec<u16> = self.base.account_id().encode_utf16().chain(Some(0)).collect();
+        let slave_utf16: Vec<u16> = self
+            .base
+            .account_id()
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
         let mut topic_buffer = vec![0u16; 256];
         let topic_len = unsafe {
             sankey_copier_zmq::ffi::build_trade_topic(

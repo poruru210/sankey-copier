@@ -46,7 +46,11 @@ async fn test_partial_close_signal() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -58,8 +62,7 @@ async fn test_partial_close_signal() {
     sleep(Duration::from_millis(500)).await;
 
     // Step 1: Open a position (lots passed through unchanged, Slave EA applies multiplier)
-    let open_signal =
-        master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
+    let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
     master
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
@@ -131,7 +134,11 @@ async fn test_full_close_signal_no_ratio() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -200,7 +207,11 @@ async fn test_allowed_symbols_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -273,7 +284,11 @@ async fn test_blocked_symbols_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -294,7 +309,10 @@ async fn test_blocked_symbols_filter() {
     let received1 = slave
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
-    assert!(received1.is_some(), "EURUSD should be received (not blocked)");
+    assert!(
+        received1.is_some(),
+        "EURUSD should be received (not blocked)"
+    );
 
     // Send blocked symbol - should NOT be received
     let signal2 = master.create_open_signal(12346, "XAUUSD", "Buy", 0.1, 2000.0, None, None, 0);
@@ -306,7 +324,10 @@ async fn test_blocked_symbols_filter() {
     let received2 = slave
         .try_receive_trade_signal(500)
         .expect("Failed to receive signal");
-    assert!(received2.is_none(), "XAUUSD should NOT be received (blocked)");
+    assert!(
+        received2.is_none(),
+        "XAUUSD should NOT be received (blocked)"
+    );
 
     println!("✅ test_blocked_symbols_filter passed");
 }
@@ -347,7 +368,11 @@ async fn test_allowed_magic_numbers_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -359,8 +384,7 @@ async fn test_allowed_magic_numbers_filter() {
     sleep(Duration::from_millis(500)).await;
 
     // Send allowed magic number - should be received
-    let signal1 =
-        master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 12345);
+    let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 12345);
     master
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
@@ -375,8 +399,7 @@ async fn test_allowed_magic_numbers_filter() {
     );
 
     // Send non-allowed magic number - should NOT be received
-    let signal2 =
-        master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 99999);
+    let signal2 = master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 99999);
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -425,7 +448,11 @@ async fn test_blocked_magic_numbers_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -437,8 +464,7 @@ async fn test_blocked_magic_numbers_filter() {
     sleep(Duration::from_millis(500)).await;
 
     // Send non-blocked magic number - should be received
-    let signal1 =
-        master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 33333);
+    let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 33333);
     master
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
@@ -453,8 +479,7 @@ async fn test_blocked_magic_numbers_filter() {
     );
 
     // Send blocked magic number - should NOT be received
-    let signal2 =
-        master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 11111);
+    let signal2 = master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 11111);
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -502,7 +527,11 @@ async fn test_source_lot_min_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -573,7 +602,11 @@ async fn test_source_lot_max_filter() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -647,7 +680,11 @@ async fn test_multiple_sequential_partial_closes() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -659,8 +696,7 @@ async fn test_multiple_sequential_partial_closes() {
     sleep(Duration::from_millis(500)).await;
 
     // Open position with 1.0 lots
-    let open_signal =
-        master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
+    let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
     master
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
@@ -681,7 +717,10 @@ async fn test_multiple_sequential_partial_closes() {
     let received_partial1 = slave
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
-    assert!(received_partial1.is_some(), "Should receive first partial close");
+    assert!(
+        received_partial1.is_some(),
+        "Should receive first partial close"
+    );
     assert_eq!(
         received_partial1.unwrap().close_ratio,
         Some(0.5),
@@ -698,7 +737,10 @@ async fn test_multiple_sequential_partial_closes() {
     let received_partial2 = slave
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
-    assert!(received_partial2.is_some(), "Should receive second partial close");
+    assert!(
+        received_partial2.is_some(),
+        "Should receive second partial close"
+    );
     assert_eq!(
         received_partial2.unwrap().close_ratio,
         Some(0.5),
@@ -739,7 +781,11 @@ async fn test_pending_order_types() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -868,7 +914,11 @@ async fn test_pending_orders_disabled() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -880,8 +930,7 @@ async fn test_pending_orders_disabled() {
     sleep(Duration::from_millis(500)).await;
 
     // Market order should be received
-    let market_order =
-        master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let market_order = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&market_order)
         .expect("Failed to send signal");
@@ -910,4 +959,3 @@ async fn test_pending_orders_disabled() {
 
     println!("✅ test_pending_orders_disabled passed");
 }
-

@@ -224,7 +224,11 @@ async fn test_slave_receives_vlogs_on_registration() {
     sleep(Duration::from_millis(500)).await;
 
     // Create slave EA
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), "VLOGS_SLAVE_001",
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        "VLOGS_SLAVE_001",
         "VLOGS_MASTER_001",
     )
     .expect("Failed to create slave");
@@ -276,7 +280,11 @@ async fn test_vlogs_broadcast_on_api_update() {
     .expect("Failed to create master");
 
     // Create slave EA
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), "VLOGS_SLAVE_002",
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        "VLOGS_SLAVE_002",
         "VLOGS_MASTER_002",
     )
     .expect("Failed to create slave");
@@ -318,7 +326,10 @@ async fn test_vlogs_broadcast_on_api_update() {
         .await
         .expect("Failed to send toggle request");
 
-    assert!(response.status().is_success(), "Toggle request should succeed");
+    assert!(
+        response.status().is_success(),
+        "Toggle request should succeed"
+    );
 
     // Give time for broadcast
     sleep(Duration::from_millis(300)).await;
@@ -335,12 +346,18 @@ async fn test_vlogs_broadcast_on_api_update() {
     let mut received_count = 0;
 
     if let Some(config) = master_received {
-        println!("✅ Master received broadcast VLogs config: enabled={}", config.enabled);
+        println!(
+            "✅ Master received broadcast VLogs config: enabled={}",
+            config.enabled
+        );
         received_count += 1;
     }
 
     if let Some(config) = slave_received {
-        println!("✅ Slave received broadcast VLogs config: enabled={}", config.enabled);
+        println!(
+            "✅ Slave received broadcast VLogs config: enabled={}",
+            config.enabled
+        );
         received_count += 1;
     }
 
@@ -350,4 +367,3 @@ async fn test_vlogs_broadcast_on_api_update() {
 
     println!("✅ VLogs Broadcast on API Update E2E test passed");
 }
-

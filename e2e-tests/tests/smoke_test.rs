@@ -63,7 +63,11 @@ async fn test_slave_ea_connection() {
     sleep(Duration::from_millis(500)).await;
 
     // Create and connect Slave EA simulator
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), "slave-smoke-test",
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        "slave-smoke-test",
         "master-smoke-test", // master_account to subscribe to
     )
     .expect("Failed to create slave simulator");
@@ -93,7 +97,11 @@ async fn test_master_slave_basic_communication() {
     .expect("Failed to create master");
 
     // Create Slave subscribed to the master
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), "slave-comm-test",
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        "slave-comm-test",
         "master-comm-test", // subscribe to master
     )
     .expect("Failed to create slave");
@@ -105,8 +113,9 @@ async fn test_master_slave_basic_communication() {
     slave.start().expect("Slave start failed");
 
     // Wait for slave to connect and receive config
-    slave.wait_for_status(STATUS_CONNECTED, 5000).expect("Slave failed to connect");
+    slave
+        .wait_for_status(STATUS_CONNECTED, 5000)
+        .expect("Slave failed to connect");
 
     println!("Master and Slave both connected and running");
 }
-

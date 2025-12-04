@@ -5,7 +5,9 @@
 
 use e2e_tests::helpers::default_test_slave_settings;
 use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
+use e2e_tests::{
+    MasterEaSimulator, SlaveEaSimulator, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
+};
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
 use tokio::time::{sleep, Duration};
@@ -33,7 +35,11 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
     assert_runtime_status(&db, master_account, slave_account, STATUS_DISABLED).await;
 
     // Create slave simulator
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -86,8 +92,13 @@ async fn seed_trade_group(
 
     // Add slave member with DISABLED status
     let slave_settings = default_test_slave_settings();
-    db.add_member(master_account, slave_account, slave_settings, STATUS_DISABLED)
-        .await?;
+    db.add_member(
+        master_account,
+        slave_account,
+        slave_settings,
+        STATUS_DISABLED,
+    )
+    .await?;
 
     // Enable the member (enabled_flag) but keep runtime_status as DISABLED
     db.update_member_enabled_flag(master_account, slave_account, true)
@@ -116,4 +127,3 @@ async fn assert_runtime_status(
         expected, member.runtime_status
     );
 }
-

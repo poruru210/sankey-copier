@@ -136,14 +136,21 @@ impl RelayServerProcess {
 
         let runtime_toml_path = working_dir.join("runtime.toml");
         let db_path = working_dir.join("e2e_test.db");
-        let database_url = format!("sqlite://{}?mode=rwc", db_path.to_str().unwrap().replace('\\', "/"));
+        let database_url = format!(
+            "sqlite://{}?mode=rwc",
+            db_path.to_str().unwrap().replace('\\', "/")
+        );
 
         // Build the binary first (from workspace root) if not already built
         // This ensures we don't wait for compilation during server startup
         let binary_path = workspace_root
             .join("target")
             .join("release")
-            .join(if cfg!(windows) { "sankey-copier-server.exe" } else { "sankey-copier-server" });
+            .join(if cfg!(windows) {
+                "sankey-copier-server.exe"
+            } else {
+                "sankey-copier-server"
+            });
 
         if !binary_path.exists() {
             eprintln!("Building relay-server binary (first time only)...");
@@ -189,7 +196,10 @@ impl RelayServerProcess {
                     if let Ok(line) = line {
                         eprintln!(
                             "[relay-server@{}] {}",
-                            working_dir_for_log.file_name().unwrap_or_default().to_string_lossy(),
+                            working_dir_for_log
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy(),
                             line
                         );
                     }
@@ -363,7 +373,7 @@ mod tests {
         assert!(server.zmq_pull_port > 0);
         assert!(server.zmq_pub_port > 0);
         assert!(server.working_dir.exists());
-        
+
         // Verify temp directory has the expected files
         assert!(server.working_dir.join("config.test.toml").exists());
         assert!(server.working_dir.join("runtime.toml").exists());
@@ -377,16 +387,22 @@ mod tests {
         let server1 = RelayServerProcess::start().expect("Failed to start server 1");
         let server2 = RelayServerProcess::start().expect("Failed to start server 2");
 
-        println!("Server 1: PULL={}, PUB={}", server1.zmq_pull_port, server1.zmq_pub_port);
-        println!("Server 2: PULL={}, PUB={}", server2.zmq_pull_port, server2.zmq_pub_port);
+        println!(
+            "Server 1: PULL={}, PUB={}",
+            server1.zmq_pull_port, server1.zmq_pub_port
+        );
+        println!(
+            "Server 2: PULL={}, PUB={}",
+            server2.zmq_pull_port, server2.zmq_pub_port
+        );
 
         // Verify different ports
         assert_ne!(server1.zmq_pull_port, server2.zmq_pull_port);
         assert_ne!(server1.zmq_pub_port, server2.zmq_pub_port);
-        
+
         // Verify different working directories
         assert_ne!(server1.working_dir, server2.working_dir);
-        
+
         // Verify different DB paths
         assert_ne!(server1.db_path, server2.db_path);
     }

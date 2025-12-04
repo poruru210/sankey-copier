@@ -69,7 +69,7 @@ pub fn default_test_slave_settings() -> SlaveSettings {
 // =============================================================================
 
 /// Enable a member's Web UI toggle (Intent only, no runtime status change)
-/// 
+///
 /// This sets the "enabled" flag in the database, which is the Intent.
 /// The actual runtime status is calculated by the Status Engine based on
 /// Intent + ConnectionSnapshot (heartbeat).
@@ -95,10 +95,10 @@ pub async fn disable_member_intent(
 }
 
 /// Setup basic test scenario with master and slaves in DB
-/// 
+///
 /// Creates trade group, enables master, and adds all slaves with given settings.
 /// Slaves are added with DISABLED status and disabled intent.
-/// 
+///
 /// To achieve CONNECTED status:
 /// 1. Call `enable_member_intent()` to enable slave's Web UI toggle
 /// 2. Start Master EA with `master.start()` to send heartbeats
@@ -132,7 +132,7 @@ pub async fn setup_test_db(
 }
 
 /// Setup test scenario and enable all slaves' intent
-/// 
+///
 /// This is a convenience function that sets up the DB and enables
 /// all slaves' Web UI toggles. The EAs still need to be started
 /// to achieve CONNECTED status.
@@ -154,11 +154,11 @@ pub async fn setup_test_scenario_with_enabled_slaves(
 }
 
 /// Setup test scenario with slaves ready for trade copying
-/// 
+///
 /// This is a complete setup that:
 /// 1. Creates trade group and master in DB
 /// 2. Adds all slaves with settings and ENABLED intent
-/// 
+///
 /// After calling this, start EAs with `start_eas_and_wait_for_ready()` to
 /// achieve CONNECTED status.
 pub async fn setup_test_scenario(
@@ -176,32 +176,29 @@ pub async fn setup_test_scenario(
 // =============================================================================
 
 /// Start Master EA and wait for it to become ready
-/// 
+///
 /// This function:
 /// 1. Starts the Master EA (sends initial heartbeat + background thread)
 /// 2. Waits for the specified duration for the connection to establish
-/// 
+///
 /// Returns Ok(()) when the Master EA is online and ready.
-pub async fn start_master_and_wait(
-    master: &mut MasterEaSimulator,
-    wait_ms: u64,
-) -> Result<()> {
+pub async fn start_master_and_wait(master: &mut MasterEaSimulator, wait_ms: u64) -> Result<()> {
     master.start()?;
     sleep(Duration::from_millis(wait_ms)).await;
     Ok(())
 }
 
 /// Start Slave EA and wait for Config reception (if DB has connection info)
-/// 
+///
 /// This function:
 /// 1. Starts the Slave EA (OnTimer loop starts automatically)
 /// 2. Waits for the Slave to receive a SlaveConfigMessage from the server
 /// 3. Returns the received config, or None if timeout
-/// 
+///
 /// The Slave is considered "ready" when it receives its first config.
 /// This ensures the Status Engine has processed the heartbeat and
 /// calculated the runtime status.
-/// 
+///
 /// Note: With MQL5-conformant implementation, config reception happens
 /// automatically via the OnTimer loop. This function uses wait_for_status
 /// to detect when config has been received.
@@ -210,7 +207,7 @@ pub async fn start_slave_and_wait_for_config(
     timeout_ms: i32,
 ) -> Result<Option<crate::SlaveConfig>> {
     slave.start()?;
-    
+
     // Wait for any status (config reception)
     // Use STATUS_DISABLED as minimum - any status >= -1 means config received
     let config = slave.wait_for_status(STATUS_DISABLED, timeout_ms)?;
@@ -218,7 +215,7 @@ pub async fn start_slave_and_wait_for_config(
 }
 
 /// Start Slave EA and wait for a specific status
-/// 
+///
 /// This function:
 /// 1. Starts the Slave EA (sends initial heartbeat + background thread)
 /// 2. Waits to receive a SlaveConfigMessage with the expected status
@@ -229,25 +226,25 @@ pub async fn start_slave_and_wait_for_status(
     timeout_ms: i32,
 ) -> Result<Option<crate::SlaveConfig>> {
     slave.start()?;
-    
+
     // Wait for config with expected status
     let config = slave.wait_for_status(expected_status, timeout_ms)?;
     Ok(config)
 }
 
 /// Start all EAs and wait for Slaves to receive their configs
-/// 
+///
 /// This function:
 /// 1. Starts the Master EA first (so it's online when Slaves connect)
 /// 2. Starts all Slave EAs (OnTimer loops start automatically)
 /// 3. Waits for each Slave to receive a config message
-/// 
+///
 /// This provides a reliable way to know when all EAs are ready:
 /// - Master is online and registered with the server
 /// - Each Slave has received its config (Status Engine has processed)
-/// 
+///
 /// Returns a Vec of received configs for each slave.
-/// 
+///
 /// Note: With MQL5-conformant implementation, config reception happens
 /// automatically via the OnTimer loop.
 pub async fn start_eas_and_wait_for_ready(
@@ -274,10 +271,10 @@ pub async fn start_eas_and_wait_for_ready(
 }
 
 /// Start all EAs and wait for all Slaves to reach CONNECTED status
-/// 
+///
 /// This is the most reliable way to ensure all EAs are fully connected
 /// and ready for trade copying.
-/// 
+///
 /// Returns a Vec of received configs (all with CONNECTED status).
 /// Returns error if any Slave fails to reach CONNECTED within timeout.
 pub async fn start_eas_and_wait_for_connected(
@@ -307,7 +304,7 @@ pub async fn start_eas_and_wait_for_connected(
 }
 
 /// Start all EAs with default wait time (legacy compatibility)
-/// 
+///
 /// This is kept for backwards compatibility. New tests should use
 /// `start_eas_and_wait_for_ready()` or `start_eas_and_wait_for_connected()`.
 pub async fn start_and_wait_for_connection(

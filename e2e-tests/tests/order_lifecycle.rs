@@ -56,7 +56,11 @@ async fn test_open_close_cycle() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -145,7 +149,11 @@ async fn test_open_modify_close_cycle() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -233,7 +241,11 @@ async fn test_modify_sl_only() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -299,7 +311,11 @@ async fn test_modify_tp_only() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -365,7 +381,11 @@ async fn test_modify_both_sl_tp() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -431,7 +451,11 @@ async fn test_multiple_open_sequential() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -495,7 +519,11 @@ async fn test_rapid_fire_signals() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -578,7 +606,11 @@ async fn test_close_nonexistent_position() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -591,10 +623,14 @@ async fn test_close_nonexistent_position() {
 
     // Send Close for ticket that was never opened
     let close_signal = master.create_close_signal(99999, "EURUSD", 0.1);
-    master.send_trade_signal(&close_signal).expect("Failed to send signal");
+    master
+        .send_trade_signal(&close_signal)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(200)).await;
-    let received = slave.try_receive_trade_signal(3000).expect("Failed to receive");
+    let received = slave
+        .try_receive_trade_signal(3000)
+        .expect("Failed to receive");
 
     // Server should still relay the signal (doesn't track position state)
     assert!(
@@ -634,7 +670,11 @@ async fn test_close_already_closed() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -656,24 +696,33 @@ async fn test_close_already_closed() {
         None,
         0,
     );
-    master.send_trade_signal(&open_signal).expect("Failed to send signal");
+    master
+        .send_trade_signal(&open_signal)
+        .expect("Failed to send signal");
     sleep(Duration::from_millis(100)).await;
 
     // First Close
     let close1 = master.create_close_signal(12347, "EURUSD", 0.1);
-    master.send_trade_signal(&close1).expect("Failed to send signal");
+    master
+        .send_trade_signal(&close1)
+        .expect("Failed to send signal");
     sleep(Duration::from_millis(100)).await;
 
     // Second Close (duplicate)
     let close2 = master.create_close_signal(12347, "EURUSD", 0.1);
-    master.send_trade_signal(&close2).expect("Failed to send signal");
+    master
+        .send_trade_signal(&close2)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(200)).await;
 
     // Collect all signals
     let mut signals = Vec::new();
     for _ in 0..3 {
-        if let Some(signal) = slave.try_receive_trade_signal(1000).expect("Failed to receive") {
+        if let Some(signal) = slave
+            .try_receive_trade_signal(1000)
+            .expect("Failed to receive")
+        {
             signals.push(signal);
         }
     }
@@ -713,7 +762,11 @@ async fn test_modify_multiple_times() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -726,22 +779,31 @@ async fn test_modify_multiple_times() {
 
     // Send 3 Modify signals with different SL/TP values
     let modify1 = master.create_modify_signal(12351, "EURUSD", Some(1.0800), Some(1.0900));
-    master.send_trade_signal(&modify1).expect("Failed to send signal");
+    master
+        .send_trade_signal(&modify1)
+        .expect("Failed to send signal");
     sleep(Duration::from_millis(100)).await;
 
     let modify2 = master.create_modify_signal(12351, "EURUSD", Some(1.0750), Some(1.0950));
-    master.send_trade_signal(&modify2).expect("Failed to send signal");
+    master
+        .send_trade_signal(&modify2)
+        .expect("Failed to send signal");
     sleep(Duration::from_millis(100)).await;
 
     let modify3 = master.create_modify_signal(12351, "EURUSD", Some(1.0700), Some(1.1000));
-    master.send_trade_signal(&modify3).expect("Failed to send signal");
+    master
+        .send_trade_signal(&modify3)
+        .expect("Failed to send signal");
 
     sleep(Duration::from_millis(200)).await;
 
     // Collect all signals
     let mut signals = Vec::new();
     for _ in 0..3 {
-        if let Some(signal) = slave.try_receive_trade_signal(1000).expect("Failed to receive") {
+        if let Some(signal) = slave
+            .try_receive_trade_signal(1000)
+            .expect("Failed to receive")
+        {
             signals.push(signal);
         }
     }
@@ -755,4 +817,3 @@ async fn test_modify_multiple_times() {
 
     println!("✅ test_modify_multiple_times passed");
 }
-

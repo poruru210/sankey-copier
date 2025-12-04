@@ -45,7 +45,11 @@ async fn test_symbol_prefix_suffix_transformation() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -125,7 +129,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -167,14 +175,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 2: Symbol WITHOUT prefix but with suffix
     let signal2 = master.create_open_signal(
-        10002,
-        "USDJPY.m", // Only suffix matches, no prefix
-        "Sell",
-        0.2,
-        150.0,
-        None,
-        None,
-        0,
+        10002, "USDJPY.m", // Only suffix matches, no prefix
+        "Sell", 0.2, 150.0, None, None, 0,
     );
     master
         .send_trade_signal(&signal2)
@@ -196,14 +198,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 3: Symbol with NO prefix/suffix match - should be passed through as-is
     let signal3 = master.create_open_signal(
-        10003,
-        "GBPUSD", // No prefix/suffix at all
-        "Buy",
-        0.15,
-        1.2500,
-        None,
-        None,
-        0,
+        10003, "GBPUSD", // No prefix/suffix at all
+        "Buy", 0.15, 1.2500, None, None, 0,
     );
     master
         .send_trade_signal(&signal3)
@@ -226,14 +222,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 4: Different broker symbol format - should be passed through
     let signal4 = master.create_open_signal(
-        10004,
-        "XAUUSD#", // Different format (e.g., hashtag suffix)
-        "Buy",
-        0.5,
-        2000.0,
-        None,
-        None,
-        0,
+        10004, "XAUUSD#", // Different format (e.g., hashtag suffix)
+        "Buy", 0.5, 2000.0, None, None, 0,
     );
     master
         .send_trade_signal(&signal4)
@@ -255,7 +245,10 @@ async fn test_master_sends_all_symbols_no_filtering() {
     );
 
     println!("✅ test_master_sends_all_symbols_no_filtering passed");
-    println!("  - PRO.EURUSD.m -> {:?} (transformation applied)", sig1.symbol);
+    println!(
+        "  - PRO.EURUSD.m -> {:?} (transformation applied)",
+        sig1.symbol
+    );
     println!("  - USDJPY.m -> {:?} (suffix handling)", sig2.symbol);
     println!("  - GBPUSD -> GBPUSD (no match, passed through)");
     println!("  - XAUUSD# -> XAUUSD# (different format, passed through)");
@@ -301,7 +294,11 @@ async fn test_symbol_mapping() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -365,7 +362,11 @@ async fn test_reverse_trade_buy_to_sell() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -426,7 +427,11 @@ async fn test_reverse_trade_pending_orders() {
     )
     .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(&server.zmq_pull_address(), &server.zmq_pub_address(), &server.zmq_pub_address(), slave_account,
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
         master_account,
     )
     .expect("Failed to create slave simulator");
@@ -458,4 +463,3 @@ async fn test_reverse_trade_pending_orders() {
 
     println!("✅ test_reverse_trade_pending_orders passed");
 }
-

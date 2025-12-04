@@ -5,17 +5,9 @@
 // Re-export types for test files
 pub use sankey_copier_zmq::SlaveConfigMessage as SlaveConfig;
 pub use sankey_copier_zmq::{
-    HeartbeatMessage as Heartbeat,
-    MasterConfigMessage,
-    PositionInfo,
-    PositionSnapshotMessage,
-    RequestConfigMessage,
-    SymbolMapping,
-    SyncMode,
-    SyncRequestMessage,
-    TradeFilters,
-    TradeSignalMessage,
-    VLogsConfigMessage,
+    HeartbeatMessage as Heartbeat, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
+    RequestConfigMessage, SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters,
+    TradeSignalMessage, VLogsConfigMessage,
 };
 
 /// Buffer size for ZMQ message reception
@@ -29,7 +21,7 @@ pub const TOPIC_BUFFER_SIZE: i32 = 256;
 // =============================================================================
 
 /// Heartbeat interval in seconds
-/// 
+///
 /// MQL5 production: HEARTBEAT_INTERVAL_SECONDS = 30
 /// E2E tests: 1 second for faster test execution
 pub const HEARTBEAT_INTERVAL_SECONDS: u64 = 1;

@@ -55,9 +55,9 @@ pub use base::EaSimulatorBase;
 pub use master::MasterEaSimulator;
 pub use slave::SlaveEaSimulator;
 pub use types::{
-    EaType, Heartbeat, HeartbeatParams, MasterConfigMessage, PositionInfo,
-    PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, SymbolMapping, SyncMode,
-    SyncRequestMessage, TradeFilters, TradeSignalMessage, VLogsConfigMessage, BUFFER_SIZE,
-    HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS, STATUS_CONNECTED, STATUS_DISABLED,
-    STATUS_ENABLED, STATUS_NO_CONFIG, TOPIC_BUFFER_SIZE,
+    EaType, Heartbeat, HeartbeatParams, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
+    RequestConfigMessage, SlaveConfig, SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters,
+    TradeSignalMessage, VLogsConfigMessage, BUFFER_SIZE, HEARTBEAT_INTERVAL_SECONDS,
+    ONTIMER_INTERVAL_MS, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
+    TOPIC_BUFFER_SIZE,
 };
