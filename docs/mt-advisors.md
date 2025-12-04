@@ -356,11 +356,11 @@ sequenceDiagram
     participant RS as relay-server
     participant MEA as Master EA
 
-    SEA->>RS: SyncRequest (PUSH)
-    RS->>MEA: ZMQ PUB sync/{master}/{slave}
+    SEA->>RS: SyncRequest
+    RS->>MEA: ZMQ PUB (5556 unified)
     MEA->>MEA: BuildPositionSnapshot()
     MEA->>RS: PUSH PositionSnapshot
-    RS->>SEA: ZMQ PUB sync/{master}/{slave}
+    RS->>SEA: ZMQ PUB (5556 unified)
 
     SEA->>SEA: ProcessPositionSnapshot()
 

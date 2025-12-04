@@ -160,6 +160,7 @@ impl MasterEaSimulator {
 
                 // 2. Heartbeat判定 (MQL5 L235-236)
                 let now = Instant::now();
+                // Option<Instant> implements Copy, avoid unnecessary clone
                 let last_hb = *g_last_heartbeat.lock().unwrap();
                 let should_send_heartbeat = match last_hb {
                     None => true,

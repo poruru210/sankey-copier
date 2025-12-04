@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 // ZmqPublisher is the primary name (2-port architecture)
 // ZmqConfigPublisher is kept for backward compatibility
 #[allow(unused_imports)]
-pub use config_publisher::{ZmqConfigPublisher, ZmqPublisher};
+pub use config_publisher::{ZmqConfigPublisher, ZmqPublisher, SendFailure};
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),

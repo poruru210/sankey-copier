@@ -7,6 +7,9 @@ use anyhow::{Context, Result};
 use sankey_copier_zmq::{build_trade_topic, ConfigMessage}; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::models::TradeSignal;
 
@@ -20,9 +23,26 @@ struct SerializedMessage {
 /// - Trade signals (to Slave EAs via trade_group_id topic)
 /// - Config messages (to Master/Slave EAs via account_id topic)
 /// - VLogs config broadcasts (to all EAs via vlogs_config topic)
+/// Snapshot of ZMQ publisher metrics
+pub struct ZmqPublisherMetrics {
+    pub sends_total: u64,
+    pub send_failures_total: u64,
+}
+
+/// Representation of a failed send event (for persistence/inspection)
+#[derive(Debug, Clone)]
+pub struct SendFailure {
+    pub topic: String,
+    pub payload: Vec<u8>,
+    pub error: String,
+    pub attempts: i32,
+}
+
 pub struct ZmqPublisher {
     tx: mpsc::UnboundedSender<SerializedMessage>,
     _handle: JoinHandle<()>,
+    sends_total: Arc<AtomicU64>,
+    send_failures_total: Arc<AtomicU64>,
 }
 
 /// Type alias for backward compatibility
@@ -46,7 +66,13 @@ impl ZmqPublisher {
 
         let (tx, mut rx) = mpsc::unbounded_channel::<SerializedMessage>();
 
+        let sends_total = Arc::new(AtomicU64::new(0));
+        let send_failures_total = Arc::new(AtomicU64::new(0));
+
         // Spawn dedicated task for ZMQ sending
+        let sends_total_cl = sends_total.clone();
+        let send_failures_cl = send_failures_total.clone();
+
         let handle = tokio::task::spawn_blocking(move || {
             while let Some(msg) = rx.blocking_recv() {
                 // Build ZMQ message: topic + space + MessagePack
@@ -54,14 +80,38 @@ impl ZmqPublisher {
                 zmq_message.push(b' ');
                 zmq_message.extend_from_slice(&msg.payload);
 
-                if let Err(e) = socket.send(&zmq_message, 0) {
-                    tracing::error!("Failed to send ZMQ message to topic '{}': {}", msg.topic, e);
-                } else {
-                    tracing::debug!(
-                        "Sent MessagePack message to topic '{}': {} bytes",
-                        msg.topic,
-                        zmq_message.len()
-                    );
+                // Try to send with a few retries on failure.
+                const MAX_RETRIES: usize = 3;
+                let mut attempt: usize = 0;
+                let mut sent_ok = false;
+                while attempt <= MAX_RETRIES {
+                    attempt += 1;
+                    match socket.send(&zmq_message, 0) {
+                        Ok(_) => {
+                            sends_total_cl.fetch_add(1, Ordering::Relaxed);
+                            tracing::debug!(
+                                "Sent MessagePack message to topic '{}': {} bytes (attempt={})",
+                                msg.topic,
+                                zmq_message.len(),
+                                attempt
+                            );
+                            sent_ok = true;
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to send ZMQ message to topic '{}' (attempt={}): {}", msg.topic, attempt, e);
+                            if attempt <= MAX_RETRIES {
+                                std::thread::sleep(Duration::from_millis(50));
+                                continue;
+                            } else {
+                                send_failures_cl.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                }
+
+                if !sent_ok {
+                    tracing::error!("ZMQ message to topic '{}' failed after {} attempts", msg.topic, MAX_RETRIES + 1);
                 }
             }
 
@@ -74,7 +124,112 @@ impl ZmqPublisher {
         Ok(Self {
             tx,
             _handle: handle,
+            sends_total,
+            send_failures_total,
         })
+    }
+
+    /// Create a publisher that will notify a provided failure channel when a send
+    /// fails after retries. The provided `failure_tx` will receive `SendFailure`
+    /// messages to allow persistence/retry handling outside of the blocking thread.
+    pub fn new_with_failure_sender(
+        bind_address: &str,
+        failure_tx: mpsc::UnboundedSender<SendFailure>,
+    ) -> Result<Self> {
+        let context = zmq::Context::new();
+        let socket = context
+            .socket(zmq::PUB)
+            .context("Failed to create PUB socket")?;
+
+        socket
+            .bind(bind_address)
+            .context(format!("Failed to bind to {}", bind_address))?;
+
+        tracing::info!(
+            "ZeroMQ unified publisher (MessagePack) bound to {}",
+            bind_address
+        );
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<SerializedMessage>();
+
+        let sends_total = Arc::new(AtomicU64::new(0));
+        let send_failures_total = Arc::new(AtomicU64::new(0));
+
+        // Spawn dedicated task for ZMQ sending
+        let sends_total_cl = sends_total.clone();
+        let send_failures_cl = send_failures_total.clone();
+        let f_tx = failure_tx.clone();
+
+        let handle = tokio::task::spawn_blocking(move || {
+            while let Some(msg) = rx.blocking_recv() {
+                // Build ZMQ message: topic + space + MessagePack
+                let mut zmq_message = msg.topic.as_bytes().to_vec();
+                zmq_message.push(b' ');
+                zmq_message.extend_from_slice(&msg.payload);
+
+                // Try to send with a few retries on failure.
+                const MAX_RETRIES: usize = 3;
+                let mut attempt: usize = 0;
+                let mut sent_ok = false;
+                while attempt <= MAX_RETRIES {
+                    attempt += 1;
+                    match socket.send(&zmq_message, 0) {
+                        Ok(_) => {
+                            sends_total_cl.fetch_add(1, Ordering::Relaxed);
+                            tracing::debug!(
+                                "Sent MessagePack message to topic '{}': {} bytes (attempt={})",
+                                msg.topic,
+                                zmq_message.len(),
+                                attempt
+                            );
+                            sent_ok = true;
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to send ZMQ message to topic '{}' (attempt={}): {}", msg.topic, attempt, e);
+                            if attempt <= MAX_RETRIES {
+                                std::thread::sleep(Duration::from_millis(50));
+                                continue;
+                            } else {
+                                send_failures_cl.fetch_add(1, Ordering::Relaxed);
+
+                                // Send an async-safe failure notification; ignore send errors
+                                let _ = f_tx.send(SendFailure {
+                                    topic: msg.topic.clone(),
+                                    payload: msg.payload.clone(),
+                                    error: format!("send failed: {}", e),
+                                    attempts: (MAX_RETRIES + 1) as i32,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if !sent_ok {
+                    tracing::error!("ZMQ message to topic '{}' failed after {} attempts", msg.topic, MAX_RETRIES + 1);
+                }
+            }
+
+            // Explicitly drop socket before context is destroyed
+            drop(socket);
+            drop(context);
+            tracing::info!("ZMQ unified publisher shut down cleanly");
+        });
+
+        Ok(Self {
+            tx,
+            _handle: handle,
+            sends_total,
+            send_failures_total,
+        })
+    }
+
+    /// Return a snapshot of the current ZMQ send metrics
+    pub fn metrics_snapshot(&self) -> ZmqPublisherMetrics {
+        ZmqPublisherMetrics {
+            sends_total: self.sends_total.load(Ordering::Relaxed),
+            send_failures_total: self.send_failures_total.load(Ordering::Relaxed),
+        }
     }
 
     /// Unified send method for all ConfigMessage types
@@ -116,6 +271,21 @@ impl ZmqPublisher {
         self.tx
             .send(serialized)
             .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Publish a pre-serialized MessagePack payload to a given topic.
+    /// This is used by retry workers that persist raw MessagePack bytes.
+    pub async fn publish_raw(&self, topic: &str, payload: &[u8]) -> Result<()> {
+        let serialized = SerializedMessage {
+            topic: topic.to_string(),
+            payload: payload.to_vec(),
+        };
+
+        self.tx
+            .send(serialized)
+            .map_err(|e| anyhow::anyhow!("Failed to send raw message: {}", e))?;
 
         Ok(())
     }
@@ -322,5 +492,35 @@ mod tests {
             let result = handle.await.unwrap();
             assert!(result.is_ok());
         }
+    }
+
+    #[tokio::test]
+    async fn test_metrics_counts() {
+        use std::sync::atomic::{AtomicU16, Ordering};
+        static PORT: AtomicU16 = AtomicU16::new(29557);
+        let port = PORT.fetch_add(1, Ordering::SeqCst);
+
+        let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
+
+        // Send a few messages
+        for i in 0..5 {
+            let config = MasterConfigMessage {
+                account_id: format!("M_{}", i),
+                status: 2,
+                symbol_prefix: None,
+                symbol_suffix: None,
+                config_version: 1,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                warning_codes: Vec::new(),
+            };
+            publisher.send(&config).await.unwrap();
+        }
+
+        // Give background sender a moment to process
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let metrics = publisher.metrics_snapshot();
+        assert!(metrics.sends_total >= 5);
+        assert_eq!(metrics.send_failures_total, 0);
     }
 }

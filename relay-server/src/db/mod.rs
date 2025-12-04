@@ -10,6 +10,7 @@ use sqlx::{sqlite::SqlitePool, Row};
 mod config_distribution;
 mod global_settings;
 mod trade_group_members;
+mod send_failures;
 mod trade_groups;
 
 // Re-export all public items
@@ -127,6 +128,24 @@ impl Database {
             CREATE TABLE IF NOT EXISTS global_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create failed_outgoing_messages table to persist ZMQ send failures
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS failed_outgoing_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                error TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                processed INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             "#,
