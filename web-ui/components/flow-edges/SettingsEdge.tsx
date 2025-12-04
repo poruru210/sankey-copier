@@ -58,9 +58,11 @@ export const SettingsEdge = memo(({
   }
   const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
 
-  // Determine if edge is active
+  // Determine edge state based on runtime_status:
+  // 0 = DISABLED (gray), 1 = ENABLED/waiting (yellow), 2 = CONNECTED (green)
   const runtimeStatus = setting?.runtime_status ?? setting?.status;
-  const isActive = runtimeStatus !== 0;
+  const isConnected = runtimeStatus === 2;
+  const isEnabled = runtimeStatus === 1;
 
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,7 +92,11 @@ export const SettingsEdge = memo(({
             {labelText && (
               <span
                 className={`text-xs font-semibold ${
-                  isActive ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+                  isConnected
+                    ? 'text-green-600 dark:text-green-400'
+                    : isEnabled
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-gray-500 dark:text-gray-400'
                 }`}
               >
                 {labelText}
