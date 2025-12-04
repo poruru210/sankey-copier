@@ -117,6 +117,7 @@ impl TestServer {
 
         // Create resolved ports for tests (2-port architecture)
         let resolved_ports = Arc::new(ResolvedPorts {
+            http_port,
             receiver_port: zmq_pull_port,
             sender_port: zmq_pub_port,
             is_dynamic: true,
