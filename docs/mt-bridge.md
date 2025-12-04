@@ -46,15 +46,16 @@ graph LR
 mt-bridge/
 ├── src/
 │   ├── lib.rs                    # ZMQ FFIラッパー (メインエントリ)
+│   ├── ffi.rs                    # ZMQ/MessagePack 統合FFI
+│   ├── ffi_helpers.rs            # UTF-16変換・ハンドル管理ヘルパー
+│   ├── types.rs                  # メッセージ型定義
+│   ├── traits.rs                 # ConfigMessageトレイト
 │   ├── victoria_logs.rs          # VictoriaLogsクライアント
+│   ├── symbol_filter_tests.rs    # シンボルフィルターテスト
 │   └── msgpack/
 │       ├── mod.rs                # モジュール定義
-│       ├── types.rs              # メッセージ型定義
-│       ├── traits.rs             # ConfigMessageトレイト
 │       ├── serialization.rs      # シリアライズ関数
-│       ├── ffi.rs                # MessagePack FFI (1153行)
-│       ├── helpers.rs            # UTF-16変換ヘルパー
-│       └── tests/
+│       └── tests/                # シリアライズテスト
 ├── build.rs                      # バージョン埋め込み
 └── Cargo.toml
 ```

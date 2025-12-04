@@ -128,43 +128,53 @@ classDiagram
     class TradeGroup {
         +String id
         +MasterSettings master_settings
-        +bool enabled_flag
-        +i32 master_runtime_status
-        +Vec~WarningCode~ warning_codes
         +String created_at
         +String updated_at
     }
 
     class MasterSettings {
+        +bool enabled
         +Option~String~ symbol_prefix
         +Option~String~ symbol_suffix
         +u32 config_version
     }
+
+    note for TradeGroup "API レスポンスでは TradeGroupRuntimeView として\nmaster_runtime_status, master_warning_codes が付与される"
 
     class TradeGroupMember {
         +i32 id
         +String trade_group_id
         +String slave_account
         +SlaveSettings slave_settings
-        +bool enabled_flag
+        +i32 status
         +i32 runtime_status
         +Vec~WarningCode~ warning_codes
+        +bool enabled_flag
         +String created_at
         +String updated_at
     }
 
+    note for TradeGroupMember "status はレガシー互換性用\n(runtime_status をミラー)"
+
     class SlaveSettings {
         +LotCalculationMode lot_calculation_mode
         +Option~f64~ lot_multiplier
+        +bool reverse_trade
         +Option~String~ symbol_prefix
         +Option~String~ symbol_suffix
         +Vec~SymbolMapping~ symbol_mappings
         +TradeFilters filters
-        +bool reverse_trade
+        +u32 config_version
+        +Option~f64~ source_lot_min
+        +Option~f64~ source_lot_max
         +SyncMode sync_mode
+        +Option~i32~ limit_order_expiry_min
+        +Option~f64~ market_sync_max_pips
+        +Option~i32~ max_slippage
+        +bool copy_pending_orders
         +i32 max_retries
         +i32 max_signal_delay_ms
-        +u32 config_version
+        +bool use_pending_order_for_delayed
     }
 
     TradeGroup "1" --> "1" MasterSettings
@@ -314,24 +324,30 @@ Status Engine は問題を検出すると `warning_codes` 配列に警告を追�
 
 ### 6.2 オブジェクトスキーマ
 
-#### TradeGroup (Master)
+#### TradeGroup (Master) - API レスポンス
 
 ```jsonc
 {
-  "master_account": "MASTER_001",
-  "display_name": "My Master",
-  "enabled_flag": true,
+  "id": "MASTER_001",
+  "master_settings": {
+    "enabled": true,
+    "symbol_prefix": null,
+    "symbol_suffix": null,
+    "config_version": 1
+  },
   "master_runtime_status": 2,
-  "warning_codes": [],
-  "members": [ ... ]
+  "master_warning_codes": [],
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
 }
 ```
 
 | フィールド | 説明 |
 |------------|------|
-| `enabled_flag` | ユーザー意図。`POST /toggle` で更新 |
+| `id` | Master アカウント ID (TradeGroup ID) |
+| `master_settings.enabled` | ユーザー意図。`POST /toggle` で更新 |
 | `master_runtime_status` | Status Engine の結果 (0 or 2) |
-| `warning_codes` | 警告配列。空なら正常 |
+| `master_warning_codes` | 警告配列。空なら正常 |
 
 #### TradeGroupMember (Slave)
 
