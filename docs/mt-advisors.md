@@ -358,6 +358,8 @@ sequenceDiagram
 
     SEA->>RS: SyncRequest
     RS->>MEA: ZMQ PUB (5556 unified)
+
+Note: The logical topic used for sync protocol is `sync/{master}/{slave}`. In this project we use a unified PUB socket (5556) to deliver `config/`, `trade/` and `sync/` messages — the transport is unified but the `sync/…` topic string continues to be used by the EA and bridge code for routing SyncRequest/PositionSnapshot messages.
     MEA->>MEA: BuildPositionSnapshot()
     MEA->>RS: PUSH PositionSnapshot
     RS->>SEA: ZMQ PUB (5556 unified)

@@ -154,6 +154,8 @@ classDiagram
         +String updated_at
     }
 
+    note for DB "failed_outgoing_messages / failed_outgoing_dead_letters: ZMQ 送信失敗の永続化とデッドレター保管用テーブル"
+
     note for TradeGroupMember "status はレガシー互換性用\n(runtime_status をミラー)"
 
     class SlaveSettings {
@@ -478,12 +480,18 @@ sequenceDiagram
 |------------|------|--------|
 | `config/{account_id}` | Master/Slave設定配布 | 特定EA |
 | `trade/{master_account}/{slave_account}` | トレードシグナル配信 | 特定Slave |
+| `sync/{master_account}/{slave_account}` | PositionSnapshot / SyncRequest (logical topic for sync protocol; delivered via unified PUB) | 特定Master-Slave間 |
 | `config/global` | VictoriaLogs設定等 | 全EA |
 
 **例**:
 - Master設定: `config/IC_Markets_123456`
 - Slave設定: `config/XM_789012`
-- トレードシグナル: `trade/IC_Markets_123456/XM_789012`
+-- トレードシグナル: `trade/IC_Markets_123456/XM_789012`
+-- 同期プロトコル: `sync/IC_Markets_123456/XM_789012`
+
+> 注: このリポジトリでは "統合 PUB (unified publisher)" アーキテクチャを採用しており、
+> サーバー→EA の配信は同じ PUB ポート (例: 5556) から行われます。トピック名 (`config/...`, `trade/...`, `sync/...`) は
+> 論理的なルーティング文字列として引き続き使用されます — `sync/…` トピックも廃止されておらず、PositionSnapshot / SyncRequest 用に利用されます。
 
 ### 8.3 メッセージフォーマット
 
@@ -492,6 +500,16 @@ sequenceDiagram
 ```
 PUB/SUB トピック形式: "{topic} {MessagePack payload}"
 ```
+
+### 8.5 ZMQ 送信の信頼性（メトリクス / 再試行 / 永続化）
+
+最近の実装では、ZMQ の送信信頼性を高めるための機能が追加されています。重要な点は次の通りです。
+
+- 送信メトリクス: 送信成功数 (sends_total) と送信失敗数 (send_failures_total) が内部カウンタとして記録され、運用での可観測性を向上させます。
+- 同期再試行: 送信に失敗した場合は内部で数回リトライ（ex: 3 回）を行います。失敗が継続した場合は、失敗イベントが永続化されます。
+- 永続化と再配信ワーカー: 永続化された失敗（`failed_outgoing_messages` テーブル）を別プロセス/ワーカーが定期的に読み出し、再送（publish_raw）を試みます。再送に失敗し続けると attempts カウントを増やし、上限に達したら `failed_outgoing_dead_letters` に移動し運用での手動調査・再処理を可能にします。
+
+これらの仕組みにより、一時的なネットワーク障害や PUB ソケットの瞬断に対しても、メッセージロスを検出・回復するための手段が提供されます。
 
 ### 8.4 ConfigMessage トレイト
 
