@@ -264,13 +264,11 @@ export function useFlowData({
 
       if (!sourceAccount || !receiverAccount) return;
 
-      // Edge is active only if both source and receiver are active (green)
-      // Both accounts must be online, trade allowed, enabled, and have no errors/warnings
+      // Edge animation and color is based solely on this specific connection's runtime_status
+      // A connection is "active" when runtime_status === 2 (CONNECTED)
+      // This means the Master is online and actively sending signals to this Slave
       const runtimeStatus = setting.runtime_status ?? setting.status ?? 0;
-      const isActive =
-        runtimeStatus === 2 &&
-        sourceAccount.isActive &&
-        receiverAccount.isActive;
+      const isConnected = runtimeStatus === 2;
 
       // Direct edge from source to receiver with settings button
       edgeList.push({
@@ -278,11 +276,11 @@ export function useFlowData({
         source: `source-${setting.master_account}`,
         target: `receiver-${setting.slave_account}`,
         type: 'settingsEdge',
-        animated: isActive,
+        animated: isConnected,
         style: {
-          stroke: isActive ? '#22c55e' : '#d1d5db',
+          stroke: isConnected ? '#22c55e' : '#d1d5db',
           strokeWidth: 2,
-          strokeDasharray: isActive ? undefined : '5,5',
+          strokeDasharray: isConnected ? undefined : '5,5',
         },
         data: {
           setting,
