@@ -23,6 +23,7 @@ struct SerializedMessage {
 /// - Trade signals (to Slave EAs via trade_group_id topic)
 /// - Config messages (to Master/Slave EAs via account_id topic)
 /// - VLogs config broadcasts (to all EAs via vlogs_config topic)
+///
 /// Snapshot of ZMQ publisher metrics
 pub struct ZmqPublisherMetrics {
     pub sends_total: u64,
