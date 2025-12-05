@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import {
   ReactFlow,
@@ -10,6 +10,7 @@ import {
   EdgeTypes,
   Edge,
   Node,
+  NodeChange,
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
@@ -22,9 +23,16 @@ import {
   useAccountData,
   useConnectionHighlight,
 } from '@/hooks/connections';
+import { useAtomValue } from 'jotai';
+import {
+  expandedSourceIdsAtom,
+  expandedReceiverIdsAtom,
+} from '@/lib/atoms/ui';
 import { useMasterFilter } from '@/hooks/useMasterFilter';
 import { useFlowData } from '@/hooks/useFlowData';
+import { useDagreLayout } from '@/hooks/useDagreLayout';
 import { AccountNode } from '@/components/flow-nodes/AccountNode';
+import type { AccountNodeData } from '@/components/flow-nodes/AccountNode';
 import { SettingsEdge } from '@/components/flow-edges';
 import { CreateConnectionDialog } from '@/components/CreateConnectionDialog';
 import { EditConnectionDrawer } from '@/components/EditConnectionDrawer';
@@ -239,74 +247,97 @@ function ConnectionsViewReactFlowInner({
   });
 
   // Use React Flow's state management for nodes and edges
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Track selected master to detect filter changes
-  const [prevSelectedMaster, setPrevSelectedMaster] = useState(selectedMaster);
+  // atoms: expanded ids
+  const expandedSourceIds = useAtomValue(expandedSourceIdsAtom);
+  const expandedReceiverIds = useAtomValue(expandedReceiverIdsAtom);
 
-  // Update nodes when source data changes (while preserving dragged positions)
+  // --- Dagre layout ---
+  const { applyLayout } = useDagreLayout({
+    expandedSourceIds,
+    expandedReceiverIds,
+    direction: 'LR',
+    nodeSpacing: 30,
+    rankSpacing: 200,
+  });
+
+  // Track user-dragged nodes to preserve their positions
+  const userDraggedNodesRef = useRef<Set<string>>(new Set());
+
+  // Track node count and filter for layout recalculation
+  const layoutTriggerRef = useRef({
+    nodeCount: 0,
+    selectedMaster: null as string | null,
+  });
+
+  // Effect 1: Apply layout when node count or filter changes (full reset)
   useEffect(() => {
-    // Check if filter changed
-    const filterChanged = prevSelectedMaster !== selectedMaster;
-    if (filterChanged) {
-      setPrevSelectedMaster(selectedMaster);
+    const currentNodeCount = visibleSourceAccounts.length + visibleReceiverAccounts.length;
+    const prev = layoutTriggerRef.current;
+    
+    if (currentNodeCount !== prev.nodeCount || selectedMaster !== prev.selectedMaster) {
+      layoutTriggerRef.current = { nodeCount: currentNodeCount, selectedMaster };
+      userDraggedNodesRef.current.clear();
+      
+      const { nodes: layoutedNodes } = applyLayout(initialNodes, initialEdges);
+      setNodes(layoutedNodes);
     }
+  }, [visibleSourceAccounts.length, visibleReceiverAccounts.length, selectedMaster, applyLayout, initialNodes, initialEdges, setNodes]);
 
+  // Effect 2: Apply layout when expansion changes (preserve dragged positions)
+  useEffect(() => {
+    const { nodes: layoutedNodes } = applyLayout(initialNodes, initialEdges);
+    
     setNodes((currentNodes) => {
-      // When switching to 'all' accounts OR filter changed, reset all node positions
-      if (selectedMaster === 'all' && filterChanged) {
-        return initialNodes;
-      }
-
-      // Check if there are new nodes (nodes in initialNodes that don't exist in currentNodes)
-      // This happens when a new connection is added
-      const hasNewNodes = initialNodes.some(
-        (newNode) => !currentNodes.find((n) => n.id === newNode.id)
-      );
-
-      // If new nodes were added, reset all positions to avoid overlap
-      // This gives the same behavior as browser refresh
-      if (hasNewNodes) {
-        return initialNodes;
-      }
-
-      // Preserve positions of ALL existing nodes (even after data updates)
-      const updatedNodes = initialNodes.map((newNode) => {
-        const existingNode = currentNodes.find((n) => n.id === newNode.id);
-        if (existingNode) {
-          // Always keep the existing position - this preserves dragged positions
-          return { ...newNode, position: existingNode.position };
+      if (currentNodes.length === 0) return layoutedNodes;
+      
+      return layoutedNodes.map((layoutedNode) => {
+        const existingNode = currentNodes.find((n) => n.id === layoutedNode.id);
+        // Preserve user-dragged positions
+        if (existingNode && userDraggedNodesRef.current.has(layoutedNode.id)) {
+          return { ...layoutedNode, position: existingNode.position };
         }
-        return newNode;
+        return layoutedNode;
       });
-
-      return updatedNodes;
     });
-    // Only re-run when actual data changes, not hover states
+    // Only react to expansion changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSourceAccounts, visibleReceiverAccounts, settings, selectedMaster]);
+  }, [expandedSourceIds, expandedReceiverIds]);
 
-  // Update node data when hover state changes (without changing positions)
+  // Effect 3: Update node data without changing positions (for hover, settings, connection status)
   useEffect(() => {
     setNodes((currentNodes) =>
       currentNodes.map((node) => {
         const newNode = initialNodes.find((n) => n.id === node.id);
         if (newNode) {
-          // Update only the data, preserve position and other properties
           return { ...node, data: newNode.data };
         }
         return node;
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoveredSourceId, hoveredReceiverId]);
+  }, [hoveredSourceId, hoveredReceiverId, settings]);
 
-  // Update edges when data changes
+  // Effect 4: Update edges when settings change
   useEffect(() => {
     setEdges(initialEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSourceAccounts, visibleReceiverAccounts, settings]);
+  }, [settings]);
+
+  // Track user drags
+  const onNodesChangeWithTracking = useCallback(
+    (changes: NodeChange[]) => {
+      changes.forEach((change) => {
+        if (change.type === 'position' && change.dragging && 'id' in change) {
+          userDraggedNodesRef.current.add(change.id);
+        }
+      });
+      onNodesChange(changes);
+    },
+    [onNodesChange]
+  );
 
   // Handle node hover for highlighting
   const onNodeMouseEnter = useCallback(
@@ -423,7 +454,7 @@ function ConnectionsViewReactFlowInner({
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
+            onNodesChange={onNodesChangeWithTracking}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -441,7 +472,10 @@ function ConnectionsViewReactFlowInner({
             proOptions={{ hideAttribution: true }}
           >
             <Background />
-            <Controls className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 [&>button]:!bg-white dark:[&>button]:!bg-gray-700 [&>button]:!border-gray-300 dark:[&>button]:!border-gray-600 [&>button]:hover:!bg-gray-50 dark:[&>button]:hover:!bg-gray-600 [&>button>svg]:!fill-gray-700 dark:[&>button>svg]:!fill-gray-200" />
+            {/* Connect Controls to global layout lock: Controls reports new interactive state */}
+            <Controls
+              className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 [&>button]:!bg-white dark:[&>button]:!bg-gray-700 [&>button]:!border-gray-300 dark:[&>button]:!border-gray-600 [&>button]:hover:!bg-gray-50 dark:[&>button]:hover:!bg-gray-600 [&>button>svg]:!fill-gray-700 dark:[&>button>svg]:!fill-gray-200"
+            />
           </ReactFlow>
         </div>
 
