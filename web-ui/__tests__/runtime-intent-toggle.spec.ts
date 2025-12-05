@@ -69,6 +69,7 @@ function buildApiState(settings: CopySettings[]) {
       },
       status: setting.status ?? 0,
       runtime_status: setting.runtime_status ?? setting.status ?? 0,
+      warning_codes: [],
       enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
       created_at: now,
       updated_at: now,

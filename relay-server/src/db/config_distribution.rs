@@ -57,6 +57,7 @@ impl Database {
                 status,
                 runtime_status,
                 enabled_flag,
+                warning_codes: Vec::new(), // Populated by Status Engine in message handlers
                 slave_settings,
             });
         }

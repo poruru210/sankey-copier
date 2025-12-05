@@ -12,6 +12,7 @@ use tokio::sync::broadcast;
 
 use crate::{
     api::AppState,
+    broadcast_coordinator::BroadcastCoordinator,
     config::{Config, VictoriaLogsConfig},
     connection_manager::ConnectionManager,
     db::Database,
@@ -68,6 +69,8 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         generated_at: None,
     });
 
+    let broadcast_coordinator = BroadcastCoordinator::new(tx.clone());
+    
     AppState {
         db,
         tx,
@@ -80,5 +83,6 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         resolved_ports,
         vlogs_controller,
         runtime_status_metrics: Arc::new(RuntimeStatusMetrics::default()),
+        broadcast_coordinator,
     }
 }

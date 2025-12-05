@@ -32,6 +32,7 @@ export function convertMembersToCopySettings(
         id: member.id,
         status: member.runtime_status ?? member.status,
         runtime_status: member.runtime_status ?? member.status,
+        warning_codes: member.warning_codes,
         enabled_flag: member.enabled_flag,
         master_account: member.trade_group_id,
         slave_account: member.slave_account,

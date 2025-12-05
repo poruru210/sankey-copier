@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
+    broadcast_coordinator::BroadcastCoordinator,
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
@@ -38,6 +39,8 @@ pub struct MessageHandler {
     /// VictoriaLogs controller for EA config broadcasting
     vlogs_controller: Option<VLogsController>,
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+    /// Centralized broadcast coordinator for settings updates
+    broadcast_coordinator: BroadcastCoordinator,
 }
 
 impl MessageHandler {
@@ -50,6 +53,7 @@ impl MessageHandler {
         vlogs_controller: Option<VLogsController>,
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     ) -> Self {
+        let broadcast_coordinator = BroadcastCoordinator::new(broadcast_tx.clone());
         Self {
             connection_manager,
             copy_engine,
@@ -58,6 +62,7 @@ impl MessageHandler {
             publisher,
             vlogs_controller,
             runtime_status_metrics,
+            broadcast_coordinator,
         }
     }
 

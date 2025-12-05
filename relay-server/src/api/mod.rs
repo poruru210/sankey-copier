@@ -38,7 +38,8 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
 
 use crate::{
-    config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
+    broadcast_coordinator::BroadcastCoordinator, config::Config,
+    connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
     port_resolver::ResolvedPorts, runtime_status_updater::RuntimeStatusMetrics,
     victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
 };
@@ -64,6 +65,8 @@ pub struct AppState {
     pub vlogs_controller: Option<VLogsController>,
     /// Shared runtime status metrics (Heartbeat, API, ZMQ handlers)
     pub runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+    /// Centralized broadcast coordinator for settings updates
+    pub broadcast_coordinator: BroadcastCoordinator,
 }
 
 pub fn create_router(state: AppState) -> Router {

@@ -4,10 +4,22 @@ export type LotCalculationMode = 'multiplier' | 'margin_ratio';
 // Sync mode for existing positions when slave connects
 export type SyncMode = 'skip' | 'limit_order' | 'market_order';
 
+// Warning codes from Status Engine (snake_case to match API response)
+export type WarningCode =
+  | 'slave_web_ui_disabled'
+  | 'slave_offline'
+  | 'slave_auto_trading_disabled'
+  | 'no_master_assigned'
+  | 'master_web_ui_disabled'
+  | 'master_offline'
+  | 'master_auto_trading_disabled'
+  | 'master_cluster_degraded';
+
 export interface CopySettings {
   id: number;
   status: number; // Runtime status from server (0=DISABLED,1=ENABLED,2=CONNECTED)
   runtime_status?: number; // Explicit runtime field (mirrors status for now)
+  warning_codes?: WarningCode[]; // Warning codes from Status Engine
   enabled_flag?: boolean; // User intent flag managed by Web UI toggle
   master_account: string;
   slave_account: string;
@@ -183,6 +195,7 @@ export interface TradeGroup {
   id: string; // Master account ID
   master_settings: MasterSettings;
   master_runtime_status?: number; // Actual status evaluated by server
+  master_warning_codes?: WarningCode[]; // Warning codes from Status Engine
   created_at: string;
   updated_at: string;
 }
@@ -219,6 +232,7 @@ export interface TradeGroupMember {
   slave_settings: SlaveSettings;
   status: number; // Legacy field kept for backwards compatibility (mirrors runtime_status)
   runtime_status: number; // Actual status evaluated by server (0/1/2)
+  warning_codes: WarningCode[]; // Warning codes from Status Engine
   enabled_flag: boolean; // User intent flag (true when switch is ON)
   created_at: string;
   updated_at: string;

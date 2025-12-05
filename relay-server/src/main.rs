@@ -1,4 +1,5 @@
 mod api;
+mod broadcast_coordinator;
 mod cert;
 mod config;
 mod config_builder;
@@ -22,6 +23,7 @@ use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use api::{create_router, AppState};
+use broadcast_coordinator::BroadcastCoordinator;
 use config::{Config, LoggingConfig};
 use connection_manager::ConnectionManager;
 use db::Database;
@@ -379,6 +381,7 @@ async fn main() -> Result<()> {
         let db_clone = db.clone();
         let publisher_clone = zmq_publisher.clone();
         let broadcast_clone = broadcast_tx.clone();
+        let broadcast_coordinator_clone = BroadcastCoordinator::new(broadcast_tx.clone());
         let metrics_clone = runtime_status_metrics.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
@@ -417,7 +420,7 @@ async fn main() -> Result<()> {
                                 &conn_mgr,
                                 &db_clone,
                                 &publisher_clone,
-                                &broadcast_clone,
+                                &broadcast_coordinator_clone,
                                 metrics_clone.clone(),
                                 &account_id,
                             )
@@ -428,7 +431,7 @@ async fn main() -> Result<()> {
                             notify_slave_offline(
                                 &conn_mgr,
                                 &db_clone,
-                                &broadcast_clone,
+                                &broadcast_coordinator_clone,
                                 metrics_clone.clone(),
                                 &account_id,
                             )
@@ -445,6 +448,7 @@ async fn main() -> Result<()> {
     tracing::info!("Creating API state...");
     let allowed_origins = config.allowed_origins();
     let cors_disabled = config.cors.disable;
+    let broadcast_coordinator = BroadcastCoordinator::new(broadcast_tx.clone());
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -457,6 +461,7 @@ async fn main() -> Result<()> {
         resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
         runtime_status_metrics,
+        broadcast_coordinator,
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");

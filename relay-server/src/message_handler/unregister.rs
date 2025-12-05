@@ -4,6 +4,8 @@
 //! When a Master EA disconnects, notifies all Slaves so they can update their status.
 //! When a Slave EA disconnects, updates runtime status and notifies WebSocket clients.
 
+use crate::broadcast_coordinator::BroadcastCoordinator;
+
 use super::MessageHandler;
 use crate::{
     connection_manager::ConnectionManager,
@@ -13,7 +15,6 @@ use crate::{
     zeromq::ZmqConfigPublisher,
 };
 use std::sync::Arc;
-use tokio::sync::broadcast;
 
 impl MessageHandler {
     /// Handle EA unregistration
@@ -71,7 +72,7 @@ impl MessageHandler {
                     &self.connection_manager,
                     &self.db,
                     &self.publisher,
-                    &self.broadcast_tx,
+                    &self.broadcast_coordinator,
                     self.runtime_status_metrics.clone(),
                     account_id,
                 )
@@ -84,7 +85,7 @@ impl MessageHandler {
                 notify_slave_offline(
                     &self.connection_manager,
                     &self.db,
-                    &self.broadcast_tx,
+                    &self.broadcast_coordinator,
                     self.runtime_status_metrics.clone(),
                     account_id,
                 )
@@ -104,7 +105,7 @@ pub(crate) async fn notify_slaves_master_offline(
     connection_manager: &Arc<ConnectionManager>,
     db: &Arc<Database>,
     publisher: &Arc<ZmqConfigPublisher>,
-    broadcast_tx: &broadcast::Sender<String>,
+    broadcast_coordinator: &BroadcastCoordinator,
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     master_account: &str,
 ) {
@@ -168,17 +169,25 @@ pub(crate) async fn notify_slaves_master_offline(
                     );
                 }
 
-                let settings_with_master = SlaveConfigWithMaster {
+                // Broadcast via BroadcastCoordinator
+                let payload = SlaveConfigWithMaster {
                     master_account: master_account.to_string(),
                     slave_account: member.slave_account.clone(),
                     status: new_status,
                     runtime_status: new_status,
                     enabled_flag: member.enabled_flag,
+                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
                     slave_settings: member.slave_settings.clone(),
                 };
-                if let Ok(json) = serde_json::to_string(&settings_with_master) {
-                    let _ = broadcast_tx.send(format!("settings_updated:{}", json));
-                }
+                
+                broadcast_coordinator
+                    .broadcast_settings_if_changed(
+                        &member.slave_account,
+                        slave_bundle.status_result.warning_codes.clone(),
+                        payload,
+                        true, // Always broadcast on Master disconnect
+                    )
+                    .await;
             }
         }
         Err(e) => {
@@ -196,7 +205,7 @@ pub(crate) async fn notify_slaves_master_offline(
 pub(crate) async fn notify_slave_offline(
     connection_manager: &Arc<ConnectionManager>,
     db: &Arc<Database>,
-    broadcast_tx: &broadcast::Sender<String>,
+    broadcast_coordinator: &BroadcastCoordinator,
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     slave_account: &str,
 ) {
@@ -266,33 +275,35 @@ pub(crate) async fn notify_slave_offline(
             );
         }
 
-        // Broadcast runtime status change to WebSocket clients
-        if new_status != previous_status {
+        // Broadcast via BroadcastCoordinator
+        let status_changed = new_status != previous_status;
+        let payload = SlaveConfigWithMaster {
+            master_account: settings.master_account.clone(),
+            slave_account: settings.slave_account.clone(),
+            status: settings.status,
+            runtime_status: new_status,
+            enabled_flag: settings.enabled_flag,
+            warning_codes: slave_bundle.status_result.warning_codes.clone(),
+            slave_settings: settings.slave_settings.clone(),
+        };
+
+        let broadcast_sent = broadcast_coordinator
+            .broadcast_settings_if_changed(
+                slave_account,
+                slave_bundle.status_result.warning_codes.clone(),
+                payload,
+                status_changed,
+            )
+            .await;
+
+        if broadcast_sent {
             tracing::info!(
-                "Slave {} offline: runtime_status changed {} -> {} (master: {})",
+                "Slave {} offline: broadcast sent (status {} -> {}, master: {})",
                 slave_account,
                 previous_status,
                 new_status,
                 settings.master_account
             );
-
-            let settings_with_master = SlaveConfigWithMaster {
-                master_account: settings.master_account.clone(),
-                slave_account: settings.slave_account.clone(),
-                status: settings.status,
-                runtime_status: new_status,
-                enabled_flag: settings.enabled_flag,
-                slave_settings: settings.slave_settings.clone(),
-            };
-            if let Ok(json) = serde_json::to_string(&settings_with_master) {
-                let _ = broadcast_tx.send(format!("settings_updated:{}", json));
-                tracing::debug!(
-                    "Broadcasted runtime status change for Slave {} (offline): {} -> {}",
-                    settings.slave_account,
-                    previous_status,
-                    new_status
-                );
-            }
         }
     }
 }

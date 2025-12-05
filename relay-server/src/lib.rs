@@ -2,6 +2,7 @@
 // Exposes modules for integration testing
 
 pub mod api;
+pub mod broadcast_coordinator;
 pub mod config;
 pub mod config_builder;
 pub mod connection_manager;
