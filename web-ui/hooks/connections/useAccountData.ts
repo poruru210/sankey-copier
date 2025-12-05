@@ -207,7 +207,19 @@ export function useAccountData({
     // Update receiver active state based on connected masters
     newReceiverAccounts.forEach((receiver) => {
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
-      const runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
+      let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
+      
+      // Override runtime_status to 0 (DISABLED) if Slave has auto-trading disabled warning
+      // Status Engine keeps it as CONNECTED (2) but Web UI should show "Manual OFF"
+      const receiverSettings = settings.filter((s) => s.slave_account === receiver.id);
+      const hasAutoTradingDisabled = receiverSettings.some((s) => 
+        (s.warning_codes ?? []).includes('slave_auto_trading_disabled')
+      );
+      
+      if (hasAutoTradingDisabled) {
+        runtimeStatus = 0; // Force to DISABLED for UI display
+      }
+      
       receiver.runtimeStatus = runtimeStatus;
       receiver.isActive = receiver.isOnline && receiver.isEnabled && runtimeStatus === 2;
       
