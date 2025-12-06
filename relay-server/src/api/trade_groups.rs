@@ -500,7 +500,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
                 master_account = %master_account,
                 status = new_status,
                 error = %e,
-                "Failed to update member runtime_status after Master switch change"
+                "Failed to update member status after Master switch change"
             );
         }
     }
@@ -543,7 +543,7 @@ async fn reevaluate_and_broadcast_slaves(state: &AppState, master_account: &str)
         let payload = SlaveConfigWithMaster {
             master_account: master_account.to_string(),
             slave_account: member.slave_account.clone(),
-            runtime_status: slave_bundle.status_result.status,
+            status: slave_bundle.status_result.status,
             enabled_flag: member.enabled_flag,
             warning_codes: slave_bundle.status_result.warning_codes.clone(),
             slave_settings: member.slave_settings.clone(),

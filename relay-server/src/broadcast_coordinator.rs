@@ -29,7 +29,7 @@ impl BroadcastCoordinator {
         }
     }
 
-    /// Broadcast settings update if warning_codes or runtime_status changed
+    /// Broadcast settings update if warning_codes or status changed
     ///
     /// # Arguments
     /// * `slave_account` - The slave account identifier
@@ -69,7 +69,7 @@ impl BroadcastCoordinator {
                 tracing::debug!(
                     slave = %slave_account,
                     master = %payload.master_account,
-                    runtime_status = payload.runtime_status,
+                    status = payload.status,
                     warning_codes_changed = warning_codes_changed,
                     forced = force,
                     "Broadcast settings_updated via BroadcastCoordinator"
@@ -110,7 +110,6 @@ mod tests {
             master_account: master.to_string(),
             slave_account: slave.to_string(),
             status,
-            runtime_status: status,
             enabled_flag: true,
             warning_codes,
             slave_settings: SlaveSettings::default(),
@@ -211,7 +210,7 @@ mod tests {
 
         assert!(broadcast, "Should broadcast when forced");
         let msg = rx.try_recv().unwrap();
-        assert!(msg.contains("\"runtime_status\":2"));
+        assert!(msg.contains("\"status\":2"));
     }
 
     #[tokio::test]

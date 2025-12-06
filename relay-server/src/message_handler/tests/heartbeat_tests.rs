@@ -189,7 +189,7 @@ async fn test_master_heartbeat_marks_enabled_slaves_connected() {
     let members = ctx.db.get_members(master_account).await.unwrap();
     assert_eq!(members.len(), 2);
     for member in members {
-        assert_eq!(member.runtime_status, crate::models::STATUS_CONNECTED);
+        assert_eq!(member.status, crate::models::STATUS_CONNECTED);
     }
 
     ctx.cleanup().await;
@@ -233,7 +233,7 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
         .await
         .unwrap()
         .expect("member should exist");
-    assert_eq!(member.runtime_status, crate::models::STATUS_ENABLED);
+    assert_eq!(member.status, crate::models::STATUS_ENABLED);
 
     ctx.cleanup().await;
 }
@@ -481,7 +481,7 @@ async fn test_master_reconnection_after_server_restart() {
         .unwrap()
         .expect("member should exist");
     assert_eq!(
-        member.runtime_status,
+        member.status,
         crate::models::STATUS_ENABLED,
         "Slave should be ENABLED before Master connects"
     );
@@ -499,7 +499,7 @@ async fn test_master_reconnection_after_server_restart() {
         .unwrap()
         .expect("member should exist");
     assert_eq!(
-        member.runtime_status,
+        member.status,
         crate::models::STATUS_CONNECTED,
         "Slave should be CONNECTED after Master reconnects (per-connection evaluation)"
     );
@@ -594,17 +594,17 @@ async fn test_master_reconnection_updates_multiple_slaves() {
         .expect("SLAVE_C should exist");
 
     assert_eq!(
-        member_a.runtime_status,
+        member_a.status,
         crate::models::STATUS_CONNECTED,
         "SLAVE_A should be CONNECTED"
     );
     assert_eq!(
-        member_b.runtime_status,
+        member_b.status,
         crate::models::STATUS_CONNECTED,
         "SLAVE_B should be CONNECTED"
     );
     assert_eq!(
-        member_c.runtime_status,
+        member_c.status,
         crate::models::STATUS_DISABLED,
         "SLAVE_C should remain DISABLED (enabled_flag=false)"
     );
@@ -661,7 +661,7 @@ async fn test_master_temporary_disconnect_reconnect() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(member.runtime_status, crate::models::STATUS_CONNECTED);
+    assert_eq!(member.status, crate::models::STATUS_CONNECTED);
 
     // Simulate: Master temporarily disconnects (we manually reset status in DB to simulate)
     ctx.db
@@ -687,7 +687,7 @@ async fn test_master_temporary_disconnect_reconnect() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        member.runtime_status,
+        member.status,
         crate::models::STATUS_CONNECTED,
         "Slave should be CONNECTED after Master's subsequent heartbeat"
     );
@@ -742,7 +742,7 @@ async fn test_per_connection_and_bulk_update_produce_same_result() {
             .unwrap()
             .unwrap();
         assert_eq!(
-            member.runtime_status,
+            member.status,
             crate::models::STATUS_CONNECTED,
             "SLAVE_{} should be CONNECTED",
             i
@@ -769,7 +769,7 @@ async fn test_per_connection_and_bulk_update_produce_same_result() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        member.runtime_status,
+        member.status,
         crate::models::STATUS_CONNECTED,
         "SLAVE_2 should be CONNECTED (via bulk update safety net)"
     );

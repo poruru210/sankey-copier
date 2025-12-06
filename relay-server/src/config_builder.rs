@@ -140,6 +140,7 @@ mod tests {
 
     fn offline_master() -> MasterStatusResult {
         MasterStatusResult {
+            status: STATUS_DISABLED,
             warning_codes: vec![WarningCode::MasterOffline],
         }
     }

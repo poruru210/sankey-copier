@@ -102,7 +102,7 @@ impl MessageHandler {
                         "Found settings for {}: master={}, db_status={}, lot_mult={:?}",
                         account_id,
                         master_account,
-                        settings.runtime_status,
+                        settings.status,
                         settings.slave_settings.lot_multiplier
                     );
 
@@ -124,14 +124,14 @@ impl MessageHandler {
                         .await
                     {
                         tracing::error!(
-                            "Failed to persist runtime_status for slave {} in trade group {}: {}",
+                            "Failed to persist status for slave {} in trade group {}: {}",
                             slave_account,
                             master_account,
                             err
                         );
                     } else {
                         tracing::debug!(
-                            "Updated runtime_status via RequestConfig: master={}, slave={}, status={}",
+                            "Updated status via RequestConfig: master={}, slave={}, status={}",
                             master_account,
                             slave_account,
                             new_status
@@ -145,7 +145,7 @@ impl MessageHandler {
                         tracing::info!(
                             "Successfully sent CONFIG to: {} (db_status: {}, effective_status: {})",
                             account_id,
-                            settings.runtime_status,
+                            settings.status,
                             new_status
                         );
                     }

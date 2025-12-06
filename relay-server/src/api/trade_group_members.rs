@@ -22,10 +22,10 @@ pub struct AddMemberRequest {
     pub slave_account: String,
     #[serde(default)]
     pub slave_settings: SlaveSettings,
-    /// Initial runtime_status for the member (0 = DISABLED, 2 = CONNECTED/enabled)
+    /// Initial status for the member (0 = DISABLED, 2 = CONNECTED/enabled)
     /// Defaults to 0 (disabled) if not specified
     #[serde(default)]
-    pub runtime_status: i32,
+    pub status: i32,
 }
 
 /// Request body for toggling member status
@@ -135,14 +135,14 @@ pub async fn add_member(
         }
     }
 
-    // Add member to database with the requested runtime_status
+    // Add member to database with the requested status
     match state
         .db
         .add_member(
             &trade_group_id,
             &request.slave_account,
             request.slave_settings.clone(),
-            request.runtime_status,
+            request.status,
         )
         .await
     {
@@ -579,7 +579,7 @@ async fn hydrate_member_runtime(
         })
         .await;
 
-    member.runtime_status = status_result.status;
+    member.status = status_result.status;
     member.warning_codes = status_result.warning_codes;
     member
 }

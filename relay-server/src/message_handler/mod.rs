@@ -107,7 +107,7 @@ pub(crate) fn log_slave_runtime_trace(
         master = %master_account,
         slave = %slave_account,
         previous_status = previous_status,
-        runtime_status = new_status,
+        status = new_status,
         status_changed = previous_status != new_status,
         allow_new_orders = allow_new_orders,
         warning_count = warning_codes.len(),

@@ -27,7 +27,7 @@ pub struct SlaveConfigWithMaster {
     pub master_account: String,
     pub slave_account: String,
     #[serde(default)]
-    pub runtime_status: i32,
+    pub status: i32,
     #[serde(default)]
     pub enabled_flag: bool,
     /// Detailed warning codes from the Status Engine (empty when healthy)

@@ -96,7 +96,7 @@ mod tests {
             master_account: "MASTER_001".to_string(),
             timestamp: "2023-01-01T00:00:00Z".to_string(),
             trade_group_id: "MASTER_001".to_string(),
-            runtime_status: 2, // STATUS_CONNECTED
+            status: 2, // STATUS_CONNECTED
             lot_calculation_mode: LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,

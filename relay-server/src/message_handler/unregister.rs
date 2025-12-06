@@ -133,7 +133,7 @@ pub(crate) async fn notify_slaves_master_offline(
                     "master_unregister",
                     master_account,
                     &member.slave_account,
-                    member.runtime_status,
+                    member.status,
                     new_status,
                     slave_bundle.status_result.allow_new_orders,
                     &slave_bundle.status_result.warning_codes,
@@ -173,7 +173,7 @@ pub(crate) async fn notify_slaves_master_offline(
                 let payload = SlaveConfigWithMaster {
                     master_account: master_account.to_string(),
                     slave_account: member.slave_account.clone(),
-                    runtime_status: new_status,
+                    status: new_status,
                     enabled_flag: member.enabled_flag,
                     warning_codes: slave_bundle.status_result.warning_codes.clone(),
                     slave_settings: member.slave_settings.clone(),
@@ -200,7 +200,7 @@ pub(crate) async fn notify_slaves_master_offline(
 }
 
 /// Notify WebSocket clients when a Slave EA goes offline
-/// Updates runtime_status in DB and broadcasts to WebSocket clients
+/// Updates status in DB and broadcasts to WebSocket clients
 pub(crate) async fn notify_slave_offline(
     connection_manager: &Arc<ConnectionManager>,
     db: &Arc<Database>,
@@ -246,7 +246,7 @@ pub(crate) async fn notify_slave_offline(
             })
             .await;
 
-        let previous_status = settings.runtime_status;
+        let previous_status = settings.status;
         let new_status = slave_bundle.status_result.status;
 
         super::log_slave_runtime_trace(
@@ -279,7 +279,7 @@ pub(crate) async fn notify_slave_offline(
         let payload = SlaveConfigWithMaster {
             master_account: settings.master_account.clone(),
             slave_account: settings.slave_account.clone(),
-            runtime_status: new_status,
+            status: new_status,
             enabled_flag: settings.enabled_flag,
             warning_codes: slave_bundle.status_result.warning_codes.clone(),
             slave_settings: settings.slave_settings.clone(),

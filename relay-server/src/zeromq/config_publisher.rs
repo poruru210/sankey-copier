@@ -211,7 +211,7 @@ mod tests {
             master_account: master_account.clone(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             trade_group_id: master_account.clone(),
-            runtime_status: 0, // 0 = DISABLED
+            status: 0, // 0 = DISABLED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
             reverse_trade: false,
@@ -253,7 +253,7 @@ mod tests {
 
         let config = MasterConfigMessage {
             account_id: "MASTER123".to_string(),
-            runtime_status: 2, // STATUS_CONNECTED
+            status: 2, // STATUS_CONNECTED
             symbol_prefix: Some("pro.".to_string()),
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,
@@ -287,7 +287,7 @@ mod tests {
                     master_account: master_account.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                     trade_group_id: master_account.clone(),
-                    runtime_status: 0, // 0 = DISABLED
+                    status: 0, // 0 = DISABLED
                     lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: Some(1.0),
                     reverse_trade: false,
