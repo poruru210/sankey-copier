@@ -71,7 +71,7 @@ export function useAccountData({
       const newDisabledReceivers: string[] = [];
 
       settings.forEach((setting) => {
-        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
         if (!intentEnabled) {
           if (!disabledReceiverIds.includes(setting.slave_account) && !newDisabledReceivers.includes(setting.slave_account)) {
             newDisabledReceivers.push(setting.slave_account);
@@ -116,7 +116,7 @@ export function useAccountData({
     const receiverRuntimeStatuses = new Map<string, number[]>();
 
     settings.forEach((setting, index) => {
-      const runtimeStatusValue = setting.runtime_status ?? 0;
+      const runtimeStatusValue = setting.status ?? 0;
       const existingStatuses = receiverRuntimeStatuses.get(setting.slave_account) ?? [];
       existingStatuses.push(runtimeStatusValue);
       receiverRuntimeStatuses.set(setting.slave_account, existingStatuses);
@@ -135,7 +135,7 @@ export function useAccountData({
         const masterWarningCodes = getMasterWarningCodes(setting.master_account);
         const hasAutoTradingWarning = masterWarningCodes.includes('master_auto_trading_disabled');
 
-        // Use Status Engine runtime_status directly
+        // Use Status Engine status directly
         const runtimeStatus = masterRuntimeStatus ?? 0;
         const isActive = runtimeStatus === 2;
 
@@ -167,7 +167,7 @@ export function useAccountData({
         const isOnline = getConnectionStatus(setting.slave_account);
         const connection = getAccountConnection(setting.slave_account);
 
-        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
         const isManuallyDisabled = disabledReceiverIds.includes(setting.slave_account);
         const isEnabled = isManuallyDisabled ? false : intentEnabled;
         const isExpanded = expandedReceiverIds.includes(setting.slave_account);
@@ -209,7 +209,7 @@ export function useAccountData({
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
       let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
       
-      // UI Display Override: Status Engine keeps runtime_status as CONNECTED (2) when Slave
+      // UI Display Override: Status Engine keeps status as CONNECTED (2) when Slave
       // has auto-trading OFF (to allow Close/Modify signals), but Web UI should show "Manual OFF".
       // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
       const receiverSettings = settings.filter((s) => s.slave_account === receiver.id);

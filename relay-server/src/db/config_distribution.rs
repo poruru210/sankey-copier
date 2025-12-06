@@ -32,7 +32,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Vec<SlaveConfigWithMaster>> {
         let rows = sqlx::query(
-            "SELECT trade_group_id, slave_account, slave_settings, status, enabled_flag, status
+            "SELECT trade_group_id, slave_account, slave_settings, status, enabled_flag
              FROM trade_group_members
              WHERE slave_account = ?
              ORDER BY trade_group_id",
@@ -49,7 +49,6 @@ impl Database {
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
             let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
-            let status: i32 = row.try_get("status").unwrap_or(status);
 
             configs.push(SlaveConfigWithMaster {
                 master_account,

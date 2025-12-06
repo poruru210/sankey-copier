@@ -57,7 +57,7 @@ impl Database {
     /// Get all members for a TradeGroup
     pub async fn get_members(&self, trade_group_id: &str) -> Result<Vec<TradeGroupMember>> {
         let rows = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ?
              ORDER BY slave_account"
@@ -102,7 +102,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Option<TradeGroupMember>> {
         let row = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ? AND slave_account = ?"
         )
