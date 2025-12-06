@@ -124,14 +124,14 @@ impl MessageHandler {
                         .await
                     {
                         tracing::error!(
-                            "Failed to persist runtime_status for slave {} in trade group {}: {}",
+                            "Failed to persist status for slave {} in trade group {}: {}",
                             slave_account,
                             master_account,
                             err
                         );
                     } else {
                         tracing::debug!(
-                            "Updated runtime_status via RequestConfig: master={}, slave={}, status={}",
+                            "Updated status via RequestConfig: master={}, slave={}, status={}",
                             master_account,
                             slave_account,
                             new_status

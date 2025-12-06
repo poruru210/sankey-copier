@@ -58,9 +58,9 @@ export const SettingsEdge = memo(({
   }
   const labelText = labelParts.length > 0 ? labelParts.join(' ') : '';
 
-  // Determine edge state based on runtime_status:
+  // Determine edge state based on status:
   // 0 = DISABLED (gray), 1 = ENABLED/waiting (yellow), 2 = CONNECTED (green)
-  const runtimeStatus = setting?.runtime_status ?? setting?.status;
+  const runtimeStatus = setting?.status ?? 0;
   const isConnected = runtimeStatus === 2;
   const isEnabled = runtimeStatus === 1;
 

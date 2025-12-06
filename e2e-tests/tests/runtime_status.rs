@@ -122,8 +122,8 @@ async fn assert_runtime_status(
         .expect("DB query should succeed")
         .expect("member should exist");
     assert_eq!(
-        member.runtime_status, expected,
-        "Expected runtime_status {} but got {}",
-        expected, member.runtime_status
+        member.status, expected,
+        "Expected status {} but got {}",
+        expected, member.status
     );
 }

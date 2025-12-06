@@ -39,7 +39,7 @@ impl Database {
                 slave_settings,
                 status,
                 enabled_flag,
-                runtime_status
+                status
             ) VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(trade_group_id)
@@ -57,7 +57,7 @@ impl Database {
     /// Get all members for a TradeGroup
     pub async fn get_members(&self, trade_group_id: &str) -> Result<Vec<TradeGroupMember>> {
         let rows = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, runtime_status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ?
              ORDER BY slave_account"
@@ -75,7 +75,7 @@ impl Database {
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
             let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
-            let runtime_status: i32 = row.try_get("runtime_status").unwrap_or(status);
+            let status: i32 = row.try_get("status").unwrap_or(status);
             let created_at: String = row.get("created_at");
             let updated_at: String = row.get("updated_at");
 
@@ -84,8 +84,7 @@ impl Database {
                 trade_group_id,
                 slave_account,
                 slave_settings,
-                status: runtime_status,
-                runtime_status,
+                status,
                 warning_codes: Vec::new(),
                 enabled_flag,
                 created_at,
@@ -103,7 +102,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Option<TradeGroupMember>> {
         let row = sqlx::query(
-            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, runtime_status, created_at, updated_at
+            "SELECT id, trade_group_id, slave_account, slave_settings, status, enabled_flag, created_at, updated_at
              FROM trade_group_members
              WHERE trade_group_id = ? AND slave_account = ?"
         )
@@ -120,7 +119,7 @@ impl Database {
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
             let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
-            let runtime_status: i32 = row.try_get("runtime_status").unwrap_or(status);
+            let status: i32 = row.try_get("status").unwrap_or(status);
             let created_at: String = row.get("created_at");
             let updated_at: String = row.get("updated_at");
 
@@ -129,8 +128,7 @@ impl Database {
                 trade_group_id,
                 slave_account,
                 slave_settings,
-                status: runtime_status,
-                runtime_status,
+                status,
                 warning_codes: Vec::new(),
                 enabled_flag,
                 created_at,
@@ -207,15 +205,14 @@ impl Database {
         &self,
         trade_group_id: &str,
         slave_account: &str,
-        runtime_status: i32,
+        status: i32,
     ) -> Result<()> {
         let result = sqlx::query(
             "UPDATE trade_group_members
-             SET runtime_status = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+             SET status = ?, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND slave_account = ?",
         )
-        .bind(runtime_status)
-        .bind(runtime_status)
+        .bind(status)
         .bind(trade_group_id)
         .bind(slave_account)
         .execute(&self.pool)

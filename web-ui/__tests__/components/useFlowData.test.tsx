@@ -61,7 +61,6 @@ function createSetting(id: number, master: string, slave: string): CopySettings 
   return {
     id,
     status: 2,
-    runtime_status: 2,
     enabled_flag: true,
     master_account: master,
     slave_account: slave,

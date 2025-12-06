@@ -139,7 +139,6 @@ export const mockSettings: CopySettings[] = [
   {
     id: 1,
     status: 2, // STATUS_CONNECTED
-    runtime_status: 2,
     enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'FxPro_22222004',
@@ -156,7 +155,6 @@ export const mockSettings: CopySettings[] = [
   {
     id: 2,
     status: 1, // STATUS_ENABLED (waiting)
-    runtime_status: 1,
     enabled_flag: true,
     master_account: 'FxPro_12345001',
     slave_account: 'OANDA_33333005',
@@ -175,7 +173,6 @@ export const mockSettings: CopySettings[] = [
   {
     id: 3,
     status: 1,
-    runtime_status: 1,
     enabled_flag: true,
     master_account: 'OANDA_67890002',
     slave_account: 'XM_44444006',
@@ -192,7 +189,6 @@ export const mockSettings: CopySettings[] = [
   {
     id: 4,
     status: 0, // STATUS_DISABLED
-    runtime_status: 0,
     enabled_flag: false,
     master_account: 'XM_11111003',
     slave_account: 'FxPro_55555007',
@@ -236,7 +232,7 @@ function toTradeGroupMember(setting: CopySettings): TradeGroupMember {
       use_pending_order_for_delayed: setting.use_pending_order_for_delayed ?? false,
     },
     status: setting.status,
-    runtime_status: setting.runtime_status ?? setting.status,
+    warning_codes: setting.warning_codes ?? [],
     enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
     created_at: now,
     updated_at: now,
@@ -265,7 +261,7 @@ export const mockTradeGroupMembers: Record<string, TradeGroupMember[]> = members
 export const mockTradeGroups: TradeGroup[] = masterAccounts.map((masterAccount) => {
   const members = membersMap[masterAccount] ?? [];
   const masterEnabled = members.some((member) => member.enabled_flag);
-  const highestRuntime = members.reduce((max, member) => Math.max(max, member.runtime_status ?? 0), 0);
+  const highestRuntime = members.reduce((max, member) => Math.max(max, member.status ?? 0), 0);
 
   return {
     id: masterAccount,

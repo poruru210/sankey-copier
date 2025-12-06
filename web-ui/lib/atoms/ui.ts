@@ -15,3 +15,6 @@ export const expandedReceiverIdsAtom = atom<string[]>([]);
 // Disabled states (for sources which don't have direct settings)
 export const disabledSourceIdsAtom = atom<string[]>([]);
 export const disabledReceiverIdsAtom = atom<string[]>([]);
+
+// Global layout lock - session only. When true, prevent auto re-layout on node expansion
+export const globalLayoutLockedAtom = atom<boolean>(false);

@@ -61,7 +61,6 @@ impl Database {
                 slave_settings TEXT NOT NULL DEFAULT '{}',
                 status INTEGER NOT NULL DEFAULT 0,
                 enabled_flag INTEGER NOT NULL DEFAULT 0,
-                runtime_status INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (trade_group_id, slave_account),
@@ -92,7 +91,7 @@ impl Database {
         let runtime_added = Self::ensure_column(
             &pool,
             "trade_group_members",
-            "runtime_status",
+            "status",
             "INTEGER NOT NULL DEFAULT 0",
         )
         .await?;
@@ -100,7 +99,7 @@ impl Database {
         if runtime_added {
             sqlx::query(
                 "UPDATE trade_group_members
-                 SET runtime_status = status",
+                 SET status = status",
             )
             .execute(&pool)
             .await?;

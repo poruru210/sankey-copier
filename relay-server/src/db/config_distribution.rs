@@ -32,7 +32,7 @@ impl Database {
         slave_account: &str,
     ) -> Result<Vec<SlaveConfigWithMaster>> {
         let rows = sqlx::query(
-            "SELECT trade_group_id, slave_account, slave_settings, status, enabled_flag, runtime_status
+            "SELECT trade_group_id, slave_account, slave_settings, status, enabled_flag
              FROM trade_group_members
              WHERE slave_account = ?
              ORDER BY trade_group_id",
@@ -49,14 +49,13 @@ impl Database {
             let slave_settings: SlaveSettings = serde_json::from_str(&settings_json)?;
             let status: i32 = row.get("status");
             let enabled_flag: bool = row.get::<i64, _>("enabled_flag") != 0;
-            let runtime_status: i32 = row.try_get("runtime_status").unwrap_or(status);
 
             configs.push(SlaveConfigWithMaster {
                 master_account,
                 slave_account,
                 status,
-                runtime_status,
                 enabled_flag,
+                warning_codes: Vec::new(), // Populated by Status Engine in message handlers
                 slave_settings,
             });
         }
@@ -68,7 +67,7 @@ impl Database {
     pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
         let result = sqlx::query(
             "UPDATE trade_group_members
-             SET runtime_status = 2, status = 2, updated_at = CURRENT_TIMESTAMP
+             SET status = 2, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND enabled_flag = 1",
         )
         .bind(master_account)
@@ -79,10 +78,20 @@ impl Database {
     }
 
     /// Update all connected members for a master to ENABLED (1) when master goes offline
-    pub async fn update_master_statuses_disconnected(&self, master_account: &str) -> Result<usize> {
+    pub async fn update_master_statuses_enabled(&self, master_account: &str) -> Result<usize> {
+        // Debug: count how many connected (status=2) rows exist for this master
+        let connected_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM trade_group_members WHERE trade_group_id = ? AND status = 2",
+        )
+        .bind(master_account)
+        .fetch_one(&self.pool)
+        .await?;
+
+        tracing::debug!(master_account = %master_account, connected_count = connected_count, "update_master_statuses_disconnected: connected rows before update");
+
         let result = sqlx::query(
             "UPDATE trade_group_members
-             SET runtime_status = 1, status = 1, updated_at = CURRENT_TIMESTAMP
+             SET status = 1, updated_at = CURRENT_TIMESTAMP
              WHERE trade_group_id = ? AND status = 2",
         )
         .bind(master_account)
@@ -91,4 +100,8 @@ impl Database {
 
         Ok(result.rows_affected() as usize)
     }
+
+    // NOTE: `update_master_statuses_disconnected` was removed — callers were
+    // migrated to `update_master_statuses_enabled`. Keeping this implementation
+    // in the git history if needed; removal avoids dead_code warnings.
 }

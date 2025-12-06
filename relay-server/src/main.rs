@@ -378,7 +378,7 @@ async fn main() -> Result<()> {
         let conn_mgr = connection_manager.clone();
         let db_clone = db.clone();
         let publisher_clone = zmq_publisher.clone();
-        let broadcast_clone = broadcast_tx.clone();
+        let broadcast_tx_clone = broadcast_tx.clone();
         let metrics_clone = runtime_status_metrics.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
@@ -390,10 +390,7 @@ async fn main() -> Result<()> {
                 for (account_id, ea_type) in timed_out {
                     match ea_type {
                         EaType::Master => {
-                            match db_clone
-                                .update_master_statuses_disconnected(&account_id)
-                                .await
-                            {
+                            match db_clone.update_master_statuses_enabled(&account_id).await {
                                 Ok(count) if count > 0 => {
                                     tracing::info!(
                                         "Master {} timed out: updated {} settings to ENABLED",
@@ -417,7 +414,7 @@ async fn main() -> Result<()> {
                                 &conn_mgr,
                                 &db_clone,
                                 &publisher_clone,
-                                &broadcast_clone,
+                                &broadcast_tx_clone,
                                 metrics_clone.clone(),
                                 &account_id,
                             )
@@ -428,7 +425,7 @@ async fn main() -> Result<()> {
                             notify_slave_offline(
                                 &conn_mgr,
                                 &db_clone,
-                                &broadcast_clone,
+                                &broadcast_tx_clone,
                                 metrics_clone.clone(),
                                 &account_id,
                             )

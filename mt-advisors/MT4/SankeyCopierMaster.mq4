@@ -59,6 +59,8 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 bool        g_config_requested = false;   // Track if config request has been sent
+HANDLE_TYPE g_ea_state = 0;             // Rust EA State manager
+
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -114,6 +116,15 @@ int OnInit()
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
+
+   // Initialize EA State manager
+   g_ea_state = ea_state_create();
+   if(g_ea_state == 0)
+   {
+      Print("[ERROR] Failed to create EA State manager");
+      return INIT_FAILED;
+   }
+
 
    // Create and connect PUSH socket
    g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
@@ -219,6 +230,10 @@ void OnDeinit(const int reason)
    // Cleanup ZMQ resources
    CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
 
+   // Cleanup EA State manager
+   ea_state_free(g_ea_state);
+
+
    Print("=== SankeyCopier Master EA (MT4) Stopped ===");
 }
 
@@ -253,10 +268,10 @@ void OnTimer()
          // Status panel is updated by server via config message (ProcessMasterConfigMessage)
       }
 
-      // Request configuration if not yet requested (on any successful heartbeat)
-      if(!g_config_requested && current_trade_allowed)
+      // Request configuration logic using Rust EaState
+      if(ea_state_should_request_config(g_ea_state, current_trade_allowed))
       {
-         Print("[INFO] First heartbeat successful, requesting configuration...");
+         Print("[INFO] Requesting configuration (via EaState)...");
          if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
          {
             g_config_requested = true;
@@ -318,6 +333,9 @@ void OnTimer()
          else if(topic == g_config_topic)
          {
             ProcessMasterConfigMessage(msgpack_payload, payload_len);
+
+            // Mark config as requested in EaState so we don't spam requests
+            ea_state_mark_config_requested(g_ea_state);
          }
       }
    }

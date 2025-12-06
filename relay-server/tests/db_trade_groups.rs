@@ -545,7 +545,7 @@ async fn test_update_master_statuses_disconnected() {
 
     // Update to ENABLED (disconnected)
     let count = db
-        .update_master_statuses_disconnected("MASTER_001")
+        .update_master_statuses_enabled("MASTER_001")
         .await
         .unwrap();
 

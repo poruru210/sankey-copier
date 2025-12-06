@@ -209,7 +209,7 @@ export class ApiClient {
    */
   async addTradeGroupMember(
     masterAccount: string,
-    data: { slave_account: string; slave_settings: import('@/types').SlaveSettings; status: number }
+    data: { slave_account: string; slave_settings: import('@/types').SlaveSettings; runtime_status: number }
   ): Promise<import('@/types').TradeGroupMember> {
     return this.post(`/trade-groups/${encodeURIComponent(masterAccount)}/members`, data);
   }

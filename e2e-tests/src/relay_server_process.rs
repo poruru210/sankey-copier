@@ -170,11 +170,12 @@ impl RelayServerProcess {
         // Start the relay-server binary directly
         // CONFIG_DIR points to the temp directory where config files were copied
         // DATABASE_URL overrides the config.toml database path
+        let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
         let mut child = Command::new(&binary_path)
             .env("CONFIG_DIR", working_dir.to_str().unwrap())
             .env("CONFIG_ENV", "test")
             .env("DATABASE_URL", &database_url)
-            .env("RUST_LOG", "info")
+            .env("RUST_LOG", rust_log)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

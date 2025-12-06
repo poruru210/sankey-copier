@@ -15,8 +15,9 @@ use crate::models::{
     status_engine::{
         evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
     },
-    MasterSettings, TradeGroup, WarningCode,
+    MasterSettings, SlaveConfigWithMaster, TradeGroup, WarningCode,
 };
+use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
 
 use super::{AppState, ProblemDetails};
 
@@ -307,6 +308,10 @@ pub async fn toggle_master(
     // When Master switch changes, Slaves need to know the new Master status
     send_config_to_slaves(&state, &id, &new_settings).await;
 
+    // Re-evaluate and broadcast all affected Slaves' warning_codes
+    // Master toggle changes Slave status (e.g., adds/removes master_web_ui_disabled warning)
+    reevaluate_and_broadcast_slaves(&state, &id).await;
+
     // Fetch updated trade group, broadcast runtime-aware payload, and return response
     match state.db.get_trade_group(&id).await {
         Ok(Some(updated_tg)) => {
@@ -495,7 +500,62 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
                 master_account = %master_account,
                 status = new_status,
                 error = %e,
-                "Failed to persist Slave runtime status after master toggle"
+                "Failed to update member status after Master switch change"
+            );
+        }
+    }
+}
+
+/// Re-evaluate all Slaves for a Master and broadcast warning_codes changes
+///
+/// Called after Master toggle to ensure Slave warning_codes reflect the new Master state.
+/// Uses BroadcastCoordinator for change detection and WebSocket notifications.
+async fn reevaluate_and_broadcast_slaves(state: &AppState, master_account: &str) {
+    let runtime_updater = RuntimeStatusUpdater::with_metrics(
+        state.db.clone(),
+        state.connection_manager.clone(),
+        state.runtime_status_metrics.clone(),
+    );
+
+    let members = match state.db.get_members(master_account).await {
+        Ok(members) => members,
+        Err(e) => {
+            tracing::error!(
+                master = %master_account,
+                error = %e,
+                "Failed to get members for Master toggle broadcast"
+            );
+            return;
+        }
+    };
+
+    for member in members {
+        let slave_bundle = runtime_updater
+            .build_slave_bundle(SlaveRuntimeTarget {
+                master_account,
+                trade_group_id: master_account,
+                slave_account: &member.slave_account,
+                enabled_flag: member.enabled_flag,
+                slave_settings: &member.slave_settings,
+            })
+            .await;
+
+        let payload = SlaveConfigWithMaster {
+            master_account: master_account.to_string(),
+            slave_account: member.slave_account.clone(),
+            status: slave_bundle.status_result.status,
+            enabled_flag: member.enabled_flag,
+            warning_codes: slave_bundle.status_result.warning_codes.clone(),
+            slave_settings: member.slave_settings.clone(),
+        };
+
+        // Broadcast settings update to WebSocket clients
+        if let Ok(json) = serde_json::to_string(&payload) {
+            let _ = state.tx.send(format!("settings_updated:{}", json));
+            tracing::info!(
+                slave = %member.slave_account,
+                master = %master_account,
+                "Broadcasted Slave warning_codes after Master toggle"
             );
         }
     }
