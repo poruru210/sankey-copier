@@ -111,8 +111,6 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
         "Expected master_auto_trading_disabled in warning_codes, got: {:?}",
         warning_codes
     );
-
-    
 }
 
 /// Test that Slave auto-trading disabled triggers immediate warning_codes broadcast
@@ -166,7 +164,6 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
 
     let settings_json = broadcast_result.unwrap();
 
-
     // Verify warning_codes contains slave_auto_trading_disabled
     let warning_codes: Vec<String> = settings_json["warning_codes"]
         .as_array()
@@ -180,8 +177,6 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
         "Expected slave_auto_trading_disabled in warning_codes, got {:?}",
         warning_codes
     );
-
-    
 }
 
 /// Test broadcast timing: should receive within 2 seconds of heartbeat
@@ -305,8 +300,6 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     .await
     .expect("Timeout waiting for master_auto_trading_disabled warning");
 
-    
-
     // ==================================================================
     // RUNTIME AUTO-TRADING TOGGLE: Master OFF → ON
     // This demonstrates the EA simulator can change auto-trading state
@@ -334,8 +327,6 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
         "Expected master_auto_trading_disabled to clear when Master auto-trading is re-enabled, got {:?}",
         warning_codes_enabled
     );
-
-    
 }
 
 // ============================================================================
