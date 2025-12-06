@@ -181,7 +181,7 @@ async fn test_slave_request_config_updates_runtime_status() {
         .await
         .unwrap()
         .expect("member missing");
-    assert_eq!(before.runtime_status, 0);
+    assert_eq!(before.status, 0);
 
     ctx.connection_manager
         .update_heartbeat(HeartbeatMessage {
@@ -222,7 +222,7 @@ async fn test_slave_request_config_updates_runtime_status() {
         .await
         .unwrap()
         .expect("member missing");
-    assert_eq!(after.runtime_status, 1);
+    assert_eq!(after.status, 1);
     assert_eq!(after.status, 1);
 
     ctx.cleanup().await;

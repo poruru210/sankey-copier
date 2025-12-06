@@ -43,11 +43,7 @@ impl MessageHandler {
                 tracing::info!("Master {} disconnected, notifying Slaves", account_id);
 
                 // Update DB: all CONNECTED slaves should become ENABLED
-                match self
-                    .db
-                    .update_master_statuses_disconnected(account_id)
-                    .await
-                {
+                match self.db.update_master_statuses_enabled(account_id).await {
                     Ok(count) if count > 0 => {
                         tracing::info!(
                             "Master {} disconnected: updated {} settings to ENABLED",
@@ -132,7 +128,7 @@ pub(crate) async fn notify_slaves_master_offline(
                     "master_unregister",
                     master_account,
                     &member.slave_account,
-                    member.runtime_status,
+                    member.status,
                     new_status,
                     slave_bundle.status_result.allow_new_orders,
                     &slave_bundle.status_result.warning_codes,
@@ -168,15 +164,17 @@ pub(crate) async fn notify_slaves_master_offline(
                     );
                 }
 
-                let settings_with_master = SlaveConfigWithMaster {
+                // WebSocket broadcast on Master disconnect
+                let payload = SlaveConfigWithMaster {
                     master_account: master_account.to_string(),
                     slave_account: member.slave_account.clone(),
                     status: new_status,
-                    runtime_status: new_status,
                     enabled_flag: member.enabled_flag,
+                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
                     slave_settings: member.slave_settings.clone(),
                 };
-                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+
+                if let Ok(json) = serde_json::to_string(&payload) {
                     let _ = broadcast_tx.send(format!("settings_updated:{}", json));
                 }
             }
@@ -192,7 +190,7 @@ pub(crate) async fn notify_slaves_master_offline(
 }
 
 /// Notify WebSocket clients when a Slave EA goes offline
-/// Updates runtime_status in DB and broadcasts to WebSocket clients
+/// Updates status in DB and broadcasts to WebSocket clients
 pub(crate) async fn notify_slave_offline(
     connection_manager: &Arc<ConnectionManager>,
     db: &Arc<Database>,
@@ -238,7 +236,7 @@ pub(crate) async fn notify_slave_offline(
             })
             .await;
 
-        let previous_status = settings.runtime_status;
+        let previous_status = settings.status;
         let new_status = slave_bundle.status_result.status;
 
         super::log_slave_runtime_trace(
@@ -266,31 +264,26 @@ pub(crate) async fn notify_slave_offline(
             );
         }
 
-        // Broadcast runtime status change to WebSocket clients
-        if new_status != previous_status {
-            tracing::info!(
-                "Slave {} offline: runtime_status changed {} -> {} (master: {})",
-                slave_account,
-                previous_status,
-                new_status,
-                settings.master_account
-            );
-
-            let settings_with_master = SlaveConfigWithMaster {
+        // WebSocket broadcast on status change
+        let status_changed = new_status != previous_status;
+        if status_changed {
+            let payload = SlaveConfigWithMaster {
                 master_account: settings.master_account.clone(),
                 slave_account: settings.slave_account.clone(),
-                status: settings.status,
-                runtime_status: new_status,
+                status: new_status,
                 enabled_flag: settings.enabled_flag,
+                warning_codes: slave_bundle.status_result.warning_codes.clone(),
                 slave_settings: settings.slave_settings.clone(),
             };
-            if let Ok(json) = serde_json::to_string(&settings_with_master) {
+
+            if let Ok(json) = serde_json::to_string(&payload) {
                 let _ = broadcast_tx.send(format!("settings_updated:{}", json));
-                tracing::debug!(
-                    "Broadcasted runtime status change for Slave {} (offline): {} -> {}",
-                    settings.slave_account,
+                tracing::info!(
+                    "Slave {} offline: broadcast sent (status {} -> {}, master: {})",
+                    slave_account,
                     previous_status,
-                    new_status
+                    new_status,
+                    settings.master_account
                 );
             }
         }

@@ -25,6 +25,13 @@ impl MessageHandler {
         let new_is_trade_allowed = msg.is_trade_allowed;
         let runtime_updater = self.runtime_status_updater();
 
+        tracing::info!(
+            account = %account_id,
+            ea_type = %ea_type,
+            is_trade_allowed = new_is_trade_allowed,
+            "[HEARTBEAT] Processing heartbeat message"
+        );
+
         // Get old is_trade_allowed before updating
         let old_is_trade_allowed = self
             .connection_manager
@@ -167,27 +174,51 @@ impl MessageHandler {
                             // (e.g., Slave stays ENABLED when Master goes from CONNECTED to DISABLED)
                             let old_slave_status = member.status;
                             let is_connected = new_slave_status == crate::models::STATUS_CONNECTED;
+                            let status_changed = old_slave_status != new_slave_status;
 
-                            // Debug logging to diagnose notification issues
                             tracing::info!(
                                 slave = %slave_account,
                                 master = %account_id,
-                                old_slave_status = old_slave_status,
-                                new_slave_status = new_slave_status,
-                                is_new_registration = is_new_registration,
-                                trade_allowed_changed = trade_allowed_changed,
-                                is_connected = is_connected,
-                                slave_online = slave_bundle.config.allow_new_orders || new_slave_status != 0,
-                                "Master heartbeat: evaluating Slave notification (per-connection)"
+                                old_status = old_slave_status,
+                                new_status = new_slave_status,
+                                status_changed = status_changed,
+                                warning_codes = ?slave_bundle.status_result.warning_codes,
+                                "[Master Heartbeat] Slave status evaluated"
                             );
 
-                            if !is_new_registration
-                                && !trade_allowed_changed
-                                && new_slave_status == old_slave_status
-                            {
-                                // Status unchanged, no trade_allowed change, and not a new registration - skip sending config
+                            // Broadcast via BroadcastCoordinator (handles change detection internally)
+                            let payload = SlaveConfigWithMaster {
+                                master_account: account_id.clone(),
+                                slave_account: slave_account.clone(),
+                                status: new_slave_status,
+                                enabled_flag: member.enabled_flag,
+                                warning_codes: slave_bundle.status_result.warning_codes.clone(),
+                                slave_settings: member.slave_settings.clone(),
+                            };
+
+                            // WebSocket broadcast on status change, trade_allowed change, or new registration
+                            // (all affect warning_codes or initial state)
+                            if status_changed || trade_allowed_changed || is_new_registration {
+                                if let Ok(json) = serde_json::to_string(&payload) {
+                                    let _ = self
+                                        .broadcast_tx
+                                        .send(format!("settings_updated:{}", json));
+                                    tracing::info!(
+                                        slave = %slave_account,
+                                        master = %account_id,
+                                        old_status = old_slave_status,
+                                        new_status = new_slave_status,
+                                        trade_allowed_changed = trade_allowed_changed,
+                                        is_new_registration = is_new_registration,
+                                        "Broadcast settings via Master heartbeat"
+                                    );
+                                }
+                            }
+
+                            if !is_new_registration && !trade_allowed_changed && !status_changed {
+                                // Status unchanged, no trade_allowed change, and not a new registration - skip sending ZMQ config
                                 tracing::debug!(
-                                    "Slave {} status unchanged ({}) and no Master trade_allowed change, skipping config send",
+                                    "Slave {} status unchanged ({}) and no Master change, skipping ZMQ config send",
                                     slave_account,
                                     new_slave_status
                                 );
@@ -262,30 +293,6 @@ impl MessageHandler {
                                     e
                                 );
                             }
-
-                            // Broadcast runtime status change to WebSocket clients (on Master heartbeat)
-                            if old_slave_status != new_slave_status {
-                                let settings_with_master = SlaveConfigWithMaster {
-                                    master_account: account_id.clone(),
-                                    slave_account: slave_account.clone(),
-                                    status: member.status,
-                                    runtime_status: new_slave_status,
-                                    enabled_flag: member.enabled_flag,
-                                    slave_settings: member.slave_settings.clone(),
-                                };
-                                if let Ok(json) = serde_json::to_string(&settings_with_master) {
-                                    let _ = self
-                                        .broadcast_tx
-                                        .send(format!("settings_updated:{}", json));
-                                    tracing::debug!(
-                                        "Broadcasted runtime status change for Slave {} via Master {} heartbeat: {} -> {}",
-                                        slave_account,
-                                        account_id,
-                                        old_slave_status,
-                                        new_slave_status
-                                    );
-                                }
-                            }
                         }
                     }
                     Err(e) => {
@@ -295,11 +302,10 @@ impl MessageHandler {
             }
 
             // Safety net: Bulk update DB status for all enabled slaves when Master is CONNECTED
-            // This handles edge cases where per-connection evaluation is skipped:
-            // - is_new_registration=false (Master already in connection_manager)
-            // - trade_allowed_changed=false (same value as before)
-            // TODO: Consider extending per-connection evaluation to always run when Master is CONNECTED,
-            //       which would make this bulk update redundant.
+            // This handles:
+            // 1. Offline slaves not processed by per-connection loop
+            // 2. Edge cases where per-connection evaluation is skipped (no new_registration, no trade_allowed_changed)
+            // Always use cached warning_codes (no expensive rebuild needed for bulk update)
             if master_status == STATUS_CONNECTED {
                 match self.db.update_master_statuses_connected(&account_id).await {
                     Ok(count) if count > 0 => {
@@ -308,18 +314,32 @@ impl MessageHandler {
                             account_id,
                             count
                         );
-                        // Notify WebSocket clients
+                        // Re-evaluate and broadcast all affected Slaves
+                        // Use RuntimeStatusUpdater to get fresh warning_codes after bulk update
                         if let Ok(members) = self.db.get_members(&account_id).await {
+                            let runtime_updater = self.runtime_status_updater();
                             for member in members {
-                                let settings_with_master = SlaveConfigWithMaster {
+                                let slave_bundle = runtime_updater
+                                    .build_slave_bundle(SlaveRuntimeTarget {
+                                        master_account: account_id.as_str(),
+                                        trade_group_id: account_id.as_str(),
+                                        slave_account: &member.slave_account,
+                                        enabled_flag: member.enabled_flag,
+                                        slave_settings: &member.slave_settings,
+                                    })
+                                    .await;
+
+                                let payload = SlaveConfigWithMaster {
                                     master_account: account_id.clone(),
                                     slave_account: member.slave_account.clone(),
-                                    status: member.status,
-                                    runtime_status: member.runtime_status,
+                                    status: slave_bundle.status_result.status,
                                     enabled_flag: member.enabled_flag,
+                                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
                                     slave_settings: member.slave_settings.clone(),
                                 };
-                                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+
+                                // WebSocket broadcast after bulk update
+                                if let Ok(json) = serde_json::to_string(&payload) {
                                     let _ = self
                                         .broadcast_tx
                                         .send(format!("settings_updated:{}", json));
@@ -387,7 +407,7 @@ impl MessageHandler {
                 })
                 .await;
 
-            let previous_status = settings.runtime_status;
+            let previous_status = settings.status;
             let evaluated_status = slave_bundle.status_result.status;
             let is_connected = evaluated_status == crate::models::STATUS_CONNECTED;
 
@@ -438,20 +458,22 @@ impl MessageHandler {
                 );
             }
 
-            // Broadcast runtime status change to WebSocket clients
-            if evaluated_status != previous_status {
-                let settings_with_master = SlaveConfigWithMaster {
+            // WebSocket broadcast on status change
+            let status_changed = evaluated_status != previous_status;
+            if status_changed {
+                let payload = SlaveConfigWithMaster {
                     master_account: settings.master_account.clone(),
                     slave_account: settings.slave_account.clone(),
-                    status: settings.status,
-                    runtime_status: evaluated_status,
+                    status: evaluated_status,
                     enabled_flag: settings.enabled_flag,
+                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
                     slave_settings: settings.slave_settings.clone(),
                 };
-                if let Ok(json) = serde_json::to_string(&settings_with_master) {
+
+                if let Ok(json) = serde_json::to_string(&payload) {
                     let _ = self.broadcast_tx.send(format!("settings_updated:{}", json));
                     tracing::debug!(
-                        "Broadcasted runtime status change for Slave {} (master {}): {} -> {}",
+                        "Broadcast settings for Slave {} (master {}): status {} -> {}",
                         settings.slave_account,
                         settings.master_account,
                         previous_status,

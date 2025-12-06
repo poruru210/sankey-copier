@@ -68,7 +68,7 @@ function buildApiState(settings: CopySettings[]) {
         use_pending_order_for_delayed: setting.use_pending_order_for_delayed,
       },
       status: setting.status ?? 0,
-      runtime_status: setting.runtime_status ?? setting.status ?? 0,
+      warning_codes: [],
       enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
       created_at: now,
       updated_at: now,
@@ -82,7 +82,7 @@ function buildApiState(settings: CopySettings[]) {
   tradeGroups.forEach((group, masterId) => {
     const memberList = members.get(masterId) ?? [];
     const hasEnabledMember = memberList.some((m) => m.enabled_flag);
-    const highestRuntime = memberList.reduce((acc, m) => Math.max(acc, m.runtime_status ?? 0), 0);
+    const highestRuntime = memberList.reduce((acc, m) => Math.max(acc, m.status ?? 0), 0);
     group.master_settings.enabled = hasEnabledMember;
     group.master_runtime_status = highestRuntime;
   });
@@ -152,7 +152,6 @@ function updateMemberRuntime(
     return;
   }
 
-  target.runtime_status = runtimeStatus;
   target.status = runtimeStatus;
 }
 

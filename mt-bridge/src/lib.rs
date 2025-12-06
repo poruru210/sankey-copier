@@ -1,5 +1,6 @@
 // Top-level modules
 pub mod constants;
+pub mod ea_state;
 pub mod ffi;
 pub mod ffi_helpers;
 pub mod msgpack;
@@ -20,6 +21,9 @@ pub use types::{
 
 // Re-export traits for polymorphic config handling
 pub use traits::{ConfigMessage, MasterConfig, SlaveConfig};
+
+// Re-export EA state management
+pub use ea_state::EaState;
 
 // Re-export GlobalConfigMessage from msgpack (if it exists there)
 pub use msgpack::GlobalConfigMessage;

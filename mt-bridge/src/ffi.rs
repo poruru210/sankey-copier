@@ -1942,3 +1942,110 @@ pub unsafe extern "C" fn get_sync_topic_prefix(
     let topic_prefix = format!("{}{}/", constants::TOPIC_SYNC_PREFIX, account);
     write_string_to_utf16_buffer(&topic_prefix, output, output_len)
 }
+
+// ============================================================================
+// EA State Management FFI Functions
+// ============================================================================
+
+/// Create a new EA state instance for managing RequestConfig logic
+///
+/// Returns an opaque pointer to the state that must be freed with `ea_state_free()`.
+/// This should be called once in OnInit() and the handle stored in a global variable.
+///
+/// # Safety
+/// The returned pointer must be freed exactly once using `ea_state_free()`.
+#[no_mangle]
+pub extern "C" fn ea_state_create() -> *mut crate::EaState {
+    let state = Box::new(crate::EaState::new());
+    Box::into_raw(state)
+}
+
+/// Free an EA state instance
+///
+/// This should be called in OnDeinit() to clean up the state.
+///
+/// # Safety
+/// - `state` must have been returned by `ea_state_create()`
+/// - `state` must not be null
+/// - `state` must only be freed once
+#[no_mangle]
+pub unsafe extern "C" fn ea_state_free(state: *mut crate::EaState) {
+    if !state.is_null() {
+        drop(Box::from_raw(state));
+    }
+}
+
+/// Determine if RequestConfig should be sent based on current state
+///
+/// This replaces the MQL logic:
+/// ```mql
+/// if(!g_config_requested && current_trade_allowed) { send_request_config(); }
+/// ```
+///
+/// The Rust implementation fixes the bug where Master doesn't send RequestConfig
+/// when starting with auto-trading OFF. It returns true unconditionally on the first
+/// call, regardless of the auto-trading state.
+///
+/// # Parameters
+/// - `state`: Pointer to EA state (must not be null)
+/// - `current_trade_allowed`: 1 if auto-trading is currently enabled, 0 otherwise
+///
+/// # Returns
+/// - 1 if RequestConfig should be sent
+/// - 0 if RequestConfig should not be sent (already requested)
+///
+/// # Safety
+/// - `state` must be a valid pointer returned by `ea_state_create()`
+/// - `state` must not have been freed
+#[no_mangle]
+pub unsafe extern "C" fn ea_state_should_request_config(
+    state: *mut crate::EaState,
+    current_trade_allowed: i32,
+) -> i32 {
+    if state.is_null() {
+        return 0;
+    }
+
+    let ea_state = &mut *state;
+    let trade_allowed = current_trade_allowed != 0;
+
+    if ea_state.should_request_config(trade_allowed) {
+        1
+    } else {
+        0
+    }
+}
+
+/// Mark that a ConfigMessage has been received
+///
+/// This should be called when the EA receives a ConfigMessage from the relay server.
+/// After calling this, `ea_state_should_request_config()` will return false until
+/// `ea_state_reset()` is called.
+///
+/// # Safety
+/// - `state` must be a valid pointer returned by `ea_state_create()`
+/// - `state` must not have been freed
+#[no_mangle]
+pub unsafe extern "C" fn ea_state_mark_config_requested(state: *mut crate::EaState) {
+    if !state.is_null() {
+        (*state).mark_config_requested();
+    }
+}
+
+/// Reset the EA state to initial conditions
+///
+/// This should be called when:
+/// - Connection to relay server is lost
+/// - EA needs to re-request configuration
+///
+/// After calling this, `ea_state_should_request_config()` will return true on the next call.
+///
+/// # Safety
+/// - `state` must be a valid pointer returned by `ea_state_create()`
+/// - `state` must not have been freed
+#[no_mangle]
+pub unsafe extern "C" fn ea_state_reset(state: *mut crate::EaState) {
+    if !state.is_null() {
+        (*state).reset();
+    }
+}

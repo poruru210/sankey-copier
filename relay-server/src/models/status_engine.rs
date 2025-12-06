@@ -156,6 +156,7 @@ pub fn evaluate_slave_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
+    // Always report auto-trading disabled as a separate warning regardless of online state
     if !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
@@ -233,12 +234,19 @@ pub fn evaluate_member_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
+    // Always report auto-trading disabled as a separate warning regardless of online state
     if !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
 
     // Slave is DISABLED if Web UI is OFF or Slave is offline
     let slave_disabled = !slave_web_ui_enabled || !slave_online;
+
+    // Always include Master's warning codes regardless of Slave status
+    // (Users need to see Master issues even when Slave is offline)
+    for code in &master_result.warning_codes {
+        push_warning(&mut warning_codes, code.clone());
+    }
 
     // Determine status based on Slave and Master state
     let status = if slave_disabled {
@@ -248,10 +256,6 @@ pub fn evaluate_member_status(
         STATUS_CONNECTED
     } else {
         // Master is not connected, this connection is ENABLED (waiting)
-        // Add Master's warning codes to explain why
-        for code in &master_result.warning_codes {
-            push_warning(&mut warning_codes, code.clone());
-        }
         STATUS_ENABLED
     };
 
@@ -653,6 +657,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Offline + trade_blocked: include both warnings (offline + auto-trading disabled)
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -674,6 +679,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Unknown/offline: include both offline and auto-trading disabled warnings
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -716,6 +722,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Web UI OFF + offline + trade_blocked: include SlaveWebUiDisabled, SlaveOffline, SlaveAutoTradingDisabled
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
@@ -738,6 +745,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Web UI OFF + unknown + trade_blocked: include all three warnings
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
