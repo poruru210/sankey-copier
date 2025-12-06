@@ -178,7 +178,7 @@ pub(crate) async fn notify_slaves_master_offline(
                     warning_codes: slave_bundle.status_result.warning_codes.clone(),
                     slave_settings: member.slave_settings.clone(),
                 };
-                
+
                 broadcast_coordinator
                     .broadcast_settings_if_changed(
                         &member.slave_account,

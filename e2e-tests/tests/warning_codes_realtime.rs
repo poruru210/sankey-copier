@@ -8,12 +8,12 @@
 use e2e_tests::helpers::default_test_slave_settings;
 use e2e_tests::relay_server_process::RelayServerProcess;
 use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_CONNECTED, STATUS_DISABLED};
+use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{MasterSettings, WarningCode};
+use sankey_copier_relay_server::models::MasterSettings;
 use serde_json::Value;
 use tokio::time::{sleep, timeout, Duration};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::StreamExt;
+use tokio_tungstenite::tungstenite::Message;
 
 const SETTLE_WAIT_MS: u64 = 250;
 const BROADCAST_TIMEOUT_SECS: u64 = 5;
@@ -21,24 +21,23 @@ const BROADCAST_TIMEOUT_SECS: u64 = 5;
 /// Create a WebSocket connector that accepts self-signed certificates
 async fn create_ws_connector(
     url: &str,
-) -> Result<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, Box<dyn std::error::Error>> {
-    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+) -> Result<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    Box<dyn std::error::Error>,
+> {
     use native_tls::TlsConnector;
-    
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
     let connector = TlsConnector::builder()
         .danger_accept_invalid_certs(true)
         .build()?;
     let connector = tokio_tungstenite::Connector::NativeTls(connector);
-    
+
     let request = url.into_client_request()?;
-    let (ws_stream, _response) = tokio_tungstenite::connect_async_tls_with_config(
-        request,
-        None,
-        false,
-        Some(connector),
-    )
-    .await?;
-    
+    let (ws_stream, _response) =
+        tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector))
+            .await?;
+
     Ok(ws_stream)
 }
 
@@ -90,7 +89,7 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
     );
 
     let settings_json = broadcast_result.unwrap();
-    
+
     // Verify warning_codes contains master_auto_trading_disabled
     let warning_codes: Vec<String> = settings_json["warning_codes"]
         .as_array()
@@ -171,7 +170,7 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     );
 
     let settings_json = broadcast_result.unwrap();
-    
+
     // Verify warning_codes contains slave_auto_trading_disabled
     let warning_codes: Vec<String> = settings_json["warning_codes"]
         .as_array()
@@ -190,7 +189,7 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     let status = settings_json["status"]
         .as_i64()
         .expect("status should be a number");
-    
+
     assert_eq!(
         status, STATUS_CONNECTED as i64,
         "Status should remain CONNECTED even with auto-trading disabled"
@@ -233,7 +232,7 @@ async fn test_warning_broadcast_timing() {
     .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
-    
+
     let start_time = std::time::Instant::now();
     master.start().expect("master start should succeed");
 
@@ -252,7 +251,7 @@ async fn test_warning_broadcast_timing() {
     let elapsed = start_time.elapsed();
     println!("✅ Warning broadcast timing test passed");
     println!("   Broadcast received in {:?}", elapsed);
-    
+
     assert!(
         elapsed.as_millis() < 2000,
         "Broadcast should be received within 2 seconds, took {:?}",
@@ -261,7 +260,7 @@ async fn test_warning_broadcast_timing() {
 }
 
 /// Test that Master warning clears when auto-trading is re-enabled
-/// 
+///
 /// This test verifies:
 /// 1. Master starts with auto-trading OFF → Slave receives master_auto_trading_disabled
 /// 2. Master switches auto-trading ON (runtime) → Slave warning clears
@@ -298,7 +297,7 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
-    
+
     // Wait for Master heartbeat to be processed
     sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
 
@@ -325,7 +324,10 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     .expect("Timeout waiting for master_auto_trading_disabled warning");
 
     println!("✅ Confirmed: Slave received master_auto_trading_disabled warning");
-    println!("   Full warning_codes: {:?}", first_broadcast["warning_codes"]);
+    println!(
+        "   Full warning_codes: {:?}",
+        first_broadcast["warning_codes"]
+    );
 
     // ==================================================================
     // RUNTIME AUTO-TRADING TOGGLE: Master OFF → ON
@@ -357,7 +359,10 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     );
 
     println!("✅ Master warning clearing test passed (EA runtime auto-trading toggle verified)");
-    println!("   Warning codes after Master ON: {:?}", warning_codes_enabled);
+    println!(
+        "   Warning codes after Master ON: {:?}",
+        warning_codes_enabled
+    );
 }
 
 // ============================================================================
@@ -415,9 +420,9 @@ async fn wait_for_settings_updated(
         let msg = msg_result.expect("WebSocket read error");
         if let Message::Text(text) = msg {
             if let Some(json_str) = text.strip_prefix("settings_updated:") {
-                let settings: Value = serde_json::from_str(json_str)
-                    .expect("Failed to parse settings_updated JSON");
-                
+                let settings: Value =
+                    serde_json::from_str(json_str).expect("Failed to parse settings_updated JSON");
+
                 // Check if this is the expected slave account
                 if settings["slave_account"].as_str() == Some(expected_slave_account) {
                     return settings;
@@ -431,7 +436,9 @@ async fn wait_for_settings_updated(
 /// Wait for settings_updated broadcast for specific slave WITH expected warning
 async fn wait_for_slave_warning(
     read: &mut futures_util::stream::SplitStream<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
     >,
     slave_account: &str,
     expected_warning: &str,
@@ -445,11 +452,7 @@ async fn wait_for_slave_warning(
                     if settings["slave_account"].as_str() == Some(slave_account) {
                         let warning_codes = settings["warning_codes"]
                             .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .collect::<Vec<_>>()
-                            })
+                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                             .unwrap_or_default();
 
                         if warning_codes.contains(&expected_warning) {

@@ -42,7 +42,10 @@ async fn create_test_app() -> (axum::Router, Arc<Database>) {
         generated_at: None,
     });
 
-    let broadcast_coordinator = sankey_copier_relay_server::broadcast_coordinator::BroadcastCoordinator::new(broadcast_tx.clone());
+    let broadcast_coordinator =
+        sankey_copier_relay_server::broadcast_coordinator::BroadcastCoordinator::new(
+            broadcast_tx.clone(),
+        );
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,

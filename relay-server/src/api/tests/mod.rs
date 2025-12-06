@@ -70,7 +70,7 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
     });
 
     let broadcast_coordinator = BroadcastCoordinator::new(tx.clone());
-    
+
     AppState {
         db,
         tx,

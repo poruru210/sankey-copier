@@ -178,7 +178,7 @@ impl MessageHandler {
                                 warning_codes: slave_bundle.status_result.warning_codes.clone(),
                                 slave_settings: member.slave_settings.clone(),
                             };
-                            
+
                             let broadcast_sent = self
                                 .broadcast_coordinator
                                 .broadcast_settings_if_changed(
@@ -199,10 +199,7 @@ impl MessageHandler {
                                 );
                             }
 
-                            if !is_new_registration
-                                && !trade_allowed_changed
-                                && !status_changed
-                            {
+                            if !is_new_registration && !trade_allowed_changed && !status_changed {
                                 // Status unchanged, no trade_allowed change, and not a new registration - skip sending ZMQ config
                                 tracing::debug!(
                                     "Slave {} status unchanged ({}) and no Master change, skipping ZMQ config send",

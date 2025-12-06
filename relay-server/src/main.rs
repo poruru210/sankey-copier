@@ -380,7 +380,7 @@ async fn main() -> Result<()> {
         let conn_mgr = connection_manager.clone();
         let db_clone = db.clone();
         let publisher_clone = zmq_publisher.clone();
-        let broadcast_clone = broadcast_tx.clone();
+        let _broadcast_clone = broadcast_tx.clone();
         let broadcast_coordinator_clone = BroadcastCoordinator::new(broadcast_tx.clone());
         let metrics_clone = runtime_status_metrics.clone();
         tokio::spawn(async move {

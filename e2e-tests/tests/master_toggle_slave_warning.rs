@@ -10,12 +10,11 @@
 use e2e_tests::helpers::default_test_slave_settings;
 use e2e_tests::relay_server_process::RelayServerProcess;
 use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_DISABLED};
+use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
 use serde_json::{json, Value};
 use tokio::time::{sleep, timeout, Duration};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::StreamExt;
 
 const SETTLE_WAIT_MS: u64 = 250;
 const BROADCAST_TIMEOUT_SECS: u64 = 5;
@@ -31,24 +30,23 @@ fn create_http_client() -> reqwest::Client {
 /// Create a WebSocket connector that accepts self-signed certificates
 async fn create_ws_connector(
     url: &str,
-) -> Result<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, Box<dyn std::error::Error>> {
-    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+) -> Result<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    Box<dyn std::error::Error>,
+> {
     use native_tls::TlsConnector;
-    
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
     let connector = TlsConnector::builder()
         .danger_accept_invalid_certs(true)
         .build()?;
     let connector = tokio_tungstenite::Connector::NativeTls(connector);
-    
+
     let request = url.into_client_request()?;
-    let (ws_stream, _response) = tokio_tungstenite::connect_async_tls_with_config(
-        request,
-        None,
-        false,
-        Some(connector),
-    )
-    .await?;
-    
+    let (ws_stream, _response) =
+        tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector))
+            .await?;
+
     Ok(ws_stream)
 }
 
@@ -101,7 +99,11 @@ async fn test_master_toggle_off_adds_slave_warning() {
     let (_write, mut read) = ws_stream.split();
 
     // Toggle Master OFF via REST API
-    let api_url = format!("{}/api/trade-groups/{}/toggle", server.http_base_url(), master_account);
+    let api_url = format!(
+        "{}/api/trade-groups/{}/toggle",
+        server.http_base_url(),
+        master_account
+    );
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
@@ -133,7 +135,7 @@ async fn test_master_toggle_off_adds_slave_warning() {
     );
 
     let settings_json = broadcast_result.unwrap();
-    
+
     // Verify warning_codes
     let warning_codes: Vec<String> = settings_json["warning_codes"]
         .as_array()
@@ -149,7 +151,10 @@ async fn test_master_toggle_off_adds_slave_warning() {
     );
 
     println!("✅ Master toggle OFF → Slave warning broadcast test passed");
-    println!("   Slave {} received warning: {:?}", slave_account, warning_codes);
+    println!(
+        "   Slave {} received warning: {:?}",
+        slave_account, warning_codes
+    );
 }
 
 /// Test Master toggle ON → Slave warning clears
@@ -212,7 +217,11 @@ async fn test_master_toggle_on_clears_slave_warning() {
     println!("✅ Confirmed: Slave has master_web_ui_disabled initially");
 
     // Toggle Master ON via REST API
-    let api_url = format!("{}/api/trade-groups/{}/toggle", server.http_base_url(), master_account);
+    let api_url = format!(
+        "{}/api/trade-groups/{}/toggle",
+        server.http_base_url(),
+        master_account
+    );
     let client = create_http_client();
     let response = client
         .post(&api_url)
@@ -241,7 +250,7 @@ async fn test_master_toggle_on_clears_slave_warning() {
     );
 
     let settings_json = broadcast_result.unwrap();
-    
+
     // Verify warning_codes does NOT contain master_web_ui_disabled
     let warning_codes: Vec<String> = settings_json["warning_codes"]
         .as_array()
@@ -257,7 +266,10 @@ async fn test_master_toggle_on_clears_slave_warning() {
     );
 
     println!("✅ Master toggle ON → Slave warning cleared test passed");
-    println!("   Slave {} warning codes after Master ON: {:?}", slave_account, warning_codes);
+    println!(
+        "   Slave {} warning codes after Master ON: {:?}",
+        slave_account, warning_codes
+    );
 }
 
 /// Test Master toggle cycle: OFF → ON → OFF
@@ -300,7 +312,11 @@ async fn test_master_toggle_cycle() {
     sleep(Duration::from_millis(SETTLE_WAIT_MS * 2)).await;
 
     let client = create_http_client();
-    let api_url = format!("{}/api/trade-groups/{}/toggle", server.http_base_url(), master_account);
+    let api_url = format!(
+        "{}/api/trade-groups/{}/toggle",
+        server.http_base_url(),
+        master_account
+    );
 
     // Step 1: Toggle Master OFF
     {
@@ -324,7 +340,10 @@ async fn test_master_toggle_cycle() {
         )
         .await;
 
-        assert!(broadcast_result.is_ok(), "Step 1 failed: Slave should receive master_web_ui_disabled");
+        assert!(
+            broadcast_result.is_ok(),
+            "Step 1 failed: Slave should receive master_web_ui_disabled"
+        );
         println!("✅ Step 1: Master OFF → Slave warning added");
     }
 
@@ -352,7 +371,10 @@ async fn test_master_toggle_cycle() {
         )
         .await;
 
-        assert!(broadcast_result.is_ok(), "Step 2 failed: Slave warning should clear");
+        assert!(
+            broadcast_result.is_ok(),
+            "Step 2 failed: Slave warning should clear"
+        );
         println!("✅ Step 2: Master ON → Slave warning cleared");
     }
 
@@ -380,7 +402,10 @@ async fn test_master_toggle_cycle() {
         )
         .await;
 
-        assert!(broadcast_result.is_ok(), "Step 3 failed: Slave should receive master_web_ui_disabled again");
+        assert!(
+            broadcast_result.is_ok(),
+            "Step 3 failed: Slave should receive master_web_ui_disabled again"
+        );
         println!("✅ Step 3: Master OFF → Slave warning added again");
     }
 
@@ -405,12 +430,18 @@ async fn seed_trade_group(
         symbol_suffix: None,
         config_version: 1,
     };
-    db.update_master_settings(master_account, master_settings).await?;
+    db.update_master_settings(master_account, master_settings)
+        .await?;
 
     // Add Slave member
     let slave_settings = default_test_slave_settings();
-    db.add_member(master_account, slave_account, slave_settings, STATUS_DISABLED)
-        .await?;
+    db.add_member(
+        master_account,
+        slave_account,
+        slave_settings,
+        STATUS_DISABLED,
+    )
+    .await?;
 
     // Enable the member
     db.update_member_enabled_flag(master_account, slave_account, true)
@@ -422,25 +453,23 @@ async fn seed_trade_group(
 /// Wait for settings_updated broadcast for specific slave with expected warning
 async fn wait_for_slave_warning(
     read: &mut futures_util::stream::SplitStream<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
     >,
     slave_account: &str,
     expected_warning: &str,
 ) -> Value {
     use futures_util::StreamExt;
-    
+
     while let Some(msg) = read.next().await {
         if let Ok(tokio_tungstenite::tungstenite::Message::Text(text)) = msg {
-            if text.starts_with("settings_updated:") {
-                if let Ok(json) = serde_json::from_str::<Value>(&text[17..]) {
+            if let Some(stripped) = text.strip_prefix("settings_updated:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
                     if json["slave_account"].as_str() == Some(slave_account) {
                         let warnings = json["warning_codes"]
                             .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .collect::<Vec<_>>()
-                            })
+                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                             .unwrap_or_default();
 
                         if warnings.contains(&expected_warning) {
@@ -457,25 +486,23 @@ async fn wait_for_slave_warning(
 /// Wait for settings_updated broadcast for specific slave WITHOUT expected warning
 async fn wait_for_slave_warning_cleared(
     read: &mut futures_util::stream::SplitStream<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
     >,
     slave_account: &str,
     cleared_warning: &str,
 ) -> Value {
     use futures_util::StreamExt;
-    
+
     while let Some(msg) = read.next().await {
         if let Ok(tokio_tungstenite::tungstenite::Message::Text(text)) = msg {
-            if text.starts_with("settings_updated:") {
-                if let Ok(json) = serde_json::from_str::<Value>(&text[17..]) {
+            if let Some(stripped) = text.strip_prefix("settings_updated:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
                     if json["slave_account"].as_str() == Some(slave_account) {
                         let warnings = json["warning_codes"]
                             .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .collect::<Vec<_>>()
-                            })
+                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                             .unwrap_or_default();
 
                         if !warnings.contains(&cleared_warning) {

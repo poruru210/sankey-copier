@@ -82,6 +82,7 @@ impl BroadcastCoordinator {
     }
 
     /// Clear cache entry for a slave (e.g., when slave is removed)
+    #[allow(dead_code)]
     pub async fn clear_cache(&self, slave_account: &str) {
         let mut cache = self.cache.write().await;
         cache.remove(slave_account);
@@ -121,12 +122,7 @@ mod tests {
         let (tx, mut rx) = broadcast::channel(16);
         let coordinator = BroadcastCoordinator::new(tx);
 
-        let payload = create_test_payload(
-            "MASTER1",
-            "SLAVE1",
-            2,
-            vec![],
-        );
+        let payload = create_test_payload("MASTER1", "SLAVE1", 2, vec![]);
 
         let broadcast = coordinator
             .broadcast_settings_if_changed("SLAVE1", vec![], payload, false)
