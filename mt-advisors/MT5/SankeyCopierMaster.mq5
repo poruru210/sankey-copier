@@ -136,6 +136,15 @@ int OnInit()
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
+   // Initialize EA State manager
+   g_ea_state = ea_state_create();
+   if(g_ea_state == 0)
+   {
+      Print("[ERROR] Failed to create EA State manager");
+      zmq_context_destroy(g_zmq_context);
+      return INIT_FAILED;
+   }
+
    // Create and connect PUSH socket
    g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
    if(g_zmq_socket < 0)

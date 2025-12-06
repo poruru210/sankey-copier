@@ -11,7 +11,8 @@ use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
-    HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings, STATUS_CONNECTED,
+    ConnectionStatus, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
+    STATUS_CONNECTED,
 };
 use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
 
@@ -32,12 +33,13 @@ impl MessageHandler {
             "[HEARTBEAT] Processing heartbeat message"
         );
 
-        // Get old is_trade_allowed before updating
-        let old_is_trade_allowed = self
-            .connection_manager
-            .get_ea(&account_id)
-            .await
-            .map(|conn| conn.is_trade_allowed);
+        // Get old connection info before updating
+        let old_conn = self.connection_manager.get_ea(&account_id).await;
+        let old_is_trade_allowed = old_conn.as_ref().map(|c| c.is_trade_allowed);
+        let was_offline = old_conn
+            .as_ref()
+            .map(|c| c.status != ConnectionStatus::Online)
+            .unwrap_or(true); // Treat new registration (None) as effectively "was offline"
 
         // Check if this is a new EA registration (not seen before)
         let is_new_registration = old_is_trade_allowed.is_none();
@@ -118,14 +120,27 @@ impl MessageHandler {
             }
 
             // Notify Slaves when Master status changes (N:N connection support)
-            // Only send SlaveConfigMessage when Slave's calculated status changes
-            if trade_allowed_changed || is_new_registration {
+            // Send SlaveConfigMessage when:
+            // 1. Slave's calculated status changes
+            // 2. Master's is_trade_allowed changes
+            // 3. Master comes Online (was Offline/Timeout)
+            // 4. New registration
+            let master_came_online = !is_new_registration && was_offline;
+
+            if trade_allowed_changed || is_new_registration || master_came_online {
                 if trade_allowed_changed {
                     tracing::info!(
                         "Master {} is_trade_allowed changed: {:?} -> {}",
                         account_id,
                         old_is_trade_allowed,
                         new_is_trade_allowed
+                    );
+                }
+
+                if master_came_online {
+                    tracing::info!(
+                        "Master {} came Online (was Offline/Timeout): notifying connected Slaves",
+                        account_id
                     );
                 }
 
@@ -196,9 +211,13 @@ impl MessageHandler {
                                 slave_settings: member.slave_settings.clone(),
                             };
 
-                            // WebSocket broadcast on status change, trade_allowed change, or new registration
+                            // WebSocket broadcast on status change, trade_allowed change, master online, or new registration
                             // (all affect warning_codes or initial state)
-                            if status_changed || trade_allowed_changed || is_new_registration {
+                            if status_changed
+                                || trade_allowed_changed
+                                || is_new_registration
+                                || master_came_online
+                            {
                                 if let Ok(json) = serde_json::to_string(&payload) {
                                     let _ = self
                                         .broadcast_tx
@@ -215,8 +234,12 @@ impl MessageHandler {
                                 }
                             }
 
-                            if !is_new_registration && !trade_allowed_changed && !status_changed {
-                                // Status unchanged, no trade_allowed change, and not a new registration - skip sending ZMQ config
+                            if !is_new_registration
+                                && !trade_allowed_changed
+                                && !status_changed
+                                && !master_came_online
+                            {
+                                // Status unchanged, no trade_allowed change, no connection recovery... skip
                                 tracing::debug!(
                                     "Slave {} status unchanged ({}) and no Master change, skipping ZMQ config send",
                                     slave_account,
@@ -254,7 +277,7 @@ impl MessageHandler {
                                 );
                             } else {
                                 tracing::info!(
-                                    "Slave {} status unchanged ({}) but notifying due to Master {} trade_allowed change",
+                                    "Slave {} status unchanged ({}) but notifying due to Master {} change (Intent/Online)",
                                     slave_account,
                                     new_slave_status,
                                     account_id

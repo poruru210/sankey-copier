@@ -329,6 +329,108 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     );
 }
 
+/// Test that Slave config updates when Master comes online later (was offline)
+#[tokio::test]
+async fn test_slave_update_when_master_connects_later() {
+    let server = RelayServerProcess::start().expect("Failed to start server");
+    let db = Database::new(&server.db_url())
+        .await
+        .expect("Failed to connect to database");
+
+    let master_account = "REPRO_MASTER_LATE";
+    let slave_account = "REPRO_SLAVE_EARLY";
+
+    seed_trade_group(&db, master_account, slave_account)
+        .await
+        .expect("failed to seed trade group");
+
+    // Connect WebSocket client
+    let ws_url = format!("wss://127.0.0.1:{}/ws", server.http_port);
+    let ws_stream = create_ws_connector(&ws_url)
+        .await
+        .expect("Failed to connect to WebSocket");
+    let (_write, mut read) = ws_stream.split();
+
+    // 1. Start Slave FIRST (Master is offline)
+    println!("[TEST] Starting Slave...");
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
+        master_account,
+    )
+    .expect("Failed to create slave simulator");
+
+    slave.set_trade_allowed(true);
+    slave.start().expect("slave start should succeed");
+
+    // 2. Wait for initial status broadcast (should be Master Offline)
+    println!("[TEST] Waiting for initial Slave status...");
+    let initial_update = timeout(
+        Duration::from_secs(BROADCAST_TIMEOUT_SECS),
+        wait_for_settings_updated(&mut read, slave_account),
+    )
+    .await
+    .expect("Timeout waiting for initial slave status");
+
+    let warning_codes: Vec<String> = initial_update["warning_codes"]
+        .as_array()
+        .expect("warning_codes should be an array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    // Should have master_offline or similar
+    println!("[TEST] Initial warnings: {:?}", warning_codes);
+
+    // 3. Start Master LATER
+    println!("[TEST] Starting Master...");
+    let mut master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        master_account,
+    )
+    .expect("Failed to create master simulator");
+
+    master.set_trade_allowed(true);
+    master.start().expect("master start should succeed");
+
+    // 4. Expect a NEW update for Slave (Transition to CONNECTED / Warnings cleared)
+    println!("[TEST] Waiting for Helper Update (Slave connected)...");
+    let update_result = timeout(
+        Duration::from_secs(BROADCAST_TIMEOUT_SECS),
+        wait_for_settings_updated(&mut read, slave_account),
+    )
+    .await;
+
+    // This is where we expect failure if the bug exists
+    assert!(
+        update_result.is_ok(),
+        "Slave did NOT receive config update when Master came online!"
+    );
+
+    let final_update = update_result.unwrap();
+    let final_warnings: Vec<String> = final_update["warning_codes"]
+        .as_array()
+        .expect("warning_codes should be an array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    println!("[TEST] Final warnings: {:?}", final_warnings);
+
+    // Ensure master_offline IS GONE
+    assert!(
+        !final_warnings.contains(&"master_offline".to_string()),
+        "master_offline warning persists!"
+    );
+    assert!(
+        !final_warnings.contains(&"slave_offline".to_string()),
+        "slave_offline warning persists!"
+    );
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
