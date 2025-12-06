@@ -186,19 +186,19 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
         warning_codes
     );
 
-    // Verify runtime_status is still CONNECTED (warning doesn't change status)
-    let runtime_status = settings_json["runtime_status"]
+    // Verify status is still CONNECTED (warning doesn't change status)
+    let status = settings_json["status"]
         .as_i64()
-        .expect("runtime_status should be a number");
+        .expect("status should be a number");
     
     assert_eq!(
-        runtime_status, STATUS_CONNECTED as i64,
-        "Runtime status should remain CONNECTED even with auto-trading disabled"
+        status, STATUS_CONNECTED as i64,
+        "Status should remain CONNECTED even with auto-trading disabled"
     );
 
     println!("✅ Slave auto-trading disabled warning broadcast test passed");
     println!("   Warning codes received: {:?}", warning_codes);
-    println!("   Runtime status: {} (CONNECTED)", runtime_status);
+    println!("   Status: {} (CONNECTED)", status);
 }
 
 /// Test broadcast timing: should receive within 2 seconds of heartbeat
