@@ -5,6 +5,7 @@ import dagre from '@dagrejs/dagre';
 // Height constants
 const COLLAPSED_HEIGHT = 96;
 const EXPANDED_HEIGHT = 520;  // 展開時の高さ（マージン含む）
+const WARNING_EXTRA_HEIGHT = 60; // 警告表示時の追加高さ
 const NODE_WIDTH = 380;
 
 interface UseDagreLayoutOptions {
@@ -12,6 +13,8 @@ interface UseDagreLayoutOptions {
   expandedSourceIds: string[];
   /** Expanded receiver account IDs */
   expandedReceiverIds: string[];
+  /** IDs of nodes showing warning messages */
+  warningNodeIds?: string[];
   /** Direction: 'LR' for left-to-right (horizontal), 'TB' for top-to-bottom */
   direction?: 'LR' | 'TB';
   /** Spacing between nodes */
@@ -31,9 +34,10 @@ interface UseDagreLayoutReturn {
 export function useDagreLayout(
   options: UseDagreLayoutOptions
 ): UseDagreLayoutReturn {
-  const { 
+  const {
     expandedSourceIds,
     expandedReceiverIds,
+    warningNodeIds = [],
     direction = 'LR',
     nodeSpacing = 30,
     rankSpacing = 200,
@@ -54,12 +58,35 @@ export function useDagreLayout(
     [expandedSourceIds, expandedReceiverIds]
   );
 
+  // Check if a node has warning
+  const hasWarning = useCallback(
+    (nodeId: string): boolean => {
+      // warningNodeIds contains full node IDs (including source-/receiver- prefix) or account IDs?
+      // Convention: let's expect Account IDs in warningNodeIds for consistency with expandedIds?
+      // Actually ConnectionsView passes node objects usually.
+      // Let's assume warningNodeIds contains ACCOUNT IDs for consistency with expandedSourceIds.
+      if (nodeId.startsWith('source-')) {
+        const accountId = nodeId.replace('source-', '');
+        return warningNodeIds.includes(accountId);
+      } else if (nodeId.startsWith('receiver-')) {
+        const accountId = nodeId.replace('receiver-', '');
+        return warningNodeIds.includes(accountId);
+      }
+      return false;
+    },
+    [warningNodeIds]
+  );
+
   // Get node height based on expansion state
   const getNodeHeight = useCallback(
     (nodeId: string): number => {
-      return isNodeExpanded(nodeId) ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+      let height = isNodeExpanded(nodeId) ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+      if (hasWarning(nodeId)) {
+        height += WARNING_EXTRA_HEIGHT;
+      }
+      return height;
     },
-    [isNodeExpanded]
+    [isNodeExpanded, hasWarning]
   );
 
   // Apply dagre layout
@@ -85,8 +112,8 @@ export function useDagreLayout(
       // Add nodes to dagre graph with their dimensions
       nodes.forEach((node) => {
         const height = getNodeHeight(node.id);
-        dagreGraph.setNode(node.id, { 
-          width: NODE_WIDTH, 
+        dagreGraph.setNode(node.id, {
+          width: NODE_WIDTH,
           height: height,
         });
       });
