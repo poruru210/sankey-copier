@@ -26,7 +26,6 @@ use serde::{Deserialize, Serialize};
 pub struct SlaveConfigWithMaster {
     pub master_account: String,
     pub slave_account: String,
-    pub status: i32,
     #[serde(default)]
     pub runtime_status: i32,
     #[serde(default)]

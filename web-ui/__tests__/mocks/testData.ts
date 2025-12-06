@@ -235,9 +235,8 @@ function toTradeGroupMember(setting: CopySettings): TradeGroupMember {
       max_signal_delay_ms: setting.max_signal_delay_ms,
       use_pending_order_for_delayed: setting.use_pending_order_for_delayed ?? false,
     },
-    status: setting.status,
-    runtime_status: setting.runtime_status ?? setting.status,
-    enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
+    runtime_status: setting.runtime_status,
+    enabled_flag: setting.enabled_flag ?? (setting.runtime_status !== 0),
     created_at: now,
     updated_at: now,
   };

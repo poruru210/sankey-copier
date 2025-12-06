@@ -17,8 +17,7 @@ export type WarningCode =
 
 export interface CopySettings {
   id: number;
-  status: number; // Runtime status from server (0=DISABLED,1=ENABLED,2=CONNECTED)
-  runtime_status?: number; // Explicit runtime field (mirrors status for now)
+  runtime_status: number; // Runtime status from server (0=DISABLED,1=ENABLED,2=CONNECTED)
   warning_codes?: WarningCode[]; // Warning codes from Status Engine
   enabled_flag?: boolean; // User intent flag managed by Web UI toggle
   master_account: string;
@@ -91,7 +90,7 @@ export interface CreateSettingsRequest {
   lot_calculation_mode?: LotCalculationMode;
   lot_multiplier: number | null;
   reverse_trade: boolean;
-  status: number; // 0=OFF (user disabled), 1=ON (user enabled)
+  runtime_status: number; // 0=DISABLED, 2=CONNECTED (enabled)
   symbol_prefix?: string;
   symbol_suffix?: string;
   symbol_mappings?: string; // Comma-separated format: "XAUUSD=GOLD,EURUSD=EUR"
@@ -230,8 +229,7 @@ export interface TradeGroupMember {
   trade_group_id: string; // Master account ID
   slave_account: string;
   slave_settings: SlaveSettings;
-  status: number; // Legacy field kept for backwards compatibility (mirrors runtime_status)
-  runtime_status: number; // Actual status evaluated by server (0/1/2)
+  runtime_status: number; // Runtime status evaluated by server (0=DISABLED,1=ENABLED,2=CONNECTED)
   warning_codes: WarningCode[]; // Warning codes from Status Engine
   enabled_flag: boolean; // User intent flag (true when switch is ON)
   created_at: string;

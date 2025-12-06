@@ -40,9 +40,9 @@ export function useAccountToggle({
       const sourceSettings = settings.filter((s) => s.master_account === accountId);
       sourceSettings.forEach((setting) => {
         // Only toggle if the target state matches the desired enabled state
-        // If we want to ENABLE (enabled=true), we should toggle if currently DISABLED (status=0)
-        // If we want to DISABLE (enabled=false), we should toggle if currently ENABLED (status!=0)
-        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        // If we want to ENABLE (enabled=true), we should toggle if currently DISABLED (runtime_status=0)
+        // If we want to DISABLE (enabled=false), we should toggle if currently ENABLED (runtime_status!=0)
+        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
         if (intentEnabled !== enabled) {
           onToggle(setting.id, enabled);
         }
@@ -58,7 +58,7 @@ export function useAccountToggle({
       // Find all settings for this receiver and toggle them
       const receiverSettings = settings.filter((s) => s.slave_account === accountId);
       receiverSettings.forEach((setting) => {
-        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
         if (intentEnabled !== enabled) {
           onToggle(setting.id, enabled);
         }

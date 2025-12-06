@@ -431,11 +431,9 @@ mod tests {
     fn master_cluster_aggregates_unique_warning_codes() {
         let snapshot = MasterClusterSnapshot::with_status_results(vec![
             MasterStatusResult {
-                status: STATUS_DISABLED,
                 warning_codes: vec![WarningCode::MasterOffline, WarningCode::MasterWebUiDisabled],
             },
             MasterStatusResult {
-                status: STATUS_DISABLED,
                 warning_codes: vec![
                     WarningCode::MasterOffline,
                     WarningCode::MasterAutoTradingDisabled,
@@ -855,7 +853,6 @@ mod tests {
             is_trade_allowed: true,
         };
         let master_result = MasterStatusResult {
-            status: STATUS_DISABLED,
             warning_codes: vec![WarningCode::MasterOffline],
         };
 
@@ -919,7 +916,6 @@ mod tests {
             is_trade_allowed: false, // generates SlaveAutoTradingDisabled
         };
         let master_result = MasterStatusResult {
-            status: STATUS_DISABLED,
             warning_codes: vec![WarningCode::MasterOffline], // priority 50
         };
 

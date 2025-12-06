@@ -102,7 +102,7 @@ impl MessageHandler {
                         "Found settings for {}: master={}, db_status={}, lot_mult={:?}",
                         account_id,
                         master_account,
-                        settings.status,
+                        settings.runtime_status,
                         settings.slave_settings.lot_multiplier
                     );
 
@@ -145,7 +145,7 @@ impl MessageHandler {
                         tracing::info!(
                             "Successfully sent CONFIG to: {} (db_status: {}, effective_status: {})",
                             account_id,
-                            settings.status,
+                            settings.runtime_status,
                             new_status
                         );
                     }

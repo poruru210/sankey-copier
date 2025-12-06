@@ -543,7 +543,6 @@ async fn reevaluate_and_broadcast_slaves(state: &AppState, master_account: &str)
         let payload = SlaveConfigWithMaster {
             master_account: master_account.to_string(),
             slave_account: member.slave_account.clone(),
-            status: member.status,
             runtime_status: slave_bundle.status_result.status,
             enabled_flag: member.enabled_flag,
             warning_codes: slave_bundle.status_result.warning_codes.clone(),

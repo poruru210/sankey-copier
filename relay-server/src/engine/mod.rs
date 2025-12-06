@@ -16,9 +16,9 @@ impl CopyEngine {
         // Check if copying is enabled and master is connected (STATUS_CONNECTED = 2)
         if !member.is_connected() {
             tracing::debug!(
-                "Member {} is not connected (status={})",
+                "Member {} is not connected (runtime_status={})",
                 member.slave_account,
-                member.status
+                member.runtime_status
             );
             return false;
         }

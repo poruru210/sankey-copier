@@ -126,7 +126,7 @@ export function SettingsDialog({
     } else {
       onSave({
         ...formData,
-        status: 0, // STATUS_DISABLED
+        runtime_status: 0, // STATUS_DISABLED
       });
     }
     onOpenChange(false);

@@ -22,9 +22,6 @@ pub struct TradeGroupMember {
     /// Slave-specific settings (stored as JSON in DB)
     pub slave_settings: SlaveSettings,
 
-    /// Legacy connection status field kept for backward compatibility (mirrors runtime_status)
-    pub status: i32,
-
     /// Runtime status calculated by the status engine: 0=DISABLED, 1=ENABLED, 2=CONNECTED
     #[serde(default)]
     pub runtime_status: i32,
@@ -183,7 +180,6 @@ impl TradeGroupMember {
             trade_group_id,
             slave_account,
             slave_settings: SlaveSettings::default(),
-            status: STATUS_DISABLED,
             runtime_status: STATUS_DISABLED,
             warning_codes: Vec::new(),
             enabled_flag: false,
@@ -203,9 +199,9 @@ impl TradeGroupMember {
         self.enabled_flag
     }
 
-    /// Check if the member is connected (status == 2)
+    /// Check if the member is connected (runtime_status == 2)
     pub fn is_connected(&self) -> bool {
-        self.status == STATUS_CONNECTED
+        self.runtime_status == STATUS_CONNECTED
     }
 }
 
@@ -221,7 +217,7 @@ mod tests {
         assert_eq!(member.id, 1);
         assert_eq!(member.trade_group_id, "MASTER_001");
         assert_eq!(member.slave_account, "SLAVE_001");
-        assert_eq!(member.status, STATUS_DISABLED); // Initial status is DISABLED
+        assert_eq!(member.runtime_status, STATUS_DISABLED); // Initial runtime_status is DISABLED
         assert_eq!(member.slave_settings.config_version, 0);
         assert!(member.slave_settings.lot_multiplier.is_none());
         assert!(!member.slave_settings.reverse_trade);
@@ -249,7 +245,7 @@ mod tests {
         member.enabled_flag = true;
         assert!(member.is_enabled());
 
-        member.status = STATUS_CONNECTED;
+        member.runtime_status = STATUS_CONNECTED;
         assert!(member.is_enabled());
     }
 
@@ -258,13 +254,13 @@ mod tests {
         let mut member =
             TradeGroupMember::new(1, "MASTER_001".to_string(), "SLAVE_001".to_string());
 
-        member.status = STATUS_DISABLED;
+        member.runtime_status = STATUS_DISABLED;
         assert!(!member.is_connected());
 
-        member.status = STATUS_ENABLED;
+        member.runtime_status = STATUS_ENABLED;
         assert!(!member.is_connected());
 
-        member.status = STATUS_CONNECTED;
+        member.runtime_status = STATUS_CONNECTED;
         assert!(member.is_connected());
     }
 

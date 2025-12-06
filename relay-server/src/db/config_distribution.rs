@@ -54,7 +54,6 @@ impl Database {
             configs.push(SlaveConfigWithMaster {
                 master_account,
                 slave_account,
-                status,
                 runtime_status,
                 enabled_flag,
                 warning_codes: Vec::new(), // Populated by Status Engine in message handlers

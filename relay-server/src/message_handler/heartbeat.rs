@@ -165,7 +165,7 @@ impl MessageHandler {
                             // Always send config on new registration or trade_allowed_changed
                             // When Master's is_trade_allowed changes, we must notify Slave even if Slave's status doesn't change
                             // (e.g., Slave stays ENABLED when Master goes from CONNECTED to DISABLED)
-                            let old_slave_status = member.status;
+                            let old_slave_status = member.runtime_status;
                             let is_connected = new_slave_status == crate::models::STATUS_CONNECTED;
                             let status_changed = old_slave_status != new_slave_status;
 
@@ -173,7 +173,6 @@ impl MessageHandler {
                             let payload = SlaveConfigWithMaster {
                                 master_account: account_id.clone(),
                                 slave_account: slave_account.clone(),
-                                status: member.status,
                                 runtime_status: new_slave_status,
                                 enabled_flag: member.enabled_flag,
                                 warning_codes: slave_bundle.status_result.warning_codes.clone(),
@@ -320,7 +319,6 @@ impl MessageHandler {
                                 let payload = SlaveConfigWithMaster {
                                     master_account: account_id.clone(),
                                     slave_account: member.slave_account.clone(),
-                                    status: member.status,
                                     runtime_status: slave_bundle.status_result.status,
                                     enabled_flag: member.enabled_flag,
                                     warning_codes: slave_bundle.status_result.warning_codes.clone(),
@@ -454,7 +452,6 @@ impl MessageHandler {
             let payload = SlaveConfigWithMaster {
                 master_account: settings.master_account.clone(),
                 slave_account: settings.slave_account.clone(),
-                status: settings.status,
                 runtime_status: evaluated_status,
                 enabled_flag: settings.enabled_flag,
                 warning_codes: slave_bundle.status_result.warning_codes.clone(),

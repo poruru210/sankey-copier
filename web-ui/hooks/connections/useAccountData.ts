@@ -71,7 +71,7 @@ export function useAccountData({
       const newDisabledReceivers: string[] = [];
 
       settings.forEach((setting) => {
-        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
         if (!intentEnabled) {
           if (!disabledReceiverIds.includes(setting.slave_account) && !newDisabledReceivers.includes(setting.slave_account)) {
             newDisabledReceivers.push(setting.slave_account);
@@ -116,7 +116,7 @@ export function useAccountData({
     const receiverRuntimeStatuses = new Map<string, number[]>();
 
     settings.forEach((setting, index) => {
-      const runtimeStatusValue = setting.runtime_status ?? setting.status ?? 0;
+      const runtimeStatusValue = setting.runtime_status ?? 0;
       const existingStatuses = receiverRuntimeStatuses.get(setting.slave_account) ?? [];
       existingStatuses.push(runtimeStatusValue);
       receiverRuntimeStatuses.set(setting.slave_account, existingStatuses);
@@ -167,7 +167,7 @@ export function useAccountData({
         const isOnline = getConnectionStatus(setting.slave_account);
         const connection = getAccountConnection(setting.slave_account);
 
-        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
         const isManuallyDisabled = disabledReceiverIds.includes(setting.slave_account);
         const isEnabled = isManuallyDisabled ? false : intentEnabled;
         const isExpanded = expandedReceiverIds.includes(setting.slave_account);
@@ -209,15 +209,16 @@ export function useAccountData({
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
       let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
       
-      // Override runtime_status to 0 (DISABLED) if Slave has auto-trading disabled warning
-      // Status Engine keeps it as CONNECTED (2) but Web UI should show "Manual OFF"
+      // UI Display Override: Status Engine keeps runtime_status as CONNECTED (2) when Slave
+      // has auto-trading OFF (to allow Close/Modify signals), but Web UI should show "Manual OFF".
+      // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
       const receiverSettings = settings.filter((s) => s.slave_account === receiver.id);
       const hasAutoTradingDisabled = receiverSettings.some((s) => 
         (s.warning_codes ?? []).includes('slave_auto_trading_disabled')
       );
       
       if (hasAutoTradingDisabled) {
-        runtimeStatus = 0; // Force to DISABLED for UI display
+        runtimeStatus = 0; // UI display override (Status Engine keeps it as 2)
       }
       
       receiver.runtimeStatus = runtimeStatus;

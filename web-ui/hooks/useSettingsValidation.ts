@@ -81,7 +81,7 @@ export function useSettingsValidation({
       );
 
       if (duplicate) {
-        const intentEnabled = duplicate.enabled_flag ?? (duplicate.status !== 0);
+        const intentEnabled = duplicate.enabled_flag ?? (duplicate.runtime_status !== 0);
         const status = intentEnabled ? messages.statusEnabled : messages.statusDisabled;
         errors.push(
           messages.duplicateSettings
@@ -142,7 +142,7 @@ export function useSettingsValidation({
         (setting) =>
           setting.master_account === slaveAccount &&
           setting.slave_account === masterAccount &&
-          (setting.enabled_flag ?? (setting.status !== 0))
+          (setting.enabled_flag ?? (setting.runtime_status !== 0))
       );
 
       if (reverseConnection) {

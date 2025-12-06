@@ -102,7 +102,7 @@ async fn test_add_member_success() {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
         },
-        status: 0,
+        runtime_status: 0,
     };
 
     let response = app
@@ -126,7 +126,7 @@ async fn test_add_member_success() {
 
     assert_eq!(member.slave_account, "SLAVE_001");
     assert_eq!(member.trade_group_id, "MASTER_001");
-    assert_eq!(member.status, 0); // DISABLED - initial status is OFF
+    assert_eq!(member.runtime_status, 0); // DISABLED - initial status is OFF
     assert_eq!(member.slave_settings.lot_multiplier, Some(1.5));
     assert!(!member.slave_settings.reverse_trade);
 }
@@ -139,7 +139,7 @@ async fn test_add_member_auto_creates_trade_group() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings::default(),
-        status: 0,
+        runtime_status: 0,
     };
 
     let response = app
@@ -340,7 +340,7 @@ async fn test_toggle_member_status_disable() {
         .unwrap();
 
     assert!(!member.enabled_flag);
-    assert_eq!(member.status, 0); // DISABLED
+    assert_eq!(member.runtime_status, 0); // DISABLED
 }
 
 #[tokio::test]
@@ -362,7 +362,7 @@ async fn test_toggle_member_status_enable() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(member.status, 0); // Initial status is DISABLED
+    assert_eq!(member.runtime_status, 0); // Initial status is DISABLED
 
     let app = create_router(state.clone());
 
@@ -392,7 +392,7 @@ async fn test_toggle_member_status_enable() {
         .unwrap();
 
     assert!(member.enabled_flag);
-    assert_eq!(member.status, 0); // runtime stays DISABLED until heartbeat evaluates
+    assert_eq!(member.runtime_status, 0); // runtime stays DISABLED until heartbeat evaluates
 }
 
 #[tokio::test]
@@ -518,7 +518,7 @@ async fn test_member_with_complex_settings() {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
         },
-        status: 0,
+        runtime_status: 0,
     };
 
     let response = app
@@ -590,7 +590,7 @@ async fn test_add_member_duplicate_conflict() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_DUP".to_string(),
         slave_settings,
-        status: 0,
+        runtime_status: 0,
     };
 
     let response = app

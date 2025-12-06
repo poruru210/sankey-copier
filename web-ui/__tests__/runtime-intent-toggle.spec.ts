@@ -154,7 +154,6 @@ function updateMemberRuntime(
   }
 
   target.runtime_status = runtimeStatus;
-  target.status = runtimeStatus;
 }
 
 async function waitForReactHydration(locator: Locator) {

@@ -30,8 +30,7 @@ fn create_test_member() -> TradeGroupMember {
         trade_group_id: "MASTER_001".to_string(),
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings::default(),
-        status: 2, // STATUS_CONNECTED
-        runtime_status: 2,
+        runtime_status: 2, // STATUS_CONNECTED
         warning_codes: Vec::new(),
         enabled_flag: true,
         created_at: Utc::now().to_rfc3339(),
@@ -66,7 +65,7 @@ fn test_filter_disabled_member_blocked() {
     let engine = CopyEngine::new();
     let signal = create_test_signal();
     let mut member = create_test_member();
-    member.status = 0; // STATUS_DISABLED
+    member.runtime_status = 0; // STATUS_DISABLED
 
     assert!(!engine.should_copy_trade(&signal, &member));
 }

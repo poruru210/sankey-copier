@@ -173,7 +173,6 @@ pub(crate) async fn notify_slaves_master_offline(
                 let payload = SlaveConfigWithMaster {
                     master_account: master_account.to_string(),
                     slave_account: member.slave_account.clone(),
-                    status: new_status,
                     runtime_status: new_status,
                     enabled_flag: member.enabled_flag,
                     warning_codes: slave_bundle.status_result.warning_codes.clone(),
@@ -280,7 +279,6 @@ pub(crate) async fn notify_slave_offline(
         let payload = SlaveConfigWithMaster {
             master_account: settings.master_account.clone(),
             slave_account: settings.slave_account.clone(),
-            status: settings.status,
             runtime_status: new_status,
             enabled_flag: settings.enabled_flag,
             warning_codes: slave_bundle.status_result.warning_codes.clone(),

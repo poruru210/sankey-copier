@@ -30,8 +30,7 @@ export function convertMembersToCopySettings(
     for (const member of members) {
       copySettings.push({
         id: member.id,
-        status: member.runtime_status ?? member.status,
-        runtime_status: member.runtime_status ?? member.status,
+        runtime_status: member.runtime_status,
         warning_codes: member.warning_codes,
         enabled_flag: member.enabled_flag,
         master_account: member.trade_group_id,
@@ -137,7 +136,6 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
       max_signal_delay_ms: request.max_signal_delay_ms,
       use_pending_order_for_delayed: request.use_pending_order_for_delayed,
     },
-    status: request.status,
   };
 }
 

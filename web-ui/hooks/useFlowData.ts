@@ -134,7 +134,7 @@ export function useFlowData({
     const receiverSettings = settings.filter((s) => s.slave_account === accountId);
     const mutations = receiverSettings
       .filter((setting) => {
-        const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+        const intentEnabled = setting.enabled_flag ?? (setting.runtime_status !== 0);
         return intentEnabled !== enabled;
       })
       .map((setting) => onToggle(setting.id, enabled));
@@ -267,7 +267,15 @@ export function useFlowData({
       // Edge animation and color is based solely on this specific connection's runtime_status
       // A connection is "active" when runtime_status === 2 (CONNECTED)
       // This means the Master is online and actively sending signals to this Slave
-      const runtimeStatus = setting.runtime_status ?? setting.status ?? 0;
+      let runtimeStatus = setting.runtime_status ?? 0;
+      
+      // UI Display Override: Status Engine keeps runtime_status as CONNECTED (2) when Slave
+      // has auto-trading OFF (to allow Close/Modify signals), but Web UI should stop animation.
+      // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
+      if ((setting.warning_codes ?? []).includes('slave_auto_trading_disabled')) {
+        runtimeStatus = 0; // UI display override (Status Engine keeps it as 2)
+      }
+      
       const isConnected = runtimeStatus === 2;
 
       // Direct edge from source to receiver with settings button

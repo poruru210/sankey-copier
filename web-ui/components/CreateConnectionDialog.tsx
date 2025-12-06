@@ -356,15 +356,15 @@ function CreateConnectionForm({
         return;
       }
 
-      // Create the member with user-selected status
-      // status: 0 = DISABLED, 2 = CONNECTED (enabled)
+      // Create the member with user-selected runtime_status
+      // runtime_status: 0 = DISABLED, 2 = CONNECTED (enabled)
       await onCreate({
         master_account: formData.master_account,
         slave_account: formData.slave_account,
         lot_calculation_mode: formData.lot_calculation_mode,
         lot_multiplier: formData.lot_multiplier,
         reverse_trade: formData.reverse_trade,
-        status: formData.enable_on_create ? 2 : 0,
+        runtime_status: formData.enable_on_create ? 2 : 0,
         symbol_prefix: formData.symbol_prefix || undefined,
         symbol_suffix: formData.symbol_suffix || undefined,
         symbol_mappings: formData.symbol_mappings || undefined,
