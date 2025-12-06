@@ -232,6 +232,7 @@ function toTradeGroupMember(setting: CopySettings): TradeGroupMember {
       use_pending_order_for_delayed: setting.use_pending_order_for_delayed ?? false,
     },
     status: setting.status,
+    warning_codes: setting.warning_codes ?? [],
     enabled_flag: setting.enabled_flag ?? (setting.status !== 0),
     created_at: now,
     updated_at: now,
