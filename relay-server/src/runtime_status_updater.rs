@@ -166,13 +166,22 @@ impl RuntimeStatusUpdater {
         &self,
         target: SlaveRuntimeTarget<'_>,
     ) -> MemberStatusResult {
+        let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
+        self.evaluate_member_runtime_status_with_snapshot(target, slave_snapshot)
+            .await
+    }
+
+    /// Helper to evaluate status with an explicit snapshot (useful for "Old" state evaluation)
+    pub async fn evaluate_member_runtime_status_with_snapshot(
+        &self,
+        target: SlaveRuntimeTarget<'_>,
+        slave_snapshot: ConnectionSnapshot,
+    ) -> MemberStatusResult {
         // Get the specific Master's status
         let master_result = self
             .evaluate_master_runtime_status(target.master_account)
             .await
             .unwrap_or_default();
-
-        let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
 
         let result = evaluate_member_status(
             SlaveIntent {

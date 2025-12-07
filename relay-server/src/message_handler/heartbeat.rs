@@ -11,7 +11,7 @@ use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
-    ConnectionStatus, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
+    ConnectionStatus, EaConnection, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
     STATUS_CONNECTED,
 };
 use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
@@ -54,9 +54,6 @@ impl MessageHandler {
 
         // If this is a Master EA, handle status calculation and notification
         if ea_type == "Master" {
-            // Detect is_trade_allowed change
-            let trade_allowed_changed = old_is_trade_allowed != Some(new_is_trade_allowed);
-
             // Fetch TradeGroup to get master_settings.enabled
             let trade_group = match self.db.get_trade_group(&account_id).await {
                 Ok(Some(tg)) => tg,
@@ -100,6 +97,7 @@ impl MessageHandler {
 
             // Send MasterConfigMessage if this is a new registration or if auto-trading state changed
             // This ensures Master EA is in sync with Server status (e.g. after Server restart or local toggle)
+            let trade_allowed_changed = old_is_trade_allowed != Some(new_is_trade_allowed);
             if is_new_registration || trade_allowed_changed {
                 let config = master_bundle.config;
 
@@ -383,7 +381,7 @@ impl MessageHandler {
                 }
             }
         } else {
-            self.update_slave_runtime_on_heartbeat(&account_id, &runtime_updater)
+            self.update_slave_runtime_on_heartbeat(&account_id, &runtime_updater, &old_conn)
                 .await;
         }
 
@@ -398,6 +396,7 @@ impl MessageHandler {
         &self,
         slave_account: &str,
         runtime_updater: &RuntimeStatusUpdater,
+        old_conn: &Option<EaConnection>,
     ) {
         let settings_list = match self.db.get_settings_for_slave(slave_account).await {
             Ok(list) => list,
@@ -481,9 +480,38 @@ impl MessageHandler {
                 );
             }
 
-            // WebSocket broadcast on status change
+            // Compare Old vs New state to detect changes
+            // We need to re-evaluate the OLD state to see if warning codes changed
+            // (e.g., AutoTrading toggled On/Off)
+            let old_snapshot = ConnectionSnapshot {
+                connection_status: old_conn.as_ref().map(|c| c.status),
+                is_trade_allowed: old_conn
+                    .as_ref()
+                    .map(|c| c.is_trade_allowed)
+                    .unwrap_or(false),
+            };
+
+            // Evaluate OLD status
+            let old_status_result = runtime_updater
+                .evaluate_member_runtime_status_with_snapshot(
+                    SlaveRuntimeTarget {
+                        master_account: settings.master_account.as_str(),
+                        trade_group_id: settings.master_account.as_str(),
+                        slave_account: &settings.slave_account,
+                        enabled_flag: settings.enabled_flag,
+                        slave_settings: &settings.slave_settings,
+                    },
+                    old_snapshot,
+                )
+                .await;
+
+            // WebSocket broadcast if Status OR Warning Codes changed
+            // This covers AutoTrading toggles, Offline/Online changes, etc.
             let status_changed = evaluated_status != previous_status;
-            if status_changed {
+            let warnings_changed =
+                old_status_result.warning_codes != slave_bundle.status_result.warning_codes;
+
+            if status_changed || warnings_changed {
                 let payload = SlaveConfigWithMaster {
                     master_account: settings.master_account.clone(),
                     slave_account: settings.slave_account.clone(),
