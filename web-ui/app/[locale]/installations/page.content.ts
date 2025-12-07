@@ -15,6 +15,10 @@ const installationsPageContent = {
       en: 'Refresh Detection',
       ja: '検出を更新',
     }),
+    refresh: t({
+      en: 'Refresh',
+      ja: '更新',
+    }),
     installToSelected: t({
       en: 'Install to Selected',
       ja: '選択項目にインストール',
@@ -62,6 +66,10 @@ const installationsPageContent = {
       en: 'Components',
       ja: 'コンポーネント',
     }),
+    status: t({
+      en: 'Status',
+      ja: 'ステータス',
+    }),
     actions: t({
       en: 'Actions',
       ja: 'アクション',
@@ -73,11 +81,11 @@ const installationsPageContent = {
     }),
     master: t({
       en: 'Master',
-      ja: 'マスター',
+      ja: 'Master',
     }),
     slave: t({
       en: 'Slave',
-      ja: 'スレーブ',
+      ja: 'Slave',
     }),
     // Buttons
     install: t({
@@ -115,6 +123,10 @@ const installationsPageContent = {
       en: 'Ports',
       ja: 'ポート',
     }),
+    eaPorts: t({
+      en: 'EA Ports',
+      ja: 'EAポート',
+    }),
     portMismatch: t({
       en: 'Mismatch',
       ja: '不一致',
@@ -126,6 +138,43 @@ const installationsPageContent = {
     portMismatchDescription: t({
       en: 'EA ports do not match server config. Click "Install" to update.',
       ja: 'EAのポート設定がサーバーと一致しません。「インストール」で更新してください。',
+    }),
+    // Status details
+    statusDetails: t({
+      en: 'Status Details',
+      ja: 'ステータス詳細',
+    }),
+    statusHealthy: t({
+      en: 'Healthy',
+      ja: '正常',
+    }),
+    statusWarning: t({
+      en: 'Warning',
+      ja: '警告',
+    }),
+    statusError: t({
+      en: 'Error',
+      ja: 'エラー',
+    }),
+    notInstalled: t({
+      en: 'Not Installed',
+      ja: '未インストール',
+    }),
+    versionInfo: t({
+      en: 'Version Info',
+      ja: 'バージョン情報',
+    }),
+    dllVersion: t({
+      en: 'DLL Version',
+      ja: 'DLLバージョン',
+    }),
+    receiverPort: t({
+      en: 'Receiver Port',
+      ja: '受信ポート (Receiver)',
+    }),
+    publisherPort: t({
+      en: 'Publisher Port',
+      ja: '配信ポート (Publisher)',
     }),
   },
 } satisfies DeclarationContent;

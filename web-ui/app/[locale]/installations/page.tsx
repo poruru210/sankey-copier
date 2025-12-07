@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Typography, Muted } from '@/components/ui/typography';
 import { AlertCircle, AlertTriangle, CheckCircle, Download, Loader2, RefreshCw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import type { MtInstallation, EaPortConfig } from '@/types';
 
 export default function InstallationsPage() {
@@ -56,9 +57,9 @@ export default function InstallationsPage() {
     const result = await installToMt(installation.id);
 
     if (result.success) {
-      setMessage({ type: 'success', text: result.message || content.installationCompleted.value });
+      setMessage({ type: 'success', text: result.message || content.installationCompleted });
     } else {
-      setMessage({ type: 'error', text: result.message || content.installationFailed.value });
+      setMessage({ type: 'error', text: result.message || content.installationFailed });
     }
 
     // Clear message after 5 seconds
@@ -95,17 +96,17 @@ export default function InstallationsPage() {
     if (failCount === 0) {
       setMessage({
         type: 'success',
-        text: content.successfullyInstalled.value.replace('{count}', successCount.toString())
+        text: content.successfullyInstalled.replace('{count}', successCount.toString())
       });
     } else if (successCount === 0) {
       setMessage({
         type: 'error',
-        text: content.failedToInstall.value.replace('{count}', failCount.toString())
+        text: content.failedToInstall.replace('{count}', failCount.toString())
       });
     } else {
       setMessage({
         type: 'error',
-        text: content.completedWithErrors.value
+        text: content.completedWithErrors
           .replace('{successCount}', successCount.toString())
           .replace('{failCount}', failCount.toString())
       });
@@ -137,6 +138,22 @@ export default function InstallationsPage() {
     const installed = [components.dll, components.master_ea, components.slave_ea].filter(Boolean).length;
     const total = 3;
     return { installed, total };
+  };
+
+  const getInstallationStatus = (installation: MtInstallation) => {
+    const { components, port_mismatch, port_config } = installation;
+    const allComponentsInstalled = components.dll && components.master_ea && components.slave_ea;
+
+    // Status Logic
+    if (allComponentsInstalled && !port_mismatch && port_config) {
+      return { status: 'healthy', icon: CheckCircle, color: 'text-green-500', label: content.statusHealthy };
+    } else if (port_mismatch || (port_config && !allComponentsInstalled)) {
+      // Installed but mismatch or partial install
+      return { status: 'warning', icon: AlertTriangle, color: 'text-yellow-500', label: content.statusWarning };
+    } else {
+      // Not installed or error
+      return { status: 'error', icon: AlertCircle, color: 'text-muted-foreground', label: content.notInstalled };
+    }
   };
 
   if (loading && installations.length === 0) {
@@ -180,7 +197,7 @@ export default function InstallationsPage() {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    インストール ({selectedIds.size})
+                    {content.install} ({selectedIds.size})
                   </>
                 )}
               </Button>
@@ -192,7 +209,7 @@ export default function InstallationsPage() {
               className="gap-2 min-h-[44px] md:min-h-0"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              更新
+              {content.refresh}
             </Button>
           </div>
 
@@ -245,10 +262,8 @@ export default function InstallationsPage() {
                       />
                     </TableHead>
                     <TableHead className="py-2 text-sm font-medium">{content.name}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium w-[100px]">{content.status}</TableHead>
                     <TableHead className="py-2 text-sm font-medium hidden md:table-cell">{content.installationPath}</TableHead>
-                    <TableHead className="py-2 text-sm font-medium">{content.version}</TableHead>
-                    <TableHead className="py-2 text-sm font-medium">{content.components}</TableHead>
-                    <TableHead className="py-2 text-sm font-medium">{content.ports || 'Ports'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -283,75 +298,64 @@ export default function InstallationsPage() {
                             <span className="text-sm">{installation.name}</span>
                           </div>
                         </TableCell>
+                        <TableCell className="py-2">
+                          {(() => {
+                            const { icon: StatusIcon, color, label } = getInstallationStatus(installation);
+                            return (
+                              <HoverCard>
+                                <HoverCardTrigger asChild>
+                                  <div className={`flex items-center gap-1 w-fit px-2 py-1 rounded-full bg-muted/50 hover:bg-muted ${color}`}>
+                                    <StatusIcon className="h-4 w-4" />
+                                    <span className="text-xs font-medium">{label}</span>
+                                  </div>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-auto min-w-[200px] p-3" side="right" align="start">
+                                  <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs items-center">
+                                    {/* Master EA */}
+                                    <div className="flex items-center gap-1.5">
+                                      {installation.components.master_ea ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <div className="h-3.5 w-3.5 rounded-full border-2 border-muted" />}
+                                      <span>{content.master}</span>
+                                    </div>
+                                    <div className="text-right text-muted-foreground">-</div>
+
+                                    {/* Slave EA */}
+                                    <div className="flex items-center gap-1.5">
+                                      {installation.components.slave_ea ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <div className="h-3.5 w-3.5 rounded-full border-2 border-muted" />}
+                                      <span>{content.slave}</span>
+                                    </div>
+                                    <div className="text-right text-muted-foreground">-</div>
+
+                                    {/* DLL */}
+                                    <div className="flex items-center gap-1.5">
+                                      {installation.components.dll ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <div className="h-3.5 w-3.5 rounded-full border-2 border-muted" />}
+                                      <span>{content.dll}</span>
+                                    </div>
+                                    <div className="text-right font-mono">
+                                      {installation.version ? `v${installation.version}` : '-'}
+                                    </div>
+
+                                    {/* Ports */}
+                                    {installation.port_config && (
+                                      <>
+                                        <div className="flex items-center gap-1.5">
+                                          {!installation.port_mismatch ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />}
+                                          <span>{content.ports}</span>
+                                        </div>
+                                        <div className="text-right font-mono">
+                                          {installation.port_config.receiver_port}, {installation.port_config.publisher_port}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </HoverCardContent>
+                              </HoverCard>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="py-2 hidden md:table-cell">
-                          <p className="text-sm text-muted-foreground truncate max-w-xs" title={installation.path}>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs lg:max-w-2xl" title={installation.path}>
                             {installation.path}
                           </p>
-                        </TableCell>
-                        <TableCell className="py-2">
-                          {installation.version ? (
-                            <span className="text-sm font-mono text-muted-foreground">v{installation.version}</span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="py-2">
-                          <div className="flex gap-2">
-                            <div className="flex items-center gap-1" title={content.dll.value}>
-                              {installation.components.dll ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
-                              )}
-                              <span className="text-sm text-muted-foreground">DLL</span>
-                            </div>
-                            <div className="flex items-center gap-1" title={content.master.value}>
-                              {installation.components.master_ea ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
-                              )}
-                              <span className="text-sm text-muted-foreground">Master</span>
-                            </div>
-                            <div className="flex items-center gap-1" title={content.slave.value}>
-                              {installation.components.slave_ea ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
-                              )}
-                              <span className="text-sm text-muted-foreground">Slave</span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-2 md:py-1">
-                          {installation.port_config ? (
-                            installation.port_mismatch ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-1 text-yellow-500 cursor-help">
-                                      <AlertTriangle className="h-4 w-4" />
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left" className="max-w-xs">
-                                    <div className="text-xs space-y-1">
-                                      <p className="font-semibold">{content.portMismatchTitle || 'Port configuration mismatch'}</p>
-                                      <p>{content.portMismatchDescription || 'EA ports do not match server. Reinstall to fix.'}</p>
-                                      <div className="mt-2 font-mono text-[10px]">
-                                        <p>EA: {installation.port_config.receiver_port}, {installation.port_config.publisher_port}</p>
-                                      </div>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : (
-                              <div className="flex items-center gap-1 text-green-500">
-                                <CheckCircle className="h-4 w-4" />
-                              </div>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
                         </TableCell>
                       </TableRow>
                     );

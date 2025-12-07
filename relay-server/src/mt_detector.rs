@@ -594,7 +594,7 @@ impl MtDetector {
         }
     }
 
-    /// WindowsファイルのバージョンResourceから ProductVersion を取得
+    /// WindowsファイルのバージョンResourceから FileVersion を取得
     #[cfg(windows)]
     fn get_file_version(&self, file_path: &Path) -> Option<String> {
         use std::ffi::OsStr;
@@ -662,7 +662,7 @@ impl MtDetector {
                     let codepage = *trans_data.add(i * 2 + 1);
 
                     let sub_block_str = format!(
-                        "\\StringFileInfo\\{:04x}{:04x}\\ProductVersion",
+                        "\\StringFileInfo\\{:04x}{:04x}\\FileVersion",
                         lang_id, codepage
                     );
 
@@ -708,7 +708,7 @@ impl MtDetector {
                 }
 
                 tracing::debug!(
-                    "No ProductVersion found in any translation for {:?}",
+                    "No FileVersion found in any translation for {:?}",
                     file_path
                 );
             } else {
@@ -726,7 +726,7 @@ impl MtDetector {
                 ];
 
                 for combo in &common_combinations {
-                    let sub_block_str = format!("\\StringFileInfo\\{}\\ProductVersion", combo);
+                    let sub_block_str = format!("\\StringFileInfo\\{}\\FileVersion", combo);
 
                     tracing::debug!(
                         "Fallback: trying sub_block {} for {:?}",
@@ -769,7 +769,7 @@ impl MtDetector {
                 }
 
                 tracing::warn!(
-                    "Failed to retrieve ProductVersion from {:?} with all methods",
+                    "Failed to retrieve FileVersion from {:?} with all methods",
                     file_path
                 );
             }
