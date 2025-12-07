@@ -20,7 +20,6 @@ export default function SitesPage() {
   const content = useIntlayer('sites-page');
   const [sites, setSites] = useAtom(sitesAtom);
   const [selectedSiteId, setSelectedSiteId] = useAtom(selectedSiteIdAtom);
-  const { serverLogHeight } = useServerLogContext();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', siteUrl: '' });
   const [error, setError] = useState<string>('');
@@ -114,153 +113,60 @@ export default function SitesPage() {
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div
-        className="relative z-10 flex flex-col overflow-y-auto"
-        style={{
-          height: `calc(100% - ${serverLogHeight}px)`,
-        }}
-      >
+      <div className="relative z-10 flex flex-col overflow-y-auto h-full">
         <div className="w-[95%] mx-auto p-4">
-            {/* Page Title */}
-            <div className="mb-4">
-              <Typography variant="h3" className="mb-1">{content.title}</Typography>
-              <Muted>{content.description}</Muted>
+          {/* Page Title */}
+          <div className="mb-4">
+            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+            <Muted>{content.description}</Muted>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 border border-red-200 dark:border-red-800 mb-6">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2 flex-shrink-0" />
+                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Site List */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Typography variant="h4" className="text-lg">{content.registeredSites}</Typography>
+              {editingId !== 'new' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleStartAdd}
+                  className="gap-2 min-h-[44px] md:min-h-0"
+                >
+                  <Plus className="h-4 w-4" />
+                  {content.addButton}
+                </Button>
+              )}
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 border border-red-200 dark:border-red-800 mb-6">
-                <div className="flex items-start">
-                  <AlertCircle className="h-5 w-5 text-red-400 mr-2 flex-shrink-0" />
-                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Site List */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Typography variant="h4" className="text-lg">{content.registeredSites}</Typography>
-                {editingId !== 'new' && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleStartAdd}
-                    className="gap-2 min-h-[44px] md:min-h-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                    {content.addButton}
-                  </Button>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                {sites.map((site) => (
-                  <div
-                    key={site.id}
-                    className={`p-4 rounded-lg border transition-colors ${site.id === selectedSiteId
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
-                        : 'border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50'
-                      }`}
-                  >
-                    {editingId === site.id ? (
-                      // Edit Mode
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor={`name-${site.id}`} className="text-sm">
-                            {content.siteName}
-                          </Label>
-                          <Input
-                            id={`name-${site.id}`}
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            placeholder={content.siteNamePlaceholder.value}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor={`url-${site.id}`} className="text-sm">
-                            {content.siteUrl}
-                          </Label>
-                          <Input
-                            id={`url-${site.id}`}
-                            value={formData.siteUrl}
-                            onChange={(e) => setFormData({ ...formData, siteUrl: e.target.value })}
-                            placeholder={content.siteUrlPlaceholder.value}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={handleCancelEdit}
-                            className="min-h-[44px] md:min-h-0"
-                          >
-                            {content.cancel}
-                          </Button>
-                          <Button type="button" size="sm" onClick={handleSave} className="min-h-[44px] md:min-h-0">
-                            {content.save}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      // Display Mode
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-base">{site.name}</h4>
-                            {site.id === selectedSiteId && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">
-                                {content.selected}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1 truncate">
-                            {site.siteUrl}
-                          </p>
-                        </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStartEdit(site)}
-                            className="h-11 w-11 md:h-9 md:w-9 p-0"
-                            title={content.edit.value}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDelete(site)}
-                            disabled={sites.length === 1}
-                            className="h-11 w-11 md:h-9 md:w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
-                            title={content.delete.value}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Add New Site Form */}
-                {editingId === 'new' && (
-                  <div className="p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-950">
+            <div className="space-y-3">
+              {sites.map((site) => (
+                <div
+                  key={site.id}
+                  className={`p-4 rounded-lg border transition-colors ${site.id === selectedSiteId
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
+                    : 'border-gray-200 dark:border-gray-700 bg-card hover:bg-accent/50'
+                    }`}
+                >
+                  {editingId === site.id ? (
+                    // Edit Mode
                     <div className="space-y-3">
-                      <h4 className="font-semibold text-base">{content.addNewSite}</h4>
                       <div>
-                        <Label htmlFor="name-new" className="text-sm">
+                        <Label htmlFor={`name-${site.id}`} className="text-sm">
                           {content.siteName}
                         </Label>
                         <Input
-                          id="name-new"
+                          id={`name-${site.id}`}
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                           placeholder={content.siteNamePlaceholder.value}
@@ -268,11 +174,11 @@ export default function SitesPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="url-new" className="text-sm">
+                        <Label htmlFor={`url-${site.id}`} className="text-sm">
                           {content.siteUrl}
                         </Label>
                         <Input
-                          id="url-new"
+                          id={`url-${site.id}`}
                           value={formData.siteUrl}
                           onChange={(e) => setFormData({ ...formData, siteUrl: e.target.value })}
                           placeholder={content.siteUrlPlaceholder.value}
@@ -290,21 +196,109 @@ export default function SitesPage() {
                           {content.cancel}
                         </Button>
                         <Button type="button" size="sm" onClick={handleSave} className="min-h-[44px] md:min-h-0">
-                          {content.add}
+                          {content.save}
                         </Button>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    // Display Mode
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-base">{site.name}</h4>
+                          {site.id === selectedSiteId && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">
+                              {content.selected}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1 truncate">
+                          {site.siteUrl}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleStartEdit(site)}
+                          className="h-11 w-11 md:h-9 md:w-9 p-0"
+                          title={content.edit.value}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDelete(site)}
+                          disabled={sites.length === 1}
+                          className="h-11 w-11 md:h-9 md:w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                          title={content.delete.value}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
 
-              {/* Info Message */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  {content.infoMessage}
-                </p>
-              </div>
+              {/* Add New Site Form */}
+              {editingId === 'new' && (
+                <div className="p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-950">
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-base">{content.addNewSite}</h4>
+                    <div>
+                      <Label htmlFor="name-new" className="text-sm">
+                        {content.siteName}
+                      </Label>
+                      <Input
+                        id="name-new"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder={content.siteNamePlaceholder.value}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="url-new" className="text-sm">
+                        {content.siteUrl}
+                      </Label>
+                      <Input
+                        id="url-new"
+                        value={formData.siteUrl}
+                        onChange={(e) => setFormData({ ...formData, siteUrl: e.target.value })}
+                        placeholder={content.siteUrlPlaceholder.value}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                        className="min-h-[44px] md:min-h-0"
+                      >
+                        {content.cancel}
+                      </Button>
+                      <Button type="button" size="sm" onClick={handleSave} className="min-h-[44px] md:min-h-0">
+                        {content.add}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Info Message */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                {content.infoMessage}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
