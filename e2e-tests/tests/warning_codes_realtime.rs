@@ -431,6 +431,123 @@ async fn test_slave_update_when_master_connects_later() {
     );
 }
 
+/// Test reconnection after explicit deletion (Unregister)
+/// Verifies that the server correctly handles the "Unknown" -> "Connected" transition
+/// (or "Offline" -> "Connected") even after an explicit Unregister event (Soft Delete).
+#[tokio::test]
+async fn test_reconnection_after_deletion() {
+    let server = RelayServerProcess::start().expect("Failed to start server");
+    let db = Database::new(&server.db_url())
+        .await
+        .expect("Failed to connect to database");
+
+    let master_account = "DELETE_TEST_MASTER";
+    let slave_account = "DELETE_TEST_SLAVE";
+
+    seed_trade_group(&db, master_account, slave_account)
+        .await
+        .expect("failed to seed trade group");
+
+    // Connect WebSocket client
+    let ws_url = format!("wss://127.0.0.1:{}/ws", server.http_port);
+    let ws_stream = create_ws_connector(&ws_url)
+        .await
+        .expect("Failed to connect to WebSocket");
+    let (_write, mut read) = ws_stream.split();
+
+    // 1. Start Master
+    let mut master = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        master_account,
+    )
+    .expect("Failed to create master");
+    master.set_trade_allowed(true);
+    master.start().expect("Failed to start master");
+
+    // 2. Start Slave
+    let mut slave = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
+        master_account,
+    )
+    .expect("Failed to create slave");
+    slave.set_trade_allowed(true);
+    slave.start().expect("Failed to start slave");
+
+    // 3. Wait for initial connection (Slave Connected)
+    // Retry loop because we might receive interim updates (status 0 or 1) before settling on 2
+    let mut initial_status_ok = false;
+    let start = std::time::Instant::now();
+    
+    while start.elapsed() < Duration::from_secs(BROADCAST_TIMEOUT_SECS) {
+        if let Ok(config) = timeout(
+            Duration::from_secs(1),
+            wait_for_settings_updated(&mut read, slave_account),
+        ).await {
+            if config["status"] == 2 {
+                initial_status_ok = true;
+                break;
+            }
+        }
+    }
+    assert!(initial_status_ok, "Slave should be CONNECTED (status=2) initially");
+
+    // 4. Perform Deletion (Unregister)
+    println!("[TEST] Stopping and unregistering slave...");
+    slave.stop().expect("Failed to stop slave");
+    slave.send_unregister().expect("Failed to send unregister");
+    drop(slave); // Close sockets
+
+    // Wait a bit for server to process Unregister
+    sleep(Duration::from_millis(1000)).await;
+
+    // 5. Reconnect (New Simulator instance)
+    println!("[TEST] Reconnecting slave...");
+    let mut slave_new = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        slave_account,
+        master_account,
+    )
+    .expect("Failed to create new slave");
+    slave_new.set_trade_allowed(true);
+    slave_new.start().expect("Failed to start new slave");
+
+    // 6. Verify Config Broadcast (Should receive update due to Unknown/Offline -> Connected transition)
+    let mut reconnect_status_ok = false;
+    let mut final_warnings = Vec::new();
+    let start_reconnect = std::time::Instant::now();
+
+    while start_reconnect.elapsed() < Duration::from_secs(BROADCAST_TIMEOUT_SECS) {
+        if let Ok(config) = timeout(
+            Duration::from_secs(1),
+            wait_for_settings_updated(&mut read, slave_account),
+        ).await {
+            if config["status"] == 2 {
+                reconnect_status_ok = true;
+                final_warnings = config["warning_codes"]
+                    .as_array()
+                    .expect("warning_codes array")
+                    .iter()
+                    .map(|v| v.as_str().unwrap().to_string())
+                    .collect();
+                break;
+            }
+        }
+    }
+
+    assert!(reconnect_status_ok, "Slave should be CONNECTED after reconnection");
+
+    assert!(
+        final_warnings.is_empty(),
+        "Slave should have no warnings after reconnection (Master is online)"
+    );
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

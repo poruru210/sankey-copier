@@ -20,7 +20,7 @@ use std::time::Instant;
 use crate::base::EaSimulatorBase;
 use crate::types::{
     EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, SyncRequestMessage,
-    TradeSignalMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
+    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
     STATUS_NO_CONFIG,
 };
 
@@ -427,6 +427,27 @@ impl SlaveEaSimulator {
 
         self.ontimer_thread = Some(handle);
         Ok(())
+    }
+
+    /// Stop the OnTimer thread
+    pub fn stop(&mut self) -> Result<()> {
+        self.base.shutdown_flag.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.ontimer_thread.take() {
+            handle.join().map_err(|e| anyhow::anyhow!("Failed to join thread: {:?}", e))?;
+        }
+        Ok(())
+    }
+
+    /// Send Unregister message to server
+    /// Used for simulating EA deletion/unregistration
+    pub fn send_unregister(&self) -> Result<()> {
+        let msg = UnregisterMessage {
+            message_type: "Unregister".to_string(),
+            account_id: self.base.account_id().to_string(),
+            timestamp: Utc::now().to_rfc3339(),
+        };
+        let bytes = rmp_serde::to_vec_named(&msg)?;
+        self.base.send_binary(&bytes)
     }
 
     // =========================================================================
