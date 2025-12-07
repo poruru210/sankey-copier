@@ -527,17 +527,17 @@ sequenceDiagram
     EA->>DLL: Heartbeat data
     DLL->>RS: ZMQ PUSH (MessagePack)
     RS->>RS: parse HeartbeatMessage
+    RS->>CM: update_heartbeat (auto-register if new)
 
-    alt 新規EA
-        RS->>DB: auto-register
-    else 既存EA
-        RS->>RS: update last_heartbeat
+    RS->>SE: calc OLD status (or Unknown)
+    RS->>SE: calc NEW status
+    RS->>RS: has_changed(OLD, NEW)?
+
+    alt ステータス変化あり (Unknown -> Connected 含む)
+        RS->>DB: update runtime_status (via RuntimeStatusUpdater)
+        RS->>WS: broadcast update
+        RS->>EA: send Config (ZMQ PUB)
     end
-
-    RS->>SE: evaluate_status()
-    SE->>DB: update runtime_status
-    SE->>WS: broadcast update
-    RS->>EA: send Config (ZMQ PUB)
 ```
 
 ### 9.2 トレードシグナル処理

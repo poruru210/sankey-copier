@@ -37,17 +37,30 @@ async fn create_ws_connector(
     use native_tls::TlsConnector;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-    let connector = TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?;
-    let connector = tokio_tungstenite::Connector::NativeTls(connector);
+    let mut retries = 5;
+    let mut last_error = None;
 
-    let request = url.into_client_request()?;
-    let (ws_stream, _response) =
-        tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector))
-            .await?;
+    while retries > 0 {
+        let connector = TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?;
+        let connector = tokio_tungstenite::Connector::NativeTls(connector);
 
-    Ok(ws_stream)
+        let request = url.into_client_request()?;
+        
+        match tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector)).await {
+            Ok((ws_stream, _)) => return Ok(ws_stream),
+            Err(e) => {
+                last_error = Some(e);
+                retries -= 1;
+                if retries > 0 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+    }
+
+    Err(Box::new(last_error.unwrap()))
 }
 
 /// Test Master toggle OFF → Slave receives master_web_ui_disabled warning
