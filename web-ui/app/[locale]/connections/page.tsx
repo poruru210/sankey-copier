@@ -11,13 +11,11 @@ import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow'
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 import { selectedSiteAtom } from '@/lib/atoms/site';
-import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Typography, Muted } from '@/components/ui/typography';
 
 export default function Home() {
   const content = useIntlayer('connections-page');
   const selectedSite = useAtomValue(selectedSiteAtom);
-  const { serverLogHeight } = useServerLogContext();
   const {
     settings,
     connections,
@@ -53,12 +51,7 @@ export default function Home() {
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div
-        className="relative z-10 flex flex-col overflow-y-auto"
-        style={{
-          height: `calc(100% - ${serverLogHeight}px)`,
-        }}
-      >
+      <div className="relative z-10 flex flex-col overflow-y-auto h-full">
         <div className="w-[95%] mx-auto p-4 h-full flex flex-col">
           {/* Page Title */}
           <div className="mb-6">

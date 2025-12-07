@@ -12,7 +12,6 @@ import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio,
 import { useAtom } from 'jotai';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
 import { useZeromqConfig } from '@/hooks/useZeromqConfig';
-import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Typography, Muted } from '@/components/ui/typography';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +25,6 @@ import { Site } from '@/lib/types/site';
 
 export default function SettingsPage() {
   const content = useIntlayer('settings-page');
-  const { serverLogHeight } = useServerLogContext();
   const { configured, config, enabled, loading, toggling, error, toggleEnabled, refetch } = useVLogsConfig();
   const { config: zmqConfig, loading: zmqLoading, error: zmqError, refetch: zmqRefetch } = useZeromqConfig();
   const { toast } = useToast();
@@ -163,12 +161,7 @@ export default function SettingsPage() {
   return (
     <div className="h-full bg-background relative overflow-hidden flex flex-col">
       {/* Main Content */}
-      <div
-        className="relative z-10 flex flex-col overflow-y-auto"
-        style={{
-          height: `calc(100% - ${serverLogHeight}px)`,
-        }}
-      >
+      <div className="relative z-10 flex flex-col overflow-y-auto h-full">
         <div className="w-[95%] mx-auto p-4 h-full flex flex-col space-y-6">
           {/* Page Title */}
           <div>

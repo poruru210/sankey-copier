@@ -7,7 +7,6 @@ import { useEffect, useState, useOptimistic, useTransition } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
-import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +20,6 @@ import type { MtInstallation, EaPortConfig } from '@/types';
 export default function InstallationsPage() {
   const content = useIntlayer('installations-page');
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
-  const { serverLogHeight } = useServerLogContext();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -31,13 +29,13 @@ export default function InstallationsPage() {
       return currentInstallations.map(inst =>
         inst.id === updatedId
           ? {
-              ...inst,
-              components: {
-                dll: true,
-                master_ea: true,
-                slave_ea: true,
-              }
+            ...inst,
+            components: {
+              dll: true,
+              master_ea: true,
+              slave_ea: true,
             }
+          }
           : inst
       );
     }
@@ -158,12 +156,7 @@ export default function InstallationsPage() {
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div
-        className="relative z-10 flex flex-col overflow-y-auto"
-        style={{
-          height: `calc(100% - ${serverLogHeight}px)`,
-        }}
-      >
+      <div className="relative z-10 flex flex-col overflow-y-auto h-full">
         <div className="w-[95%] mx-auto p-4">
           {/* Page Title */}
           <div className="mb-6">
@@ -214,11 +207,10 @@ export default function InstallationsPage() {
           {/* Message Display */}
           {message && (
             <div
-              className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${
-                message.type === 'success'
-                  ? 'bg-green-500/10 border border-green-500 text-green-500'
-                  : 'bg-destructive/10 border border-destructive text-destructive'
-              }`}
+              className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${message.type === 'success'
+                ? 'bg-green-500/10 border border-green-500 text-green-500'
+                : 'bg-destructive/10 border border-destructive text-destructive'
+                }`}
             >
               {message.type === 'success' ? (
                 <CheckCircle className="h-5 w-5" />
@@ -245,18 +237,18 @@ export default function InstallationsPage() {
             <div className="rounded-lg border bg-card overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="h-12 md:h-9">
-                    <TableHead className="w-[40px] py-2 text-xs">
+                  <TableRow className="h-12 md:h-10">
+                    <TableHead className="w-[40px] py-2">
                       <Checkbox
                         checked={selectedIds.size === optimisticInstallations.length && optimisticInstallations.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead className="py-2 text-xs">{content.name}</TableHead>
-                    <TableHead className="py-2 text-xs hidden md:table-cell">{content.installationPath}</TableHead>
-                    <TableHead className="py-2 text-xs">{content.version}</TableHead>
-                    <TableHead className="py-2 text-xs">{content.components}</TableHead>
-                    <TableHead className="py-2 text-xs">{content.ports || 'Ports'}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium">{content.name}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium hidden md:table-cell">{content.installationPath}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium">{content.version}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium">{content.components}</TableHead>
+                    <TableHead className="py-2 text-sm font-medium">{content.ports || 'Ports'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -270,65 +262,64 @@ export default function InstallationsPage() {
                       <TableRow
                         key={installation.id}
                         onClick={() => toggleSelection(installation.id)}
-                        className="cursor-pointer h-14 md:h-10"
+                        className="cursor-pointer h-14 md:h-12"
                       >
-                        <TableCell onClick={(e) => e.stopPropagation()} className="py-2 md:py-1">
+                        <TableCell onClick={(e) => e.stopPropagation()} className="py-2">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelection(installation.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-medium py-2 md:py-1">
+                        <TableCell className="font-medium py-2">
                           <div className="flex items-center gap-2">
                             <Badge
-                              className={`text-xs px-1.5 py-0 ${
-                                installation.type === 'MT4'
-                                  ? 'bg-blue-500 text-white hover:bg-blue-600'
-                                  : 'bg-purple-500 text-white hover:bg-purple-600'
-                              }`}
+                              className={`text-xs px-1.5 py-0 ${installation.type === 'MT4'
+                                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                : 'bg-purple-500 text-white hover:bg-purple-600'
+                                }`}
                             >
                               {installation.type}
                             </Badge>
-                            <span className="text-xs">{installation.name}</span>
+                            <span className="text-sm">{installation.name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-2 md:py-1 hidden md:table-cell">
-                          <p className="text-xs font-mono truncate max-w-xs" title={installation.path}>
+                        <TableCell className="py-2 hidden md:table-cell">
+                          <p className="text-sm text-muted-foreground truncate max-w-xs" title={installation.path}>
                             {installation.path}
                           </p>
                         </TableCell>
-                        <TableCell className="py-2 md:py-1">
+                        <TableCell className="py-2">
                           {installation.version ? (
-                            <span className="text-xs font-mono">v{installation.version}</span>
+                            <span className="text-sm font-mono text-muted-foreground">v{installation.version}</span>
                           ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
+                            <span className="text-sm text-muted-foreground">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="py-2 md:py-1">
+                        <TableCell className="py-2">
                           <div className="flex gap-2">
                             <div className="flex items-center gap-1" title={content.dll.value}>
                               {installation.components.dll ? (
-                                <CheckCircle className="h-3 w-3 text-green-500" />
+                                <CheckCircle className="h-4 w-4 text-green-500" />
                               ) : (
-                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">DLL</span>
+                              <span className="text-sm text-muted-foreground">DLL</span>
                             </div>
                             <div className="flex items-center gap-1" title={content.master.value}>
                               {installation.components.master_ea ? (
-                                <CheckCircle className="h-3 w-3 text-green-500" />
+                                <CheckCircle className="h-4 w-4 text-green-500" />
                               ) : (
-                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">Master</span>
+                              <span className="text-sm text-muted-foreground">Master</span>
                             </div>
                             <div className="flex items-center gap-1" title={content.slave.value}>
                               {installation.components.slave_ea ? (
-                                <CheckCircle className="h-3 w-3 text-green-500" />
+                                <CheckCircle className="h-4 w-4 text-green-500" />
                               ) : (
-                                <div className="h-3 w-3 rounded-full border-2 border-muted" />
+                                <div className="h-4 w-4 rounded-full border-2 border-muted" />
                               )}
-                              <span className="text-xs">Slave</span>
+                              <span className="text-sm text-muted-foreground">Slave</span>
                             </div>
                           </div>
                         </TableCell>
