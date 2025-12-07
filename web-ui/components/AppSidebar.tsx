@@ -23,7 +23,6 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { SiteSelector } from './SiteSelector';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
@@ -52,25 +51,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         active: pathname.includes('/installations'),
       },
       {
-        href: `/${locale}/sites`,
-        icon: Globe,
-        label: content.sites,
-        active: pathname.includes('/sites'),
-      },
-    ];
-
-    // Only show Settings nav if VictoriaLogs is configured (or still loading to avoid flash)
-    if (vlogsConfigured || vlogsLoading) {
-      items.push({
         href: `/${locale}/settings`,
         icon: Cog,
         label: content.settings,
         active: pathname.includes('/settings'),
-      });
-    }
+      },
+    ];
 
     return items;
-  }, [locale, pathname, content, vlogsConfigured, vlogsLoading]);
+  }, [locale, pathname, content]);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -132,7 +121,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-1 px-2 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
-              <SiteSelector />
               <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
                 <LanguageToggle />
                 <ThemeToggle />
