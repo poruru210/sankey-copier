@@ -201,6 +201,22 @@ impl MessageHandler {
 
                             // Broadcast only if Slave specific status/warnings changed
                             if slave_changed {
+                                // 1. Send ZMQ update to Slave EA
+                                if let Err(e) = self.publisher.send(&slave_bundle.config).await {
+                                    tracing::error!(
+                                        "Failed to send config update to Slave {}: {}",
+                                        slave_account,
+                                        e
+                                    );
+                                } else {
+                                    tracing::info!(
+                                        "Sent Slave CONFIG to {} (status: {}, reason: master_changed)",
+                                        slave_account,
+                                        new_slave_result.status
+                                    );
+                                }
+
+                                // 2. Send WebSocket update to UI
                                 let payload = SlaveConfigWithMaster {
                                     master_account: account_id.clone(),
                                     slave_account: slave_account.clone(),
@@ -295,7 +311,16 @@ impl MessageHandler {
                                     slave_settings: member.slave_settings.clone(),
                                 };
 
-                                // WebSocket broadcast after bulk update
+                                // 1. Send ZMQ update to Slave EA (Safety net)
+                                if let Err(e) = self.publisher.send(&slave_bundle.config).await {
+                                    tracing::error!(
+                                        "Failed to send config update to Slave {} (bulk): {}",
+                                        member.slave_account,
+                                        e
+                                    );
+                                }
+
+                                // 2. Send WebSocket update to UI
                                 if let Ok(json) = serde_json::to_string(&payload) {
                                     let _ = self
                                         .broadcast_tx
