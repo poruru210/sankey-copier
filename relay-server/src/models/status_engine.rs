@@ -109,21 +109,11 @@ impl MasterStatusResult {
 /// Result for a single Member (Master-Slave connection) status evaluation.
 /// Unlike SlaveStatusResult which aggregates all Masters, this evaluates
 /// the status of a specific Master-Slave pair.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MemberStatusResult {
     pub status: i32,
     pub allow_new_orders: bool,
     pub warning_codes: Vec<WarningCode>,
-}
-
-impl Default for MemberStatusResult {
-    fn default() -> Self {
-        Self {
-            status: 0, // STATUS_DISABLED
-            warning_codes: Vec::new(),
-            allow_new_orders: false,
-        }
-    }
 }
 
 impl MemberStatusResult {
