@@ -22,10 +22,42 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
+import { useServerLogContext } from '@/lib/contexts/sidebar-context';
+import { Button } from '@/components/ui/button';
+import { SquareTerminal } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+function ServerLogToggle() {
+  const { setServerLogExpanded } = useServerLogContext();
+  const { state } = useSidebar();
+  const isCollapsed = state === 'collapsed';
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setServerLogExpanded(true)}
+            className="h-9 w-9"
+          >
+            <SquareTerminal className="h-[1.2rem] w-[1.2rem] transition-all" />
+            <span className="sr-only">Toggle Server Logs</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          <p>Server Logs</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const content = useIntlayer('sidebar');
@@ -124,6 +156,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
                 <LanguageToggle />
                 <ThemeToggle />
+                <ServerLogToggle />
               </div>
             </div>
           </SidebarMenuItem>

@@ -10,7 +10,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
-import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +24,6 @@ export default function TradeGroupDetailPage() {
   const router = useRouter();
   const content = useIntlayer('trade-group-detail-page');
   const apiClient = useAtomValue(apiClientAtom);
-  const { serverLogHeight } = useServerLogContext();
 
   const masterAccount = decodeURIComponent(params.id as string);
 
@@ -150,121 +148,115 @@ export default function TradeGroupDetailPage() {
       <ParticlesBackground />
 
       {/* Main Content */}
-      <div
-        className="relative z-10 flex flex-col overflow-y-auto"
-        style={{
-          height: `calc(100% - ${serverLogHeight}px)`,
-        }}
-      >
+      <div className="relative z-10 flex flex-col overflow-y-auto h-full">
         <div className="w-[95%] max-w-2xl mx-auto p-4">
-            {/* Back Button */}
-            <Button
-              onClick={handleCancel}
-              variant="ghost"
-              className="mb-4 gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              {content.backToList}
-            </Button>
+          {/* Back Button */}
+          <Button
+            onClick={handleCancel}
+            variant="ghost"
+            className="mb-4 gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {content.backToList}
+          </Button>
 
-            {/* Page Title */}
-            <div className="mb-6">
-              <Typography variant="h3" className="mb-1">{content.title}</Typography>
-              <Muted>{content.description}</Muted>
-            </div>
+          {/* Page Title */}
+          <div className="mb-6">
+            <Typography variant="h3" className="mb-1">{content.title}</Typography>
+            <Muted>{content.description}</Muted>
+          </div>
 
-            {/* Message Display */}
-            {message && (
-              <div
-                className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${
-                  message.type === 'success'
-                    ? 'bg-green-500/10 border border-green-500 text-green-500'
-                    : 'bg-destructive/10 border border-destructive text-destructive'
+          {/* Message Display */}
+          {message && (
+            <div
+              className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${message.type === 'success'
+                ? 'bg-green-500/10 border border-green-500 text-green-500'
+                : 'bg-destructive/10 border border-destructive text-destructive'
                 }`}
-              >
-                {message.type === 'success' ? (
-                  <CheckCircle className="h-5 w-5" />
-                ) : (
-                  <AlertCircle className="h-5 w-5" />
-                )}
-                {message.text}
-              </div>
-            )}
+            >
+              {message.type === 'success' ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : (
+                <AlertCircle className="h-5 w-5" />
+              )}
+              {message.text}
+            </div>
+          )}
 
-            {/* Settings Form */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{tradeGroup.id}</CardTitle>
-                <CardDescription>
-                  {content.configVersionLabel}: {tradeGroup.master_settings.config_version} |{' '}
-                  {content.lastUpdatedLabel}: {formatDate(tradeGroup.updated_at)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Symbol Prefix */}
-                  <div className="space-y-2">
-                    <Label htmlFor="symbol_prefix">{content.symbolPrefixLabel}</Label>
-                    <Input
-                      id="symbol_prefix"
-                      type="text"
-                      placeholder={content.symbolPrefixPlaceholder.value}
-                      value={formData.symbol_prefix}
-                      onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
-                      disabled={saving}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {content.symbolPrefixDescription}
-                    </p>
-                  </div>
+          {/* Settings Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{tradeGroup.id}</CardTitle>
+              <CardDescription>
+                {content.configVersionLabel}: {tradeGroup.master_settings.config_version} |{' '}
+                {content.lastUpdatedLabel}: {formatDate(tradeGroup.updated_at)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Symbol Prefix */}
+                <div className="space-y-2">
+                  <Label htmlFor="symbol_prefix">{content.symbolPrefixLabel}</Label>
+                  <Input
+                    id="symbol_prefix"
+                    type="text"
+                    placeholder={content.symbolPrefixPlaceholder.value}
+                    value={formData.symbol_prefix}
+                    onChange={(e) => setFormData({ ...formData, symbol_prefix: e.target.value })}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {content.symbolPrefixDescription}
+                  </p>
+                </div>
 
-                  {/* Symbol Suffix */}
-                  <div className="space-y-2">
-                    <Label htmlFor="symbol_suffix">{content.symbolSuffixLabel}</Label>
-                    <Input
-                      id="symbol_suffix"
-                      type="text"
-                      placeholder={content.symbolSuffixPlaceholder.value}
-                      value={formData.symbol_suffix}
-                      onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
-                      disabled={saving}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {content.symbolSuffixDescription}
-                    </p>
-                  </div>
+                {/* Symbol Suffix */}
+                <div className="space-y-2">
+                  <Label htmlFor="symbol_suffix">{content.symbolSuffixLabel}</Label>
+                  <Input
+                    id="symbol_suffix"
+                    type="text"
+                    placeholder={content.symbolSuffixPlaceholder.value}
+                    value={formData.symbol_suffix}
+                    onChange={(e) => setFormData({ ...formData, symbol_suffix: e.target.value })}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {content.symbolSuffixDescription}
+                  </p>
+                </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      type="submit"
-                      disabled={saving}
-                      className="gap-2"
-                    >
-                      {saving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          {content.saving}
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4" />
-                          {content.save}
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleCancel}
-                      disabled={saving}
-                    >
-                      {content.cancel}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="submit"
+                    disabled={saving}
+                    className="gap-2"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {content.saving}
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        {content.save}
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCancel}
+                    disabled={saving}
+                  >
+                    {content.cancel}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
