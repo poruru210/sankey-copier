@@ -47,8 +47,15 @@ async fn create_ws_connector(
         let connector = tokio_tungstenite::Connector::NativeTls(connector);
 
         let request = url.into_client_request()?;
-        
-        match tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector)).await {
+
+        match tokio_tungstenite::connect_async_tls_with_config(
+            request,
+            None,
+            false,
+            Some(connector),
+        )
+        .await
+        {
             Ok((ws_stream, _)) => return Ok(ws_stream),
             Err(e) => {
                 last_error = Some(e);
