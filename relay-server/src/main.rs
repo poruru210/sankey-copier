@@ -16,6 +16,7 @@ mod victoria_logs;
 mod zeromq;
 
 use anyhow::Result;
+use chrono::TimeZone;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
@@ -33,7 +34,7 @@ use models::EaType;
 use runtime_status_updater::RuntimeStatusMetrics;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
-use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
+use zeromq::{SendFailure, ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
 /// Clean up old log files based on retention policy
 fn cleanup_old_logs(logging_config: &LoggingConfig) {
@@ -339,11 +340,135 @@ async fn main() -> Result<()> {
 
     // Initialize unified ZeroMQ publisher (PUB socket for all outgoing messages)
     // 2-port architecture: single publisher handles both trade signals and config messages
-    let zmq_publisher = Arc::new(ZmqConfigPublisher::new(&resolved_ports.sender_address())?);
+    // Create a failure channel to persist send failures into the database
+    let (failure_tx, mut failure_rx) = mpsc::unbounded_channel::<SendFailure>();
+
+    let zmq_publisher = Arc::new(ZmqConfigPublisher::new_with_failure_sender(
+        &resolved_ports.sender_address(),
+        failure_tx,
+    )?);
     tracing::info!(
         "ZeroMQ unified publisher started on {}",
         resolved_ports.sender_address()
     );
+
+    // Spawn background task that persists failed send notifications to DB
+    {
+        let db_clone = db.clone();
+        tokio::spawn(async move {
+            while let Some(failure) = failure_rx.recv().await {
+                match db_clone
+                    .record_failed_send(
+                        &failure.topic,
+                        &failure.payload,
+                        &failure.error,
+                        failure.attempts,
+                    )
+                    .await
+                {
+                    Ok(id) => tracing::info!(
+                        "Persisted failed ZMQ send id={} topic={}",
+                        id,
+                        failure.topic
+                    ),
+                    Err(e) => tracing::error!("Failed to persist ZMQ send failure: {}", e),
+                }
+            }
+        });
+    }
+
+    // Spawn retry worker to re-send persisted failed messages
+    tracing::info!("Spawning failed-send retry worker...");
+    {
+        let db_clone = db.clone();
+        let publisher_clone = zmq_publisher.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+
+                // Backoff and dead-letter policy
+                const MAX_RETRY_ATTEMPTS: i32 = 5;
+                const BASE_BACKOFF_SECS: u64 = 1;
+                const MAX_BACKOFF_SECS: u64 = 60;
+
+                match db_clone.fetch_pending_failed_sends(100).await {
+                    Ok(items) if !items.is_empty() => {
+                        for (id, topic, payload, attempts, updated_at) in items {
+                            // If we've reached max attempts, archive to dead-letter storage
+                            if attempts >= MAX_RETRY_ATTEMPTS {
+                                if let Ok(rows) = db_clone.move_failed_to_dead_letter(id).await {
+                                    if rows > 0 {
+                                        tracing::warn!("Moved failed send id={} topic={} to dead-letter after attempts={}", id, topic, attempts);
+                                    }
+                                }
+                                continue;
+                            }
+
+                            // Parse updated_at (SQLite CURRENT_TIMESTAMP format: "YYYY-MM-DD HH:MM:SS")
+                            let ok_to_try = if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(
+                                &updated_at,
+                                "%Y-%m-%d %H:%M:%S",
+                            ) {
+                                let last = chrono::Utc.from_utc_datetime(&naive);
+                                let elapsed_secs =
+                                    chrono::Utc::now().signed_duration_since(last).num_seconds();
+                                // exponential backoff: BASE * 2^(attempts)
+                                let pow = attempts.max(0) as u32;
+                                let factor = 2u64.pow(pow);
+                                let mut backoff = BASE_BACKOFF_SECS.saturating_mul(factor);
+                                if backoff > MAX_BACKOFF_SECS {
+                                    backoff = MAX_BACKOFF_SECS;
+                                }
+                                elapsed_secs >= backoff as i64
+                            } else {
+                                // If parsing fails, be permissive and try
+                                true
+                            };
+
+                            if !ok_to_try {
+                                continue;
+                            }
+
+                            // Try to resend preserved MessagePack payload
+                            match publisher_clone.publish_raw(&topic, &payload).await {
+                                Ok(_) => {
+                                    if let Ok(rows) = db_clone.mark_failed_send_processed(id).await
+                                    {
+                                        if rows > 0 {
+                                            tracing::info!("Retried and cleared failed send id={} topic={} attempts={}", id, topic, attempts);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Retrying failed send id={} topic={} failed: {}",
+                                        id,
+                                        topic,
+                                        e
+                                    );
+                                    // Record that we attempted another retry
+                                    if let Err(err) =
+                                        db_clone.increment_failed_send_attempts(id).await
+                                    {
+                                        tracing::error!(
+                                            "Failed to increment retry attempts for id={} : {}",
+                                            id,
+                                            err
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        // nothing to do
+                    }
+                    Err(e) => tracing::error!("Failed to fetch pending failed sends: {}", e),
+                }
+            }
+        });
+    }
 
     // Initialize copy engine
     let copy_engine = Arc::new(CopyEngine::new());
