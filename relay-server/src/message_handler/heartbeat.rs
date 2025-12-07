@@ -11,8 +11,7 @@ use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
-    EaConnection, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings,
-    STATUS_CONNECTED,
+    EaConnection, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings, STATUS_CONNECTED,
 };
 use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
 
@@ -93,7 +92,7 @@ impl MessageHandler {
 
             // Send MasterConfigMessage if state (status or warnings) changed
             // This uniformly handles new registrations (unknown -> new) and updates.
-            
+
             // Calculate OLD Master status (or Unknown if previous connection didn't exist)
             let old_master_status = if let Some(conn) = old_conn.as_ref() {
                 let old_snapshot = ConnectionSnapshot {
@@ -111,9 +110,7 @@ impl MessageHandler {
             };
 
             // Compare with NEW status
-            let master_changed = master_bundle
-                .status_result
-                .has_changed(&old_master_status);
+            let master_changed = master_bundle.status_result.has_changed(&old_master_status);
 
             tracing::debug!(
                 "Master {} change detection: changed={} (Old: {:?}) -> (New: {:?})",
@@ -169,22 +166,26 @@ impl MessageHandler {
                                     slave_settings: &member.slave_settings,
                                 })
                                 .await;
-                            
+
                             // Calculate OLD Slave Status
                             // Uses current slave settings but OLD Master Status
                             let slave_conn = self.connection_manager.get_ea(&slave_account).await;
                             let slave_snapshot = crate::models::status_engine::ConnectionSnapshot {
                                 connection_status: slave_conn.as_ref().map(|c| c.status),
-                                is_trade_allowed: slave_conn.as_ref().map(|c| c.is_trade_allowed).unwrap_or(false),
+                                is_trade_allowed: slave_conn
+                                    .as_ref()
+                                    .map(|c| c.is_trade_allowed)
+                                    .unwrap_or(false),
                             };
-                            
-                            let old_slave_result = crate::models::status_engine::evaluate_member_status(
-                                crate::models::status_engine::SlaveIntent {
-                                    web_ui_enabled: member.enabled_flag,
-                                },
-                                slave_snapshot,
-                                &old_master_status
-                            );
+
+                            let old_slave_result =
+                                crate::models::status_engine::evaluate_member_status(
+                                    crate::models::status_engine::SlaveIntent {
+                                        web_ui_enabled: member.enabled_flag,
+                                    },
+                                    slave_snapshot,
+                                    &old_master_status,
+                                );
 
                             let new_slave_result = &slave_bundle.status_result;
                             let slave_changed = new_slave_result.has_changed(&old_slave_result);
@@ -231,7 +232,7 @@ impl MessageHandler {
                                     1, // per-connection: always 1 Master
                                     new_slave_result.status == crate::models::STATUS_CONNECTED,
                                 );
-                                
+
                                 // Update database with new status
                                 if let Err(e) = self
                                     .db
@@ -443,10 +444,7 @@ impl MessageHandler {
 
             // WebSocket broadcast if Status OR Warning Codes changed
             // This covers AutoTrading toggles, Offline/Online changes, etc.
-            if slave_bundle
-                .status_result
-                .has_changed(&old_status_result)
-            {
+            if slave_bundle.status_result.has_changed(&old_status_result) {
                 let payload = SlaveConfigWithMaster {
                     master_account: settings.master_account.clone(),
                     slave_account: settings.slave_account.clone(),

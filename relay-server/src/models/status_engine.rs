@@ -1058,7 +1058,7 @@ mod tests {
         // 1. Unknown should be different from Default (Disabled)
         // 2. Unknown should be different from Connected
         // 3. Unknown should be equal to Unknown
-        
+
         // This will fail to compile initially because unknown() is not defined
         let unknown = MemberStatusResult::unknown();
         let default = MemberStatusResult::default(); // usually status=0 (Disabled)
@@ -1078,11 +1078,11 @@ mod tests {
 
         // Unknown vs Unknown
         assert!(!unknown.has_changed(&unknown));
-        
+
         // Check MasterStatusResult unknown as well
         let master_unknown = MasterStatusResult::unknown();
         let master_default = MasterStatusResult::default();
-        
+
         assert!(master_unknown.has_changed(&master_default));
         assert!(!master_unknown.has_changed(&master_unknown));
     }

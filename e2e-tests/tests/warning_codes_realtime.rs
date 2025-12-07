@@ -481,19 +481,24 @@ async fn test_reconnection_after_deletion() {
     // Retry loop because we might receive interim updates (status 0 or 1) before settling on 2
     let mut initial_status_ok = false;
     let start = std::time::Instant::now();
-    
+
     while start.elapsed() < Duration::from_secs(BROADCAST_TIMEOUT_SECS) {
         if let Ok(config) = timeout(
             Duration::from_secs(1),
             wait_for_settings_updated(&mut read, slave_account),
-        ).await {
+        )
+        .await
+        {
             if config["status"] == 2 {
                 initial_status_ok = true;
                 break;
             }
         }
     }
-    assert!(initial_status_ok, "Slave should be CONNECTED (status=2) initially");
+    assert!(
+        initial_status_ok,
+        "Slave should be CONNECTED (status=2) initially"
+    );
 
     // 4. Perform Deletion (Unregister)
     println!("[TEST] Stopping and unregistering slave...");
@@ -526,7 +531,9 @@ async fn test_reconnection_after_deletion() {
         if let Ok(config) = timeout(
             Duration::from_secs(1),
             wait_for_settings_updated(&mut read, slave_account),
-        ).await {
+        )
+        .await
+        {
             if config["status"] == 2 {
                 reconnect_status_ok = true;
                 final_warnings = config["warning_codes"]
@@ -540,7 +547,10 @@ async fn test_reconnection_after_deletion() {
         }
     }
 
-    assert!(reconnect_status_ok, "Slave should be CONNECTED after reconnection");
+    assert!(
+        reconnect_status_ok,
+        "Slave should be CONNECTED after reconnection"
+    );
 
     assert!(
         final_warnings.is_empty(),

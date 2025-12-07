@@ -20,8 +20,8 @@ use std::time::Instant;
 use crate::base::EaSimulatorBase;
 use crate::types::{
     EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, SyncRequestMessage,
-    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
-    STATUS_NO_CONFIG,
+    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
+    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
 // =============================================================================
@@ -433,7 +433,9 @@ impl SlaveEaSimulator {
     pub fn stop(&mut self) -> Result<()> {
         self.base.shutdown_flag.store(true, Ordering::SeqCst);
         if let Some(handle) = self.ontimer_thread.take() {
-            handle.join().map_err(|e| anyhow::anyhow!("Failed to join thread: {:?}", e))?;
+            handle
+                .join()
+                .map_err(|e| anyhow::anyhow!("Failed to join thread: {:?}", e))?;
         }
         Ok(())
     }
