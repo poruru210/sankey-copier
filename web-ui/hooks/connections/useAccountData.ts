@@ -59,6 +59,12 @@ export function useAccountData({
     return tradeGroup?.master_runtime_status;
   }, [tradeGroups]);
 
+  // Get warning codes for a Master account from TradeGroups
+  const getMasterWarningCodes = useCallback((masterAccount: string): string[] => {
+    const tradeGroup = tradeGroups.find((tg) => tg.id === masterAccount);
+    return tradeGroup?.master_warning_codes ?? [];
+  }, [tradeGroups]);
+
   // Initialize disabled receiver list from settings on first load
   useLayoutEffect(() => {
     if (!initialized && settings.length > 0) {
@@ -110,7 +116,7 @@ export function useAccountData({
     const receiverRuntimeStatuses = new Map<string, number[]>();
 
     settings.forEach((setting, index) => {
-      const runtimeStatusValue = setting.runtime_status ?? setting.status ?? 0;
+      const runtimeStatusValue = setting.status ?? 0;
       const existingStatuses = receiverRuntimeStatuses.get(setting.slave_account) ?? [];
       existingStatuses.push(runtimeStatusValue);
       receiverRuntimeStatuses.set(setting.slave_account, existingStatuses);
@@ -119,25 +125,22 @@ export function useAccountData({
       if (!sourceMap.has(setting.master_account)) {
         const isOnline = getConnectionStatus(setting.master_account);
         const connection = getAccountConnection(setting.master_account);
-        const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
         // Master enabled state comes from TradeGroup.master_settings.enabled
         const isEnabled = isMasterEnabled(setting.master_account);
         const isExpanded = expandedSourceIds.includes(setting.master_account);
 
         const masterRuntimeStatus = getMasterRuntimeStatus(setting.master_account);
-        const fallbackRuntimeStatus = isOnline && isTradeAllowed && isEnabled
-          ? 2
-          : isOnline && isTradeAllowed
-          ? 1
-          : 0;
-        const runtimeStatus = isTradeAllowed
-          ? (masterRuntimeStatus ?? fallbackRuntimeStatus)
-          : 0;
+        // Get warning codes from Status Engine (updated with settings, not heartbeat)
+        const masterWarningCodes = getMasterWarningCodes(setting.master_account);
+        const hasAutoTradingWarning = masterWarningCodes.includes('master_auto_trading_disabled');
+
+        // Use Status Engine status directly
+        const runtimeStatus = masterRuntimeStatus ?? 0;
         const isActive = runtimeStatus === 2;
 
-        // Warnings: only show if online but trade not allowed
-        const hasWarning = isOnline && !isTradeAllowed;
+        // Warnings: use Status Engine warning_codes (synced with settings updates)
+        const hasWarning = hasAutoTradingWarning && isOnline;
         const hasError = false;
         const errorMsg = hasWarning ? content.autoTradingDisabled : '';
 
@@ -163,7 +166,6 @@ export function useAccountData({
       if (!receiverMap.has(setting.slave_account)) {
         const isOnline = getConnectionStatus(setting.slave_account);
         const connection = getAccountConnection(setting.slave_account);
-        const isTradeAllowed = connection?.is_trade_allowed ?? true;
 
         const intentEnabled = setting.enabled_flag ?? (setting.status !== 0);
         const isManuallyDisabled = disabledReceiverIds.includes(setting.slave_account);
@@ -174,8 +176,11 @@ export function useAccountData({
         // For now, set to false - will be updated in the next section
         const isActive = false;
 
-        // Check for MT auto-trading disabled warning
-        const hasWarning = isOnline && !isTradeAllowed;
+        // Check for MT auto-trading disabled warning using Status Engine warning_codes
+        // This syncs with settings updates rather than waiting for heartbeat
+        const slaveWarningCodes = setting.warning_codes ?? [];
+        const hasAutoTradingWarning = slaveWarningCodes.includes('slave_auto_trading_disabled');
+        const hasWarning = hasAutoTradingWarning && isOnline;
 
         receiverMap.set(setting.slave_account, {
           id: setting.slave_account,
@@ -201,22 +206,26 @@ export function useAccountData({
 
     // Update receiver active state based on connected masters
     newReceiverAccounts.forEach((receiver) => {
-      const connection = getAccountConnection(receiver.id);
-      const isTradeAllowed = connection?.is_trade_allowed ?? true;
-
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
-      const runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
-      receiver.runtimeStatus = isTradeAllowed ? runtimeStatus : 0;
-      receiver.isActive = receiver.isOnline && receiver.isEnabled && isTradeAllowed && runtimeStatus === 2;
-
-      if (receiver.isOnline && !isTradeAllowed) {
-        receiver.hasWarning = true;
-        receiver.errorMsg = content.autoTradingDisabled;
-      } else {
-        receiver.hasWarning = false;
-        receiver.hasError = false;
-        receiver.errorMsg = '';
+      let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
+      
+      // UI Display Override: Status Engine keeps status as CONNECTED (2) when Slave
+      // has auto-trading OFF (to allow Close/Modify signals), but Web UI should show "Manual OFF".
+      // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
+      const receiverSettings = settings.filter((s) => s.slave_account === receiver.id);
+      const hasAutoTradingDisabled = receiverSettings.some((s) => 
+        (s.warning_codes ?? []).includes('slave_auto_trading_disabled')
+      );
+      
+      if (hasAutoTradingDisabled) {
+        runtimeStatus = 0; // UI display override (Status Engine keeps it as 2)
       }
+      
+      receiver.runtimeStatus = runtimeStatus;
+      receiver.isActive = receiver.isOnline && receiver.isEnabled && runtimeStatus === 2;
+      
+      // Warning state already set from warning_codes during initial map creation
+      // No need to recompute based on is_trade_allowed
     });
 
     return { sourceAccounts: newSourceAccounts, receiverAccounts: newReceiverAccounts };

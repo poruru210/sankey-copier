@@ -95,7 +95,7 @@ async fn test_master_unregister_updates_slave_runtime_status() {
         .await
         .unwrap()
         .expect("member should exist");
-    assert_eq!(member.runtime_status, crate::models::STATUS_ENABLED);
+    assert_eq!(member.status, crate::models::STATUS_ENABLED);
 
     let master_conn = ctx
         .connection_manager

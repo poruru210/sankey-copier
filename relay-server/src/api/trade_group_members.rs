@@ -579,7 +579,6 @@ async fn hydrate_member_runtime(
         })
         .await;
 
-    member.runtime_status = status_result.status;
     member.status = status_result.status;
     member.warning_codes = status_result.warning_codes;
     member

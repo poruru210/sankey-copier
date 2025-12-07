@@ -153,6 +153,14 @@
    int         get_global_config_topic(ushort &output[], int output_len);
    int         build_sync_topic_ffi(ushort &master_id[], ushort &slave_id[], ushort &output[], int output_len);
    int         get_sync_topic_prefix(string account_id, ushort &output[], int output_len);
+
+   // EA State Management
+   HANDLE_TYPE ea_state_create();
+   void        ea_state_free(HANDLE_TYPE state);
+   int         ea_state_should_request_config(HANDLE_TYPE state, int current_trade_allowed);
+   void        ea_state_mark_config_requested(HANDLE_TYPE state);
+   void        ea_state_reset(HANDLE_TYPE state);
+
 #import
 
 //--- Common structures

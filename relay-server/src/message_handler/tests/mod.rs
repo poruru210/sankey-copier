@@ -14,6 +14,7 @@ mod config_tests;
 mod heartbeat_tests;
 mod trade_signal_tests;
 mod unregister_tests;
+mod warning_codes_tests;
 
 /// Test context wrapper for MessageHandler with proper cleanup
 ///

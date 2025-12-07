@@ -22,12 +22,9 @@ pub struct TradeGroupMember {
     /// Slave-specific settings (stored as JSON in DB)
     pub slave_settings: SlaveSettings,
 
-    /// Legacy connection status field kept for backward compatibility (mirrors runtime_status)
-    pub status: i32,
-
     /// Runtime status calculated by the status engine: 0=DISABLED, 1=ENABLED, 2=CONNECTED
     #[serde(default)]
-    pub runtime_status: i32,
+    pub status: i32,
 
     /// Detailed warning codes provided by runtime status engine (empty when healthy)
     #[serde(default)]
@@ -184,7 +181,6 @@ impl TradeGroupMember {
             slave_account,
             slave_settings: SlaveSettings::default(),
             status: STATUS_DISABLED,
-            runtime_status: STATUS_DISABLED,
             warning_codes: Vec::new(),
             enabled_flag: false,
             created_at: chrono::Utc::now().to_rfc3339(),

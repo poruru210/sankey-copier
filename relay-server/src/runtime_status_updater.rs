@@ -102,12 +102,14 @@ impl RuntimeStatusUpdater {
             snapshot,
         );
 
-        tracing::debug!(
-            target: "runtime_status",
+        tracing::info!(
             master_account = %master_account,
             status = result.status,
-            warning_count = result.warning_codes.len(),
-            "evaluated master runtime status"
+            warning_codes = ?result.warning_codes,
+            connection_status = ?snapshot.connection_status,
+            is_trade_allowed = snapshot.is_trade_allowed,
+            web_ui_enabled = trade_group.master_settings.enabled,
+            "[RuntimeStatusUpdater] Evaluated master runtime status"
         );
         self.metrics.record_master_eval_success();
         Some(result)
@@ -143,10 +145,10 @@ impl RuntimeStatusUpdater {
         });
 
         tracing::debug!(
-            target: "runtime_status",
+            target: "status",
             slave_account = %target.slave_account,
             master_account = %target.master_account,
-            runtime_status = bundle.status_result.status,
+            status = bundle.status_result.status,
             allow_new_orders = bundle.status_result.allow_new_orders,
             warning_count = bundle.status_result.warning_codes.len(),
             master_status = master_result.status,
@@ -164,13 +166,22 @@ impl RuntimeStatusUpdater {
         &self,
         target: SlaveRuntimeTarget<'_>,
     ) -> MemberStatusResult {
+        let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
+        self.evaluate_member_runtime_status_with_snapshot(target, slave_snapshot)
+            .await
+    }
+
+    /// Helper to evaluate status with an explicit snapshot (useful for "Old" state evaluation)
+    pub async fn evaluate_member_runtime_status_with_snapshot(
+        &self,
+        target: SlaveRuntimeTarget<'_>,
+        slave_snapshot: ConnectionSnapshot,
+    ) -> MemberStatusResult {
         // Get the specific Master's status
         let master_result = self
             .evaluate_master_runtime_status(target.master_account)
             .await
             .unwrap_or_default();
-
-        let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
 
         let result = evaluate_member_status(
             SlaveIntent {
@@ -181,10 +192,10 @@ impl RuntimeStatusUpdater {
         );
 
         tracing::debug!(
-            target: "runtime_status",
+            target: "status",
             slave_account = %target.slave_account,
             master_account = %target.master_account,
-            runtime_status = result.status,
+            status = result.status,
             allow_new_orders = result.allow_new_orders,
             warning_count = result.warning_codes.len(),
             master_status = master_result.status,

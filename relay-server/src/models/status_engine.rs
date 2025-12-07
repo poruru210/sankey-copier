@@ -92,14 +92,45 @@ impl Default for MasterStatusResult {
     }
 }
 
+impl MasterStatusResult {
+    pub fn has_changed(&self, other: &Self) -> bool {
+        self.status != other.status || self.warning_codes != other.warning_codes
+    }
+
+    /// Returns a special 'Unknown' state (-1)
+    pub fn unknown() -> Self {
+        Self {
+            status: -1,
+            warning_codes: Vec::new(),
+        }
+    }
+}
+
 /// Result for a single Member (Master-Slave connection) status evaluation.
 /// Unlike SlaveStatusResult which aggregates all Masters, this evaluates
 /// the status of a specific Master-Slave pair.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MemberStatusResult {
     pub status: i32,
     pub allow_new_orders: bool,
     pub warning_codes: Vec<WarningCode>,
+}
+
+impl MemberStatusResult {
+    /// Returns true if the status OR warning codes differ from the other result.
+    /// Warning codes are assumed to be sorted by priority by `evaluate_member_status`.
+    pub fn has_changed(&self, other: &Self) -> bool {
+        self.status != other.status || self.warning_codes != other.warning_codes
+    }
+
+    /// Returns a special 'Unknown' state (-1)
+    pub fn unknown() -> Self {
+        Self {
+            status: -1,
+            warning_codes: Vec::new(),
+            allow_new_orders: false,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -156,6 +187,7 @@ pub fn evaluate_slave_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
+    // Always report auto-trading disabled as a separate warning regardless of online state
     if !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
@@ -233,12 +265,19 @@ pub fn evaluate_member_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
+    // Always report auto-trading disabled as a separate warning regardless of online state
     if !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
 
     // Slave is DISABLED if Web UI is OFF or Slave is offline
     let slave_disabled = !slave_web_ui_enabled || !slave_online;
+
+    // Always include Master's warning codes regardless of Slave status
+    // (Users need to see Master issues even when Slave is offline)
+    for code in &master_result.warning_codes {
+        push_warning(&mut warning_codes, code.clone());
+    }
 
     // Determine status based on Slave and Master state
     let status = if slave_disabled {
@@ -248,10 +287,6 @@ pub fn evaluate_member_status(
         STATUS_CONNECTED
     } else {
         // Master is not connected, this connection is ENABLED (waiting)
-        // Add Master's warning codes to explain why
-        for code in &master_result.warning_codes {
-            push_warning(&mut warning_codes, code.clone());
-        }
         STATUS_ENABLED
     };
 
@@ -653,6 +688,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Offline + trade_blocked: include both warnings (offline + auto-trading disabled)
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -674,6 +710,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Unknown/offline: include both offline and auto-trading disabled warnings
                 expected_warnings: &[
                     WarningCode::SlaveOffline,
                     WarningCode::SlaveAutoTradingDisabled,
@@ -716,6 +753,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Web UI OFF + offline + trade_blocked: include SlaveWebUiDisabled, SlaveOffline, SlaveAutoTradingDisabled
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
@@ -738,6 +776,7 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
+                // Web UI OFF + unknown + trade_blocked: include all three warnings
                 expected_warnings: &[
                     WarningCode::SlaveWebUiDisabled,
                     WarningCode::SlaveOffline,
@@ -955,5 +994,86 @@ mod tests {
         assert!(result
             .warning_codes
             .contains(&WarningCode::SlaveAutoTradingDisabled));
+    }
+    #[test]
+    fn test_has_changed_logic() {
+        let base = MemberStatusResult {
+            status: STATUS_CONNECTED,
+            allow_new_orders: true,
+            warning_codes: vec![],
+        };
+
+        // Case 1: Identical -> false
+        let identical = base.clone();
+        assert!(!base.has_changed(&identical));
+
+        // Case 2: Status different -> true
+        let status_diff = MemberStatusResult {
+            status: STATUS_DISABLED,
+            ..base.clone()
+        };
+        assert!(base.has_changed(&status_diff));
+
+        // Case 3: Warning codes content different -> true
+        let warning_diff = MemberStatusResult {
+            warning_codes: vec![WarningCode::SlaveOffline],
+            ..base.clone()
+        };
+        assert!(base.has_changed(&warning_diff));
+
+        // Case 4: Warning codes count different -> true
+        let warning_count_diff = MemberStatusResult {
+            warning_codes: vec![WarningCode::SlaveOffline, WarningCode::MasterOffline],
+            ..base.clone()
+        };
+        assert!(base.has_changed(&warning_count_diff));
+
+        // Case 5: Warning codes order different (but same content) -> true
+        // Note: In practice, evaluate_member_status sorts them, so this shouldn't happen naturally,
+        // but has_changed should strictly compare vectors.
+        let warning_order_a = MemberStatusResult {
+            warning_codes: vec![WarningCode::SlaveOffline, WarningCode::MasterOffline],
+            ..base.clone()
+        };
+        let warning_order_b = MemberStatusResult {
+            warning_codes: vec![WarningCode::MasterOffline, WarningCode::SlaveOffline],
+            ..base.clone()
+        };
+        assert!(warning_order_a.has_changed(&warning_order_b));
+    }
+
+    #[test]
+    fn test_unknown_state_logic() {
+        // TDD: Define expected behavior for "Unknown" state
+        // 1. Unknown should be different from Default (Disabled)
+        // 2. Unknown should be different from Connected
+        // 3. Unknown should be equal to Unknown
+
+        // This will fail to compile initially because unknown() is not defined
+        let unknown = MemberStatusResult::unknown();
+        let default = MemberStatusResult::default(); // usually status=0 (Disabled)
+        let connected = MemberStatusResult {
+            status: crate::models::STATUS_CONNECTED,
+            warning_codes: vec![],
+            allow_new_orders: true,
+        };
+
+        // Unknown vs Default
+        assert!(unknown.has_changed(&default));
+        assert!(default.has_changed(&unknown));
+
+        // Unknown vs Connected
+        assert!(unknown.has_changed(&connected));
+        assert!(connected.has_changed(&unknown));
+
+        // Unknown vs Unknown
+        assert!(!unknown.has_changed(&unknown));
+
+        // Check MasterStatusResult unknown as well
+        let master_unknown = MasterStatusResult::unknown();
+        let master_default = MasterStatusResult::default();
+
+        assert!(master_unknown.has_changed(&master_default));
+        assert!(!master_unknown.has_changed(&master_unknown));
     }
 }

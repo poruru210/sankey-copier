@@ -99,7 +99,7 @@ export const AccountNodeContent = React.memo(
     return (
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg ${isMobile ? 'flex flex-col' : 'flex'
-          } transition-all w-full text-sm md:text-base ${visibilityClass}`}
+          } transition-opacity duration-150 w-full text-sm md:text-base ${visibilityClass}`}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >

@@ -53,6 +53,8 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false;   // Track if config request has been sent
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
+HANDLE_TYPE g_ea_state = 0;             // Rust EA State manager
+
 
 //--- Extended configuration variables (from ConfigMessage)
 CopyConfig     g_configs[];                      // Array of active configurations
@@ -117,6 +119,15 @@ int OnInit()
    g_zmq_context = InitializeZmqContext();
    if(g_zmq_context < 0)
       return INIT_FAILED;
+
+   // Initialize EA State manager
+   g_ea_state = ea_state_create();
+   if(g_ea_state == 0)
+   {
+      Print("[ERROR] Failed to create EA State manager");
+      return INIT_FAILED;
+   }
+
 
    // Create and connect trade signal socket (SUB) - uses unified PUB address
    g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_TradeAddress, "Slave Trade SUB");
@@ -213,6 +224,10 @@ void OnDeinit(const int reason)
    // Cleanup ZMQ resources
    CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
 
+   // Cleanup EA State manager
+   ea_state_free(g_ea_state);
+
+
    Print("=== SankeyCopier Slave EA (MT4) Stopped ===");
 }
 
@@ -270,10 +285,10 @@ void OnTimer()
                ChartRedraw();
             }
 
-            // If auto-trading was just enabled, request configuration
-            if(current_trade_allowed && !g_config_requested)
+            // Request configuration logic using Rust EaState
+            if(ea_state_should_request_config(g_ea_state, current_trade_allowed))
             {
-               Print("[INFO] Auto-trading enabled, requesting configuration...");
+               Print("[INFO] Requesting configuration (via EaState)...");
                if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
                {
                   g_config_requested = true;
@@ -287,20 +302,20 @@ void OnTimer()
          }
          else
          {
-            // On first successful heartbeat (normal interval), request configuration if not yet requested
-            if(!g_config_requested)
+         // On first successful heartbeat, check if we need to request config via EaState
+         if(ea_state_should_request_config(g_ea_state, current_trade_allowed))
+         {
+            Print("[INFO] First heartbeat/periodic check, requesting configuration (via EaState)...");
+            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
             {
-               Print("[INFO] First heartbeat successful, requesting configuration...");
-               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
-               {
-                  g_config_requested = true;
-                  Print("[INFO] Configuration request sent successfully");
-               }
-               else
-               {
-                  Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-               }
+               g_config_requested = true;
+               Print("[INFO] Configuration request sent successfully");
             }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+            }
+         }
          }
       }
    }
@@ -362,6 +377,9 @@ void OnTimer()
             {
                SubscribeToSyncTopic();
             }
+            
+            // Mark config as requested in EaState so we don't spam requests
+            ea_state_mark_config_requested(g_ea_state);
          }
          
          

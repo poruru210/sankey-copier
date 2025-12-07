@@ -63,6 +63,7 @@ impl MessageHandler {
 
     /// Process a single ZMQ message
     pub async fn handle_message(&self, msg: ZmqMessage) {
+        tracing::info!("[ZMQ] Received message: {:?}", std::mem::discriminant(&msg));
         match msg {
             ZmqMessage::RequestConfig(req_msg) => self.handle_request_config(req_msg).await,
             ZmqMessage::Unregister(unreg_msg) => self.handle_unregister(unreg_msg).await,
@@ -102,7 +103,7 @@ pub(crate) fn log_slave_runtime_trace(
         master = %master_account,
         slave = %slave_account,
         previous_status = previous_status,
-        runtime_status = new_status,
+        status = new_status,
         status_changed = previous_status != new_status,
         allow_new_orders = allow_new_orders,
         warning_count = warning_codes.len(),

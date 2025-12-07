@@ -2,7 +2,6 @@ import type { EaConnection, CopySettings } from '@/types';
 import { AccountInfoSection } from './AccountInfoSection';
 import { BalanceSection } from './BalanceSection';
 import { ConnectionStatusSection } from './ConnectionStatusSection';
-import { CopySettingsCarousel } from './CopySettingsCarousel';
 
 interface AccountNodeExpandedProps {
   connection?: EaConnection;
@@ -94,30 +93,6 @@ export function AccountNodeExpanded({
               lastHeartbeat: content.lastHeartbeat,
             }}
           />
-
-          {/* Copy Settings Carousel - only for receiver (Slave) nodes */}
-          {type === 'receiver' && accountSettings.length > 0 && (
-            <div className="pointer-events-auto">
-              <CopySettingsCarousel
-                accountSettings={accountSettings}
-                content={{
-                  copySettings: content.copySettings,
-                  lotMultiplier: content.lotMultiplier,
-                  marginRatio: content.marginRatio,
-                  reverseTrade: content.reverseTrade,
-                  symbolRules: content.symbolRules,
-                  prefix: content.prefix,
-                  suffix: content.suffix,
-                  mappings: content.mappings,
-                  lotFilter: content.lotFilter,
-                  min: content.min,
-                  max: content.max,
-                  noSettings: content.noSettings,
-                  pageIndicator: '{current} / {total}',
-                }}
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>

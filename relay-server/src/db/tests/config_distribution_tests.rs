@@ -113,7 +113,7 @@ async fn test_update_master_statuses_disconnected() {
 
     // Update master statuses to ENABLED (disconnected)
     let count = db
-        .update_master_statuses_disconnected("MASTER_001")
+        .update_master_statuses_enabled("MASTER_001")
         .await
         .unwrap();
 
@@ -156,7 +156,7 @@ async fn test_update_master_statuses_no_settings() {
     assert_eq!(count, 0);
 
     let count = db
-        .update_master_statuses_disconnected("NONEXISTENT_MASTER")
+        .update_master_statuses_enabled("NONEXISTENT_MASTER")
         .await
         .unwrap();
 
