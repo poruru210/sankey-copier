@@ -86,7 +86,7 @@ async fn test_slave_ea_connection() {
 #[tokio::test]
 async fn test_master_slave_basic_communication() {
     let server = RelayServerProcess::start().expect("Failed to start relay-server");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Create Master
     let mut master = MasterEaSimulator::new(

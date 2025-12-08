@@ -106,6 +106,7 @@ fn test_message_discriminator_unregister() {
         message_type: "Unregister".to_string(),
         account_id: "TEST_001".to_string(),
         timestamp: Utc::now().to_rfc3339(),
+        ea_type: None,
     };
 
     let bytes = rmp_serde::to_vec_named(&unregister).unwrap();

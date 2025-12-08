@@ -33,7 +33,7 @@ async fn test_handle_heartbeat() {
     ctx.handle_heartbeat(hb_msg).await;
 
     // Verify EA was auto-registered with correct balance and equity
-    let ea = ctx.connection_manager.get_ea(&account_id).await;
+    let ea = ctx.connection_manager.get_master(&account_id).await;
     assert!(ea.is_some());
     let ea = ea.unwrap();
     assert_eq!(ea.balance, 12000.0);
@@ -88,7 +88,7 @@ async fn test_handle_heartbeat_sends_config_on_new_master_registration() {
     ctx.handle_heartbeat(hb_msg).await;
 
     // Verify: Connection status should be Online
-    let conn = ctx.connection_manager.get_ea(account_id).await.unwrap();
+    let conn = ctx.connection_manager.get_master(account_id).await.unwrap();
     assert_eq!(conn.status, crate::models::ConnectionStatus::Online);
 
     // Note: We cannot easily assert that ZMQ message was sent without mocking the publisher,
@@ -147,7 +147,7 @@ async fn test_handle_heartbeat_sends_config_on_trade_allowed_change() {
     ctx.handle_heartbeat(hb).await;
 
     // Verify connection state updated
-    let conn = ctx.connection_manager.get_ea(account_id).await.unwrap();
+    let conn = ctx.connection_manager.get_master(account_id).await.unwrap();
     assert!(conn.is_trade_allowed);
 
     ctx.cleanup().await;

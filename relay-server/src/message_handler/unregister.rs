@@ -29,8 +29,10 @@ impl MessageHandler {
             .await
             .map(|conn| conn.ea_type);
 
-        // Unregister the EA
-        self.connection_manager.unregister_ea(account_id).await;
+        // Unregister the EA (if ea_type was found)
+        if let Some(et) = ea_type {
+            self.connection_manager.unregister_ea(account_id, et).await;
+        }
 
         // Notify WebSocket clients
         let _ = self

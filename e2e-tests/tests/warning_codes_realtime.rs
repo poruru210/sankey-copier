@@ -66,6 +66,7 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
         .await
         .expect("Failed to connect to WebSocket");
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED AFTER WebSocket connection
     let mut master = MasterEaSimulator::new(
@@ -135,6 +136,7 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
         .await
         .expect("Failed to connect to WebSocket");
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // Start Slave with auto-trading DISABLED
     let mut slave = SlaveEaSimulator::new(
@@ -202,6 +204,7 @@ async fn test_warning_broadcast_timing() {
         .expect("Failed to connect to WebSocket");
 
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
     let mut master = MasterEaSimulator::new(
@@ -263,6 +266,7 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
         .await
         .expect("Failed to connect to WebSocket");
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
     let mut master = MasterEaSimulator::new(
@@ -293,7 +297,7 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 
     // Wait for broadcast with master_auto_trading_disabled warning
     // (Skip any initial broadcasts that don't have this warning yet)
-    let first_broadcast = timeout(
+    let _first_broadcast = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
         wait_for_slave_warning(&mut read, slave_account, "master_auto_trading_disabled"),
     )
@@ -350,6 +354,7 @@ async fn test_slave_update_when_master_connects_later() {
         .await
         .expect("Failed to connect to WebSocket");
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // 1. Start Slave FIRST (Master is offline)
     println!("[TEST] Starting Slave...");
@@ -454,6 +459,7 @@ async fn test_reconnection_after_deletion() {
         .await
         .expect("Failed to connect to WebSocket");
     let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
 
     // 1. Start Master
     let mut master = MasterEaSimulator::new(

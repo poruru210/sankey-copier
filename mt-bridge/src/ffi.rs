@@ -3,6 +3,7 @@
 // Why: Provides C-compatible interface for ZMQ operations and MessagePack message handling
 
 use crate::constants::{self, TOPIC_GLOBAL_CONFIG};
+use crate::ea_context::EaContext;
 use crate::ffi_helpers::{
     free_handle, parse_msgpack, string_to_utf16_buffer, utf16_to_string, BUFFER_INDEX,
     MAX_STRING_LEN, STRING_BUFFER_1, STRING_BUFFER_2, STRING_BUFFER_3, STRING_BUFFER_4,
@@ -1947,47 +1948,191 @@ pub unsafe extern "C" fn get_sync_topic_prefix(
 // EA State Management FFI Functions
 // ============================================================================
 
-/// Create a new EA state instance for managing RequestConfig logic
+/// Create and serialize a RegisterMessage using context data (Zero arguments from MQL!)
 ///
-/// Returns an opaque pointer to the state that must be freed with `ea_state_free()`.
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `output` must be a valid buffer
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_register(
+    context: *mut crate::EaContext,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &*context;
+
+    // Build RegisterMessage using cached context data
+    let msg = crate::types::RegisterMessage {
+        message_type: "Register".to_string(),
+        account_id: ctx.account_id.clone(),
+        ea_type: ctx.ea_type.clone(),
+        platform: ctx.platform.clone(),
+        account_number: ctx.account_number,
+        broker: ctx.broker.clone(),
+        account_name: ctx.account_name.clone(),
+        server: ctx.server.clone(),
+        currency: ctx.currency.clone(),
+        leverage: ctx.leverage,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+}
+
+/// Create and serialize a HeartbeatMessage using context data + dynamic args
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_heartbeat(
+    context: *mut crate::EaContext,
+    balance: f64,
+    equity: f64,
+    open_positions: i32,
+    is_trade_allowed: i32,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &*context;
+
+    let msg = crate::types::HeartbeatMessage {
+        message_type: "Heartbeat".to_string(),
+        account_id: ctx.account_id.clone(),
+        balance,
+        equity,
+        open_positions,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        ea_type: ctx.ea_type.clone(),
+        platform: ctx.platform.clone(),
+        account_number: ctx.account_number,
+        broker: ctx.broker.clone(),
+        account_name: ctx.account_name.clone(),
+        server: ctx.server.clone(),
+        currency: ctx.currency.clone(),
+        leverage: ctx.leverage,
+        is_trade_allowed: is_trade_allowed != 0,
+        // Optional fields (defaults)
+        symbol_prefix: None,
+        symbol_suffix: None,
+        symbol_map: None,
+    };
+
+    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+}
+
+/// Create and serialize an UnregisterMessage using context data
+///
+/// # Safety
+/// - `context` must be a valid pointer created by `ea_init`
+/// - `output` must point to a valid buffer with at least `output_len` bytes
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_unregister(
+    context: *mut crate::EaContext,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &*context;
+
+    let msg = crate::types::UnregisterMessage {
+        message_type: "Unregister".to_string(),
+        account_id: ctx.account_id.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        ea_type: Some(ctx.ea_type.clone()),
+    };
+
+    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+}
+
+/// Create and initialize an EA Context
+///
 /// This should be called once in OnInit() and the handle stored in a global variable.
 ///
 /// # Safety
-/// The returned pointer must be freed exactly once using `ea_state_free()`.
+/// All pointers must be valid null-terminated UTF-16 strings
 #[no_mangle]
-pub extern "C" fn ea_state_create() -> *mut crate::EaState {
-    let state = Box::new(crate::EaState::new());
-    Box::into_raw(state)
+pub unsafe extern "C" fn ea_init(
+    account_id: *const u16,
+    ea_type: *const u16,
+    platform: *const u16,
+    account_number: i64,
+    broker: *const u16,
+    account_name: *const u16,
+    server: *const u16,
+    currency: *const u16,
+    leverage: i64,
+) -> *mut EaContext {
+    let acc_id = match utf16_to_string(account_id) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let et = match utf16_to_string(ea_type) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let plt = match utf16_to_string(platform) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let brk = match utf16_to_string(broker) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let acc_name = match utf16_to_string(account_name) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let srv = match utf16_to_string(server) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let curr = match utf16_to_string(currency) {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+
+    let context = Box::new(crate::EaContext::new(
+        acc_id,
+        et,
+        plt,
+        account_number,
+        brk,
+        acc_name,
+        srv,
+        curr,
+        leverage,
+    ));
+    Box::into_raw(context)
 }
 
-/// Free an EA state instance
+/// Free an EA Context instance
 ///
 /// This should be called in OnDeinit() to clean up the state.
 ///
 /// # Safety
-/// - `state` must have been returned by `ea_state_create()`
-/// - `state` must not be null
-/// - `state` must only be freed once
+/// - `context` must have been returned by `ea_init()`
+/// - `context` must not be null
+/// - `context` must only be freed once
 #[no_mangle]
-pub unsafe extern "C" fn ea_state_free(state: *mut crate::EaState) {
-    if !state.is_null() {
-        drop(Box::from_raw(state));
+pub unsafe extern "C" fn ea_context_free(context: *mut crate::EaContext) {
+    if !context.is_null() {
+        drop(Box::from_raw(context));
     }
 }
 
 /// Determine if RequestConfig should be sent based on current state
 ///
-/// This replaces the MQL logic:
-/// ```mql
-/// if(!g_config_requested && current_trade_allowed) { send_request_config(); }
-/// ```
-///
-/// The Rust implementation fixes the bug where Master doesn't send RequestConfig
-/// when starting with auto-trading OFF. It returns true unconditionally on the first
-/// call, regardless of the auto-trading state.
-///
 /// # Parameters
-/// - `state`: Pointer to EA state (must not be null)
+/// - `context`: Pointer to EA Context (must not be null)
 /// - `current_trade_allowed`: 1 if auto-trading is currently enabled, 0 otherwise
 ///
 /// # Returns
@@ -1995,21 +2140,21 @@ pub unsafe extern "C" fn ea_state_free(state: *mut crate::EaState) {
 /// - 0 if RequestConfig should not be sent (already requested)
 ///
 /// # Safety
-/// - `state` must be a valid pointer returned by `ea_state_create()`
-/// - `state` must not have been freed
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `context` must not have been freed
 #[no_mangle]
-pub unsafe extern "C" fn ea_state_should_request_config(
-    state: *mut crate::EaState,
+pub unsafe extern "C" fn ea_context_should_request_config(
+    context: *mut crate::EaContext,
     current_trade_allowed: i32,
 ) -> i32 {
-    if state.is_null() {
+    if context.is_null() {
         return 0;
     }
 
-    let ea_state = &mut *state;
+    let ea_ctx = &mut *context;
     let trade_allowed = current_trade_allowed != 0;
 
-    if ea_state.should_request_config(trade_allowed) {
+    if ea_ctx.should_request_config(trade_allowed) {
         1
     } else {
         0
@@ -2019,16 +2164,16 @@ pub unsafe extern "C" fn ea_state_should_request_config(
 /// Mark that a ConfigMessage has been received
 ///
 /// This should be called when the EA receives a ConfigMessage from the relay server.
-/// After calling this, `ea_state_should_request_config()` will return false until
-/// `ea_state_reset()` is called.
+/// After calling this, `ea_context_should_request_config()` will return false until
+/// `ea_context_reset()` is called.
 ///
 /// # Safety
-/// - `state` must be a valid pointer returned by `ea_state_create()`
-/// - `state` must not have been freed
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `context` must not have been freed
 #[no_mangle]
-pub unsafe extern "C" fn ea_state_mark_config_requested(state: *mut crate::EaState) {
-    if !state.is_null() {
-        (*state).mark_config_requested();
+pub unsafe extern "C" fn ea_context_mark_config_requested(context: *mut crate::EaContext) {
+    if !context.is_null() {
+        (*context).mark_config_requested();
     }
 }
 
@@ -2038,14 +2183,14 @@ pub unsafe extern "C" fn ea_state_mark_config_requested(state: *mut crate::EaSta
 /// - Connection to relay server is lost
 /// - EA needs to re-request configuration
 ///
-/// After calling this, `ea_state_should_request_config()` will return true on the next call.
+/// After calling this, `ea_context_should_request_config()` will return true on the next call.
 ///
 /// # Safety
-/// - `state` must be a valid pointer returned by `ea_state_create()`
-/// - `state` must not have been freed
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `context` must not have been freed
 #[no_mangle]
-pub unsafe extern "C" fn ea_state_reset(state: *mut crate::EaState) {
-    if !state.is_null() {
-        (*state).reset();
+pub unsafe extern "C" fn ea_context_reset(context: *mut crate::EaContext) {
+    if !context.is_null() {
+        (*context).reset();
     }
 }

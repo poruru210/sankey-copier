@@ -477,7 +477,7 @@ async fn test_sync_request_non_member_rejected() {
     master.start().expect("Failed to start master");
     non_member.set_trade_allowed(true);
     non_member.start().expect("Failed to start non_member");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Non-member sends SyncRequest
     non_member

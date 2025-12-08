@@ -33,7 +33,12 @@ impl MessageHandler {
         );
 
         // Get old connection info before updating
-        let old_conn = self.connection_manager.get_ea(&account_id).await;
+        // Use ea_type from message to determine which lookup to use
+        let old_conn = if ea_type == "Master" {
+            self.connection_manager.get_master(&account_id).await
+        } else {
+            self.connection_manager.get_slave(&account_id).await
+        };
 
         // Check if this is a new EA registration (not seen before)
         // Used for VLogs config broadcast
@@ -66,7 +71,7 @@ impl MessageHandler {
             };
 
             // Get Master connection info
-            let master_conn = self.connection_manager.get_ea(&account_id).await;
+            let master_conn = self.connection_manager.get_master(&account_id).await;
 
             let master_bundle = ConfigBuilder::build_master_config(MasterConfigContext {
                 account_id: account_id.clone(),
@@ -169,7 +174,8 @@ impl MessageHandler {
 
                             // Calculate OLD Slave Status
                             // Uses current slave settings but OLD Master Status
-                            let slave_conn = self.connection_manager.get_ea(&slave_account).await;
+                            let slave_conn =
+                                self.connection_manager.get_slave(&slave_account).await;
                             let slave_snapshot = crate::models::status_engine::ConnectionSnapshot {
                                 connection_status: slave_conn.as_ref().map(|c| c.status),
                                 is_trade_allowed: slave_conn

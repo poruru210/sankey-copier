@@ -59,7 +59,8 @@ bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 bool        g_config_requested = false;   // Track if config request has been sent
-HANDLE_TYPE g_ea_state = 0;             // Rust EA State manager
+bool        g_register_sent = false;    // Track if register message has been sent
+EaContextWrapper g_ea_context;        // Rust EA Context wrapper
 
 
 //--- Configuration panel
@@ -117,11 +118,12 @@ int OnInit()
    if(g_zmq_context < 0)
       return INIT_FAILED;
 
-   // Initialize EA State manager
-   g_ea_state = ea_state_create();
-   if(g_ea_state == 0)
+   // Initialize EA Context (Stateful FFI)
+   if(!g_ea_context.Initialize(AccountID, "Master", "MT4", GetAccountNumber(), 
+                               GetBrokerName(), GetAccountName(), GetServerName(), 
+                               GetAccountCurrency(), GetAccountLeverage()))
    {
-      Print("[ERROR] Failed to create EA State manager");
+      Print("[ERROR] Failed to initialize EA Context");
       return INIT_FAILED;
    }
 
@@ -218,7 +220,10 @@ void OnDeinit(const int reason)
    VLogsFlush();
 
    // Send unregister message
-   SendUnregistrationMessage(g_zmq_context, g_RelayAddress, AccountID);
+   if(g_ea_context.IsInitialized())
+   {
+      g_ea_context.SendUnregister(g_zmq_socket);
+   }
 
    // Kill timer
    EventKillTimer();
@@ -230,8 +235,8 @@ void OnDeinit(const int reason)
    // Cleanup ZMQ resources
    CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
 
-   // Cleanup EA State manager
-   ea_state_free(g_ea_state);
+   // Cleanup EA Context handled by wrapper destructor
+   // ea_context_free is called by ~EaContextWrapper
 
 
    Print("=== SankeyCopier Master EA (MT4) Stopped ===");
@@ -254,32 +259,45 @@ void OnTimer()
    datetime now = TimeLocal();
    bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
 
+   // Send Register Message (Once)
+   if(!g_register_sent && g_initialized)
+   {
+      if(g_ea_context.SendRegister(g_zmq_socket))
+      {
+         g_register_sent = true;
+         Print("Register message sent for ", AccountID);
+      }
+   }
+
    if(should_send_heartbeat)
    {
-      SendHeartbeatMessage(g_zmq_context, g_RelayAddress, AccountID, "Master", "MT4", g_symbol_prefix, g_symbol_suffix, "");
-      g_last_heartbeat = TimeLocal();
-
-      // If trade state changed, log it and update tracking variable
-      // Server will send updated status via config message based on is_trade_allowed
-      if(trade_state_changed)
+      // Use efficient FFI heartbeat
+      bool heartbeat_sent = g_ea_context.SendHeartbeat(g_zmq_socket, GetAccountBalance(), GetAccountEquity(), 
+                                                       GetOpenPositionsCount(), current_trade_allowed);
+      if(heartbeat_sent)
       {
-         Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
-         g_last_trade_allowed = current_trade_allowed;
-         // Status panel is updated by server via config message (ProcessMasterConfigMessage)
-      }
+         g_last_heartbeat = TimeLocal();
 
-      // Request configuration logic using Rust EaState
-      if(ea_state_should_request_config(g_ea_state, current_trade_allowed))
-      {
-         Print("[INFO] Requesting configuration (via EaState)...");
-         if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
+         // If trade state changed, log it and update tracking variable
+         if(trade_state_changed)
          {
-            g_config_requested = true;
-            Print("[INFO] Configuration request sent successfully");
+            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
+            g_last_trade_allowed = current_trade_allowed;
          }
-         else
+
+         // Request configuration logic using Rust EaContext
+         if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
          {
-            Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+            Print("[INFO] Requesting configuration (via EaContext)...");
+            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
+            {
+               g_ea_context.MarkConfigRequested();
+               Print("[INFO] Configuration request sent successfully");
+            }
+            else
+            {
+               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
+            }
          }
       }
    }
@@ -334,8 +352,8 @@ void OnTimer()
          {
             ProcessMasterConfigMessage(msgpack_payload, payload_len);
 
-            // Mark config as requested in EaState so we don't spam requests
-            ea_state_mark_config_requested(g_ea_state);
+            // Mark config as requested in EaContext so we don't spam requests
+            g_ea_context.MarkConfigRequested();
          }
       }
    }

@@ -27,11 +27,11 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = { version = "1.0", features = ["backtrace"] }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 
 [profile.release]
-# Optimize for size and performance
+# Optimize for performance but keep build times reasonable
 opt-level = 3
-lto = true
-codegen-units = 1
+lto = "thin"      # Faster than "true" (Fat LTO) with good results
+# codegen-units = 1 # Removed to allow parallel code generation (default is 16)
 strip = true

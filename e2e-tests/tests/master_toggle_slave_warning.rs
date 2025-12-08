@@ -193,6 +193,13 @@ async fn test_master_toggle_on_clears_slave_warning() {
         .await
         .expect("failed to seed trade group");
 
+    // Connect WebSocket to monitor broadcasts
+    let ws_url = format!("wss://{}:{}/ws", "127.0.0.1", server.http_port);
+    let ws_stream = create_ws_connector(&ws_url)
+        .await
+        .expect("Failed to connect to WebSocket");
+    let (_write, mut read) = ws_stream.split();
+
     // Start Master EA (online, auto-trading ON)
     let mut master = MasterEaSimulator::new(
         &server.zmq_pull_address(),
@@ -214,13 +221,6 @@ async fn test_master_toggle_on_clears_slave_warning() {
     .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
-
-    // Connect WebSocket to monitor broadcasts
-    let ws_url = format!("wss://{}:{}/ws", "127.0.0.1", server.http_port);
-    let ws_stream = create_ws_connector(&ws_url)
-        .await
-        .expect("Failed to connect to WebSocket");
-    let (_write, mut read) = ws_stream.split();
 
     // Wait for first broadcast with master_web_ui_disabled warning (since Master enabled=false)
     let first_broadcast = timeout(

@@ -3,7 +3,9 @@
 // Why: Provides binary serialization for efficient message passing between EA and relay-server
 
 use crate::ffi_helpers::{utf16_to_string, utf16_to_string_opt};
-use crate::types::{HeartbeatMessage, RequestConfigMessage, TradeSignalMessage, UnregisterMessage};
+use crate::types::{
+    HeartbeatMessage, RegisterMessage, RequestConfigMessage, TradeSignalMessage, UnregisterMessage,
+};
 use std::sync::{LazyLock, Mutex};
 
 // Static buffer for serialized data
@@ -41,7 +43,7 @@ pub unsafe extern "C" fn serialize_request_config(
     }
 }
 
-/// Serialize an UnregisterMessage to MessagePack
+/// Serialize an UnregisterMessage to MessagePack (legacy, no ea_type)
 ///
 /// # Safety
 /// - All pointer parameters must be valid null-terminated UTF-16 string pointers
@@ -55,6 +57,35 @@ pub unsafe extern "C" fn serialize_unregister(
         message_type: utf16_to_string(message_type).unwrap_or_default(),
         account_id: utf16_to_string(account_id).unwrap_or_default(),
         timestamp: utf16_to_string(timestamp).unwrap_or_default(),
+        ea_type: None, // Legacy: no ea_type specified
+    };
+
+    match rmp_serde::to_vec_named(&msg) {
+        Ok(data) => {
+            let mut buffer = SERIALIZE_BUFFER.lock().unwrap();
+            *buffer = data;
+            buffer.len() as i32
+        }
+        Err(_) => 0,
+    }
+}
+
+/// Serialize an UnregisterMessage to MessagePack with ea_type
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
+#[no_mangle]
+pub unsafe extern "C" fn serialize_unregister_v2(
+    message_type: *const u16,
+    account_id: *const u16,
+    timestamp: *const u16,
+    ea_type: *const u16,
+) -> i32 {
+    let msg = UnregisterMessage {
+        message_type: utf16_to_string(message_type).unwrap_or_default(),
+        account_id: utf16_to_string(account_id).unwrap_or_default(),
+        timestamp: utf16_to_string(timestamp).unwrap_or_default(),
+        ea_type: utf16_to_string_opt(ea_type),
     };
 
     match rmp_serde::to_vec_named(&msg) {
@@ -226,4 +257,46 @@ pub unsafe extern "C" fn copy_serialized_buffer(dest: *mut u8, max_len: i32) -> 
 
     std::ptr::copy_nonoverlapping(buffer.as_ptr(), dest, len);
     len as i32
+}
+
+/// Serialize a RegisterMessage to MessagePack
+///
+/// # Safety
+/// - All pointer parameters must be valid null-terminated UTF-16 string pointers
+#[no_mangle]
+pub unsafe extern "C" fn serialize_register(
+    message_type: *const u16,
+    account_id: *const u16,
+    ea_type: *const u16,
+    platform: *const u16,
+    account_number: i64,
+    broker: *const u16,
+    account_name: *const u16,
+    server: *const u16,
+    currency: *const u16,
+    leverage: i64,
+    timestamp: *const u16,
+) -> i32 {
+    let msg = RegisterMessage {
+        message_type: utf16_to_string(message_type).unwrap_or_default(),
+        account_id: utf16_to_string(account_id).unwrap_or_default(),
+        ea_type: utf16_to_string(ea_type).unwrap_or_default(),
+        platform: utf16_to_string(platform).unwrap_or_default(),
+        account_number,
+        broker: utf16_to_string(broker).unwrap_or_default(),
+        account_name: utf16_to_string(account_name).unwrap_or_default(),
+        server: utf16_to_string(server).unwrap_or_default(),
+        currency: utf16_to_string(currency).unwrap_or_default(),
+        leverage,
+        timestamp: utf16_to_string(timestamp).unwrap_or_default(),
+    };
+
+    match rmp_serde::to_vec_named(&msg) {
+        Ok(data) => {
+            let mut buffer = SERIALIZE_BUFFER.lock().unwrap();
+            *buffer = data;
+            buffer.len() as i32
+        }
+        Err(_) => 0,
+    }
 }

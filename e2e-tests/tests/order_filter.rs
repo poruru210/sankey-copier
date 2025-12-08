@@ -59,7 +59,7 @@ async fn test_partial_close_signal() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Step 1: Open a position (lots passed through unchanged, Slave EA applies multiplier)
     let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
@@ -147,7 +147,7 @@ async fn test_full_close_signal_no_ratio() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send full close signal (no close_ratio)
     let close_signal = master.create_close_signal(12346, "GBPUSD", 0.5);
@@ -220,7 +220,7 @@ async fn test_allowed_symbols_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send allowed symbol - should be received
     let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -297,7 +297,7 @@ async fn test_blocked_symbols_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send non-blocked symbol - should be received
     let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -381,7 +381,7 @@ async fn test_allowed_magic_numbers_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send allowed magic number - should be received
     let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 12345);
@@ -461,7 +461,7 @@ async fn test_blocked_magic_numbers_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send non-blocked magic number - should be received
     let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 33333);
@@ -540,7 +540,7 @@ async fn test_source_lot_min_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send signal above minimum - should be received
     let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
@@ -615,7 +615,7 @@ async fn test_source_lot_max_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send signal below maximum - should be received
     let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.5, 1.0850, None, None, 0);
@@ -693,7 +693,7 @@ async fn test_multiple_sequential_partial_closes() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open position with 1.0 lots
     let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
@@ -794,7 +794,7 @@ async fn test_pending_order_types() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Test BuyLimit
     let buy_limit = master.create_open_signal(

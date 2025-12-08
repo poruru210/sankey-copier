@@ -6,8 +6,8 @@
 pub use sankey_copier_zmq::SlaveConfigMessage as SlaveConfig;
 pub use sankey_copier_zmq::{
     HeartbeatMessage as Heartbeat, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
-    RequestConfigMessage, SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters,
-    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage,
+    RegisterMessage, RequestConfigMessage, SymbolMapping, SyncMode, SyncRequestMessage,
+    TradeFilters, TradeSignalMessage, UnregisterMessage, VLogsConfigMessage,
 };
 
 /// Buffer size for ZMQ message reception

@@ -20,6 +20,7 @@ use crate::{
 mod config_request;
 mod heartbeat;
 mod position_snapshot;
+mod register;
 mod sync_request;
 mod trade_signal;
 pub(crate) mod unregister;
@@ -69,6 +70,7 @@ impl MessageHandler {
             ZmqMessage::Unregister(unreg_msg) => self.handle_unregister(unreg_msg).await,
             ZmqMessage::Heartbeat(hb_msg) => self.handle_heartbeat(hb_msg).await,
             ZmqMessage::TradeSignal(signal) => self.handle_trade_signal(signal).await,
+            ZmqMessage::Register(reg_msg) => self.handle_register(reg_msg).await,
             // Position sync protocol messages
             ZmqMessage::PositionSnapshot(snapshot) => self.handle_position_snapshot(snapshot).await,
             ZmqMessage::SyncRequest(request) => self.handle_sync_request(request).await,

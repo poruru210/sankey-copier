@@ -428,7 +428,7 @@ async fn test_slave_individual_lot_multiplier() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Master sends 0.1 lot
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -496,7 +496,7 @@ async fn test_signal_latency_measurement() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Measure latency for 10 signals
     let mut latencies = Vec::new();
@@ -584,7 +584,7 @@ async fn test_delayed_signal_immediate() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 100ms old timestamp
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -646,7 +646,7 @@ async fn test_delayed_signal_acceptable() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 3 second old timestamp
     let signal = master.create_open_signal(12346, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -710,7 +710,7 @@ async fn test_stale_signal_too_old() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 10 second old timestamp
     let signal = master.create_open_signal(12347, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);

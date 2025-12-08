@@ -208,22 +208,22 @@ export function useAccountData({
     newReceiverAccounts.forEach((receiver) => {
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
       let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
-      
+
       // UI Display Override: Status Engine keeps status as CONNECTED (2) when Slave
       // has auto-trading OFF (to allow Close/Modify signals), but Web UI should show "Manual OFF".
       // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
       const receiverSettings = settings.filter((s) => s.slave_account === receiver.id);
-      const hasAutoTradingDisabled = receiverSettings.some((s) => 
+      const hasAutoTradingDisabled = receiverSettings.some((s) =>
         (s.warning_codes ?? []).includes('slave_auto_trading_disabled')
       );
-      
+
       if (hasAutoTradingDisabled) {
         runtimeStatus = 0; // UI display override (Status Engine keeps it as 2)
       }
-      
+
       receiver.runtimeStatus = runtimeStatus;
       receiver.isActive = receiver.isOnline && receiver.isEnabled && runtimeStatus === 2;
-      
+
       // Warning state already set from warning_codes during initial map creation
       // No need to recompute based on is_trade_allowed
     });
@@ -239,6 +239,7 @@ export function useAccountData({
     getAccountConnection,
     getConnectionStatus,
     getMasterRuntimeStatus,
+    getMasterWarningCodes,
   ]);
 
   // Toggle expand state for source accounts

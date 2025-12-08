@@ -64,12 +64,6 @@
    // MessagePack serialization functions
    int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
 
-   int    serialize_unregister(string message_type, string account_id, string timestamp);
-   int serialize_heartbeat(string message_type, string account_id, double balance, double equity,
-                          int open_positions, string timestamp, string ea_type, string platform,
-                          long account_number, string broker, string account_name, string server,
-                          string currency, long leverage, int is_trade_allowed,
-                          string symbol_prefix, string symbol_suffix, string symbol_map);
    int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
                                  double lots, double open_price, double stop_loss, double take_profit,
                                  long magic_number, string comment, string timestamp, string source_account,
@@ -154,14 +148,168 @@
    int         build_sync_topic_ffi(ushort &master_id[], ushort &slave_id[], ushort &output[], int output_len);
    int         get_sync_topic_prefix(string account_id, ushort &output[], int output_len);
 
-   // EA State Management
-   HANDLE_TYPE ea_state_create();
-   void        ea_state_free(HANDLE_TYPE state);
-   int         ea_state_should_request_config(HANDLE_TYPE state, int current_trade_allowed);
-   void        ea_state_mark_config_requested(HANDLE_TYPE state);
-   void        ea_state_reset(HANDLE_TYPE state);
+   // EA State Management (Stateful FFI)
+   HANDLE_TYPE ea_init(string account_id, string ea_type, string platform, long account_number, 
+                       string broker, string account_name, string server, string currency, long leverage);
+   void        ea_context_free(HANDLE_TYPE context);
+   
+   int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len);
+   int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
+                                 int is_trade_allowed, uchar &output[], int output_len);
+   int         ea_send_unregister(HANDLE_TYPE context, uchar &output[], int output_len);
+   
+   int         ea_context_should_request_config(HANDLE_TYPE context, int current_trade_allowed);
+   void        ea_context_mark_config_requested(HANDLE_TYPE context);
+   void        ea_context_reset(HANDLE_TYPE context);
 
 #import
+
+//+------------------------------------------------------------------+
+//| EaContextWrapper: Manages Rust-side EaContext lifetime           |
+//+------------------------------------------------------------------+
+class EaContextWrapper
+{
+private:
+   HANDLE_TYPE m_context;
+   bool        m_initialized;
+
+public:
+   EaContextWrapper() : m_context(0), m_initialized(false) {}
+
+   ~EaContextWrapper()
+   {
+      if(m_initialized && m_context != 0)
+      {
+         ea_context_free(m_context);
+         m_context = 0;
+         m_initialized = false;
+      }
+   }
+
+   bool Initialize(string account_id, string ea_type, string platform, long account_number, 
+                   string broker, string account_name, string server, string currency, long leverage)
+   {
+      if(m_initialized) return true;
+      
+      m_context = ea_init(account_id, ea_type, platform, account_number, broker, account_name, server, currency, leverage);
+      
+      if(m_context != 0)
+      {
+         m_initialized = true;
+         return true;
+      }
+      return false;
+   }
+
+   bool IsInitialized() const { return m_initialized; }
+   HANDLE_TYPE GetHandle() const { return m_context; }
+
+   bool SendRegister(HANDLE_TYPE socket_push)
+   {
+      if(!m_initialized) return false;
+      
+      uchar buffer[1024];
+      int len = ea_send_register(m_context, buffer, 1024);
+      
+      if(len > 0)
+      {
+         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+      }
+      return false;
+   }
+   
+   bool SendRegister(HANDLE_TYPE zmq_context, string address)
+   {
+      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+      if(socket < 0) return false;
+      
+      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
+      {
+         zmq_socket_destroy(socket);
+         return false;
+      }
+      
+      bool res = SendRegister(socket);
+      zmq_socket_destroy(socket);
+      return res;
+   }
+
+   bool SendHeartbeat(HANDLE_TYPE socket_push, double balance, double equity, int open_positions, bool is_trade_allowed)
+   {
+      if(!m_initialized) return false;
+      
+      uchar buffer[1024];
+      int len = ea_send_heartbeat(m_context, balance, equity, open_positions, (int)is_trade_allowed, buffer, 1024);
+      
+      if(len > 0)
+      {
+         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+      }
+      return false;
+   }
+   
+   bool SendHeartbeat(HANDLE_TYPE zmq_context, string address, double balance, double equity, int open_positions, bool is_trade_allowed)
+   {
+      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+      if(socket < 0) return false;
+      
+      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
+      {
+         zmq_socket_destroy(socket);
+         return false;
+      }
+      
+      bool res = SendHeartbeat(socket, balance, equity, open_positions, is_trade_allowed);
+      zmq_socket_destroy(socket);
+      return res;
+   }
+
+   bool SendUnregister(HANDLE_TYPE socket_push)
+   {
+      if(!m_initialized) return false;
+      
+      uchar buffer[1024];
+      int len = ea_send_unregister(m_context, buffer, 1024);
+      
+      if(len > 0)
+      {
+         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+      }
+      return false;
+   }
+   
+   bool SendUnregister(HANDLE_TYPE zmq_context, string address)
+   {
+      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+      if(socket < 0) return false;
+      
+      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
+      {
+         zmq_socket_destroy(socket);
+         return false;
+      }
+      
+      bool res = SendUnregister(socket);
+      zmq_socket_destroy(socket);
+      return res;
+   }
+   
+   bool ShouldRequestConfig(bool current_trade_allowed)
+   {
+      if(!m_initialized) return false;
+      return ea_context_should_request_config(m_context, (int)current_trade_allowed) != 0;
+   }
+   
+   void MarkConfigRequested()
+   {
+      if(m_initialized) ea_context_mark_config_requested(m_context);
+   }
+   
+   void Reset()
+   {
+       if(m_initialized) ea_context_reset(m_context);
+   }
+};
 
 //--- Common structures
 struct SymbolMapping {

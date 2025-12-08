@@ -76,6 +76,10 @@ pub struct MasterEaSimulator {
     /// MQL5: OnTimerでconfig_socketから受信し、ProcessVLogsConfig()で処理
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
 
+    /// Register送信済みフラグ
+    /// OnTimer初回でRegister送信後にtrueになる
+    g_register_sent: Arc<AtomicBool>,
+
     /// OnTimerスレッドハンドル
     ontimer_thread: Option<JoinHandle<()>>,
 }
@@ -109,6 +113,7 @@ impl MasterEaSimulator {
             g_config_version: Arc::new(Mutex::new(0)),
             received_sync_requests: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
+            g_register_sent: Arc::new(AtomicBool::new(false)),
             ontimer_thread: None,
         })
     }
@@ -129,7 +134,7 @@ impl MasterEaSimulator {
         let shutdown_flag = self.base.shutdown_flag.clone();
         let is_trade_allowed = self.base.is_trade_allowed_arc();
         let heartbeat_params = self.base.heartbeat_params.clone();
-        let ea_type = self.base.ea_type;
+        let ea_type_val = self.base.ea_type;
 
         let g_last_heartbeat = self.g_last_heartbeat.clone();
         let g_config_requested = self.g_config_requested.clone();
@@ -139,8 +144,42 @@ impl MasterEaSimulator {
         let g_symbol_suffix = self.g_symbol_suffix.clone();
         let received_sync_requests = self.received_sync_requests.clone();
         let received_vlogs_configs = self.received_vlogs_configs.clone();
+        let g_register_sent = self.g_register_sent.clone();
 
         let handle = std::thread::spawn(move || {
+            // Helper to convert to UTF-16
+            let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+            // --- OnInit logic (mocked) ---
+            // Create inputs for ea_init
+            let acc_id_u16 = to_u16(&account_id);
+            let ea_type_u16 = to_u16(ea_type_val.as_str());
+            let platform_u16 = to_u16("MT5");
+            let broker_u16 = to_u16("TestBroker");
+            let acc_name_u16 = to_u16(&heartbeat_params.account_name);
+            let server_u16 = to_u16("TestServer");
+            let currency_u16 = to_u16("USD");
+
+            // Call ea_init via FFI
+            let ctx = unsafe {
+                sankey_copier_zmq::ffi::ea_init(
+                    acc_id_u16.as_ptr(),
+                    ea_type_u16.as_ptr(),
+                    platform_u16.as_ptr(),
+                    heartbeat_params.account_number,
+                    broker_u16.as_ptr(),
+                    acc_name_u16.as_ptr(),
+                    server_u16.as_ptr(),
+                    currency_u16.as_ptr(),
+                    heartbeat_params.leverage,
+                )
+            };
+
+            if ctx.is_null() {
+                eprintln!("Failed to initialize EA context!");
+                return;
+            }
+
             // MQL5: OnTimer() loop
             while !shutdown_flag.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
@@ -152,6 +191,32 @@ impl MasterEaSimulator {
                 // =============================================================
                 // MQL5 OnTimer() L225-343 準拠
                 // =============================================================
+
+                // 0. Register送信 (OnTimer初回のみ)
+                if !g_register_sent.load(Ordering::SeqCst) {
+                    // Use FFI ea_send_register
+                    let mut buffer = vec![0u8; 1024];
+                    let len = unsafe {
+                        sankey_copier_zmq::ffi::ea_send_register(
+                            ctx,
+                            buffer.as_mut_ptr(),
+                            buffer.len() as i32,
+                        )
+                    };
+
+                    if len > 0 {
+                        let sent = unsafe {
+                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                                push_socket,
+                                buffer.as_ptr(),
+                                len,
+                            ) == 1
+                        };
+                        if sent {
+                            g_register_sent.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
 
                 // 1. Auto-trading状態変化の検出 (MQL5 L230-232)
                 let current_trade_allowed = is_trade_allowed.load(Ordering::SeqCst);
@@ -171,45 +236,26 @@ impl MasterEaSimulator {
 
                 // 3. Heartbeat送信 (MQL5 L238-269)
                 if should_send_heartbeat {
-                    let prefix = g_symbol_prefix.lock().unwrap().clone();
-                    let suffix = g_symbol_suffix.lock().unwrap().clone();
-
-                    let msg = sankey_copier_zmq::HeartbeatMessage {
-                        message_type: "Heartbeat".to_string(),
-                        account_id: account_id.clone(),
-                        balance: heartbeat_params.balance,
-                        equity: heartbeat_params.equity,
-                        open_positions: 0,
-                        timestamp: Utc::now().to_rfc3339(),
-                        version: heartbeat_params.version.clone(),
-                        ea_type: ea_type.as_str().to_string(),
-                        platform: "MT5".to_string(),
-                        account_number: heartbeat_params.account_number,
-                        broker: "TestBroker".to_string(),
-                        account_name: heartbeat_params.account_name.clone(),
-                        server: "TestServer".to_string(),
-                        currency: "USD".to_string(),
-                        leverage: heartbeat_params.leverage,
-                        is_trade_allowed: current_trade_allowed,
-                        symbol_prefix: if prefix.is_empty() {
-                            None
-                        } else {
-                            Some(prefix)
-                        },
-                        symbol_suffix: if suffix.is_empty() {
-                            None
-                        } else {
-                            Some(suffix)
-                        },
-                        symbol_map: None,
+                    // Use FFI ea_send_heartbeat
+                    let mut buffer = vec![0u8; 1024];
+                    let len = unsafe {
+                        sankey_copier_zmq::ffi::ea_send_heartbeat(
+                            ctx,
+                            heartbeat_params.balance,
+                            heartbeat_params.equity,
+                            0, // open_positions
+                            if current_trade_allowed { 1 } else { 0 },
+                            buffer.as_mut_ptr(),
+                            buffer.len() as i32,
+                        )
                     };
 
-                    if let Ok(bytes) = rmp_serde::to_vec_named(&msg) {
+                    if len > 0 {
                         let heartbeat_sent = unsafe {
                             sankey_copier_zmq::ffi::zmq_socket_send_binary(
                                 push_socket,
-                                bytes.as_ptr(),
-                                bytes.len() as i32,
+                                buffer.as_ptr(),
+                                len,
                             ) == 1
                         };
 
@@ -221,8 +267,20 @@ impl MasterEaSimulator {
                             }
 
                             // RequestConfig送信 (MQL5 L253-267)
-                            // current_trade_allowed AND !g_config_requested の時のみ
-                            if !g_config_requested.load(Ordering::SeqCst) && current_trade_allowed {
+                            // Note: RequestConfig is also managed by EaContext internally
+                            // via should_request_config logic.
+                            // However, ea_send_heartbeat does NOT send RequestConfig.
+                            // We should check ea_context_should_request_config via FFI.
+
+                            // Replicating MQL logic using FFI:
+                            let should_request = unsafe {
+                                sankey_copier_zmq::ffi::ea_context_should_request_config(
+                                    ctx,
+                                    if current_trade_allowed { 1 } else { 0 },
+                                )
+                            };
+
+                            if should_request == 1 {
                                 let req_msg = RequestConfigMessage {
                                     message_type: "RequestConfig".to_string(),
                                     account_id: account_id.clone(),
@@ -238,6 +296,10 @@ impl MasterEaSimulator {
                                         ) == 1
                                         {
                                             g_config_requested.store(true, Ordering::SeqCst);
+                                            // Must mark as requested in context too! (Wait, MQL logic is: send -> wait for config)
+                                            // The FFI `should_request_config` returns true until `mark_config_requested` is called.
+                                            // But MQL typically calls `mark_config_requested` when Config is RECEIVED.
+                                            // So here we just send.
                                         }
                                     }
                                 }
@@ -289,6 +351,11 @@ impl MasterEaSimulator {
                                 if let Some(suffix) = &config.symbol_suffix {
                                     *g_symbol_suffix.lock().unwrap() = suffix.clone();
                                 }
+
+                                // Mark config as requested (FFI logic)
+                                unsafe {
+                                    sankey_copier_zmq::ffi::ea_context_mark_config_requested(ctx);
+                                }
                             } else if let Ok(vlogs_config) =
                                 rmp_serde::from_slice::<VLogsConfigMessage>(payload)
                             {
@@ -299,6 +366,31 @@ impl MasterEaSimulator {
                         }
                     }
                 }
+            }
+
+            // Clean up calling OnDeinit logic
+            // Send Unregister via FFI
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe {
+                sankey_copier_zmq::ffi::ea_send_unregister(
+                    ctx,
+                    buffer.as_mut_ptr(),
+                    buffer.len() as i32,
+                )
+            };
+            if len > 0 {
+                unsafe {
+                    sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                        push_socket,
+                        buffer.as_ptr(),
+                        len,
+                    );
+                }
+            }
+
+            // Free context
+            unsafe {
+                sankey_copier_zmq::ffi::ea_context_free(ctx);
             }
         });
 
