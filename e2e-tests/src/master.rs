@@ -149,7 +149,7 @@ impl MasterEaSimulator {
         let handle = std::thread::spawn(move || {
             // Helper to convert to UTF-16
             let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
-            
+
             // --- OnInit logic (mocked) ---
             // Create inputs for ea_init
             let acc_id_u16 = to_u16(&account_id);
@@ -174,7 +174,7 @@ impl MasterEaSimulator {
                     heartbeat_params.leverage,
                 )
             };
-            
+
             if ctx.is_null() {
                 eprintln!("Failed to initialize EA context!");
                 return;
@@ -267,14 +267,17 @@ impl MasterEaSimulator {
                             }
 
                             // RequestConfig送信 (MQL5 L253-267)
-                            // Note: RequestConfig is also managed by EaContext internally 
+                            // Note: RequestConfig is also managed by EaContext internally
                             // via should_request_config logic.
                             // However, ea_send_heartbeat does NOT send RequestConfig.
                             // We should check ea_context_should_request_config via FFI.
-                            
+
                             // Replicating MQL logic using FFI:
                             let should_request = unsafe {
-                                sankey_copier_zmq::ffi::ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
+                                sankey_copier_zmq::ffi::ea_context_should_request_config(
+                                    ctx,
+                                    if current_trade_allowed { 1 } else { 0 },
+                                )
                             };
 
                             if should_request == 1 {
@@ -348,7 +351,7 @@ impl MasterEaSimulator {
                                 if let Some(suffix) = &config.symbol_suffix {
                                     *g_symbol_suffix.lock().unwrap() = suffix.clone();
                                 }
-                                
+
                                 // Mark config as requested (FFI logic)
                                 unsafe {
                                     sankey_copier_zmq::ffi::ea_context_mark_config_requested(ctx);
@@ -364,7 +367,7 @@ impl MasterEaSimulator {
                     }
                 }
             }
-            
+
             // Clean up calling OnDeinit logic
             // Send Unregister via FFI
             let mut buffer = vec![0u8; 1024];
@@ -376,7 +379,7 @@ impl MasterEaSimulator {
                 )
             };
             if len > 0 {
-                 unsafe {
+                unsafe {
                     sankey_copier_zmq::ffi::zmq_socket_send_binary(
                         push_socket,
                         buffer.as_ptr(),
