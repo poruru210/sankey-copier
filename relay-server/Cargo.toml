@@ -30,7 +30,7 @@ rmp-serde = "1.3"
 sankey_copier_zmq = { path = "../mt-bridge", package = "sankey-copier-mt-bridge" }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 
 # Logging
 tracing = "0.1"

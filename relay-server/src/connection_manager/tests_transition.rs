@@ -1,6 +1,5 @@
-
-use super::*;
 use super::tests::create_test_heartbeat_message;
+use super::*;
 
 #[tokio::test]
 async fn test_register_ea_state_transition() {
