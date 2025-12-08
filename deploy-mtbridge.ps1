@@ -43,11 +43,17 @@ if ($doClean) {
     Write-Host "[1/5] Cleaning and rebuilding Rust components..." -ForegroundColor Green
     Push-Location $ProjectRoot
     try {
-        # Delete DLL directly to force rebuild
-        $dllPath = Join-Path $ProjectRoot "target\release\sankey_copier_zmq.dll"
-        if (Test-Path $dllPath) { 
-            Remove-Item $dllPath -Force
-            Write-Host "      Deleted existing DLL" -ForegroundColor Gray
+        # Delete 64-bit DLL
+        $dll64Path = Join-Path $ProjectRoot "target\release\sankey_copier_zmq.dll"
+        if (Test-Path $dll64Path) { 
+            Remove-Item $dll64Path -Force
+            Write-Host "      Deleted existing 64-bit DLL" -ForegroundColor Gray
+        }
+        # Delete 32-bit DLL
+        $dll32Path = Join-Path $ProjectRoot "target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"
+        if (Test-Path $dll32Path) { 
+            Remove-Item $dll32Path -Force
+            Write-Host "      Deleted existing 32-bit DLL" -ForegroundColor Gray
         }
         # Delete relay-server exe
         $serverPath = Join-Path $ProjectRoot "target\release\sankey-copier-server.exe"
@@ -59,11 +65,18 @@ if ($doClean) {
         Get-ChildItem "target\release" -Filter "sankey_copier*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         Get-ChildItem "target\release\deps" -Filter "*sankey_copier*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         Get-ChildItem "target\release\deps" -Filter "*relay_server*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem "target\i686-pc-windows-msvc\release" -Filter "sankey_copier*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         
+        # Build 64-bit (MT5) and relay-server
+        Write-Host "      Building 64-bit (MT5)..." -ForegroundColor Gray
         cargo build --release -p sankey-copier-mt-bridge -p sankey-copier-relay-server
-        if ($LASTEXITCODE -ne 0) {
-            throw "Cargo build failed with exit code $LASTEXITCODE"
-        }
+        if ($LASTEXITCODE -ne 0) { throw "Cargo build (64-bit) failed" }
+        
+        # Build 32-bit (MT4)
+        Write-Host "      Building 32-bit (MT4)..." -ForegroundColor Gray
+        cargo build --release -p sankey-copier-mt-bridge --target i686-pc-windows-msvc
+        if ($LASTEXITCODE -ne 0) { throw "Cargo build (32-bit) failed" }
+        
         Write-Host "      Clean build successful!" -ForegroundColor Green
     } finally {
         Pop-Location
@@ -72,10 +85,16 @@ if ($doClean) {
     Write-Host "[1/5] Building Rust components in release mode..." -ForegroundColor Green
     Push-Location $ProjectRoot
     try {
+        # Build 64-bit (MT5) and relay-server
+        Write-Host "      Building 64-bit (MT5)..." -ForegroundColor Gray
         cargo build --release -p sankey-copier-mt-bridge -p sankey-copier-relay-server
-        if ($LASTEXITCODE -ne 0) {
-            throw "Cargo build failed with exit code $LASTEXITCODE"
-        }
+        if ($LASTEXITCODE -ne 0) { throw "Cargo build (64-bit) failed" }
+        
+        # Build 32-bit (MT4)
+        Write-Host "      Building 32-bit (MT4)..." -ForegroundColor Gray
+        cargo build --release -p sankey-copier-mt-bridge --target i686-pc-windows-msvc
+        if ($LASTEXITCODE -ne 0) { throw "Cargo build (32-bit) failed" }
+        
         Write-Host "      Build successful!" -ForegroundColor Green
     } finally {
         Pop-Location
@@ -129,24 +148,46 @@ if (-not (Test-Path $DllSource)) {
 
 # Relay server exe
 $ServerSource = Join-Path $ProjectRoot "target\release\sankey-copier-server.exe"
+$NssmPath = Join-Path $TargetDir "nssm.exe"
+$ServiceName = "SANKEYCopierServer"
+
 if (Test-Path $ServerSource) {
+    # Stop service if nssm exists
+    if (Test-Path $NssmPath) {
+        Write-Host "      Stopping $ServiceName service..." -ForegroundColor Gray
+        & $NssmPath stop $ServiceName 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    
     Copy-Item -Path $ServerSource -Destination (Join-Path $TargetDir "sankey-copier-server.exe") -Force
     Write-Host "      relay-server -> sankey-copier-server.exe" -ForegroundColor Gray
+    
+    # Start service if nssm exists
+    if (Test-Path $NssmPath) {
+        Write-Host "      Starting $ServiceName service..." -ForegroundColor Gray
+        & $NssmPath start $ServiceName 2>&1 | Out-Null
+    }
 } else {
     Write-Host "      WARNING: relay-server.exe not found, skipping" -ForegroundColor Yellow
 }
 
-# Copy DLL to MT5\Libraries (inside mt-advisors)
+# Copy 64-bit DLL to MT5\Libraries (inside mt-advisors)
+$Dll64Source = Join-Path $ProjectRoot "target\release\sankey_copier_zmq.dll"
 $Mt5LibDir = Join-Path $TargetDir "mt-advisors\MT5\Libraries"
 if (-not (Test-Path $Mt5LibDir)) { New-Item -ItemType Directory -Path $Mt5LibDir -Force | Out-Null }
-Copy-Item -Path $DllSource -Destination (Join-Path $Mt5LibDir "sankey_copier_zmq.dll") -Force
-Write-Host "      DLL -> mt-advisors\MT5\Libraries\" -ForegroundColor Gray
+Copy-Item -Path $Dll64Source -Destination (Join-Path $Mt5LibDir "sankey_copier_zmq.dll") -Force
+Write-Host "      DLL (64-bit) -> mt-advisors\MT5\Libraries\" -ForegroundColor Gray
 
-# Copy DLL to MT4\Libraries (inside mt-advisors)
+# Copy 32-bit DLL to MT4\Libraries (inside mt-advisors)
+$Dll32Source = Join-Path $ProjectRoot "target\i686-pc-windows-msvc\release\sankey_copier_zmq.dll"
+if (-not (Test-Path $Dll32Source)) {
+    Write-Host "      WARNING: 32-bit DLL not found, using 64-bit (MT4 will not work)" -ForegroundColor Yellow
+    $Dll32Source = $Dll64Source
+}
 $Mt4LibDir = Join-Path $TargetDir "mt-advisors\MT4\Libraries"
 if (-not (Test-Path $Mt4LibDir)) { New-Item -ItemType Directory -Path $Mt4LibDir -Force | Out-Null }
-Copy-Item -Path $DllSource -Destination (Join-Path $Mt4LibDir "sankey_copier_zmq.dll") -Force
-Write-Host "      DLL -> mt-advisors\MT4\Libraries\" -ForegroundColor Gray
+Copy-Item -Path $Dll32Source -Destination (Join-Path $Mt4LibDir "sankey_copier_zmq.dll") -Force
+Write-Host "      DLL (32-bit) -> mt-advisors\MT4\Libraries\" -ForegroundColor Gray
 
 # Copy compiled .ex5 files
 $Mt5ExpDir = Join-Path $TargetDir "mt-advisors\MT5\Experts"
