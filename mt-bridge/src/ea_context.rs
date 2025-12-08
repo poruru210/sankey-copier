@@ -16,7 +16,7 @@
 pub struct EaContext {
     // --- Static Identity (Set via ea_init) ---
     pub account_id: String,
-    pub ea_type: String, // "Master" or "Slave"
+    pub ea_type: String,  // "Master" or "Slave"
     pub platform: String, // "MT4" or "MT5"
     pub account_number: i64,
     pub broker: String,
@@ -34,6 +34,7 @@ pub struct EaContext {
 
 impl EaContext {
     /// Create a new Context with static identity information
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_id: String,
         ea_type: String,
@@ -114,7 +115,7 @@ mod tests {
         let mut ctx = create_test_context();
         // Should request initially
         assert!(ctx.should_request_config(true));
-        
+
         // Mark as requested
         ctx.mark_config_requested();
         assert!(!ctx.should_request_config(true));

@@ -2028,6 +2028,10 @@ pub unsafe extern "C" fn ea_send_heartbeat(
 }
 
 /// Create and serialize an UnregisterMessage using context data
+///
+/// # Safety
+/// - `context` must be a valid pointer created by `ea_init`
+/// - `output` must point to a valid buffer with at least `output_len` bytes
 #[no_mangle]
 pub unsafe extern "C" fn ea_send_unregister(
     context: *mut crate::EaContext,
