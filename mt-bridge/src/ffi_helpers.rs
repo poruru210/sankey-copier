@@ -120,6 +120,46 @@ pub(crate) unsafe fn free_handle<T>(handle: *mut T) {
     }
 }
 
+/// Generic helper to serialize a message to MessagePack buffer for FFI
+/// Returns the number of bytes written, or 0 on error/buffer too small
+///
+/// # Safety
+/// - output must be a valid buffer of at least output_len bytes
+pub(crate) unsafe fn serialize_to_buffer<T: serde::Serialize>(
+    msg: &T,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if output.is_null() || output_len <= 0 {
+        return 0;
+    }
+
+    // Serialize to vector first
+    let serialized = match rmp_serde::to_vec_named(msg) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Serialization failed: {}", e);
+            return 0;
+        }
+    };
+
+    // Check buffer size
+    if serialized.len() > output_len as usize {
+        eprintln!(
+            "Buffer too small: required {}, provided {}",
+            serialized.len(),
+            output_len
+        );
+        return 0;
+    }
+
+    // Copy to output buffer
+    let output_slice = std::slice::from_raw_parts_mut(output, output_len as usize);
+    output_slice[..serialized.len()].copy_from_slice(&serialized);
+
+    serialized.len() as i32
+}
+
 // =============================================================================
 // Tests for helper functions
 // =============================================================================

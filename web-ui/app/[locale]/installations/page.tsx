@@ -96,17 +96,17 @@ export default function InstallationsPage() {
     if (failCount === 0) {
       setMessage({
         type: 'success',
-        text: content.successfullyInstalled.replace('{count}', successCount.toString())
+        text: content.successfullyInstalled.value.replace('{count}', successCount.toString())
       });
     } else if (successCount === 0) {
       setMessage({
         type: 'error',
-        text: content.failedToInstall.replace('{count}', failCount.toString())
+        text: content.failedToInstall.value.replace('{count}', failCount.toString())
       });
     } else {
       setMessage({
         type: 'error',
-        text: content.completedWithErrors
+        text: content.completedWithErrors.value
           .replace('{successCount}', successCount.toString())
           .replace('{failCount}', failCount.toString())
       });

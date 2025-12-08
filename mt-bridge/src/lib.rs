@@ -1,6 +1,6 @@
 // Top-level modules
 pub mod constants;
-pub mod ea_state;
+pub mod ea_context;
 pub mod ffi;
 pub mod ffi_helpers;
 pub mod msgpack;
@@ -23,7 +23,7 @@ pub use types::{
 pub use traits::{ConfigMessage, MasterConfig, SlaveConfig};
 
 // Re-export EA state management
-pub use ea_state::EaState;
+pub use ea_context::EaContext;
 
 // Re-export GlobalConfigMessage from msgpack (if it exists there)
 pub use msgpack::GlobalConfigMessage;

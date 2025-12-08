@@ -174,6 +174,39 @@ impl SlaveEaSimulator {
         let g_register_sent = self.g_register_sent.clone();
 
         let handle = std::thread::spawn(move || {
+            // Helper to convert to UTF-16
+            let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+            
+            // --- OnInit logic (mocked) ---
+            // Create inputs for ea_init
+            let acc_id_u16 = to_u16(&account_id);
+            let ea_type_u16 = to_u16(ea_type.as_str());
+            let platform_u16 = to_u16("MT5");
+            let broker_u16 = to_u16("TestBroker");
+            let acc_name_u16 = to_u16(&heartbeat_params.account_name);
+            let server_u16 = to_u16("TestServer");
+            let currency_u16 = to_u16("USD");
+
+            // Call ea_init via FFI
+            let ctx = unsafe {
+                sankey_copier_zmq::ffi::ea_init(
+                    acc_id_u16.as_ptr(),
+                    ea_type_u16.as_ptr(),
+                    platform_u16.as_ptr(),
+                    heartbeat_params.account_number,
+                    broker_u16.as_ptr(),
+                    acc_name_u16.as_ptr(),
+                    server_u16.as_ptr(),
+                    currency_u16.as_ptr(),
+                    heartbeat_params.leverage,
+                )
+            };
+            
+            if ctx.is_null() {
+                eprintln!("Failed to initialize EA context!");
+                return;
+            }
+
             // MQL5: OnTimer() loop
             while !shutdown_flag.load(Ordering::SeqCst) {
                 // Sleep for ONTIMER_INTERVAL_MS (100ms)
@@ -189,25 +222,22 @@ impl SlaveEaSimulator {
 
                 // 0. Register送信 (OnTimer初回のみ)
                 if !g_register_sent.load(Ordering::SeqCst) {
-                    let reg_msg = crate::types::RegisterMessage {
-                        message_type: "Register".to_string(),
-                        account_id: account_id.clone(),
-                        ea_type: ea_type.as_str().to_string(),
-                        platform: "MT5".to_string(),
-                        account_number: heartbeat_params.account_number,
-                        broker: "TestBroker".to_string(),
-                        account_name: heartbeat_params.account_name.clone(),
-                        server: "TestServer".to_string(),
-                        currency: "USD".to_string(),
-                        leverage: heartbeat_params.leverage,
-                        timestamp: Utc::now().to_rfc3339(),
+                    // Use FFI ea_send_register
+                    let mut buffer = vec![0u8; 1024];
+                    let len = unsafe {
+                        sankey_copier_zmq::ffi::ea_send_register(
+                            ctx,
+                            buffer.as_mut_ptr(),
+                            buffer.len() as i32,
+                        )
                     };
-                    if let Ok(bytes) = rmp_serde::to_vec_named(&reg_msg) {
+
+                    if len > 0 {
                         let sent = unsafe {
                             sankey_copier_zmq::ffi::zmq_socket_send_binary(
                                 push_socket,
-                                bytes.as_ptr(),
-                                bytes.len() as i32,
+                                buffer.as_ptr(),
+                                len,
                             ) == 1
                         };
                         if sent {
@@ -266,35 +296,26 @@ impl SlaveEaSimulator {
 
                 // 4. Heartbeat送信 (MQL5 L254-317)
                 if should_send_heartbeat {
-                    // SendHeartbeatMessage (MQL5 L257)
-                    let msg = sankey_copier_zmq::HeartbeatMessage {
-                        message_type: "Heartbeat".to_string(),
-                        account_id: account_id.clone(),
-                        balance: heartbeat_params.balance,
-                        equity: heartbeat_params.equity,
-                        open_positions: 0,
-                        timestamp: Utc::now().to_rfc3339(),
-                        version: heartbeat_params.version.clone(),
-                        ea_type: ea_type.as_str().to_string(),
-                        platform: "MT5".to_string(),
-                        account_number: heartbeat_params.account_number,
-                        broker: "TestBroker".to_string(),
-                        account_name: heartbeat_params.account_name.clone(),
-                        server: "TestServer".to_string(),
-                        currency: "USD".to_string(),
-                        leverage: heartbeat_params.leverage,
-                        is_trade_allowed: current_trade_allowed,
-                        symbol_prefix: None,
-                        symbol_suffix: None,
-                        symbol_map: None,
+                    // Use FFI ea_send_heartbeat
+                    let mut buffer = vec![0u8; 1024];
+                    let len = unsafe {
+                        sankey_copier_zmq::ffi::ea_send_heartbeat(
+                            ctx,
+                            heartbeat_params.balance,
+                            heartbeat_params.equity,
+                            0, // open_positions
+                            if current_trade_allowed { 1 } else { 0 },
+                            buffer.as_mut_ptr(),
+                            buffer.len() as i32,
+                        )
                     };
 
-                    if let Ok(bytes) = rmp_serde::to_vec_named(&msg) {
+                    if len > 0 {
                         let heartbeat_sent = unsafe {
                             sankey_copier_zmq::ffi::zmq_socket_send_binary(
                                 push_socket,
-                                bytes.as_ptr(),
-                                bytes.len() as i32,
+                                buffer.as_ptr(),
+                                len,
                             ) == 1
                         };
 
@@ -305,49 +326,29 @@ impl SlaveEaSimulator {
                             // 状態変化時の処理 (MQL5 L265-293)
                             if trade_state_changed {
                                 g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
-
-                                // Auto-trading有効化時にconfig要求 (MQL5 L285-293)
-                                if current_trade_allowed
-                                    && !g_config_requested.load(Ordering::SeqCst)
-                                {
-                                    let req_msg = RequestConfigMessage {
-                                        message_type: "RequestConfig".to_string(),
-                                        account_id: account_id.clone(),
-                                        ea_type: "Slave".to_string(),
-                                        timestamp: Utc::now().to_rfc3339(),
-                                    };
-                                    if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
-                                        unsafe {
-                                            if sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                                push_socket,
-                                                req_bytes.as_ptr(),
-                                                req_bytes.len() as i32,
-                                            ) == 1
-                                            {
-                                                g_config_requested.store(true, Ordering::SeqCst);
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                // 通常heartbeat時にconfig要求 (MQL5 L297-309)
-                                if !g_config_requested.load(Ordering::SeqCst) {
-                                    let req_msg = RequestConfigMessage {
-                                        message_type: "RequestConfig".to_string(),
-                                        account_id: account_id.clone(),
-                                        ea_type: "Slave".to_string(),
-                                        timestamp: Utc::now().to_rfc3339(),
-                                    };
-                                    if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
-                                        unsafe {
-                                            if sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                                push_socket,
-                                                req_bytes.as_ptr(),
-                                                req_bytes.len() as i32,
-                                            ) == 1
-                                            {
-                                                g_config_requested.store(true, Ordering::SeqCst);
-                                            }
+                            } 
+                            
+                            // Check request config logic via FFI
+                            let should_request = unsafe {
+                                sankey_copier_zmq::ffi::ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
+                            };
+                            
+                            if should_request == 1 {
+                                let req_msg = RequestConfigMessage {
+                                    message_type: "RequestConfig".to_string(),
+                                    account_id: account_id.clone(),
+                                    ea_type: "Slave".to_string(),
+                                    timestamp: Utc::now().to_rfc3339(),
+                                };
+                                if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
+                                    unsafe {
+                                        if sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                                            push_socket,
+                                            req_bytes.as_ptr(),
+                                            req_bytes.len() as i32,
+                                        ) == 1
+                                        {
+                                            g_config_requested.store(true, Ordering::SeqCst);
                                         }
                                     }
                                 }
@@ -407,6 +408,11 @@ impl SlaveEaSimulator {
                                 // Update status
                                 last_received_status.store(config.status, Ordering::SeqCst);
                                 g_has_received_config.store(true, Ordering::SeqCst);
+                                
+                                // Mark config as requested (FFI logic)
+                                unsafe {
+                                    sankey_copier_zmq::ffi::ea_context_mark_config_requested(ctx);
+                                }
 
                                 // 動的にtrade topicとsync topicを購読 (ProcessConfigMessage内の動作)
                                 let master_acc = &config.master_account;
@@ -457,6 +463,30 @@ impl SlaveEaSimulator {
                         }
                     }
                 }
+            }
+            // Clean up calling OnDeinit logic
+            // Send Unregister via FFI
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe {
+                sankey_copier_zmq::ffi::ea_send_unregister(
+                    ctx,
+                    buffer.as_mut_ptr(),
+                    buffer.len() as i32,
+                )
+            };
+            if len > 0 {
+                 unsafe {
+                    sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                        push_socket,
+                        buffer.as_ptr(),
+                        len,
+                    );
+                }
+            }
+
+            // Free context
+            unsafe {
+                sankey_copier_zmq::ffi::ea_context_free(ctx);
             }
         });
 
