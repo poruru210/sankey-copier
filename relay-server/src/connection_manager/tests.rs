@@ -4,7 +4,7 @@
 
 use super::*;
 
-fn create_test_heartbeat_message(account_id: &str, ea_type: &str) -> HeartbeatMessage {
+pub fn create_test_heartbeat_message(account_id: &str, ea_type: &str) -> HeartbeatMessage {
     HeartbeatMessage {
         message_type: "Heartbeat".to_string(),
         account_id: account_id.to_string(),

@@ -69,7 +69,7 @@ async fn test_open_close_cycle() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Step 1: Master sends Open signal
     let open_signal = master.create_open_signal(
@@ -162,7 +162,7 @@ async fn test_open_modify_close_cycle() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open
     let open_signal = master.create_open_signal(
@@ -254,7 +254,7 @@ async fn test_modify_sl_only() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open position first
     let open_signal = master.create_open_signal(
@@ -324,7 +324,7 @@ async fn test_modify_tp_only() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open position first
     let open_signal = master.create_open_signal(
@@ -394,7 +394,7 @@ async fn test_modify_both_sl_tp() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open position first
     let open_signal = master.create_open_signal(
@@ -464,7 +464,7 @@ async fn test_multiple_open_sequential() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open 3 positions sequentially
     for i in 0..3 {
@@ -532,7 +532,7 @@ async fn test_rapid_fire_signals() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send 10 signals rapidly
     let signal_count = 10;
@@ -619,7 +619,7 @@ async fn test_close_nonexistent_position() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send Close for ticket that was never opened
     let close_signal = master.create_close_signal(99999, "EURUSD", 0.1);
@@ -683,7 +683,7 @@ async fn test_close_already_closed() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Open
     let open_signal = master.create_open_signal(
@@ -775,7 +775,7 @@ async fn test_modify_multiple_times() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send 3 Modify signals with different SL/TP values
     let modify1 = master.create_modify_signal(12351, "EURUSD", Some(1.0800), Some(1.0900));

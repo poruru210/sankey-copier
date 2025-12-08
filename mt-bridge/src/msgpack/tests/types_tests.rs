@@ -37,6 +37,7 @@ fn test_unregister_message_serialization() {
         message_type: "Unregister".to_string(),
         account_id: "test_account_123".to_string(),
         timestamp: "2025-01-01T00:00:00Z".to_string(),
+        ea_type: Some("Master".to_string()),
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
@@ -46,6 +47,7 @@ fn test_unregister_message_serialization() {
     assert_eq!(msg.message_type, deserialized.message_type);
     assert_eq!(msg.account_id, deserialized.account_id);
     assert_eq!(msg.timestamp, deserialized.timestamp);
+    assert_eq!(msg.ea_type, deserialized.ea_type);
 }
 
 #[test]

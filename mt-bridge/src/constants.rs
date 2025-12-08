@@ -45,6 +45,9 @@ pub const MSG_TYPE_SYNC_REQUEST: &str = "sync_request";
 /// Unregister message when EA is removed
 pub const MSG_TYPE_UNREGISTER: &str = "unregister";
 
+/// Register message when EA connects
+pub const MSG_TYPE_REGISTER: &str = "register";
+
 // =============================================================================
 // Topic Constants
 // =============================================================================

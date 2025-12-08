@@ -1,8 +1,8 @@
 mod config_publisher;
 
 use crate::models::{
-    HeartbeatMessage, PositionSnapshotMessage, RequestConfigMessage, SyncRequestMessage,
-    TradeSignal, UnregisterMessage,
+    HeartbeatMessage, PositionSnapshotMessage, RegisterMessage, RequestConfigMessage,
+    SyncRequestMessage, TradeSignal, UnregisterMessage,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ pub enum ZmqMessage {
     Unregister(UnregisterMessage),
     Heartbeat(HeartbeatMessage),
     RequestConfig(RequestConfigMessage),
+    Register(RegisterMessage),
     // Position sync protocol messages
     PositionSnapshot(PositionSnapshotMessage),
     SyncRequest(SyncRequestMessage),
@@ -134,6 +135,27 @@ impl ZmqServer {
                                                 }
                                                 Err(e) => {
                                                     tracing::error!("Failed to deserialize Unregister message: {}", e);
+                                                }
+                                            }
+                                        }
+                                        "Register" => {
+                                            match rmp_serde::from_slice::<RegisterMessage>(&bytes) {
+                                                Ok(reg) => {
+                                                    tracing::debug!(
+                                                        "Received Register message: {:?}",
+                                                        reg
+                                                    );
+                                                    if let Err(e) =
+                                                        tx.send(ZmqMessage::Register(reg))
+                                                    {
+                                                        tracing::error!(
+                                                            "Failed to send message to channel: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("Failed to deserialize Register message: {}", e);
                                                 }
                                             }
                                         }

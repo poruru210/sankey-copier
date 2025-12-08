@@ -193,6 +193,25 @@ pub struct UnregisterMessage {
     pub message_type: String, // "Unregister"
     pub account_id: String,
     pub timestamp: String,
+    #[serde(default)]
+    pub ea_type: Option<String>, // "Master" or "Slave" (optional for backward compatibility)
+}
+
+/// Registration message structure
+/// Sent when an EA connects to register itself with the relay server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterMessage {
+    pub message_type: String, // "Register"
+    pub account_id: String,
+    pub ea_type: String,  // "Master" or "Slave"
+    pub platform: String, // "MT4" or "MT5"
+    pub account_number: i64,
+    pub broker: String,
+    pub account_name: String,
+    pub server: String,
+    pub currency: String,
+    pub leverage: i64,
+    pub timestamp: String,
 }
 
 /// Request configuration message structure (for Slave EAs)

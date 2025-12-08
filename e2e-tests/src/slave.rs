@@ -86,6 +86,10 @@ pub struct SlaveEaSimulator {
     /// 受信したVLogsConfigキュー (テスト用)
     /// MQL5: OnTimerでconfig_socketから受信し、ProcessVLogsConfig()で処理
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+
+    /// Register送信済みフラグ
+    /// OnTimer初回でRegister送信後にtrueになる
+    g_register_sent: Arc<AtomicBool>,
 }
 
 impl SlaveEaSimulator {
@@ -129,6 +133,7 @@ impl SlaveEaSimulator {
             received_trade_signals: Arc::new(Mutex::new(Vec::new())),
             received_position_snapshots: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
+            g_register_sent: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -166,6 +171,7 @@ impl SlaveEaSimulator {
         let received_trade_signals = self.received_trade_signals.clone();
         let received_position_snapshots = self.received_position_snapshots.clone();
         let received_vlogs_configs = self.received_vlogs_configs.clone();
+        let g_register_sent = self.g_register_sent.clone();
 
         let handle = std::thread::spawn(move || {
             // MQL5: OnTimer() loop
@@ -180,6 +186,35 @@ impl SlaveEaSimulator {
                 // =============================================================
                 // MQL5 OnTimer() L234-418 準拠
                 // =============================================================
+
+                // 0. Register送信 (OnTimer初回のみ)
+                if !g_register_sent.load(Ordering::SeqCst) {
+                    let reg_msg = crate::types::RegisterMessage {
+                        message_type: "Register".to_string(),
+                        account_id: account_id.clone(),
+                        ea_type: ea_type.as_str().to_string(),
+                        platform: "MT5".to_string(),
+                        account_number: heartbeat_params.account_number,
+                        broker: "TestBroker".to_string(),
+                        account_name: heartbeat_params.account_name.clone(),
+                        server: "TestServer".to_string(),
+                        currency: "USD".to_string(),
+                        leverage: heartbeat_params.leverage,
+                        timestamp: Utc::now().to_rfc3339(),
+                    };
+                    if let Ok(bytes) = rmp_serde::to_vec_named(&reg_msg) {
+                        let sent = unsafe {
+                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                                push_socket,
+                                bytes.as_ptr(),
+                                bytes.len() as i32,
+                            ) == 1
+                        };
+                        if sent {
+                            g_register_sent.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
 
                 // 1. ProcessTradeSignals() (MQL5 L244)
                 // MQL5: zmq_socket_receive(g_zmq_trade_socket, trade_buffer, ...)
@@ -447,6 +482,7 @@ impl SlaveEaSimulator {
             message_type: "Unregister".to_string(),
             account_id: self.base.account_id().to_string(),
             timestamp: Utc::now().to_rfc3339(),
+            ea_type: Some("Slave".to_string()),
         };
         let bytes = rmp_serde::to_vec_named(&msg)?;
         self.base.send_binary(&bytes)

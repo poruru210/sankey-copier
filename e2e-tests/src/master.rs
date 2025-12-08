@@ -76,6 +76,10 @@ pub struct MasterEaSimulator {
     /// MQL5: OnTimerでconfig_socketから受信し、ProcessVLogsConfig()で処理
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
 
+    /// Register送信済みフラグ
+    /// OnTimer初回でRegister送信後にtrueになる
+    g_register_sent: Arc<AtomicBool>,
+
     /// OnTimerスレッドハンドル
     ontimer_thread: Option<JoinHandle<()>>,
 }
@@ -109,6 +113,7 @@ impl MasterEaSimulator {
             g_config_version: Arc::new(Mutex::new(0)),
             received_sync_requests: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
+            g_register_sent: Arc::new(AtomicBool::new(false)),
             ontimer_thread: None,
         })
     }
@@ -139,6 +144,7 @@ impl MasterEaSimulator {
         let g_symbol_suffix = self.g_symbol_suffix.clone();
         let received_sync_requests = self.received_sync_requests.clone();
         let received_vlogs_configs = self.received_vlogs_configs.clone();
+        let g_register_sent = self.g_register_sent.clone();
 
         let handle = std::thread::spawn(move || {
             // MQL5: OnTimer() loop
@@ -152,6 +158,35 @@ impl MasterEaSimulator {
                 // =============================================================
                 // MQL5 OnTimer() L225-343 準拠
                 // =============================================================
+
+                // 0. Register送信 (OnTimer初回のみ)
+                if !g_register_sent.load(Ordering::SeqCst) {
+                    let reg_msg = crate::types::RegisterMessage {
+                        message_type: "Register".to_string(),
+                        account_id: account_id.clone(),
+                        ea_type: ea_type.as_str().to_string(),
+                        platform: "MT5".to_string(),
+                        account_number: heartbeat_params.account_number,
+                        broker: "TestBroker".to_string(),
+                        account_name: heartbeat_params.account_name.clone(),
+                        server: "TestServer".to_string(),
+                        currency: "USD".to_string(),
+                        leverage: heartbeat_params.leverage,
+                        timestamp: Utc::now().to_rfc3339(),
+                    };
+                    if let Ok(bytes) = rmp_serde::to_vec_named(&reg_msg) {
+                        let sent = unsafe {
+                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
+                                push_socket,
+                                bytes.as_ptr(),
+                                bytes.len() as i32,
+                            ) == 1
+                        };
+                        if sent {
+                            g_register_sent.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
 
                 // 1. Auto-trading状態変化の検出 (MQL5 L230-232)
                 let current_trade_allowed = is_trade_allowed.load(Ordering::SeqCst);

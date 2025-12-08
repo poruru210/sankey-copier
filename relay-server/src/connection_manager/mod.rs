@@ -25,6 +25,58 @@ impl ConnectionManager {
         }
     }
 
+    /// RegisterMessageからEAを登録（is_trade_allowed=false初期値）
+    ///
+    /// Register専用のメソッド。Heartbeatによる自動登録とは異なり、
+    /// is_trade_allowedは初期値falseで設定される。
+    /// 最初のHeartbeatで正確なis_trade_allowed値に更新される。
+    pub async fn register_ea(&self, msg: &crate::models::RegisterMessage) {
+        let ea_type: EaType = msg.ea_type.parse().unwrap_or(EaType::Master);
+        let key = (msg.account_id.clone(), ea_type);
+
+        let mut connections = self.connections.write().await;
+
+        // 既に登録済みの場合は更新しない（Heartbeatに任せる）
+        if connections.contains_key(&key) {
+            tracing::debug!(
+                "EA already registered: {} ({}), skipping register",
+                msg.account_id,
+                ea_type
+            );
+            return;
+        }
+
+        tracing::info!(
+            "Registering EA from Register message: {} ({:?}, {:?}) - {}@{}",
+            msg.account_id,
+            msg.ea_type,
+            msg.platform,
+            msg.account_number,
+            msg.broker
+        );
+
+        let now = Utc::now();
+        let connection = EaConnection {
+            account_id: msg.account_id.clone(),
+            ea_type,
+            platform: msg.platform.parse().unwrap_or(Platform::MT5),
+            account_number: msg.account_number,
+            broker: msg.broker.clone(),
+            account_name: msg.account_name.clone(),
+            server: msg.server.clone(),
+            balance: 0.0, // 初期値、Heartbeatで更新
+            equity: 0.0,  // 初期値、Heartbeatで更新
+            currency: msg.currency.clone(),
+            leverage: msg.leverage,
+            last_heartbeat: now,
+            status: ConnectionStatus::Registered,
+            connected_at: now,
+            is_trade_allowed: false, // 初期値、最初のHeartbeatで更新
+        };
+
+        connections.insert(key, connection);
+    }
+
     /// EAの登録を解除 (特定のEA種別)
     pub async fn unregister_ea(&self, account_id: &str, ea_type: EaType) {
         tracing::info!("EA unregistered: {} ({})", account_id, ea_type);
@@ -150,7 +202,9 @@ impl ConnectionManager {
         let mut timed_out_accounts = Vec::new();
 
         for ((account_id, ea_type), conn) in connections.iter_mut() {
-            if conn.status == ConnectionStatus::Online {
+            if conn.status == ConnectionStatus::Online
+                || conn.status == ConnectionStatus::Registered
+            {
                 let elapsed = now.signed_duration_since(conn.last_heartbeat);
 
                 if elapsed > timeout_duration {
@@ -182,3 +236,5 @@ impl ConnectionManager {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_transition;

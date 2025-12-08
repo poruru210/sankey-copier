@@ -47,7 +47,7 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
-    sleep(Duration::from_millis(SETTLE_WAIT_MS)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // After slave heartbeat - should transition to ENABLED
     assert_runtime_status(&db, master_account, slave_account, STATUS_ENABLED).await;

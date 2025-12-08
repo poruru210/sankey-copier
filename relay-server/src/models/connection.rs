@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 // Re-export shared message types from DLL
 pub use sankey_copier_zmq::{
-    HeartbeatMessage, PositionSnapshotMessage, RequestConfigMessage, SyncRequestMessage,
-    UnregisterMessage,
+    HeartbeatMessage, PositionSnapshotMessage, RegisterMessage, RequestConfigMessage,
+    SyncRequestMessage, UnregisterMessage,
 };
 
 /// EA接続情報
@@ -83,6 +83,7 @@ pub enum ConnectionStatus {
     Online,
     Offline,
     Timeout,
+    Registered,
 }
 
 #[cfg(test)]

@@ -58,7 +58,7 @@ async fn test_symbol_prefix_suffix_transformation() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Master sends signal with symbol (prefix/suffix stripping happens at relay)
     let signal = master.create_open_signal(
@@ -142,7 +142,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Test 1: Symbol WITH matching prefix/suffix - should be transformed
     let signal1 = master.create_open_signal(
@@ -307,7 +307,7 @@ async fn test_symbol_mapping() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send XAUUSD signal
     let signal = master.create_open_signal(12345, "XAUUSD", "Buy", 0.1, 2000.0, None, None, 0);
@@ -375,7 +375,7 @@ async fn test_reverse_trade_buy_to_sell() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send Buy signal - passed through unchanged (Slave EA handles reversal)
     let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
@@ -440,7 +440,7 @@ async fn test_reverse_trade_pending_orders() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     // Send BuyLimit - passed through unchanged (Slave EA handles reversal)
     let signal = master.create_open_signal(12345, "EURUSD", "BuyLimit", 0.1, 1.0800, None, None, 0);
