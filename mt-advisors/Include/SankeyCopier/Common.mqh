@@ -206,48 +206,30 @@ public:
 
    bool SendRegister(HANDLE_TYPE socket_push)
    {
-      if(!m_initialized) 
-      {
-         Print("[ERROR] SendRegister(socket): not initialized");
-         return false;
-      }
+      if(!m_initialized) return false;
       
       uchar buffer[1024];
       int len = ea_send_register(m_context, buffer, 1024);
-      Print("[DEBUG] SendRegister(socket): ea_send_register returned len=", len);
       
       if(len > 0)
       {
-         int sent = zmq_socket_send_binary(socket_push, buffer, len);
-         Print("[DEBUG] SendRegister(socket): zmq_socket_send_binary returned ", sent);
-         return sent > 0;
+         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
       }
       return false;
    }
    
    bool SendRegister(HANDLE_TYPE zmq_context, string address)
    {
-      Print("[DEBUG] SendRegister: creating PUSH socket...");
       HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-      if(socket < 0) 
-      {
-         Print("[ERROR] SendRegister: failed to create socket, handle=", socket);
-         return false;
-      }
+      if(socket < 0) return false;
       
-      Print("[DEBUG] SendRegister: connecting to ", address);
-      int connect_result = zmq_socket_connect(socket, address);
-      Print("[DEBUG] SendRegister: zmq_socket_connect returned ", connect_result);
-      if(connect_result == 0)  // 0 = failure, 1 = success
+      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
       {
-         Print("[ERROR] SendRegister: failed to connect");
          zmq_socket_destroy(socket);
          return false;
       }
       
-      Print("[DEBUG] SendRegister: calling SendRegister(socket)...");
       bool res = SendRegister(socket);
-      Print("[DEBUG] SendRegister: result=", res);
       zmq_socket_destroy(socket);
       return res;
    }
