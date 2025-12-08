@@ -345,7 +345,7 @@ async fn evaluate_master_runtime_status(
     state: &AppState,
     trade_group: &TradeGroup,
 ) -> MasterStatusResult {
-    let master_conn = state.connection_manager.get_ea(&trade_group.id).await;
+    let master_conn = state.connection_manager.get_master(&trade_group.id).await;
     let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
         is_trade_allowed: master_conn
@@ -365,7 +365,7 @@ async fn evaluate_master_runtime_status(
 /// Send Master config to Master EA via ZMQ
 async fn send_config_to_master(state: &AppState, master_account: &str, settings: &MasterSettings) {
     // Get Master connection info
-    let master_conn = state.connection_manager.get_ea(master_account).await;
+    let master_conn = state.connection_manager.get_master(master_account).await;
     let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
         is_trade_allowed: master_conn
@@ -413,7 +413,7 @@ async fn send_config_to_master(state: &AppState, master_account: &str, settings:
 /// Called when Master switch changes to notify Slaves of the new Master status
 async fn send_config_to_slaves(state: &AppState, master_account: &str, settings: &MasterSettings) {
     // Get is_trade_allowed for Master (to calculate master_status)
-    let master_conn = state.connection_manager.get_ea(master_account).await;
+    let master_conn = state.connection_manager.get_master(master_account).await;
     let master_snapshot = ConnectionSnapshot {
         connection_status: master_conn.as_ref().map(|c| c.status),
         is_trade_allowed: master_conn
@@ -449,7 +449,7 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
     // Send config to each Slave
     for member in members {
         // Get Slave's is_trade_allowed from connection manager (if connected)
-        let slave_conn = state.connection_manager.get_ea(&member.slave_account).await;
+        let slave_conn = state.connection_manager.get_slave(&member.slave_account).await;
         let slave_snapshot = ConnectionSnapshot {
             connection_status: slave_conn.as_ref().map(|c| c.status),
             is_trade_allowed: slave_conn

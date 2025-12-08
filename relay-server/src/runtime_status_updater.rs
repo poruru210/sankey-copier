@@ -50,7 +50,7 @@ impl RuntimeStatusUpdater {
 
     #[instrument(skip(self), fields(slave_account = %slave_account))]
     pub async fn slave_connection_snapshot(&self, slave_account: &str) -> ConnectionSnapshot {
-        let slave_conn = self.connection_manager.get_ea(slave_account).await;
+        let slave_conn = self.connection_manager.get_slave(slave_account).await;
         ConnectionSnapshot {
             connection_status: slave_conn.as_ref().map(|conn| conn.status),
             is_trade_allowed: slave_conn
@@ -86,7 +86,7 @@ impl RuntimeStatusUpdater {
             }
         };
 
-        let master_conn = self.connection_manager.get_ea(master_account).await;
+        let master_conn = self.connection_manager.get_master(master_account).await;
         let snapshot = ConnectionSnapshot {
             connection_status: master_conn.as_ref().map(|conn| conn.status),
             is_trade_allowed: master_conn
@@ -126,7 +126,7 @@ impl RuntimeStatusUpdater {
         let slave_snapshot = self.slave_connection_snapshot(target.slave_account).await;
         let master_equity = self
             .connection_manager
-            .get_ea(target.master_account)
+            .get_master(target.master_account)
             .await
             .map(|conn| conn.equity);
 

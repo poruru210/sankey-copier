@@ -41,7 +41,7 @@ impl MessageHandler {
         match self.db.get_settings_for_master(account_id).await {
             Ok(master_settings) => {
                 // Get Master connection snapshot
-                let master_conn = self.connection_manager.get_ea(account_id).await;
+                let master_conn = self.connection_manager.get_master(account_id).await;
                 let master_snapshot = ConnectionSnapshot {
                     connection_status: master_conn.as_ref().map(|c| c.status),
                     is_trade_allowed: master_conn

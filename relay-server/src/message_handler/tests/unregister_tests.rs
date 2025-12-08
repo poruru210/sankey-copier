@@ -41,7 +41,7 @@ async fn test_handle_unregister() {
     .await;
 
     // Verify EA status is Offline
-    let ea = ctx.connection_manager.get_ea(&account_id).await;
+    let ea = ctx.connection_manager.get_master(&account_id).await;
     assert!(ea.is_some());
     assert_eq!(ea.unwrap().status, crate::models::ConnectionStatus::Offline);
 
@@ -99,7 +99,7 @@ async fn test_master_unregister_updates_slave_runtime_status() {
 
     let master_conn = ctx
         .connection_manager
-        .get_ea(master_account)
+        .get_master(master_account)
         .await
         .expect("master should remain tracked");
     assert_eq!(master_conn.status, crate::models::ConnectionStatus::Offline);
