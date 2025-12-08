@@ -29,7 +29,7 @@ pub struct EaConnection {
 }
 
 /// EAの種類
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum EaType {
     Master,
