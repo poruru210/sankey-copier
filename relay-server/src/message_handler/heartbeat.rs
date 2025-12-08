@@ -174,7 +174,8 @@ impl MessageHandler {
 
                             // Calculate OLD Slave Status
                             // Uses current slave settings but OLD Master Status
-                            let slave_conn = self.connection_manager.get_slave(&slave_account).await;
+                            let slave_conn =
+                                self.connection_manager.get_slave(&slave_account).await;
                             let slave_snapshot = crate::models::status_engine::ConnectionSnapshot {
                                 connection_status: slave_conn.as_ref().map(|c| c.status),
                                 is_trade_allowed: slave_conn

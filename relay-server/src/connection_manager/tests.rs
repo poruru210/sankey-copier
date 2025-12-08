@@ -207,7 +207,11 @@ async fn test_same_account_master_and_slave() {
 
     // Both should be registered
     let all_eas = manager.get_all_eas().await;
-    assert_eq!(all_eas.len(), 2, "Both Master and Slave should be registered");
+    assert_eq!(
+        all_eas.len(),
+        2,
+        "Both Master and Slave should be registered"
+    );
 
     // get_master returns Master
     let master = manager.get_master(account_id).await;

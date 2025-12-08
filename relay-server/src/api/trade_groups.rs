@@ -449,7 +449,10 @@ async fn send_config_to_slaves(state: &AppState, master_account: &str, settings:
     // Send config to each Slave
     for member in members {
         // Get Slave's is_trade_allowed from connection manager (if connected)
-        let slave_conn = state.connection_manager.get_slave(&member.slave_account).await;
+        let slave_conn = state
+            .connection_manager
+            .get_slave(&member.slave_account)
+            .await;
         let slave_snapshot = ConnectionSnapshot {
             connection_status: slave_conn.as_ref().map(|c| c.status),
             is_trade_allowed: slave_conn

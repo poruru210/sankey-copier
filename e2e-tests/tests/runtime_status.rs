@@ -127,3 +127,136 @@ async fn assert_runtime_status(
         expected, member.status
     );
 }
+
+// =============================================================================
+// Dual EA Per Account Tests (Same account_id for Master and Slave)
+// =============================================================================
+
+/// Test that Master and Slave EAs with the same account_id can both be registered
+/// This verifies the ConnectionManager composite key (account_id, ea_type) works correctly
+#[tokio::test]
+async fn test_same_account_id_master_and_slave_both_registered() {
+    let server = RelayServerProcess::start().expect("Failed to start server");
+    let db = Database::new(&server.db_url())
+        .await
+        .expect("Failed to connect to database");
+
+    // Use the SAME account_id for both Master and Slave
+    let shared_account = "DUAL_EA_SAME_001";
+    let other_slave = "DUAL_EA_SLAVE_ONLY_001";
+
+    // Setup: shared_account is a Master with another slave
+    // Also, shared_account can connect as a Slave to a different Master (not in this test)
+    db.create_trade_group(shared_account)
+        .await
+        .expect("Failed to create trade group");
+
+    let master_settings = MasterSettings {
+        enabled: true,
+        config_version: 1,
+        ..Default::default()
+    };
+    db.update_master_settings(shared_account, master_settings)
+        .await
+        .expect("Failed to update master settings");
+
+    // Add another slave to this master
+    db.add_member(
+        shared_account,
+        other_slave,
+        default_test_slave_settings(),
+        STATUS_DISABLED,
+    )
+    .await
+    .expect("Failed to add member");
+    db.update_member_enabled_flag(shared_account, other_slave, true)
+        .await
+        .expect("Failed to enable member");
+
+    // Create Master EA simulator (with shared_account as account_id)
+    let mut master_ea = MasterEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        shared_account, // Same account_id
+    )
+    .expect("Failed to create Master simulator");
+
+    // Create Slave EA simulator (with shared_account as account_id, connected to a different master)
+    // For this test, we'll simulate a Slave with the same account_id
+    // In real scenario, this would be the same MT account running both Master and Slave EAs
+    let mut slave_ea = SlaveEaSimulator::new(
+        &server.zmq_pull_address(),
+        &server.zmq_pub_address(),
+        &server.zmq_pub_address(),
+        shared_account,      // Same account_id as Master
+        "SOME_OTHER_MASTER", // Connected to a different master (doesn't need to exist for this test)
+    )
+    .expect("Failed to create Slave simulator");
+
+    // Allow ZMQ connections to stabilize (avoid "slow joiner" problem)
+    sleep(Duration::from_millis(500)).await;
+
+    // Start Master EA first
+    master_ea.set_trade_allowed(true);
+    master_ea.start().expect("Master should start");
+
+    // Wait for Master heartbeat to be processed (Master OnTimer runs every 100ms)
+    sleep(Duration::from_millis(1000)).await;
+
+    // Then start Slave EA
+    slave_ea.set_trade_allowed(true);
+    slave_ea.start().expect("Slave should start");
+
+    // Wait for Slave heartbeat to be processed
+    sleep(Duration::from_millis(1000)).await;
+
+    // Verify via API: GET /api/connections should show both EAs
+    // Note: Test environment uses self-signed certificates
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create HTTP client");
+    let response = client
+        .get(format!("{}/api/connections", server.http_base_url()))
+        .send()
+        .await
+        .expect("HTTP request should succeed");
+
+    assert!(response.status().is_success(), "API should return success");
+
+    let connections: Vec<serde_json::Value> =
+        response.json().await.expect("Should parse JSON response");
+
+    // Filter connections for shared_account
+    let shared_connections: Vec<_> = connections
+        .iter()
+        .filter(|c| c["account_id"].as_str() == Some(shared_account))
+        .collect();
+
+    assert_eq!(
+        shared_connections.len(),
+        2,
+        "Should have 2 connections for the same account_id (Master and Slave). Got {} connections. All connections: {:?}",
+        shared_connections.len(),
+        connections.iter().map(|c| format!("{}:{}", c["account_id"].as_str().unwrap_or("?"), c["ea_type"].as_str().unwrap_or("?"))).collect::<Vec<_>>()
+    );
+
+    // Verify both EA types are present
+    let ea_types: Vec<_> = shared_connections
+        .iter()
+        .filter_map(|c| c["ea_type"].as_str())
+        .collect();
+
+    assert!(
+        ea_types.contains(&"Master"),
+        "Should have Master EA for shared account"
+    );
+    assert!(
+        ea_types.contains(&"Slave"),
+        "Should have Slave EA for shared account"
+    );
+
+    println!("✅ Same account_id Master and Slave both registered test passed");
+    println!("   account_id: {}", shared_account);
+    println!("   EA types: {:?}", ea_types);
+}

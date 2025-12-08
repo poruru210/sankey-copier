@@ -43,7 +43,7 @@ impl ConnectionManager {
         let account_id = &msg.account_id;
         let ea_type: EaType = msg.ea_type.parse().unwrap_or(EaType::Master);
         let key = (account_id.clone(), ea_type);
-        
+
         let mut connections = self.connections.write().await;
 
         if let Some(conn) = connections.get_mut(&key) {

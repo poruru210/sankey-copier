@@ -38,8 +38,11 @@ pub async fn get_connection(
     let span = tracing::info_span!("get_connection", account_id = %account_id);
     let _enter = span.enter();
 
-    let connections = state.connection_manager.get_eas_by_account(&account_id).await;
-    
+    let connections = state
+        .connection_manager
+        .get_eas_by_account(&account_id)
+        .await;
+
     if connections.is_empty() {
         tracing::warn!(
             account_id = %account_id,
