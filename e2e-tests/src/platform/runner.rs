@@ -137,6 +137,11 @@ impl PlatformRunner {
             self.running.store(false, Ordering::SeqCst);
         }
     }
+
+    /// イベントセンダーのクローンを取得します
+    pub fn get_sender(&self) -> std::sync::mpsc::Sender<PlatformEvent> {
+        self.sender.clone()
+    }
 }
 
 impl Drop for PlatformRunner {

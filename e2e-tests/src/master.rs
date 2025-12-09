@@ -3,6 +3,7 @@
 // Master EA Simulator - MQL5 SankeyCopierMaster.mq5 完全準拠実装
 //
 // Refactored to use EaContext via FFI, demonstrating strict encapsulation and Strategy Pattern.
+// Now using the Platform Simulator infrastructure.
 
 #![allow(unused_imports)]
 
@@ -22,6 +23,9 @@ use sankey_copier_zmq::ffi::{
 use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
+use crate::platform::runner::PlatformRunner;
+use crate::platform::traits::ExpertAdvisor;
+use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
     EaType, MasterConfigMessage, OrderType, PositionInfo, PositionSnapshotMessage,
     SyncRequestMessage, TradeAction, TradeSignal, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
@@ -34,7 +38,240 @@ unsafe impl Send for ContextWrapper {}
 unsafe impl Sync for ContextWrapper {}
 
 // =============================================================================
-// Master EA Simulator
+// Master EA Core (MQL5 Logic)
+// =============================================================================
+
+#[derive(Clone)]
+struct MasterEaCore {
+    // Shared state from MasterEaSimulator
+    account_id: String,
+    ea_type: EaType,
+    heartbeat_params: crate::types::HeartbeatParams,
+    _shutdown_flag: Arc<AtomicBool>,
+    is_trade_allowed: Arc<AtomicBool>,
+
+    g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
+    g_config_requested: Arc<AtomicBool>,
+    g_last_trade_allowed: Arc<AtomicBool>,
+    g_server_status: Arc<AtomicI32>,
+    g_symbol_prefix: Arc<Mutex<String>>,
+    g_symbol_suffix: Arc<Mutex<String>>,
+
+    received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
+    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
+
+    g_register_sent: Arc<AtomicBool>,
+    context: Arc<Mutex<Option<ContextWrapper>>>,
+    push_address: String,
+    config_address: String,
+    pending_subscriptions: Arc<Mutex<Vec<String>>>,
+}
+
+impl ExpertAdvisor for MasterEaCore {
+    fn on_init(&mut self) -> ENUM_INIT_RETCODE {
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        let acc_id_u16 = to_u16(&self.account_id);
+        let ea_type_u16 = to_u16(self.ea_type.as_str());
+        let platform_u16 = to_u16("MT5");
+        let broker_u16 = to_u16("TestBroker");
+        let acc_name_u16 = to_u16(&self.heartbeat_params.account_name);
+        let server_u16 = to_u16("TestServer");
+        let currency_u16 = to_u16("USD");
+
+        let ctx = unsafe {
+            ea_init(
+                acc_id_u16.as_ptr(),
+                ea_type_u16.as_ptr(),
+                platform_u16.as_ptr(),
+                self.heartbeat_params.account_number,
+                broker_u16.as_ptr(),
+                acc_name_u16.as_ptr(),
+                server_u16.as_ptr(),
+                currency_u16.as_ptr(),
+                self.heartbeat_params.leverage,
+            )
+        };
+
+        if ctx.is_null() {
+            eprintln!("Failed to initialize EA context!");
+            return ENUM_INIT_RETCODE::INIT_FAILED;
+        }
+
+        {
+            let mut guard = self.context.lock().unwrap();
+            *guard = Some(ContextWrapper(ctx));
+        }
+
+        let push_u16 = to_u16(&self.push_address);
+        let sub_u16 = to_u16(&self.config_address);
+
+        unsafe {
+            if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
+                eprintln!("Failed to connect EA context!");
+                return ENUM_INIT_RETCODE::INIT_FAILED;
+            }
+        }
+
+        ENUM_INIT_RETCODE::INIT_SUCCEEDED
+    }
+
+    fn on_deinit(&mut self, _reason: ENUM_DEINIT_REASON) {
+        let mut guard = self.context.lock().unwrap();
+        if let Some(wrapper) = guard.take() {
+            let ctx = wrapper.0;
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe {
+                sankey_copier_zmq::ffi::ea_send_unregister(
+                    ctx,
+                    buffer.as_mut_ptr(),
+                    buffer.len() as i32,
+                )
+            };
+            if len > 0 {
+                unsafe {
+                    ea_send_push(ctx, buffer.as_ptr(), len);
+                }
+            }
+            unsafe {
+                ea_context_free(ctx);
+            }
+        }
+    }
+
+    fn on_timer(&mut self) {
+        // Retrieve context
+        let guard = self.context.lock().unwrap();
+        let ctx = match guard.as_ref() {
+            Some(w) => w.0,
+            None => return,
+        };
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        // Process pending subscriptions
+        {
+            let mut subs = self.pending_subscriptions.lock().unwrap();
+            if !subs.is_empty() {
+                for topic in subs.iter() {
+                    let topic_u16 = to_u16(topic);
+                    unsafe {
+                        ea_subscribe_config(ctx, topic_u16.as_ptr());
+                    }
+                }
+                subs.clear();
+            }
+        }
+
+        // Register (should be done once)
+        if !self.g_register_sent.load(Ordering::SeqCst) {
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
+            if len > 0 {
+                unsafe {
+                    ea_send_push(ctx, buffer.as_ptr(), len);
+                }
+                self.g_register_sent.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let current_trade_allowed = self.is_trade_allowed.load(Ordering::SeqCst);
+        let last_trade_allowed_val = self.g_last_trade_allowed.load(Ordering::SeqCst);
+        let trade_state_changed = current_trade_allowed != last_trade_allowed_val;
+
+        let now = Instant::now();
+        let last_hb = *self.g_last_heartbeat.lock().unwrap();
+        let should_send_heartbeat = match last_hb {
+            None => true,
+            Some(last) => {
+                now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
+                    || trade_state_changed
+            }
+        };
+
+        if should_send_heartbeat {
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe {
+                ea_send_heartbeat(
+                    ctx,
+                    self.heartbeat_params.balance,
+                    self.heartbeat_params.equity,
+                    0, // open_positions
+                    if current_trade_allowed { 1 } else { 0 },
+                    buffer.as_mut_ptr(),
+                    buffer.len() as i32,
+                )
+            };
+
+            if len > 0 {
+                unsafe {
+                    ea_send_push(ctx, buffer.as_ptr(), len);
+                }
+
+                *self.g_last_heartbeat.lock().unwrap() = Some(Instant::now());
+                if trade_state_changed {
+                    self.g_last_trade_allowed
+                        .store(current_trade_allowed, Ordering::SeqCst);
+                }
+
+                let should_request = unsafe {
+                    ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
+                };
+
+                if should_request == 1 {
+                    unsafe {
+                        sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0);
+                    }
+                    self.g_config_requested.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+
+        // Config Receive Loop
+        loop {
+            let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
+
+            let received_bytes = unsafe {
+                ea_receive_config(ctx, buffer.as_mut_ptr(), crate::types::BUFFER_SIZE as i32)
+            };
+
+            if received_bytes <= 0 {
+                break;
+            }
+
+            let bytes = &buffer[..received_bytes as usize];
+            if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
+                let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
+                let payload = &bytes[space_pos + 1..];
+
+                if topic.starts_with("sync/") {
+                    if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
+                        self.received_sync_requests.lock().unwrap().push(msg);
+                    }
+                } else if topic.starts_with("config/") {
+                    if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(payload) {
+                        self.g_server_status.store(config.status, Ordering::SeqCst);
+                        if let Some(prefix) = &config.symbol_prefix {
+                            *self.g_symbol_prefix.lock().unwrap() = prefix.clone();
+                        }
+                        if let Some(suffix) = &config.symbol_suffix {
+                            *self.g_symbol_suffix.lock().unwrap() = suffix.clone();
+                        }
+                        unsafe {
+                            ea_context_mark_config_requested(ctx);
+                        }
+                        *self.received_config.lock().unwrap() = Some(config);
+                    } else if let Ok(vlogs) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
+                        self.received_vlogs_configs.lock().unwrap().push(vlogs);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Master EA Simulator (Facade)
 // =============================================================================
 
 pub struct MasterEaSimulator {
@@ -51,11 +288,14 @@ pub struct MasterEaSimulator {
     // --- Received Data Queues (Verification) ---
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
-    received_config: Arc<Mutex<Option<MasterConfigMessage>>>, // For test verification
+    received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
     // --- State ---
     g_register_sent: Arc<AtomicBool>,
-    ontimer_thread: Option<JoinHandle<()>>,
+
+    // Platform Runner & Timer Thread
+    runner: Option<PlatformRunner>,
+    timer_thread: Option<JoinHandle<()>>,
 
     // --- Context (Managed in OnTimer thread, accessible via FFI wrapper) ---
     context: Arc<Mutex<Option<ContextWrapper>>>,
@@ -70,7 +310,6 @@ pub struct MasterEaSimulator {
 
 impl MasterEaSimulator {
     pub fn new(push_address: &str, config_address: &str, account_id: &str) -> Result<Self> {
-        // Use new_without_zmq to avoid creating raw sockets in base
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master)?;
 
         Ok(Self {
@@ -85,7 +324,8 @@ impl MasterEaSimulator {
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
             received_config: Arc::new(Mutex::new(None)),
             g_register_sent: Arc::new(AtomicBool::new(false)),
-            ontimer_thread: None,
+            runner: None,
+            timer_thread: None,
             context: Arc::new(Mutex::new(None)),
             push_address: push_address.to_string(),
             config_address: config_address.to_string(),
@@ -94,246 +334,57 @@ impl MasterEaSimulator {
     }
 
     pub fn start(&mut self) -> Result<()> {
-        if self.ontimer_thread.is_some() {
+        if self.runner.is_some() {
             return Ok(());
         }
 
-        let account_id = self.base.account_id().to_string();
-        let shutdown_flag = self.base.shutdown_flag.clone();
-        let is_trade_allowed = self.base.is_trade_allowed_arc();
-        let heartbeat_params = self.base.heartbeat_params.clone();
-        let ea_type_val = self.base.ea_type;
+        let core = MasterEaCore {
+            account_id: self.base.account_id().to_string(),
+            ea_type: self.base.ea_type,
+            heartbeat_params: self.base.heartbeat_params.clone(),
+            _shutdown_flag: self.base.shutdown_flag.clone(),
+            is_trade_allowed: self.base.is_trade_allowed_arc(),
+            g_last_heartbeat: self.g_last_heartbeat.clone(),
+            g_config_requested: self.g_config_requested.clone(),
+            g_last_trade_allowed: self.g_last_trade_allowed.clone(),
+            g_server_status: self.g_server_status.clone(),
+            g_symbol_prefix: self.g_symbol_prefix.clone(),
+            g_symbol_suffix: self.g_symbol_suffix.clone(),
+            received_sync_requests: self.received_sync_requests.clone(),
+            received_vlogs_configs: self.received_vlogs_configs.clone(),
+            received_config: self.received_config.clone(),
+            g_register_sent: self.g_register_sent.clone(),
+            context: self.context.clone(),
+            push_address: self.push_address.clone(),
+            config_address: self.config_address.clone(),
+            pending_subscriptions: self.pending_subscriptions.clone(),
+        };
 
-        let g_last_heartbeat = self.g_last_heartbeat.clone();
-        let g_config_requested = self.g_config_requested.clone();
-        let g_last_trade_allowed = self.g_last_trade_allowed.clone();
-        let g_server_status = self.g_server_status.clone();
-        let g_symbol_prefix = self.g_symbol_prefix.clone();
-        let g_symbol_suffix = self.g_symbol_suffix.clone();
-        let received_sync_requests = self.received_sync_requests.clone();
-        let received_vlogs_configs = self.received_vlogs_configs.clone();
-        let received_config = self.received_config.clone();
-        let g_register_sent = self.g_register_sent.clone();
-        let context_mutex = self.context.clone();
-        let push_addr = self.push_address.clone();
-        let config_addr = self.config_address.clone();
-        let pending_subs = self.pending_subscriptions.clone();
+        // Initialize Platform Runner
+        let runner = PlatformRunner::new(core);
+        let sender = runner.get_sender();
 
-        let handle = std::thread::spawn(move || {
-            let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
-
-            // 1. ea_init
-            let acc_id_u16 = to_u16(&account_id);
-            let ea_type_u16 = to_u16(ea_type_val.as_str());
-            let platform_u16 = to_u16("MT5");
-            let broker_u16 = to_u16("TestBroker");
-            let acc_name_u16 = to_u16(&heartbeat_params.account_name);
-            let server_u16 = to_u16("TestServer");
-            let currency_u16 = to_u16("USD");
-
-            let ctx = unsafe {
-                ea_init(
-                    acc_id_u16.as_ptr(),
-                    ea_type_u16.as_ptr(),
-                    platform_u16.as_ptr(),
-                    heartbeat_params.account_number,
-                    broker_u16.as_ptr(),
-                    acc_name_u16.as_ptr(),
-                    server_u16.as_ptr(),
-                    currency_u16.as_ptr(),
-                    heartbeat_params.leverage,
-                )
-            };
-
-            if ctx.is_null() {
-                eprintln!("Failed to initialize EA context!");
-                return;
-            }
-
-            {
-                let mut guard = context_mutex.lock().unwrap();
-                *guard = Some(ContextWrapper(ctx));
-            }
-
-            // 2. ea_connect
-            let push_u16 = to_u16(&push_addr);
-            let sub_u16 = to_u16(&config_addr);
-            // trade_u16 not used in ea_connect signature anymore (Strategy handles sub reuse)
-
-            unsafe {
-                if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
-                    eprintln!("Failed to connect EA context!");
-                    return;
-                }
-            }
-
-            // 3. OnTimer Loop
-            while !shutdown_flag.load(Ordering::SeqCst) {
-                // Process pending subscriptions
-                {
-                    let mut subs = pending_subs.lock().unwrap();
-                    if !subs.is_empty() {
-                        for topic in subs.iter() {
-                            let topic_u16 = to_u16(topic);
-                            unsafe {
-                                ea_subscribe_config(ctx, topic_u16.as_ptr());
-                            }
-                        }
-                        subs.clear();
-                    }
-                }
-
-                std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
-                if shutdown_flag.load(Ordering::SeqCst) {
-                    break;
-                }
-
-                // P. Register
-                if !g_register_sent.load(Ordering::SeqCst) {
-                    let mut buffer = vec![0u8; 1024];
-                    let len =
-                        unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
-                    if len > 0 {
-                        unsafe {
-                            ea_send_push(ctx, buffer.as_ptr(), len);
-                        }
-                        g_register_sent.store(true, Ordering::SeqCst);
-                    }
-                }
-
-                let current_trade_allowed = is_trade_allowed.load(Ordering::SeqCst);
-                let last_trade_allowed_val = g_last_trade_allowed.load(Ordering::SeqCst);
-                let trade_state_changed = current_trade_allowed != last_trade_allowed_val;
-
-                let now = Instant::now();
-                let last_hb = *g_last_heartbeat.lock().unwrap();
-                let should_send_heartbeat = match last_hb {
-                    None => true,
-                    Some(last) => {
-                        now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
-                            || trade_state_changed
-                    }
-                };
-
-                if should_send_heartbeat {
-                    let mut buffer = vec![0u8; 1024];
-                    let len = unsafe {
-                        ea_send_heartbeat(
-                            ctx,
-                            heartbeat_params.balance,
-                            heartbeat_params.equity,
-                            0, // open_positions
-                            if current_trade_allowed { 1 } else { 0 },
-                            buffer.as_mut_ptr(),
-                            buffer.len() as i32,
-                        )
-                    };
-
-                    if len > 0 {
-                        unsafe {
-                            ea_send_push(ctx, buffer.as_ptr(), len);
-                        }
-
-                        *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-                        if trade_state_changed {
-                            g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
-                        }
-
-                        let should_request = unsafe {
-                            ea_context_should_request_config(
-                                ctx,
-                                if current_trade_allowed { 1 } else { 0 },
-                            )
-                        };
-
-                        if should_request == 1 {
-                            unsafe {
-                                sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0);
-                            }
-                            g_config_requested.store(true, Ordering::SeqCst);
-                        }
-                    }
-                }
-
-                // Config Receive Loop
-                loop {
-                    let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-
-                    let received_bytes = unsafe {
-                        ea_receive_config(
-                            ctx,
-                            buffer.as_mut_ptr(),
-                            crate::types::BUFFER_SIZE as i32,
-                        )
-                    };
-
-                    if received_bytes <= 0 {
-                        break;
-                    }
-
-                    let bytes = &buffer[..received_bytes as usize];
-                    if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                        let payload = &bytes[space_pos + 1..];
-
-                        if topic.starts_with("sync/") {
-                            if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
-                                received_sync_requests.lock().unwrap().push(msg);
-                            }
-                        } else if topic.starts_with("config/") {
-                            if let Ok(config) =
-                                rmp_serde::from_slice::<MasterConfigMessage>(payload)
-                            {
-                                g_server_status.store(config.status, Ordering::SeqCst);
-                                if let Some(prefix) = &config.symbol_prefix {
-                                    *g_symbol_prefix.lock().unwrap() = prefix.clone();
-                                }
-                                if let Some(suffix) = &config.symbol_suffix {
-                                    *g_symbol_suffix.lock().unwrap() = suffix.clone();
-                                }
-                                unsafe {
-                                    ea_context_mark_config_requested(ctx);
-                                }
-                                *received_config.lock().unwrap() = Some(config);
-                            } else if let Ok(vlogs) =
-                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
-                            {
-                                received_vlogs_configs.lock().unwrap().push(vlogs);
-                            }
-                        }
-                    }
-                }
-            } // End While
-
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe {
-                sankey_copier_zmq::ffi::ea_send_unregister(
-                    ctx,
-                    buffer.as_mut_ptr(),
-                    buffer.len() as i32,
-                )
-            };
-            if len > 0 {
-                unsafe {
-                    ea_send_push(ctx, buffer.as_ptr(), len);
-                }
-            }
-
-            {
-                let mut guard = context_mutex.lock().unwrap();
-                *guard = None;
-            }
-            unsafe {
-                ea_context_free(ctx);
-            }
-        });
-
-        self.ontimer_thread = Some(handle);
+        self.runner = Some(runner);
 
         // Wait for initialization
         let start = std::time::Instant::now();
         while start.elapsed().as_secs() < 5 {
             if self.context.lock().unwrap().is_some() {
+                // Initialized. Now start timer thread.
+                let shutdown_flag = self.base.shutdown_flag.clone();
+                let timer_sender = sender.clone();
+
+                let handle = std::thread::spawn(move || {
+                    while !shutdown_flag.load(Ordering::SeqCst) {
+                        std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
+                        if shutdown_flag.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let _ = timer_sender.send(crate::platform::runner::PlatformEvent::Timer);
+                    }
+                });
+
+                self.timer_thread = Some(handle);
                 return Ok(());
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -344,9 +395,7 @@ impl MasterEaSimulator {
         ))
     }
 
-    // =========================================================================
-    // Helpers
-    // =========================================================================
+    // ... Helpers ... (rest of the file)
     pub fn account_id(&self) -> &str {
         self.base.account_id()
     }
@@ -383,7 +432,6 @@ impl MasterEaSimulator {
         Ok(None)
     }
 
-    // For test compatibility - returns config if received, but does NOT consume from socket directly
     pub fn try_receive_master_config(
         &self,
         timeout_ms: i32,
@@ -408,7 +456,6 @@ impl MasterEaSimulator {
 
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
-        // If signal has a custom timestamp (simulated delay), use raw bytes to bypass FFI timestamp generation
         if (Utc::now() - signal.timestamp).num_seconds().abs() > 1 {
             let bytes = rmp_serde::to_vec_named(signal)?;
             let ret = unsafe { ea_send_push(ctx, bytes.as_ptr(), bytes.len() as i32) };
@@ -456,7 +503,7 @@ impl MasterEaSimulator {
                         ctx,
                         signal.ticket,
                         signal.lots.unwrap_or(0.0),
-                        signal.close_ratio.unwrap_or(1.0), // Default to full close if not specified
+                        signal.close_ratio.unwrap_or(1.0),
                     )
                 };
                 if ret != 1 {
@@ -659,7 +706,10 @@ impl MasterEaSimulator {
 impl Drop for MasterEaSimulator {
     fn drop(&mut self) {
         self.base.shutdown_flag.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.ontimer_thread.take() {
+        if let Some(mut runner) = self.runner.take() {
+            runner.stop(ENUM_DEINIT_REASON::REASON_REMOVE);
+        }
+        if let Some(handle) = self.timer_thread.take() {
             let _ = handle.join();
         }
     }
