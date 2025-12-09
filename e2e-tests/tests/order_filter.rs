@@ -75,8 +75,8 @@ async fn test_partial_close_signal() {
     let open_sig = received_open.unwrap();
     assert_eq!(
         open_sig.lots,
-        Some(1.0),
-        "Lots should be passed through unchanged (Slave EA handles calculation)"
+        Some(2.0),
+        "Lots should be calculated by mt-bridge (1.0 * 2.0 = 2.0)"
     );
 
     // Step 2: Partial close with 50% close_ratio
@@ -100,10 +100,23 @@ async fn test_partial_close_signal() {
         Some(0.5),
         "close_ratio should be preserved: 0.5"
     );
+    // Note: Close signal lots might also be transformed if we implemented it for Close.
+    // In `ea_context.rs`, we currently only implemented `transform_lot_size` for `Open`.
+    // For `Close`, MQL traditionally uses `Ticket` to close volume.
+    // If partial close, `lots` usually means "volume to close".
+    // Does Master send "Volume to close" or "Total Volume"?
+    // Master sends "Original Volume" and "Close Ratio".
+    // If we transformed Open Volume (2.0), we should probably transform Close Volume too?
+    // Current `ea_context.rs` `process_incoming_trade`:
+    // It applies `transform_lot_size` for ALL actions?
+    // Let's check `ea_context.rs`:
+    // `let raw_lots = signal.lots.unwrap_or(0.0); let final_lots = transform_lot_size(...)`
+    // Yes, it applies to all.
+    // So if Master says "Close 1.0 lot" (which was 2.0 on Slave), Slave should receive "Close 2.0 lot".
     assert_eq!(
         received_signal.lots,
-        Some(1.0),
-        "Lots should be passed through unchanged"
+        Some(2.0),
+        "Lots should be calculated by mt-bridge (1.0 * 2.0 = 2.0)"
     );
 
     println!("✅ test_partial_close_signal passed");

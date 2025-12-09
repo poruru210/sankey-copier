@@ -368,7 +368,7 @@ async fn test_reverse_trade_buy_to_sell() {
     slave.start().expect("Failed to start slave");
     sleep(Duration::from_millis(2000)).await;
 
-    // Send Buy signal - passed through unchanged (Slave EA handles reversal)
+    // Send Buy signal - should be reversed to Sell by mt-bridge
     let signal = master.create_open_signal(
         12345,
         "EURUSD",
@@ -392,8 +392,8 @@ async fn test_reverse_trade_buy_to_sell() {
 
     assert_eq!(
         sig.order_type,
-        Some(e2e_tests::types::OrderType::Buy),
-        "Order type should be passed through unchanged (Slave EA handles reversal)"
+        Some(e2e_tests::types::OrderType::Sell),
+        "Order type should be reversed to Sell by mt-bridge"
     );
 
     println!("✅ test_reverse_trade_buy_to_sell passed");
@@ -433,7 +433,7 @@ async fn test_reverse_trade_pending_orders() {
     slave.start().expect("Failed to start slave");
     sleep(Duration::from_millis(2000)).await;
 
-    // Send BuyLimit - passed through unchanged (Slave EA handles reversal)
+    // Send BuyLimit - should be reversed to SellLimit by mt-bridge
     let signal = master.create_open_signal(
         12345,
         "EURUSD",
@@ -457,8 +457,8 @@ async fn test_reverse_trade_pending_orders() {
 
     assert_eq!(
         sig.order_type,
-        Some(e2e_tests::types::OrderType::BuyLimit),
-        "Order type should be passed through unchanged (Slave EA handles reversal)"
+        Some(e2e_tests::types::OrderType::SellLimit),
+        "Order type should be reversed to SellLimit by mt-bridge"
     );
 
     println!("✅ test_reverse_trade_pending_orders passed");

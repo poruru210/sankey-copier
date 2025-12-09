@@ -390,11 +390,11 @@ async fn test_slave_individual_lot_multiplier() {
 
     assert_eq!(signals.len(), 1, "Should receive 1 signal");
 
-    // Verify lots are passed through unchanged (Slave EA handles lot calculation)
+    // Verify lots are transformed by mt-bridge (0.1 * 2.0 = 0.2)
     let lots = signals[0].lots.expect("lots should be present");
     assert!(
-        (lots - 0.1).abs() < 0.001,
-        "Lots should be 0.1 (passed through unchanged), got {}",
+        (lots - 0.2).abs() < 0.001,
+        "Lots should be 0.2 (0.1 * 2.0 calculated by mt-bridge), got {}",
         lots
     );
 

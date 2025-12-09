@@ -239,6 +239,14 @@ impl ExpertAdvisor for SlaveEaCore {
                             Some(comment_str)
                         };
 
+                        // New: Source Account from EaCommand
+                        let src_bytes = &cmd.source_account;
+                         let end_src = src_bytes
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(src_bytes.len());
+                        let source_account = String::from_utf8_lossy(&src_bytes[..end_src]).to_string();
+
                         let signal = TradeSignal {
                             action,
                             ticket: cmd.ticket,
@@ -260,7 +268,7 @@ impl ExpertAdvisor for SlaveEaCore {
                             comment: comment,
                             timestamp: chrono::DateTime::from_timestamp(cmd.timestamp, 0)
                                 .unwrap_or_else(chrono::Utc::now),
-                            source_account: "unknown".to_string(), // Inferred from context if needed
+                            source_account: source_account, // Used new field
                             close_ratio: if cmd.close_ratio.abs() < 1e-6 {
                                 None
                             } else {

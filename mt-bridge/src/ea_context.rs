@@ -7,9 +7,9 @@
 use crate::communication::{CommunicationStrategy, MasterStrategy, NoOpStrategy, SlaveStrategy};
 use crate::constants::{OrderType, TradeAction};
 use crate::errors::BridgeError;
-use crate::types::{RequestConfigMessage, TradeSignal};
+use crate::types::{RequestConfigMessage, SlaveConfigMessage, TradeSignal};
 use chrono::{DateTime, Utc};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 
 // Command types corresponding to MQL
@@ -47,7 +47,10 @@ pub struct EaCommand {
     pub magic: i64,
     pub close_ratio: f64,
     pub timestamp: i64,
-    pub comment: [u8; 64],
+    pub comment: [u8; 64], // MQL Comment
+
+    // New field for Source Account (Master ID)
+    pub source_account: [u8; 64],
 }
 
 impl Default for EaCommand {
@@ -67,6 +70,7 @@ impl Default for EaCommand {
             close_ratio: 0.0,
             timestamp: 0,
             comment: [0; 64],
+            source_account: [0; 64],
         }
     }
 }
@@ -106,7 +110,9 @@ pub struct EaContext {
 
     // --- Cached Config ---
     pub last_master_config: Option<crate::types::MasterConfigMessage>,
-    pub last_slave_config: Option<crate::types::SlaveConfigMessage>,
+    pub slave_configs: HashMap<String, SlaveConfigMessage>, // Key: Master Account ID
+    pub last_slave_config: Option<crate::types::SlaveConfigMessage>, // For UI update command (latest received)
+
     pub last_position_snapshot: Option<crate::types::PositionSnapshotMessage>,
     pub last_sync_request: Option<crate::types::SyncRequestMessage>,
 
@@ -154,6 +160,7 @@ impl EaContext {
             current_equity: 0.0,
             current_open_positions: 0,
             last_master_config: None,
+            slave_configs: HashMap::new(),
             last_slave_config: None,
             last_position_snapshot: None,
             last_sync_request: None,
@@ -336,18 +343,28 @@ impl EaContext {
                 let master_acc = config.master_account.clone();
                 // Also sync topic
                 let sync_topic = format!("sync/{}/{}", master_acc, self.account_id);
-                // For trade subscription, specific master logic is handled but
-                // typically we subscribe to specific masters.
-                // In new protocol, topic is trade/{master_acc}/
-                // Current subscribe_trade handles it.
-                let _ = self.subscribe_trade(&master_acc);
-                let _ = self.subscribe_config(&sync_topic);
 
+                // Subscribe if not disabled
+                if config.status != 0 {
+                    let _ = self.subscribe_trade(&master_acc);
+                    let _ = self.subscribe_config(&sync_topic);
+                }
+
+                // Store in HashMap
+                // -1: No Config (Remove)
+                // 0: Disabled (Keep but maybe don't trade)
+                // 1, 2: Enabled
+                if config.status == -1 {
+                    self.slave_configs.remove(&master_acc);
+                } else {
+                    self.slave_configs.insert(master_acc.clone(), config.clone());
+                }
+
+                // For UI Update, we set this one as the "last received" one so UI can update this specific entry
                 self.last_slave_config = Some(config);
             }
         }
 
-        // Trigger UPDATE_UI command
         // Trigger UPDATE_UI command
         let cmd = EaCommand {
             command_type: EaCommandType::UpdateUi as i32,
@@ -386,7 +403,59 @@ impl EaContext {
     fn process_incoming_trade(&mut self, data: &[u8]) {
         // Parse trade signal
         if let Ok(signal) = rmp_serde::from_slice::<TradeSignal>(data) {
-            // Convert to EaCommand
+
+            // --- Business Logic: Config Lookup & Transformation ---
+
+            // 1. Find Config
+            let config = match self.slave_configs.get(&signal.source_account) {
+                Some(c) => c,
+                None => {
+                    // Config not found for this master - ignore trade
+                    // In future we might log this to a structured log
+                    eprintln!("Ignored trade from {}: No active config", signal.source_account);
+                    return;
+                }
+            };
+
+            // 2. Check Filters (Basic)
+            // allow_new_orders check for Open signals
+            if signal.action == TradeAction::Open {
+                if !config.allow_new_orders || config.status <= 0 {
+                    eprintln!("Ignored open from {}: New orders disabled", signal.source_account);
+                    return;
+                }
+
+                // Check allowed symbols (if list is not empty)
+                if let Some(allowed) = &config.filters.allowed_symbols {
+                    if !allowed.is_empty() && !allowed.contains(signal.symbol.as_ref().unwrap_or(&"".to_string())) {
+                        return; // Symbol not allowed
+                    }
+                }
+
+                // Check blocked symbols
+                if let Some(blocked) = &config.filters.blocked_symbols {
+                     if blocked.contains(signal.symbol.as_ref().unwrap_or(&"".to_string())) {
+                        return; // Symbol blocked
+                    }
+                }
+
+                // Check magic numbers (optional logic, usually handled by checking signal magic?)
+                // Assuming signal.magic is the Master's magic.
+                if let Some(magic) = signal.magic_number {
+                    if let Some(allowed) = &config.filters.allowed_magic_numbers {
+                         if !allowed.is_empty() && !allowed.contains(&magic) {
+                            return;
+                        }
+                    }
+                    if let Some(blocked) = &config.filters.blocked_magic_numbers {
+                        if blocked.contains(&magic) {
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // 3. Transform Values
             let mut cmd = EaCommand {
                 command_type: match signal.action {
                     TradeAction::Open => EaCommandType::Open as i32,
@@ -401,21 +470,67 @@ impl EaContext {
             }
 
             cmd.ticket = signal.ticket;
-            if let Some(s) = signal.symbol {
-                copy_string_to_array(&s, &mut cmd.symbol);
+
+            // Symbol is already transformed by Relay Server typically,
+            // BUT config might have local prefix/suffix?
+            // "Symbol transformation is now handled by Relay Server" according to MQL comments.
+            // So we take symbol as is.
+            if let Some(s) = &signal.symbol {
+                copy_string_to_array(s, &mut cmd.symbol);
             }
+
+            // Order Type Reversal
             if let Some(ot) = signal.order_type {
-                cmd.order_type = i32::from(ot);
+                let final_ot = if config.reverse_trade {
+                    ot.reverse()
+                } else {
+                    ot
+                };
+                cmd.order_type = i32::from(final_ot);
             }
-            cmd.volume = signal.lots.unwrap_or(0.0);
+
+            // Lot Calculation
+            let raw_lots = signal.lots.unwrap_or(0.0);
+            let final_lots = transform_lot_size(
+                raw_lots,
+                config,
+                self.current_equity
+            );
+            cmd.volume = final_lots;
+
+            // Price, SL, TP - passed as is?
+            // Ideally SL/TP distance should be respected if reversing?
+            // For now, simpler logic: pass as is (Relay server might handle reverse logic for SL/TP?)
+            // If we reverse "Buy" to "Sell", we must swap SL/TP relative to price?
+            // Actually, if we reverse, we probably shouldn't blindly copy absolute SL/TP prices.
+            // But implementing full reverse SL/TP logic here is complex.
+            // Assuming "Simple Reverse" for now or that Master/Relay handles it?
+            // In MQL implementation: `ReverseOrderType` only flipped the enum string.
+            // It did NOT seem to recalculate SL/TP prices in the snippet provided.
+            // Wait, `SlaveTrade.mqh` logic:
+            // `transformed_order_type = ReverseOrderType(...)`
+            // `ExecuteOpenTrade` receives `cmd.price, cmd.sl, cmd.tp`.
+            // If we reverse Buy to Sell, Open Price is Bid instead of Ask (handled by market execution),
+            // but SL/TP levels are absolute prices.
+            // If Buy @ 1.10, SL 1.09. If Reversed to Sell @ 1.10, SL 1.09 is PROFIT (TP).
+            // So MQL implementation was seemingly incomplete or relied on `ExecuteOpenTrade` to fix it?
+            // Actually `ExecuteOpenTrade` in `Trade.mqh` (common) likely handles minimal execution.
+            // Let's assume for this task we copy MQL logic: Just reverse the enum.
+
             cmd.price = signal.open_price.unwrap_or(0.0);
             cmd.sl = signal.stop_loss.unwrap_or(0.0);
             cmd.tp = signal.take_profit.unwrap_or(0.0);
             cmd.magic = signal.magic_number.unwrap_or(0);
             cmd.close_ratio = signal.close_ratio.unwrap_or(0.0);
-            // We prioritize source_account into cmd.comment because Slave EA needs it
-            // to look up configuration (slippage, etc). The original user comment is less critical.
-            copy_string_to_array(&signal.source_account, &mut cmd.comment);
+
+            // Populate MQL Comment with Source Account for reference (optional now since logic is here)
+            // But we keep it for backward compat or logging
+            if let Some(comment) = &signal.comment {
+                copy_string_to_array(comment, &mut cmd.comment);
+            }
+
+            // Essential: Set Source Account in new field
+            copy_string_to_array(&signal.source_account, &mut cmd.source_account);
 
             cmd.timestamp = signal.timestamp.timestamp();
 
@@ -577,6 +692,48 @@ impl EaContext {
         // But if we want to ensure clean state, we might want to clear subscriptions?
         // For now, keep connection, just reset state flags.
     }
+}
+
+// --- Logic Helpers ---
+
+fn transform_lot_size(lots: f64, config: &SlaveConfigMessage, slave_equity: f64) -> f64 {
+    use crate::types::LotCalculationMode;
+
+    let mut new_lots = lots;
+
+    match config.lot_calculation_mode {
+        LotCalculationMode::MarginRatio => {
+             if let Some(master_equity) = config.master_equity {
+                if master_equity > 0.0 {
+                    let ratio = slave_equity / master_equity;
+                    new_lots = lots * ratio;
+                }
+            }
+        },
+        LotCalculationMode::Multiplier => {
+             if let Some(mult) = config.lot_multiplier {
+                new_lots = lots * mult;
+            }
+        }
+    }
+
+    // Normalize? Rust doesn't have SymbolInfoDouble for MIN/MAX/STEP.
+    // However, we can at least clamp to configured Min/Max from config if present.
+    // MQL `NormalizeLotSize` uses local broker info which we don't have here perfectly.
+    // BUT we have `source_lot_min/max` in config.
+    // Wait, `source_lot_min` checks the *input* (Master) lots usually?
+    // The comment says: "Minimum lot size filter: skip trades with lot smaller than this value"
+    // So that's a filter, not a clamper.
+
+    // The actual "Round to Step" logic must effectively remain in MQL
+    // because `SYMBOL_VOLUME_STEP` is broker specific and dynamic.
+    // OR we pass `SYMBOL_VOLUME_STEP` in Heartbeat or Init? No, that's too much.
+    //
+    // Compromise:
+    // Rust does the *strategy* calculation (Multiplier/Ratio).
+    // MQL does the *normalization* (Step/Min/Max clamping based on Broker Info).
+
+    new_lots
 }
 
 fn copy_string_to_array<const N: usize>(s: &str, arr: &mut [u8; N]) {
@@ -807,24 +964,39 @@ mod tests {
     }
 
     #[test]
-    fn test_processing_incoming_trade_slave() {
+    fn test_processing_incoming_trade_slave_with_logic() {
         let mut ctx = create_test_context("Slave");
         let incoming = Arc::new(Mutex::new(VecDeque::new()));
 
-        // Prepare TradeSignal
+        // 1. Inject Config first
+        let config = crate::types::SlaveConfigMessage {
+            account_id: "test_acc".to_string(),
+            master_account: "master1".to_string(),
+            status: 1, // Enabled
+            lot_calculation_mode: crate::types::LotCalculationMode::Multiplier,
+            lot_multiplier: Some(2.0),
+            reverse_trade: true,
+            ..Default::default()
+        };
+        let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
+        let mut payload_conf = b"config/global ".to_vec();
+        payload_conf.append(&mut config_bytes);
+        incoming.lock().unwrap().push_back(payload_conf);
+
+        // 2. Inject Trade Signal
         let signal = crate::types::TradeSignal {
             action: TradeAction::Open,
             ticket: 999,
             symbol: Some("GBPUSD".to_string()),
             lots: Some(0.5),
+            source_account: "master1".to_string(),
+            order_type: Some(OrderType::Buy),
             ..Default::default()
         };
         let mut signal_bytes = rmp_serde::to_vec_named(&signal).unwrap();
-        // Topic: "trade/master1 "
-        let mut payload = b"trade/master1 ".to_vec();
-        payload.append(&mut signal_bytes);
-
-        incoming.lock().unwrap().push_back(payload);
+        let mut payload_trade = b"trade/master1 ".to_vec();
+        payload_trade.append(&mut signal_bytes);
+        incoming.lock().unwrap().push_back(payload_trade);
 
         ctx.strategy = Box::new(MockStrategy {
             sent_data: Arc::new(Mutex::new(Vec::new())),
@@ -832,14 +1004,31 @@ mod tests {
             next_error: Arc::new(Mutex::new(None)),
         });
 
-        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+        // Tick 1: Process Config
+        ctx.manager_tick(1000.0, 1000.0, 0, true);
+        ctx.get_next_command(); // Clear UI command
 
+        // Tick 2: Process Trade (Should succeed because Config is present)
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
         assert_eq!(pending, 1, "Should have pending command (Open)");
 
         let cmd = ctx.get_next_command().unwrap();
         assert_eq!(cmd.command_type, EaCommandType::Open as i32);
         assert_eq!(cmd.ticket, 999);
-        assert_eq!(cmd.volume, 0.5);
+
+        // Verify Lot Transformation (0.5 * 2.0 = 1.0)
+        assert!((cmd.volume - 1.0).abs() < 1e-6, "Volume should be 1.0");
+
+        // Verify Order Reversal (Buy -> Sell)
+        // OrderType::Buy = 0, OrderType::Sell = 1 (check implementation of OrderType)
+        // constants.rs says OrderType::Sell is 1.
+        assert_eq!(cmd.order_type, 1);
+
+        // Verify Source Account
+        let src = String::from_utf8_lossy(&cmd.source_account)
+            .trim_matches(char::from(0))
+            .to_string();
+        assert_eq!(src, "master1");
     }
 
     #[test]
