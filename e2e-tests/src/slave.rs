@@ -13,8 +13,8 @@ use std::time::Instant;
 
 use sankey_copier_zmq::ffi::{
     build_trade_topic, ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_get_config_socket, ea_init, ea_send_heartbeat,
-    ea_send_push, ea_send_register, ea_send_unregister, ea_socket_receive, ea_socket_subscribe,
+    ea_context_should_request_config, ea_init, ea_send_heartbeat,
+    ea_send_push, ea_send_register, ea_send_unregister, ea_receive_config, ea_subscribe_config,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -177,13 +177,6 @@ impl SlaveEaSimulator {
                 }
             }
 
-            // In SlaveStrategy, both get_config_socket and get_trade_socket return the same socket
-            let socket = unsafe { ea_get_config_socket(ctx) };
-            if socket.is_null() {
-                eprintln!("Failed to get socket!");
-                return;
-            }
-
             // 3. OnTimer Loop
             while !shutdown_flag.load(Ordering::SeqCst) {
                 // Process pending subscriptions
@@ -193,7 +186,7 @@ impl SlaveEaSimulator {
                         for topic in subs.iter() {
                             let topic_u16 = to_u16(topic);
                             unsafe {
-                                ea_socket_subscribe(socket, topic_u16.as_ptr());
+                                ea_subscribe_config(ctx, topic_u16.as_ptr());
                             }
                         }
                         subs.clear();
@@ -286,9 +279,9 @@ impl SlaveEaSimulator {
                     let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
 
                     let received_bytes = unsafe {
-                        ea_socket_receive(
-                            socket,
-                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
+                        ea_receive_config(
+                            ctx,
+                            buffer.as_mut_ptr(),
                             crate::types::BUFFER_SIZE as i32,
                         )
                     };
@@ -347,13 +340,13 @@ impl SlaveEaSimulator {
                                             topic_buf.as_mut_ptr(),
                                             256,
                                         );
-                                        ea_socket_subscribe(socket, topic_buf.as_ptr());
+                                        ea_subscribe_config(ctx, topic_buf.as_ptr());
                                     }
 
                                     let sync_topic = format!("sync/{}/{}", master_acc, account_id);
                                     let sync_topic_u16 = to_u16(&sync_topic);
                                     unsafe {
-                                        ea_socket_subscribe(socket, sync_topic_u16.as_ptr());
+                                        ea_subscribe_config(ctx, sync_topic_u16.as_ptr());
                                     }
 
                                     subscribed.push(master_acc.clone());

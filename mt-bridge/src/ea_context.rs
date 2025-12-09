@@ -31,6 +31,15 @@ pub trait CommunicationStrategy: Send + Debug {
     /// Get raw pointer to Trade SUB socket (Slave only, for receive loop)
     /// Note: In Single-Socket implementation, this may return the same pointer as config socket.
     fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String>;
+
+    /// Receive message from Config socket (non-blocking)
+    fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, String>;
+
+    /// Receive message from Trade socket (non-blocking, Slave only)
+    fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, String>;
+
+    /// Subscribe to a topic on Config socket
+    fn subscribe_config(&mut self, topic: &str) -> Result<(), String>;
 }
 
 // ===========================================================================
@@ -118,6 +127,26 @@ impl CommunicationStrategy for MasterStrategy {
     fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
         Err("Master EA does not have a Trade socket".to_string())
     }
+
+    fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+        let res = self.resources.as_mut().ok_or("ZMQ not initialized")?;
+        match res.sub.recv_into(buffer, zmq::DONTWAIT) {
+            Ok(n) => Ok(n as i32),
+            Err(zmq::Error::EAGAIN) => Ok(0), // No message available
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn receive_trade(&mut self, _buffer: &mut [u8]) -> Result<i32, String> {
+        Err("Master EA does not receive trade messages".to_string())
+    }
+
+    fn subscribe_config(&mut self, topic: &str) -> Result<(), String> {
+        let res = self.resources.as_mut().ok_or("ZMQ not initialized")?;
+        res.sub
+            .set_subscribe(topic.as_bytes())
+            .map_err(|e| format!("Subscribe failed: {}", e))
+    }
 }
 
 // ===========================================================================
@@ -172,6 +201,27 @@ impl CommunicationStrategy for SlaveStrategy {
         let res = self.resources.as_mut().ok_or("ZMQ not initialized")?;
         Ok(res.sub.as_mut_ptr())
     }
+
+    fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+        let res = self.resources.as_mut().ok_or("ZMQ not initialized")?;
+        match res.sub.recv_into(buffer, zmq::DONTWAIT) {
+            Ok(n) => Ok(n as i32),
+            Err(zmq::Error::EAGAIN) => Ok(0),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+        // Slave uses same SUB socket for config and trade
+        self.receive_config(buffer)
+    }
+
+    fn subscribe_config(&mut self, topic: &str) -> Result<(), String> {
+        let res = self.resources.as_mut().ok_or("ZMQ not initialized")?;
+        res.sub
+            .set_subscribe(topic.as_bytes())
+            .map_err(|e| format!("Subscribe failed: {}", e))
+    }
 }
 
 // ===========================================================================
@@ -197,6 +247,15 @@ impl CommunicationStrategy for NoOpStrategy {
     }
     fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
         Err("NoOp".to_string())
+    }
+    fn receive_config(&mut self, _: &mut [u8]) -> Result<i32, String> {
+        Ok(0)
+    }
+    fn receive_trade(&mut self, _: &mut [u8]) -> Result<i32, String> {
+        Ok(0)
+    }
+    fn subscribe_config(&mut self, _: &str) -> Result<(), String> {
+        Ok(())
     }
 }
 
@@ -345,6 +404,21 @@ impl EaContext {
 
     pub fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
         self.strategy.get_trade_socket_ptr()
+    }
+
+    /// Receive from Config socket (non-blocking)
+    pub fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+        self.strategy.receive_config(buffer)
+    }
+
+    /// Receive from Trade socket (Slave only, non-blocking)
+    pub fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+        self.strategy.receive_trade(buffer)
+    }
+
+    /// Subscribe to topic on Config socket
+    pub fn subscribe_config(&mut self, topic: &str) -> Result<(), String> {
+        self.strategy.subscribe_config(topic)
     }
 
     // --- Original Logic ---

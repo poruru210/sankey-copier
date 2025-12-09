@@ -161,6 +161,15 @@
    int         ea_context_should_request_config(HANDLE_TYPE context, int current_trade_allowed);
    void        ea_context_mark_config_requested(HANDLE_TYPE context);
    void        ea_context_reset(HANDLE_TYPE context);
+   
+   // FFI Integration (Phase 2) - High-Level Functions
+   int         ea_connect(HANDLE_TYPE context, string push_addr, string sub_addr);
+   int         ea_send_push(HANDLE_TYPE context, uchar &data[], int len);
+   
+   // High-Level Receive/Subscribe (Replaces raw socket operations)
+   int         ea_receive_config(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
+   int         ea_receive_trade(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
+   int         ea_subscribe_config(HANDLE_TYPE context, string topic);
 
 #import
 
@@ -201,8 +210,40 @@ public:
       return false;
    }
 
+   bool Connect(string push_addr, string sub_addr)
+   {
+      if(!m_initialized) return false;
+      return ea_connect(m_context, push_addr, sub_addr) == 1;
+   }
+   
+   // High-level receive methods (replaces raw socket access)
+   int ReceiveConfig(uchar &buffer[], int buffer_size)
+   {
+      if(!m_initialized) return 0;
+      return ea_receive_config(m_context, buffer, buffer_size);
+   }
+   
+   int ReceiveTrade(uchar &buffer[], int buffer_size)
+   {
+      if(!m_initialized) return 0;
+      return ea_receive_trade(m_context, buffer, buffer_size);
+   }
+   
+   bool SubscribeConfig(string topic)
+   {
+      if(!m_initialized) return false;
+      return ea_subscribe_config(m_context, topic) == 1;
+   }
+
    bool IsInitialized() const { return m_initialized; }
    HANDLE_TYPE GetHandle() const { return m_context; }
+   
+   // Send raw data via context (abstracted PUSH)
+   bool SendPush(uchar &data[], int len)
+   {
+      if(!m_initialized) return false;
+      return ea_send_push(m_context, data, len) == 1;
+   }
 
    bool SendRegister(HANDLE_TYPE socket_push)
    {

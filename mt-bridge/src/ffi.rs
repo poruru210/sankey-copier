@@ -677,6 +677,80 @@ pub unsafe extern "C" fn ea_send_push(context: *mut EaContext, data: *const u8, 
     }
 }
 
+/// Receive message from Config socket (high-level, non-blocking)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - buffer: Valid buffer pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_receive_config(
+    context: *mut EaContext,
+    buffer: *mut u8,
+    buffer_size: i32,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    if buffer.is_null() || buffer_size <= 0 {
+        return 0;
+    }
+    let slice = std::slice::from_raw_parts_mut(buffer, buffer_size as usize);
+    match ctx.receive_config(slice) {
+        Ok(n) => n,
+        Err(_) => 0,
+    }
+}
+
+/// Receive message from Trade socket (high-level, Slave only, non-blocking)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - buffer: Valid buffer pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_receive_trade(
+    context: *mut EaContext,
+    buffer: *mut u8,
+    buffer_size: i32,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    if buffer.is_null() || buffer_size <= 0 {
+        return 0;
+    }
+    let slice = std::slice::from_raw_parts_mut(buffer, buffer_size as usize);
+    match ctx.receive_trade(slice) {
+        Ok(n) => n,
+        Err(_) => 0,
+    }
+}
+
+/// Subscribe to topic on Config socket
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - topic: Valid null-terminated UTF-16 string
+#[no_mangle]
+pub unsafe extern "C" fn ea_subscribe_config(
+    context: *mut EaContext,
+    topic: *const u16,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    let topic_str = match utf16_to_string(topic) {
+        Some(s) => s,
+        None => return 0,
+    };
+    match ctx.subscribe_config(&topic_str) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
 // ===========================================================================
 // Direct ZMQ Socket Operations (for use with raw pointers from ea_get_*_socket)
 // ===========================================================================

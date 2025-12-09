@@ -15,8 +15,8 @@ use std::time::Instant;
 
 use sankey_copier_zmq::ffi::{
     ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_get_config_socket, ea_init, ea_send_heartbeat,
-    ea_send_push, ea_send_register, ea_socket_receive, ea_socket_subscribe,
+    ea_context_should_request_config, ea_init, ea_send_heartbeat,
+    ea_send_push, ea_send_register, ea_receive_config, ea_subscribe_config,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -166,12 +166,6 @@ impl MasterEaSimulator {
                 }
             }
 
-            let config_socket = unsafe { ea_get_config_socket(ctx) };
-            if config_socket.is_null() {
-                eprintln!("Failed to get config socket!");
-                return;
-            }
-
             // 3. OnTimer Loop
             while !shutdown_flag.load(Ordering::SeqCst) {
                 // Process pending subscriptions
@@ -181,7 +175,7 @@ impl MasterEaSimulator {
                         for topic in subs.iter() {
                             let topic_u16 = to_u16(topic);
                             unsafe {
-                                ea_socket_subscribe(config_socket, topic_u16.as_ptr());
+                                ea_subscribe_config(ctx, topic_u16.as_ptr());
                             }
                         }
                         subs.clear();
@@ -265,9 +259,9 @@ impl MasterEaSimulator {
                     let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
 
                     let received_bytes = unsafe {
-                        ea_socket_receive(
-                            config_socket,
-                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
+                        ea_receive_config(
+                            ctx,
+                            buffer.as_mut_ptr(),
                             crate::types::BUFFER_SIZE as i32,
                         )
                     };
