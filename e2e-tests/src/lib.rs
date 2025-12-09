@@ -50,6 +50,9 @@ pub mod master;
 // Slave EA simulator
 pub mod slave;
 
+// MQL5 Platform Simulator
+pub mod platform;
+
 // Re-export main types for convenience
 pub use base::EaSimulatorBase;
 pub use master::MasterEaSimulator;
