@@ -6,8 +6,8 @@
 //! 3. Both Master and Slave scenarios work correctly
 
 use e2e_tests::helpers::default_test_slave_settings;
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_DISABLED};
+use e2e_tests::TestSandbox;
+use e2e_tests::STATUS_DISABLED;
 use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
@@ -44,7 +44,8 @@ async fn create_ws_connector(
 /// Test that Master auto-trading disabled triggers immediate warning_codes broadcast
 #[tokio::test]
 async fn test_master_auto_trading_disabled_warning_broadcast() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -69,12 +70,8 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED AFTER WebSocket connection
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
@@ -117,7 +114,8 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
 /// Test that Slave auto-trading disabled triggers immediate warning_codes broadcast
 #[tokio::test]
 async fn test_slave_auto_trading_disabled_warning_broadcast() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -139,14 +137,8 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Slave with auto-trading DISABLED
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(false); // Auto-trading OFF
     slave.start().expect("slave start should succeed");
@@ -184,7 +176,8 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
 /// Test broadcast timing: should receive within 2 seconds of heartbeat
 #[tokio::test]
 async fn test_warning_broadcast_timing() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -207,12 +200,8 @@ async fn test_warning_broadcast_timing() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
 
@@ -247,7 +236,8 @@ async fn test_warning_broadcast_timing() {
 /// 3. Demonstrates EA simulator's ability to dynamically toggle auto-trading state
 #[tokio::test]
 async fn test_master_warning_clears_on_auto_trading_enabled() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -269,12 +259,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
@@ -283,14 +269,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
 
     // Start Slave with auto-trading ENABLED
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true); // Slave auto-trading ON
     slave.start().expect("slave start should succeed");
@@ -336,7 +316,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 /// Test that Slave config updates when Master comes online later (was offline)
 #[tokio::test]
 async fn test_slave_update_when_master_connects_later() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -358,14 +339,8 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 1. Start Slave FIRST (Master is offline)
     println!("[TEST] Starting Slave...");
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
@@ -391,12 +366,8 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 3. Start Master LATER
     println!("[TEST] Starting Master...");
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
@@ -441,7 +412,8 @@ async fn test_slave_update_when_master_connects_later() {
 /// (or "Offline" -> "Connected") even after an explicit Unregister event (Soft Delete).
 #[tokio::test]
 async fn test_reconnection_after_deletion() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -462,24 +434,14 @@ async fn test_reconnection_after_deletion() {
     sleep(Duration::from_millis(1000)).await;
 
     // 1. Start Master
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master");
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
 
     // 2. Start Slave
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
 
@@ -517,14 +479,8 @@ async fn test_reconnection_after_deletion() {
 
     // 5. Reconnect (New Simulator instance)
     println!("[TEST] Reconnecting slave...");
-    let mut slave_new = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create new slave");
+    let mut slave_new = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create new slave");
     slave_new.set_trade_allowed(true);
     slave_new.start().expect("Failed to start new slave");
 

@@ -32,9 +32,6 @@
 // - master: MasterEaSimulator with OnTimer loop and trade signals
 // - slave: SlaveEaSimulator with OnTimer loop and config/trade reception
 
-// Relay server process management for E2E tests
-pub mod relay_server_process;
-
 // Shared helper functions for E2E tests
 pub mod helpers;
 
@@ -50,13 +47,18 @@ pub mod master;
 // Slave EA simulator
 pub mod slave;
 
-// MQL5 Platform Simulator
+// MQL5 Platform Simulator & Test Environment
+// Contains:
+// - Runner, Traits, Types (Platform Simulation)
+// - TestSandbox, RelayServerProcess (Test Environment)
 pub mod platform;
 
 // Re-export main types for convenience
 pub use base::EaSimulatorBase;
 pub use master::MasterEaSimulator;
 pub use slave::SlaveEaSimulator;
+// Re-export TestSandbox from platform module
+pub use platform::sandbox::TestSandbox;
 pub use types::{
     EaType, Heartbeat, HeartbeatParams, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
     RequestConfigMessage, SlaveConfig, SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters,

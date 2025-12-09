@@ -6,8 +6,8 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, SymbolMapping};
+use e2e_tests::TestSandbox;
+use e2e_tests::SymbolMapping;
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
 
@@ -19,7 +19,8 @@ use tokio::time::{sleep, Duration};
 /// Master sends "pro.EURUSD.m" -> Slave receives "fx.EURUSD"
 #[tokio::test]
 async fn test_symbol_prefix_suffix_transformation() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -38,21 +39,11 @@ async fn test_symbol_prefix_suffix_transformation() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -103,7 +94,8 @@ async fn test_symbol_prefix_suffix_transformation() {
 /// - Orders WITHOUT matching prefix/suffix: passed through as-is
 #[tokio::test]
 async fn test_master_sends_all_symbols_no_filtering() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -122,21 +114,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -279,7 +261,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
 /// Test symbol mapping (XAUUSD -> GOLD)
 #[tokio::test]
 async fn test_symbol_mapping() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -305,21 +288,11 @@ async fn test_symbol_mapping() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -365,7 +338,8 @@ async fn test_symbol_mapping() {
 /// Test reverse trade mode passthrough - order type passed unchanged (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_buy_to_sell() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -382,21 +356,11 @@ async fn test_reverse_trade_buy_to_sell() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -438,7 +402,8 @@ async fn test_reverse_trade_buy_to_sell() {
 /// Test reverse trade mode passthrough with pending orders (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_pending_orders() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -456,21 +421,11 @@ async fn test_reverse_trade_pending_orders() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
