@@ -2283,6 +2283,25 @@ pub unsafe extern "C" fn ea_send_sync_request(
     }
 }
 
+/// Get the last received SyncRequestMessage
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - The returned pointer is valid until the next manager_tick involving sync request update
+#[no_mangle]
+pub unsafe extern "C" fn ea_context_get_sync_request(
+    context: *const crate::EaContext,
+) -> *const crate::types::SyncRequestMessage {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return std::ptr::null(),
+    };
+    match &ctx.last_sync_request {
+        Some(c) => c as *const _,
+        None => std::ptr::null(),
+    }
+}
+
 /// Reset the EA state to initial conditions
 ///
 /// This should be called when:
@@ -2404,5 +2423,115 @@ pub unsafe extern "C" fn ea_send_modify_signal(
             eprintln!("ea_send_modify_signal failed: {}", e);
             0
         }
+    }
+}
+// ===========================================================================
+// New High-Level FFI Functions (Phase 3)
+// ===========================================================================
+
+use crate::ea_context::EaCommand;
+
+/// Main Manager Tick (replaces ea_tick_timer)
+/// Handles heartbeat, polling, and internal state
+/// Returns 1 if commands are pending, 0 otherwise
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_manager_tick(
+    context: *mut EaContext,
+    balance: f64,
+    equity: f64,
+    open_positions: i32,
+    is_trade_allowed: i32,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    ctx.manager_tick(balance, equity, open_positions, is_trade_allowed != 0)
+}
+
+/// Retrieve the next pending command for MQL
+/// Returns 1 if command retrieved, 0 if queue empty
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - command: Pointer to allocated EaCommand struct to be filled
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_command(context: *mut EaContext, command: *mut EaCommand) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    if command.is_null() {
+        return 0;
+    }
+
+    if let Some(cmd) = ctx.get_next_command() {
+        *command = cmd;
+        1
+    } else {
+        0
+    }
+}
+
+/// Get pointer to the last received MasterConfigMessage
+/// Returns null if no config received yet
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - The returned pointer is valid until the next manager_tick involving config update
+#[no_mangle]
+pub unsafe extern "C" fn ea_context_get_master_config(
+    context: *const EaContext,
+) -> *const MasterConfigMessage {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return std::ptr::null(),
+    };
+    match &ctx.last_master_config {
+        Some(c) => c as *const _,
+        None => std::ptr::null(),
+    }
+}
+
+/// Get pointer to the last received SlaveConfigMessage
+/// Returns null if no config received yet
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - The returned pointer is valid until the next manager_tick involving config update
+#[no_mangle]
+pub unsafe extern "C" fn ea_context_get_slave_config(
+    context: *const EaContext,
+) -> *const SlaveConfigMessage {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return std::ptr::null(),
+    };
+    match &ctx.last_slave_config {
+        Some(c) => c as *const _,
+        None => std::ptr::null(),
+    }
+}
+
+/// Get pointer to the last received PositionSnapshotMessage
+/// Returns null if no snapshot received yet
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - The returned pointer is valid until the next manager_tick involving snapshot update
+#[no_mangle]
+pub unsafe extern "C" fn ea_context_get_position_snapshot(
+    context: *const EaContext,
+) -> *const PositionSnapshotMessage {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return std::ptr::null(),
+    };
+    match &ctx.last_position_snapshot {
+        Some(c) => c as *const _,
+        None => std::ptr::null(),
     }
 }

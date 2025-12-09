@@ -143,6 +143,19 @@ impl OrderType {
     }
 }
 
+impl From<OrderType> for i32 {
+    fn from(ot: OrderType) -> Self {
+        match ot {
+            OrderType::Buy => 0,
+            OrderType::Sell => 1,
+            OrderType::BuyLimit => 2,
+            OrderType::SellLimit => 3,
+            OrderType::BuyStop => 4,
+            OrderType::SellStop => 5,
+        }
+    }
+}
+
 // =============================================================================
 // Trade Action Enum
 // =============================================================================

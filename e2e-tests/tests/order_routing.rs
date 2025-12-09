@@ -6,9 +6,9 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::TestSandbox;
 use e2e_tests::types::{OrderType, TradeSignal};
 use e2e_tests::SlaveEaSimulator;
+use e2e_tests::TestSandbox;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use tokio::time::{sleep, Duration};
@@ -77,16 +77,20 @@ async fn test_multi_master_signal_isolation() {
     .await
     .expect("Failed to setup test scenario for master2");
 
-    let mut master1 = sandbox.create_master(master1_account)
+    let mut master1 = sandbox
+        .create_master(master1_account)
         .expect("Failed to create master1 simulator");
 
-    let mut master2 = sandbox.create_master(master2_account)
+    let mut master2 = sandbox
+        .create_master(master2_account)
         .expect("Failed to create master2 simulator");
 
-    let mut slave1 = sandbox.create_slave(slave1_account, master1_account)
+    let mut slave1 = sandbox
+        .create_slave(slave1_account, master1_account)
         .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = sandbox.create_slave(slave2_account, master2_account)
+    let mut slave2 = sandbox
+        .create_slave(slave2_account, master2_account)
         .expect("Failed to create slave2 simulator");
 
     // Start all EAs
@@ -98,7 +102,14 @@ async fn test_multi_master_signal_isolation() {
     slave1.start().expect("Failed to start slave1");
     slave2.set_trade_allowed(true);
     slave2.start().expect("Failed to start slave2");
-    sleep(Duration::from_millis(500)).await;
+
+    slave1
+        .wait_for_status(2, 5000)
+        .expect("Slave1 failed to connect");
+    slave2
+        .wait_for_status(2, 5000)
+        .expect("Slave2 failed to connect");
+    sleep(Duration::from_millis(1000)).await;
 
     // Master1 sends ticket 100
     let sig1 =
@@ -157,16 +168,20 @@ async fn test_multi_master_same_symbol_open() {
     .await
     .expect("Failed to setup test scenario for master2");
 
-    let mut master1 = sandbox.create_master(master1_account)
+    let mut master1 = sandbox
+        .create_master(master1_account)
         .expect("Failed to create master1 simulator");
 
-    let mut master2 = sandbox.create_master(master2_account)
+    let mut master2 = sandbox
+        .create_master(master2_account)
         .expect("Failed to create master2 simulator");
 
-    let mut slave1 = sandbox.create_slave(slave1_account, master1_account)
+    let mut slave1 = sandbox
+        .create_slave(slave1_account, master1_account)
         .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = sandbox.create_slave(slave2_account, master2_account)
+    let mut slave2 = sandbox
+        .create_slave(slave2_account, master2_account)
         .expect("Failed to create slave2 simulator");
 
     // Start all EAs
@@ -178,7 +193,14 @@ async fn test_multi_master_same_symbol_open() {
     slave1.start().expect("Failed to start slave1");
     slave2.set_trade_allowed(true);
     slave2.start().expect("Failed to start slave2");
-    sleep(Duration::from_millis(500)).await;
+
+    slave1
+        .wait_for_status(2, 5000)
+        .expect("Slave1 failed to connect");
+    slave2
+        .wait_for_status(2, 5000)
+        .expect("Slave2 failed to connect");
+    sleep(Duration::from_millis(1000)).await;
 
     // Both masters send Open for EURUSD (same symbol)
     let sig1 =
@@ -239,16 +261,20 @@ async fn test_signal_broadcast_to_all_slaves() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave1 = sandbox.create_slave(slave1_account, master_account)
+    let mut slave1 = sandbox
+        .create_slave(slave1_account, master_account)
         .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = sandbox.create_slave(slave2_account, master_account)
+    let mut slave2 = sandbox
+        .create_slave(slave2_account, master_account)
         .expect("Failed to create slave2 simulator");
 
-    let mut slave3 = sandbox.create_slave(slave3_account, master_account)
+    let mut slave3 = sandbox
+        .create_slave(slave3_account, master_account)
         .expect("Failed to create slave3 simulator");
 
     // Start all EAs
@@ -260,7 +286,17 @@ async fn test_signal_broadcast_to_all_slaves() {
     slave2.start().expect("Failed to start slave2");
     slave3.set_trade_allowed(true);
     slave3.start().expect("Failed to start slave3");
-    sleep(Duration::from_millis(500)).await;
+
+    slave1
+        .wait_for_status(2, 5000)
+        .expect("Slave1 failed to connect");
+    slave2
+        .wait_for_status(2, 5000)
+        .expect("Slave2 failed to connect");
+    slave3
+        .wait_for_status(2, 5000)
+        .expect("Slave3 failed to connect");
+    sleep(Duration::from_millis(1000)).await;
 
     // Master sends one signal
     let signal =
@@ -326,10 +362,12 @@ async fn test_slave_individual_lot_multiplier() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -386,10 +424,12 @@ async fn test_signal_latency_measurement() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -466,10 +506,12 @@ async fn test_delayed_signal_immediate() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -520,10 +562,12 @@ async fn test_delayed_signal_acceptable() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -576,10 +620,12 @@ async fn test_stale_signal_too_old() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -597,7 +643,7 @@ async fn test_stale_signal_too_old() {
         .send_trade_signal(&stale_signal)
         .expect("Failed to send stale signal");
 
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(500)).await;
     let received = slave
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");

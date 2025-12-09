@@ -6,8 +6,70 @@
 
 use crate::communication::{CommunicationStrategy, MasterStrategy, NoOpStrategy, SlaveStrategy};
 use crate::constants::{OrderType, TradeAction};
+use crate::errors::BridgeError;
 use crate::types::{RequestConfigMessage, TradeSignal};
+use chrono::{DateTime, Utc};
+use std::collections::VecDeque;
 use std::fmt::Debug;
+
+// Command types corresponding to MQL
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(i32)]
+pub enum EaCommandType {
+    None = 0,
+    Open = 1,
+    Close = 2,
+    Modify = 3,
+    Delete = 4,
+    UpdateUi = 5,
+    SendSnapshot = 6,
+    ProcessSnapshot = 7,
+}
+
+// C-compatible Command structure
+// MQL4 (pack=1) and Rust (aligned) compatibility requires explicit padding.
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct EaCommand {
+    pub command_type: i32,
+    pub _pad1: i32, // [FIX] Explicit padding for alignment
+
+    pub ticket: i64,
+    pub symbol: [u8; 32], // 32 bytes (aligned to 8, safe)
+
+    pub order_type: i32,
+    pub _pad2: i32, // [FIX] Explicit padding for alignment
+
+    pub volume: f64,
+    pub price: f64,
+    pub sl: f64,
+    pub tp: f64,
+    pub magic: i64,
+    pub close_ratio: f64,
+    pub timestamp: i64,
+    pub comment: [u8; 64],
+}
+
+impl Default for EaCommand {
+    fn default() -> Self {
+        Self {
+            command_type: 0,
+            _pad1: 0,
+            ticket: 0,
+            symbol: [0; 32],
+            order_type: 0,
+            _pad2: 0,
+            volume: 0.0,
+            price: 0.0,
+            sl: 0.0,
+            tp: 0.0,
+            magic: 0,
+            close_ratio: 0.0,
+            timestamp: 0,
+            comment: [0; 64],
+        }
+    }
+}
 
 // ===========================================================================
 // EaContext (Context)
@@ -33,6 +95,20 @@ pub struct EaContext {
     pub is_config_requested: bool,
     /// Last auto-trading state (for tracking changes)
     pub last_trade_allowed: bool,
+
+    // --- Event Loop State ---
+    pub last_heartbeat_time: DateTime<Utc>,
+    pub pending_commands: VecDeque<EaCommand>,
+    // Latest state provided by MQL (for heartbeat)
+    pub current_balance: f64,
+    pub current_equity: f64,
+    pub current_open_positions: i32,
+
+    // --- Cached Config ---
+    pub last_master_config: Option<crate::types::MasterConfigMessage>,
+    pub last_slave_config: Option<crate::types::SlaveConfigMessage>,
+    pub last_position_snapshot: Option<crate::types::PositionSnapshotMessage>,
+    pub last_sync_request: Option<crate::types::SyncRequestMessage>,
 
     // --- Communication Layer ---
     pub strategy: Box<dyn CommunicationStrategy>,
@@ -72,12 +148,21 @@ impl EaContext {
             is_config_requested: false,
             last_trade_allowed: false,
             strategy,
+            last_heartbeat_time: Utc::now(),
+            pending_commands: VecDeque::new(),
+            current_balance: 0.0,
+            current_equity: 0.0,
+            current_open_positions: 0,
+            last_master_config: None,
+            last_slave_config: None,
+            last_position_snapshot: None,
+            last_sync_request: None,
         }
     }
 
     // --- Logic Delegation ---
 
-    pub fn connect(&mut self, push_addr: &str, sub_addr: &str) -> Result<(), String> {
+    pub fn connect(&mut self, push_addr: &str, sub_addr: &str) -> Result<(), BridgeError> {
         // We pass self.account_id clone if needed, or refs? Strategy expects &str.
         self.strategy.connect(push_addr, sub_addr, &self.account_id)
     }
@@ -86,15 +171,15 @@ impl EaContext {
         self.strategy.disconnect();
     }
 
-    pub fn subscribe_trade(&mut self, master_id: &str) -> Result<(), String> {
+    pub fn subscribe_trade(&mut self, master_id: &str) -> Result<(), BridgeError> {
         self.strategy.subscribe_trade(master_id)
     }
 
-    pub fn send_push(&mut self, data: &[u8]) -> Result<(), String> {
+    pub fn send_push(&mut self, data: &[u8]) -> Result<(), BridgeError> {
         self.strategy.send_push(data)
     }
 
-    pub fn send_request_config(&mut self, _version: u32) -> Result<(), String> {
+    pub fn send_request_config(&mut self, _version: u32) -> Result<(), BridgeError> {
         let msg = RequestConfigMessage {
             message_type: "RequestConfig".to_string(),
             account_id: self.account_id.clone(),
@@ -102,14 +187,240 @@ impl EaContext {
             ea_type: self.ea_type.clone(),
         };
 
-        let data = rmp_serde::encode::to_vec_named(&msg)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
         self.strategy.send_push(&data)?;
 
         // Mark as requested to prevent duplicate requests
         self.mark_config_requested();
 
         Ok(())
+    }
+
+    /// Enqueue a command for MQL to execute
+    pub fn enqueue_command(&mut self, cmd: EaCommand) {
+        self.pending_commands.push_back(cmd);
+    }
+
+    /// Pop the next command for MQL
+    pub fn get_next_command(&mut self) -> Option<EaCommand> {
+        self.pending_commands.pop_front()
+    }
+
+    /// Main Event Loop Tick (called by MQL OnTimer)
+    /// Returns 1 if there is a pending command, 0 otherwise
+    pub fn manager_tick(
+        &mut self,
+        balance: f64,
+        equity: f64,
+        open_positions: i32,
+        is_trade_allowed: bool,
+    ) -> i32 {
+        self.current_balance = balance;
+        self.current_equity = equity;
+        self.current_open_positions = open_positions;
+
+        let now = Utc::now();
+
+        // 1. Heartbeat Check (every 1 second)
+        if (now - self.last_heartbeat_time).num_seconds() >= 1 {
+            if let Err(e) = self.send_heartbeat(is_trade_allowed) {
+                eprintln!("Failed to send heartbeat: {}", e);
+            } else {
+                self.last_heartbeat_time = now;
+            }
+        }
+
+        // 2. Poll ZMQ (Unified polling for Config + Trade)
+        // Since Slave shares the same SUB socket for both, we must use a single loop
+        // to consume all messages and dispatch based on topic.
+        let mut buffer = [0u8; 4096];
+        let mut loop_count = 0;
+        const MAX_LOOPS: i32 = 100; // Limit processing to prevent freezing
+
+        loop {
+            if loop_count >= MAX_LOOPS {
+                break;
+            }
+            loop_count += 1;
+
+            match self.strategy.receive_config(&mut buffer) {
+                Ok(len) if len > 0 => {
+                    let data = &buffer[..len as usize];
+                    self.process_incoming_message(data);
+                }
+                _ => break, // No more messages or error
+            }
+        }
+
+        // 3. Return status
+        if !self.pending_commands.is_empty() {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn send_heartbeat(&mut self, is_trade_allowed: bool) -> Result<(), BridgeError> {
+        use crate::types::HeartbeatMessage;
+
+        // Determine version (hardcoded for now or passed in?)
+        let version = "2.0.0".to_string();
+
+        let msg = HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
+            account_id: self.account_id.clone(),
+            balance: self.current_balance,
+            equity: self.current_equity,
+            open_positions: self.current_open_positions,
+            timestamp: Utc::now().to_rfc3339(),
+            version,
+            ea_type: self.ea_type.clone(),
+            platform: self.platform.clone(),
+            account_number: self.account_number,
+            broker: self.broker.clone(),
+            account_name: self.account_name.clone(),
+            server: self.server.clone(),
+            currency: self.currency.clone(),
+            leverage: self.leverage,
+            is_trade_allowed,
+            symbol_prefix: None, // Could be updated from config
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
+        self.strategy.send_push(&data)?;
+
+        // Check if we need to request config (if trade allowed changed to true)
+        if is_trade_allowed && !self.last_trade_allowed {
+            // Request config logic
+            let _ = self.send_request_config(1);
+        }
+        self.last_trade_allowed = is_trade_allowed;
+
+        Ok(())
+    }
+
+    fn process_incoming_message(&mut self, data: &[u8]) {
+        // Parse Topic vs Payload (Zero allocation)
+        if let Some(space_pos) = data.iter().position(|&b| b == b' ') {
+            let topic_bytes = &data[..space_pos];
+            let payload = &data[space_pos + 1..];
+
+            // Check prefix directly on bytes
+            if topic_bytes.starts_with(b"trade/") {
+                if self.ea_type == "Slave" {
+                    self.process_incoming_trade(payload);
+                }
+            } else if topic_bytes.starts_with(b"sync/") {
+                // We only convert to String if really needed (e.g. for further parsing)
+                // process_sync_message signature needs topic: &str, so we convert just here
+                let topic = String::from_utf8_lossy(topic_bytes);
+                self.process_sync_message(&topic, payload);
+            } else if topic_bytes.starts_with(b"config/") {
+                self.process_config_message(payload);
+            }
+        }
+    }
+
+    fn process_config_message(&mut self, payload: &[u8]) {
+        // Parse and store config
+        if self.ea_type == "Master" {
+            if let Ok(config) = rmp_serde::from_slice::<crate::types::MasterConfigMessage>(payload)
+            {
+                self.last_master_config = Some(config);
+            }
+        } else if self.ea_type == "Slave" {
+            if let Ok(config) = rmp_serde::from_slice::<crate::types::SlaveConfigMessage>(payload) {
+                // Auto subscribe logic
+                let master_acc = config.master_account.clone();
+                // Also sync topic
+                let sync_topic = format!("sync/{}/{}", master_acc, self.account_id);
+                // For trade subscription, specific master logic is handled but
+                // typically we subscribe to specific masters.
+                // In new protocol, topic is trade/{master_acc}/
+                // Current subscribe_trade handles it.
+                let _ = self.subscribe_trade(&master_acc);
+                let _ = self.subscribe_config(&sync_topic);
+
+                self.last_slave_config = Some(config);
+            }
+        }
+
+        // Trigger UPDATE_UI command
+        // Trigger UPDATE_UI command
+        let cmd = EaCommand {
+            command_type: EaCommandType::UpdateUi as i32,
+            ..Default::default()
+        };
+        self.enqueue_command(cmd);
+    }
+
+    fn process_sync_message(&mut self, _topic: &str, payload: &[u8]) {
+        if self.ea_type == "Master" {
+            if let Ok(req) = rmp_serde::from_slice::<crate::types::SyncRequestMessage>(payload) {
+                if req.master_account == self.account_id {
+                    self.last_sync_request = Some(req.clone());
+                    let mut cmd = EaCommand {
+                        command_type: EaCommandType::SendSnapshot as i32,
+                        ..Default::default()
+                    };
+                    copy_string_to_array(&req.slave_account, &mut cmd.comment);
+                    self.enqueue_command(cmd);
+                }
+            }
+        } else if self.ea_type == "Slave" {
+            if let Ok(snapshot) =
+                rmp_serde::from_slice::<crate::types::PositionSnapshotMessage>(payload)
+            {
+                self.last_position_snapshot = Some(snapshot);
+                let cmd = EaCommand {
+                    command_type: EaCommandType::ProcessSnapshot as i32,
+                    ..Default::default()
+                };
+                self.enqueue_command(cmd);
+            }
+        }
+    }
+
+    fn process_incoming_trade(&mut self, data: &[u8]) {
+        // Parse trade signal
+        if let Ok(signal) = rmp_serde::from_slice::<TradeSignal>(data) {
+            // Convert to EaCommand
+            let mut cmd = EaCommand {
+                command_type: match signal.action {
+                    TradeAction::Open => EaCommandType::Open as i32,
+                    TradeAction::Close => EaCommandType::Close as i32,
+                    TradeAction::Modify => EaCommandType::Modify as i32,
+                },
+                ..Default::default()
+            };
+
+            if cmd.command_type == 0 {
+                return;
+            }
+
+            cmd.ticket = signal.ticket;
+            if let Some(s) = signal.symbol {
+                copy_string_to_array(&s, &mut cmd.symbol);
+            }
+            if let Some(ot) = signal.order_type {
+                cmd.order_type = i32::from(ot);
+            }
+            cmd.volume = signal.lots.unwrap_or(0.0);
+            cmd.price = signal.open_price.unwrap_or(0.0);
+            cmd.sl = signal.stop_loss.unwrap_or(0.0);
+            cmd.tp = signal.take_profit.unwrap_or(0.0);
+            cmd.magic = signal.magic_number.unwrap_or(0);
+            cmd.close_ratio = signal.close_ratio.unwrap_or(0.0);
+            // We prioritize source_account into cmd.comment because Slave EA needs it
+            // to look up configuration (slippage, etc). The original user comment is less critical.
+            copy_string_to_array(&signal.source_account, &mut cmd.comment);
+
+            cmd.timestamp = signal.timestamp.timestamp();
+
+            self.enqueue_command(cmd);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -124,7 +435,7 @@ impl EaContext {
         tp: f64,
         magic: i64,
         comment: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), BridgeError> {
         let msg = TradeSignal {
             action: TradeAction::Open,
             ticket,
@@ -141,8 +452,7 @@ impl EaContext {
             close_ratio: None,
         };
 
-        let data = rmp_serde::encode::to_vec_named(&msg)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
@@ -153,7 +463,7 @@ impl EaContext {
         ticket: i64,
         lots: f64,
         close_ratio: f64,
-    ) -> Result<(), String> {
+    ) -> Result<(), BridgeError> {
         let msg = TradeSignal {
             action: crate::constants::TradeAction::Close,
             ticket,
@@ -174,14 +484,13 @@ impl EaContext {
             },
         };
 
-        let data = rmp_serde::encode::to_vec_named(&msg)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn send_modify_signal(&mut self, ticket: i64, sl: f64, tp: f64) -> Result<(), String> {
+    pub fn send_modify_signal(&mut self, ticket: i64, sl: f64, tp: f64) -> Result<(), BridgeError> {
         let msg = TradeSignal {
             action: TradeAction::Modify,
             ticket,
@@ -198,8 +507,7 @@ impl EaContext {
             close_ratio: None,
         };
 
-        let data = rmp_serde::encode::to_vec_named(&msg)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
@@ -208,7 +516,7 @@ impl EaContext {
         &mut self,
         master_account: &str,
         last_sync_time: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), BridgeError> {
         let msg = crate::types::SyncRequestMessage {
             message_type: "SyncRequest".to_string(),
             slave_account: self.account_id.clone(),
@@ -217,33 +525,32 @@ impl EaContext {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        let data = rmp_serde::encode::to_vec_named(&msg)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
 
     // --- Socket Accessors for FFI (Raw Pointers) ---
-    pub fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+    pub fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, BridgeError> {
         self.strategy.get_config_socket_ptr()
     }
 
-    pub fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+    pub fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, BridgeError> {
         self.strategy.get_trade_socket_ptr()
     }
 
     /// Receive from Config socket (non-blocking)
-    pub fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+    pub fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, BridgeError> {
         self.strategy.receive_config(buffer)
     }
 
     /// Receive from Trade socket (Slave only, non-blocking)
-    pub fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, String> {
+    pub fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, BridgeError> {
         self.strategy.receive_trade(buffer)
     }
 
     /// Subscribe to topic on Config socket
-    pub fn subscribe_config(&mut self, topic: &str) -> Result<(), String> {
+    pub fn subscribe_config(&mut self, topic: &str) -> Result<(), BridgeError> {
         self.strategy.subscribe_config(topic)
     }
 
@@ -272,9 +579,54 @@ impl EaContext {
     }
 }
 
+fn copy_string_to_array<const N: usize>(s: &str, arr: &mut [u8; N]) {
+    // Max bytes we can safely store (leaving room for null terminator if needed,
+    // though this logic guarantees 0 at N-1 if we don't fill it?
+    // Actually simpler: fill up to N-1, ensure safely cut at char boundary.
+    let max_len = N - 1;
+
+    let bytes = if s.len() <= max_len {
+        s.as_bytes()
+    } else {
+        // Find safe cut point
+        let mut end = max_len;
+        while end > 0 && !is_char_boundary(s, end) {
+            end -= 1;
+        }
+        &s.as_bytes()[..end]
+    };
+
+    arr[..bytes.len()].copy_from_slice(bytes);
+    // Fill remaining with 0
+    // Note: iterating range logic is efficient in Rust
+    // Fill remaining with 0
+    arr[bytes.len()..].fill(0);
+}
+
+// Helper: Check if index is a valid UTF-8 char boundary
+// See: https://doc.rust-lang.org/std/primitive.str.html#method.is_char_boundary
+// But we cannot use s.is_char_boundary(index) if index is not a valid implementation detail?
+// Actually s.is_char_boundary(index) is safe.
+fn is_char_boundary(s: &str, index: usize) -> bool {
+    // Fallback manual check if needed, or use std method:
+    // s.is_char_boundary(index)
+    // Here we implement the logic manually to match user request style or just use std
+    if index == 0 {
+        return true;
+    }
+    match s.as_bytes().get(index) {
+        // 10xxxxxx (0x80 .. 0xBF) means continuation byte.
+        // So valid boundary is NOT (0x80 & b != 0)
+        // i.e. (b & 0xC0) != 0x80
+        Some(&b) => (b & 0xC0) != 0x80,
+        None => true, // End of string is boundary
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::BridgeError;
     use std::sync::{Arc, Mutex};
 
     fn create_test_context(ea_type: &str) -> EaContext {
@@ -322,33 +674,47 @@ mod tests {
     #[derive(Debug, Default)]
     struct MockStrategy {
         sent_data: Arc<Mutex<Vec<Vec<u8>>>>,
+        incoming_data: Arc<Mutex<VecDeque<Vec<u8>>>>,
+        next_error: Arc<Mutex<Option<BridgeError>>>,
     }
 
     impl CommunicationStrategy for MockStrategy {
-        fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), String> {
+        fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), BridgeError> {
             Ok(())
         }
         fn disconnect(&mut self) {}
-        fn send_push(&mut self, data: &[u8]) -> Result<(), String> {
+        fn send_push(&mut self, data: &[u8]) -> Result<(), BridgeError> {
             self.sent_data.lock().unwrap().push(data.to_vec());
             Ok(())
         }
-        fn subscribe_trade(&mut self, _: &str) -> Result<(), String> {
+        fn subscribe_trade(&mut self, _: &str) -> Result<(), BridgeError> {
             Ok(())
         }
-        fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
-            Err("Mock".to_string())
+        fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, BridgeError> {
+            Err(BridgeError::Init("Mock".to_string()))
         }
-        fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
-            Err("Mock".to_string())
+        fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, BridgeError> {
+            Err(BridgeError::Init("Mock".to_string()))
         }
-        fn receive_config(&mut self, _: &mut [u8]) -> Result<i32, String> {
-            Ok(0)
+        fn receive_config(&mut self, buffer: &mut [u8]) -> Result<i32, BridgeError> {
+            if let Some(err) = self.next_error.lock().unwrap().take() {
+                return Err(err);
+            }
+            let mut queue = self.incoming_data.lock().unwrap();
+            if let Some(data) = queue.pop_front() {
+                if data.len() > buffer.len() {
+                    return Err(BridgeError::Generic("Buffer too small".to_string()));
+                }
+                buffer[..data.len()].copy_from_slice(&data);
+                Ok(data.len() as i32)
+            } else {
+                Ok(0)
+            }
         }
-        fn receive_trade(&mut self, _: &mut [u8]) -> Result<i32, String> {
-            Ok(0)
+        fn receive_trade(&mut self, buffer: &mut [u8]) -> Result<i32, BridgeError> {
+            self.receive_config(buffer)
         }
-        fn subscribe_config(&mut self, _: &str) -> Result<(), String> {
+        fn subscribe_config(&mut self, _: &str) -> Result<(), BridgeError> {
             Ok(())
         }
     }
@@ -360,9 +726,10 @@ mod tests {
 
         ctx.strategy = Box::new(MockStrategy {
             sent_data: sent_data.clone(),
+            incoming_data: Arc::new(Mutex::new(VecDeque::new())),
+            next_error: Arc::new(Mutex::new(None)),
         });
 
-        // This should invoke send_push
         ctx.send_request_config(1)
             .expect("Failed to send request config");
 
@@ -377,6 +744,8 @@ mod tests {
 
         ctx.strategy = Box::new(MockStrategy {
             sent_data: sent_data.clone(),
+            incoming_data: Arc::new(Mutex::new(VecDeque::new())),
+            next_error: Arc::new(Mutex::new(None)),
         });
 
         ctx.send_open_signal(
@@ -394,5 +763,103 @@ mod tests {
 
         let data = sent_data.lock().unwrap();
         assert_eq!(data.len(), 1, "Should have sent one message");
+    }
+
+    #[test]
+    fn test_processing_incoming_config_slave() {
+        let mut ctx = create_test_context("Slave");
+        let incoming = Arc::new(Mutex::new(VecDeque::new()));
+
+        // Prepare a SlaveConfigMessage mock payload
+        let config = crate::types::SlaveConfigMessage {
+            account_id: "test_acc".to_string(),
+            master_account: "master1".to_string(),
+            status: 1, // Enabled
+            ..Default::default()
+        };
+        let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
+        // Prepend topic if process_incoming_message expects it?
+        // logic: `if let Some(space_pos) = data.iter().position(|&b| b == b' ')`
+        // We need to construct "config/global " + msgpack
+        let mut payload = b"config/global ".to_vec();
+        payload.append(&mut config_bytes);
+
+        incoming.lock().unwrap().push_back(payload);
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: incoming.clone(),
+            next_error: Arc::new(Mutex::new(None)),
+        });
+
+        // Run manager_tick
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+
+        assert_eq!(pending, 1, "Should have pending command (UpdateUi)");
+        assert!(ctx.last_slave_config.is_some());
+        assert_eq!(
+            ctx.last_slave_config.as_ref().unwrap().master_account,
+            "master1"
+        );
+
+        let cmd = ctx.get_next_command().expect("No command found");
+        assert_eq!(cmd.command_type, EaCommandType::UpdateUi as i32);
+    }
+
+    #[test]
+    fn test_processing_incoming_trade_slave() {
+        let mut ctx = create_test_context("Slave");
+        let incoming = Arc::new(Mutex::new(VecDeque::new()));
+
+        // Prepare TradeSignal
+        let signal = crate::types::TradeSignal {
+            action: TradeAction::Open,
+            ticket: 999,
+            symbol: Some("GBPUSD".to_string()),
+            lots: Some(0.5),
+            ..Default::default()
+        };
+        let mut signal_bytes = rmp_serde::to_vec_named(&signal).unwrap();
+        // Topic: "trade/master1 "
+        let mut payload = b"trade/master1 ".to_vec();
+        payload.append(&mut signal_bytes);
+
+        incoming.lock().unwrap().push_back(payload);
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: incoming.clone(),
+            next_error: Arc::new(Mutex::new(None)),
+        });
+
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+
+        assert_eq!(pending, 1, "Should have pending command (Open)");
+
+        let cmd = ctx.get_next_command().unwrap();
+        assert_eq!(cmd.command_type, EaCommandType::Open as i32);
+        assert_eq!(cmd.ticket, 999);
+        assert_eq!(cmd.volume, 0.5);
+    }
+
+    #[test]
+    fn test_error_handling_in_loop() {
+        let mut ctx = create_test_context("Slave");
+        let next_error = Arc::new(Mutex::new(Some(BridgeError::Generic(
+            "Simulated Failure".to_string(),
+        ))));
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: Arc::new(Mutex::new(VecDeque::new())),
+            next_error: next_error.clone(),
+        });
+
+        // manager_tick should call receive_config, fail, log error (eprintln) and continue/break without panic
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ctx.manager_tick(1000.0, 1000.0, 0, true)
+        }));
+
+        assert!(result.is_ok(), "Manager tick panicked on error!");
     }
 }

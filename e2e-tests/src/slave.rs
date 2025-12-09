@@ -12,10 +12,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::{
-    build_trade_topic, ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_init, ea_receive_config, ea_send_heartbeat, ea_send_push,
-    ea_send_register, ea_send_sync_request, ea_send_unregister, ea_subscribe_config,
+    build_trade_topic, ea_connect, ea_context_free, ea_context_get_position_snapshot,
+    ea_context_get_slave_config, ea_context_mark_config_requested, ea_get_command, ea_init,
+    ea_manager_tick, ea_send_push, ea_send_sync_request, ea_send_unregister, ea_subscribe_config,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -24,9 +25,8 @@ use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
-    EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, TradeAction, TradeSignal,
-    UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
-    STATUS_NO_CONFIG,
+    EaType, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal, UnregisterMessage,
+    VLogsConfigMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
 // Wrapper for thread-safe passing of EaContext pointer
@@ -48,19 +48,19 @@ struct SlaveEaCore {
     is_trade_allowed: Arc<AtomicBool>,
     _master_account: String,
 
-    g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
-    g_config_requested: Arc<AtomicBool>,
-    g_last_trade_allowed: Arc<AtomicBool>,
-    g_has_received_config: Arc<AtomicBool>,
+    _g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
+    _g_config_requested: Arc<AtomicBool>,
+    _g_last_trade_allowed: Arc<AtomicBool>,
+    _g_has_received_config: Arc<AtomicBool>,
     g_configs: Arc<Mutex<Vec<SlaveConfig>>>,
     last_received_status: Arc<AtomicI32>,
 
-    g_register_sent: Arc<AtomicBool>,
+    _g_register_sent: Arc<AtomicBool>,
     received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
 
-    subscribed_masters: Arc<Mutex<Vec<String>>>,
+    _subscribed_masters: Arc<Mutex<Vec<String>>>,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
     context: Arc<Mutex<Option<ContextWrapper>>>,
 
@@ -122,9 +122,7 @@ impl ExpertAdvisor for SlaveEaCore {
         if let Some(wrapper) = guard.take() {
             let ctx = wrapper.0;
             let mut buffer = vec![0u8; 1024];
-            let len = unsafe {
-                ea_send_unregister(ctx, buffer.as_mut_ptr(), buffer.len() as i32)
-            };
+            let len = unsafe { ea_send_unregister(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
             if len > 0 {
                 unsafe {
                     ea_send_push(ctx, buffer.as_ptr(), len);
@@ -142,6 +140,8 @@ impl ExpertAdvisor for SlaveEaCore {
             Some(w) => w.0,
             None => return,
         };
+
+        // Helper for string conversion
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
         // Process pending subscriptions
@@ -158,163 +158,118 @@ impl ExpertAdvisor for SlaveEaCore {
             }
         }
 
-        // Register (Once)
-        if !self.g_register_sent.load(Ordering::SeqCst) {
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
-            if len > 0 {
-                unsafe {
-                    ea_send_push(ctx, buffer.as_ptr(), len);
-                }
-                self.g_register_sent.store(true, Ordering::SeqCst);
-            }
-        }
-
         let current_trade_allowed = self.is_trade_allowed.load(Ordering::SeqCst);
-        let last_trade_allowed_val = self.g_last_trade_allowed.load(Ordering::SeqCst);
-        let trade_state_changed = current_trade_allowed != last_trade_allowed_val;
 
-        let now = Instant::now();
-        let last_hb = *self.g_last_heartbeat.lock().unwrap();
-        let should_send_heartbeat = match last_hb {
-            None => true,
-            Some(last) => {
-                now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
-                    || trade_state_changed
-            }
+        // 1. Rust Manager Tick
+        let status = unsafe {
+            ea_manager_tick(
+                ctx,
+                self.heartbeat_params.balance,
+                self.heartbeat_params.equity,
+                0,
+                if current_trade_allowed { 1 } else { 0 },
+            )
         };
 
-        if should_send_heartbeat {
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe {
-                ea_send_heartbeat(
-                    ctx,
-                    self.heartbeat_params.balance,
-                    self.heartbeat_params.equity,
-                    0, // open_positions
-                    if current_trade_allowed { 1 } else { 0 },
-                    buffer.as_mut_ptr(),
-                    buffer.len() as i32,
-                )
-            };
-
-            if len > 0 {
-                unsafe {
-                    ea_send_push(ctx, buffer.as_ptr(), len);
-                }
-
-                *self.g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-                if trade_state_changed {
-                    self.g_last_trade_allowed
-                        .store(current_trade_allowed, Ordering::SeqCst);
-                }
-
-                let should_request = unsafe {
-                    ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
-                };
-
-                if should_request == 1 {
-                    let req_msg = RequestConfigMessage {
-                        message_type: "RequestConfig".to_string(),
-                        account_id: self.account_id.clone(),
-                        ea_type: "Slave".to_string(),
-                        timestamp: Utc::now().to_rfc3339(),
-                    };
-                    if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
-                        unsafe {
-                            ea_send_push(ctx, req_bytes.as_ptr(), req_bytes.len() as i32);
-                        }
-                        self.g_config_requested.store(true, Ordering::SeqCst);
-                    }
-                }
-            }
-        }
-
-        // Receive Loop (Config & Trade & Sync)
-        loop {
-            let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-
-            let received_bytes = unsafe {
-                ea_receive_config(ctx, buffer.as_mut_ptr(), crate::types::BUFFER_SIZE as i32)
-            };
-
-            if received_bytes <= 0 {
-                break;
-            }
-
-            let bytes = &buffer[..received_bytes as usize];
-            if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                let payload = &bytes[space_pos + 1..];
-
-                if topic.starts_with("trade/") {
-                    match rmp_serde::from_slice::<TradeSignal>(payload) {
-                        Ok(signal) => {
-                            self.received_trade_signals.lock().unwrap().push(signal);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to deserialize TradeSignal: {}", e);
-                            eprintln!("Payload len: {}, bytes: {:?}", payload.len(), payload);
-                        }
-                    }
-                } else if topic.starts_with("sync/") {
-                    if let Ok(snapshot) = rmp_serde::from_slice::<PositionSnapshotMessage>(payload)
-                    {
-                        self.received_position_snapshots
-                            .lock()
-                            .unwrap()
-                            .push(snapshot);
-                    }
-                } else if topic.starts_with("config/") {
-                    if let Ok(config) = rmp_serde::from_slice::<SlaveConfig>(payload) {
-                        {
-                            let mut configs = self.g_configs.lock().unwrap();
-                            if let Some(existing) = configs
-                                .iter_mut()
-                                .find(|c| c.master_account == config.master_account)
+        // 2. Process Commands
+        if status == 1 {
+            let mut cmd = EaCommand::default();
+            while unsafe { ea_get_command(ctx, &mut cmd) } == 1 {
+                let cmd_type =
+                    unsafe { std::mem::transmute::<i32, EaCommandType>(cmd.command_type) };
+                match cmd_type {
+                    EaCommandType::UpdateUi => {
+                        // Config updated.
+                        let cfg_ptr = unsafe { ea_context_get_slave_config(ctx) };
+                        if !cfg_ptr.is_null() {
+                            let cfg = unsafe { &*cfg_ptr };
+                            // Update verification queues
                             {
-                                *existing = config.clone();
-                            } else {
-                                configs.push(config.clone());
+                                let mut configs = self.g_configs.lock().unwrap();
+                                if let Some(existing) = configs
+                                    .iter_mut()
+                                    .find(|c| c.master_account == cfg.master_account)
+                                {
+                                    *existing = cfg.clone();
+                                } else {
+                                    configs.push(cfg.clone());
+                                }
                             }
+                            self.last_received_status
+                                .store(cfg.status, Ordering::SeqCst);
+                            unsafe { ea_context_mark_config_requested(ctx) };
                         }
-                        self.last_received_status
-                            .store(config.status, Ordering::SeqCst);
-                        self.g_has_received_config.store(true, Ordering::SeqCst);
-                        unsafe {
-                            ea_context_mark_config_requested(ctx);
-                        }
-
-                        // Dynamic Trade/Sync Subscription logic
-                        let master_acc = &config.master_account;
-                        let mut subscribed = self.subscribed_masters.lock().unwrap();
-                        if !subscribed.contains(master_acc) {
-                            let master_u16 = to_u16(master_acc);
-                            let slave_u16 = to_u16(&self.account_id);
-                            let mut topic_buf = vec![0u16; 256];
-
-                            unsafe {
-                                build_trade_topic(
-                                    master_u16.as_ptr(),
-                                    slave_u16.as_ptr(),
-                                    topic_buf.as_mut_ptr(),
-                                    256,
-                                );
-                                ea_subscribe_config(ctx, topic_buf.as_ptr());
-                            }
-
-                            let sync_topic =
-                                format!("sync/{}/{}", master_acc, self.account_id);
-                            let sync_topic_u16 = to_u16(&sync_topic);
-                            unsafe {
-                                ea_subscribe_config(ctx, sync_topic_u16.as_ptr());
-                            }
-
-                            subscribed.push(master_acc.clone());
-                        }
-                    } else if let Ok(vlogs) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
-                        self.received_vlogs_configs.lock().unwrap().push(vlogs);
                     }
+                    EaCommandType::ProcessSnapshot => {
+                        let snap_ptr = unsafe { ea_context_get_position_snapshot(ctx) };
+                        if !snap_ptr.is_null() {
+                            let snap = unsafe { &*snap_ptr };
+                            self.received_position_snapshots
+                                .lock()
+                                .unwrap()
+                                .push(snap.clone());
+                        }
+                    }
+                    EaCommandType::Open | EaCommandType::Close | EaCommandType::Modify => {
+                        // Reconstruct TradeSignal for verification
+                        let sym_bytes = &cmd.symbol;
+                        let end = sym_bytes
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(sym_bytes.len());
+                        let symbol = String::from_utf8_lossy(&sym_bytes[..end]).to_string();
+
+                        let action = match cmd_type {
+                            EaCommandType::Open => TradeAction::Open,
+                            EaCommandType::Close => TradeAction::Close,
+                            EaCommandType::Modify => TradeAction::Modify,
+                            _ => TradeAction::Open,
+                        };
+
+                        let comment_raw = &cmd.comment;
+                        let end_comment = comment_raw
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(comment_raw.len());
+                        let comment_str =
+                            String::from_utf8_lossy(&comment_raw[..end_comment]).to_string();
+                        let comment = if comment_str.is_empty() {
+                            None
+                        } else {
+                            Some(comment_str)
+                        };
+
+                        let signal = TradeSignal {
+                            action,
+                            ticket: cmd.ticket,
+                            symbol: Some(symbol),
+                            order_type: crate::types::OrderType::from_mql(cmd.order_type),
+                            lots: Some(cmd.volume),
+                            open_price: Some(cmd.price),
+                            stop_loss: if cmd.sl.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.sl)
+                            },
+                            take_profit: if cmd.tp.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.tp)
+                            },
+                            magic_number: Some(cmd.magic),
+                            comment: comment,
+                            timestamp: chrono::DateTime::from_timestamp(cmd.timestamp, 0)
+                                .unwrap_or_else(chrono::Utc::now),
+                            source_account: "unknown".to_string(), // Inferred from context if needed
+                            close_ratio: if cmd.close_ratio.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.close_ratio)
+                            },
+                        };
+                        self.received_trade_signals.lock().unwrap().push(signal);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -406,17 +361,17 @@ impl SlaveEaSimulator {
             _shutdown_flag: self.base.shutdown_flag.clone(),
             is_trade_allowed: self.base.is_trade_allowed_arc(),
             _master_account: self.master_account.clone(),
-            g_last_heartbeat: self.g_last_heartbeat.clone(),
-            g_config_requested: self.g_config_requested.clone(),
-            g_last_trade_allowed: self.g_last_trade_allowed.clone(),
-            g_has_received_config: self.g_has_received_config.clone(),
+            _g_last_heartbeat: self.g_last_heartbeat.clone(),
+            _g_config_requested: self.g_config_requested.clone(),
+            _g_last_trade_allowed: self.g_last_trade_allowed.clone(),
+            _g_has_received_config: self.g_has_received_config.clone(),
             g_configs: self.g_configs.clone(),
             last_received_status: self.last_received_status.clone(),
-            g_register_sent: self.g_register_sent.clone(),
+            _g_register_sent: self.g_register_sent.clone(),
             received_trade_signals: self.received_trade_signals.clone(),
             received_position_snapshots: self.received_position_snapshots.clone(),
-            received_vlogs_configs: self.received_vlogs_configs.clone(),
-            subscribed_masters: self.subscribed_masters.clone(),
+            _received_vlogs_configs: self.received_vlogs_configs.clone(),
+            _subscribed_masters: self.subscribed_masters.clone(),
             pending_subscriptions: self.pending_subscriptions.clone(),
             context: self.context.clone(),
             push_address: self.push_address.clone(),

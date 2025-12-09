@@ -355,3 +355,56 @@ pub struct VLogsConfigMessage {
     /// Timestamp when this config was sent (ISO 8601)
     pub timestamp: String,
 }
+
+impl Default for SlaveConfigMessage {
+    fn default() -> Self {
+        Self {
+            account_id: String::new(),
+            master_account: String::new(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            trade_group_id: String::new(),
+            status: 0,
+            lot_calculation_mode: LotCalculationMode::default(),
+            lot_multiplier: None,
+            reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_mappings: Vec::new(),
+            filters: TradeFilters::default(),
+            config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: None,
+            sync_mode: SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: default_max_retries(),
+            max_signal_delay_ms: default_max_signal_delay_ms(),
+            use_pending_order_for_delayed: false,
+            allow_new_orders: default_allow_new_orders(),
+            warning_codes: Vec::new(),
+        }
+    }
+}
+
+impl Default for TradeSignal {
+    fn default() -> Self {
+        Self {
+            action: crate::constants::TradeAction::Open,
+            ticket: 0,
+            symbol: None,
+            order_type: None,
+            lots: None,
+            open_price: None,
+            stop_loss: None,
+            take_profit: None,
+            magic_number: None,
+            comment: None,
+            timestamp: chrono::Utc::now(),
+            source_account: String::new(),
+            close_ratio: None,
+        }
+    }
+}

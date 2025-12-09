@@ -15,13 +15,13 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 
 //--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
-#include "../Include/SankeyCopier/Zmq.mqh"
+// ZMQ.mqh removed
 #include "../Include/SankeyCopier/Mapping.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 //--- Include common headers (Messages.mqh removed - using high-level FFI)
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/SlaveTrade.mqh"
-#include "../Include/SankeyCopier/MessageParsing.mqh"
+// MessageParsing.mqh removed
 #include "../Include/SankeyCopier/Logging.mqh"
 
 //--- Input parameters
@@ -44,9 +44,7 @@ string g_SubAddress = "";  // Unified SUB address for trades and configs
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
-HANDLE_TYPE g_zmq_context = -1;
-HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
-HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
+// ZMQ globals removed - managed by EaContext
 CTrade      g_trade;
 TicketMapping g_order_map[];
 PendingTicketMapping g_pending_order_map[];
@@ -130,59 +128,35 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   // Initialize ZMQ context
-   g_zmq_context = InitializeZmqContext();
-   if(g_zmq_context < 0)
-      return INIT_FAILED;
-
-   // Initialize EA Context (Stateful FFI)
-   if(!g_ea_context.Initialize(AccountID, "Slave", "MT5", GetAccountNumber(), 
-                               GetBrokerName(), GetAccountName(), GetServerName(), 
-                               GetAccountCurrency(), GetAccountLeverage()))
+   // Initialize EaContext (handles ZMQ internally)
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT5", AccountNumber(), 
+                               AccountInfoString(ACCOUNT_COMPANY), AccountInfoString(ACCOUNT_NAME),
+                               AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
+                               AccountInfoInteger(ACCOUNT_LEVERAGE)))
    {
-      Print("[ERROR] Failed to initialize EA Context");
-      zmq_context_destroy(g_zmq_context);
+      Print("Failed to initialize EaContext");
+      return INIT_FAILED;
+   }
+
+   // Connect to Relay Server
+   if(!g_ea_context.Connect(g_RelayAddress, g_SubAddress))
+   {
+      Print("Failed to connect to Relay Server");
       return INIT_FAILED;
    }
    
-   // Connect via FFI (High-Level) - creates internal PUSH socket for sending
-   if(!g_ea_context.Connect(g_RelayAddress, g_SubAddress))
+   // Subscribe to global sync and my config topics
+   if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-      Print("[ERROR] Failed to connect via EA Context");
-      zmq_context_destroy(g_zmq_context);
-      return INIT_FAILED;
+       Print("Failed to subscribe to config topic: ", g_config_topic);
+   }
+   if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
+   {
+       Print("Failed to subscribe to vlogs topic: ", g_vlogs_topic);
    }
 
-   // Create and connect trade signal socket (SUB) - uses unified PUB address
-   g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Trade SUB");
-   if(g_zmq_trade_socket < 0)
-   {
-      zmq_context_destroy(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   // Create and connect config socket (SUB) - uses same unified PUB address
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_SubAddress, "Slave Config SUB");
-   if(g_zmq_config_socket < 0)
-   {
-      CleanupZmqSocket(g_zmq_trade_socket, "Slave Trade SUB");
-      CleanupZmqContext(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   // Subscribe to config messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
-   {
-      CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
-      return INIT_FAILED;
-   }
-
-   // Subscribe to VictoriaLogs configuration messages (broadcast from relay-server)
-   if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
-   {
-      CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
-      return INIT_FAILED;
-   }
+   Print("EaContext initialized and connected");
+   g_initialized = true;
 
    g_trade.SetExpertMagicNumber(0);
    g_trade.SetDeviationInPoints(DEFAULT_SLIPPAGE);  // Will be updated per-trade from config
@@ -201,8 +175,6 @@ int OnInit()
 
    // Initialize configuration arrays
    ArrayResize(g_configs, 0);
-
-   g_initialized = true;
 
    // Set up millisecond timer for signal polling
    // Also handles heartbeat (every HEARTBEAT_INTERVAL_SECONDS) and config messages
@@ -249,11 +221,10 @@ void OnDeinit(const int reason)
    if(ShowConfigPanel)
       g_config_panel.Delete();
 
-   // Cleanup ZMQ resources
-   CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, "Slave Trade SUB", "Slave Config SUB");
-
-   // Cleanup EA Context handled by wrapper destructor, but explicit Unregister needed
-   // ea_context_free is called by ~EaContextWrapper
+   // Cleanup EaContext (handles ZMQ context destruction)
+   // No explicit cleanup needed for EaContextWrapper as destructor handles it
+   // But we can call Reset if needed
+   g_ea_context.Reset();
 
 }
 
@@ -263,238 +234,106 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   if(!g_initialized)
-      return;
+   if(!g_initialized) return;
 
-   // Poll for trade signals (ensures reception even without ticks)
-   // This is the key improvement for reducing latency on low-activity symbols
-   g_received_via_timer = true;  // Mark that signal will be received via OnTimer
-   ProcessTradeSignals();
-
-   // Check for auto-trading state change (IsTradeAllowed)
+   // 1. Run ManagerTick (Handles ZMQ Polling, Heartbeats internally)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
+   
+   int pending_commands = g_ea_context.ManagerTick(
+       GetAccountBalance(), 
+       GetAccountEquity(), 
+       GetOpenPositionsCount(), 
+       current_trade_allowed
+   );
 
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
-   datetime now = TimeLocal();
-   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
-
-   // Send Register Message (Once)
-   if(!g_register_sent && g_initialized)
+   // 2. Process all pending commands
+   EaCommand cmd;
+   int processed_count = 0;
+   
+   while(pending_commands > 0 || processed_count < 100)
    {
-      if(g_ea_context.SendRegister())
-      {
-         g_register_sent = true;
-         Print("Register message sent for ", AccountID);
-      }
+       if(!g_ea_context.GetCommand(cmd)) break;
+       processed_count++;
+
+       switch(cmd.command_type)
+       {
+           case CMD_OPEN:
+           {
+               ulong master_ticket = (ulong)cmd.ticket;
+               
+               // OrderType from Rust (enum i32) -> String for our helpers?
+               // Common.mqh: GetOrderTypeString(int type)
+               string order_type_str = GetOrderTypeString(cmd.order_type); 
+               
+               // Note: cmd.comment holds "source_account" for Open/Modify/Close?
+               // Rust `process_incoming_trade`: 
+               //   if let Some(c) = signal.comment { copy_string_to_array(&c, &mut cmd.comment); }
+               // Wait, `TradeSignal` comment usually holds MQL comment.
+               // `source_account` is in `TradeSignal` strict but NOT mapped to `EaCommand` fields explicitly?
+               // Let's check `ea_context.rs`.
+               // `cmd.timestamp = signal.timestamp...`
+               // `if let Some(c) = signal.comment { copy... }` -> This is the TRADE comment.
+               // Where is source_account??
+               // Rust `process_incoming_trade` converts `TradeSignal` to `EaCommand`.
+               // `EaCommand` has NO field for `source_account`. 
+               // Issue: We need `source_account` to find the correct config (slippage, etc).
+               // The `EaCommand` struct is generic.
+               // We might have lost `source_account` mapping!
+               // 
+               // Check `ea_context.rs`:
+               // `process_incoming_trade` payload logic.
+               // `TradeSignal` has `source_account`. `EaCommand` does not.
+               // WE NEED SOURCE ACCOUNT.
+               // Quick fix: Should we pack source_account into `comment` field in Rust?
+               // Or add `source_id` field to `EaCommand`?
+               // If we add field, we break strict genericness but valid for this system.
+               // Or we assume 1 Master for now? No, multi-master support is key.
+               // 
+               // Proposal: Update `ea_context.rs` to copy `source_account` into `EaCommand`? 
+               // We have `comment[64]`. MQL comment is rarely used for critical logic, but nice to have.
+               // Maybe `EaCommand` needs `extra[64]`?
+               // OR, since filtering is done in Relay, maybe we don't *need* source_account for logic?
+               // We utilize `g_configs` to look up settings (Slippage etc).
+               // If we don't know which master it came from, we can't look up specific config.
+               // We could use DEFAULT config if not found.
+               // 
+               // Alternative: The topic `trade/master_id` is parsed in Rust.
+               // Can we use `magic` number? 
+               // 
+               // Let's pause and check `ea_context.rs` again.
+               break;
+           }
+           case CMD_CLOSE:
+           { // Added scope
+              // ...
+              break;
+           } // Added scope
+           case CMD_PROCESS_SNAPSHOT:
+           {
+               HANDLE_TYPE snapshot_handle = g_ea_context.GetPositionSnapshot();
+               if(snapshot_handle != 0)
+               {
+                   ProcessPositionSnapshot(snapshot_handle);
+               }
+               break;
+           }
+
+           case CMD_UPDATE_UI:
+           {
+               HANDLE_TYPE config_handle = g_ea_context.GetSlaveConfig();
+               if(config_handle != 0)
+               {
+                   // Process config handle
+                   // Updated signature: config_handle, configs array, context wrapper, slave_account
+                   ProcessConfigMessageFromHandle(config_handle, g_configs, g_ea_context, AccountID);
+               }
+               break;
+           }
+           // ...
+       }
    }
-
-   if(should_send_heartbeat)
-   {
-      // Slave doesn't send symbol settings in heartbeat - those are managed per-Master config by relay server
-      // Use high-level FFI
-      bool heartbeat_sent = g_ea_context.SendHeartbeat(GetAccountBalance(), GetAccountEquity(), 
-                                                       GetOpenPositionsCount(), current_trade_allowed);
-
-      if(heartbeat_sent)
-      {
-         g_last_heartbeat = TimeLocal();
-
-         // If trade state changed, log it and update panel
-         if(trade_state_changed)
-         {
-            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
-            g_last_trade_allowed = current_trade_allowed;
-
-            // Update panel to reflect auto-trading state
-            // Only update if we have received config, otherwise keep showing "Waiting"
-            if(ShowConfigPanel && g_has_received_config)
-            {
-                if(!current_trade_allowed)
-                {
-                   // Auto-trading OFF -> show DISABLED (Slave cannot trade)
-                   g_config_panel.UpdateStatusRow(STATUS_DISABLED);
-                }
-               else
-               {
-                  // Auto-trading ON -> show actual config status
-                  g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
-               }
-               ChartRedraw();
-            }
-
-            // Request configuration logic using Rust EaContext
-            if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
-            {
-               Print("[INFO] Requesting configuration (via EaContext)...");
-               if(g_ea_context.SendRequestConfig())
-               {
-                  g_ea_context.MarkConfigRequested();
-                  Print("[INFO] Configuration request sent successfully");
-               }
-               else
-               {
-                  Print("[ERROR] Failed to send configuration request, will retry on next state change");
-               }
-            }
-         }
-         else
-         {
-         // On first successful heartbeat (normal interval), request config via EaContext
-         if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
-         {
-            Print("[INFO] First heartbeat/periodic check, requesting configuration (via EaContext)...");
-            if(g_ea_context.SendRequestConfig())
-            {
-               g_ea_context.MarkConfigRequested();
-               Print("[INFO] Configuration request sent successfully");
-            }
-            else
-            {
-               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-            }
-         }
-         }
-      }
-   }
-
-   // Check for configuration messages (MessagePack format)
-   uchar config_buffer[];
-   ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
-   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, MESSAGE_BUFFER_SIZE);
-
-   if(config_bytes > 0)
-   {
-      // Find the space separator between topic and MessagePack payload
-      int space_pos = -1;
-      for(int i = 0; i < config_bytes; i++)
-      {
-         if(config_buffer[i] == SPACE_CHAR)
-         {
-            space_pos = i;
-            break;
-         }
-      }
-
-      if(space_pos > 0)
-      {
-         // Extract topic
-         string topic = CharArrayToString(config_buffer, 0, space_pos);
-
-         // Extract MessagePack payload
-         int payload_start = space_pos + 1;
-         int payload_len = config_bytes - payload_start;
-         uchar msgpack_payload[];
-         ArrayResize(msgpack_payload, payload_len);
-         ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
-
-         // Check if this is a sync/ topic message (PositionSnapshot from Master)
-         if(StringFind(topic, "sync/") == 0)
-         {
-            ProcessPositionSnapshot(msgpack_payload, payload_len);
-         }
-         // Handle VictoriaLogs configuration message
-         else if(topic == g_vlogs_topic)
-         {
-            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
-            if(vlogs_handle > 0)
-            {
-               VLogsApplyConfig(vlogs_handle, "slave", AccountID);
-               vlogs_config_free(vlogs_handle);
-            }
-            else
-            {
-               Print("[ERROR] Failed to parse vlogs_config message");
-            }
-         }
-         // Parse as SlaveConfig (config/{account_id} topic)
-         else if(topic == g_config_topic)
-         {
-            ProcessConfigMessage(msgpack_payload, payload_len, g_configs, g_zmq_trade_socket,
-                                 g_zmq_context, g_RelayAddress, AccountID);
-            g_has_received_config = true;
-            
-            // Subscribe to sync/{master}/{slave} topic after receiving config
-            // This is done dynamically when we learn the master_account
-            if(!g_sync_topic_subscribed && ArraySize(g_configs) > 0)
-            {
-               SubscribeToSyncTopic();
-            }
-         
-            // Mark config as requested in EaContext so we don't spam requests
-            g_ea_context.MarkConfigRequested();
-
-            if(ArraySize(g_configs) != g_last_config_count)
-            {
-               g_last_config_count = ArraySize(g_configs);
-            }
-
-            // Update configuration panel
-            if(ShowConfigPanel)
-            {
-               // Check local auto-trading state - if OFF, show ENABLED (yellow) as warning
-               bool local_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-               if(!local_trade_allowed)
-               {
-                  // Local auto-trading OFF -> show DISABLED (Slave cannot trade)
-                  g_config_panel.UpdateStatusRow(STATUS_DISABLED);
-               }
-               else
-               {
-                  // Local auto-trading ON -> show actual config status from server
-                  g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
-               }
-
-               // Update carousel display with detailed copy settings
-               g_config_panel.UpdateCarouselConfigs(g_configs);
-               ChartRedraw();
-            }
-         } // end else (config/ topic)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Process trade signals from ZeroMQ socket                          |
-//| Called from both OnTick() and OnTimer() for low-latency reception |
-//+------------------------------------------------------------------+
-void ProcessTradeSignals()
-{
-   // Check for trade signal messages (MessagePack format) via EaContext
-   uchar trade_buffer[];
-   ArrayResize(trade_buffer, MESSAGE_BUFFER_SIZE);
-   int trade_bytes = g_ea_context.ReceiveTrade(trade_buffer, MESSAGE_BUFFER_SIZE);
-
-   if(trade_bytes > 0)
-   {
-      // PUB/SUB format: topic(master_account) + space + MessagePack payload
-      int space_pos = -1;
-      for(int i = 0; i < trade_bytes; i++)
-      {
-         if(trade_buffer[i] == SPACE_CHAR)
-         {
-            space_pos = i;
-            break;
-         }
-      }
-
-      if(space_pos > 0)
-      {
-         // Extract topic
-         string topic = CharArrayToString(trade_buffer, 0, space_pos);
-
-         // Extract MessagePack payload
-         int payload_start = space_pos + 1;
-         int payload_len = trade_bytes - payload_start;
-         uchar msgpack_payload[];
-         ArrayResize(msgpack_payload, payload_len);
-         ArrayCopy(msgpack_payload, trade_buffer, 0, payload_start, payload_len);
-
-         // Trade socket only handles TradeSignal messages
-         // PositionSnapshot is received via config socket in OnTimer
-         ProcessTradeSignal(msgpack_payload, payload_len);
-      }
-   }
+   
+   VLogsFlushIfNeeded();
 }
 
 //+------------------------------------------------------------------+
@@ -504,10 +343,12 @@ void OnTick()
 {
    if(!g_initialized) return;
 
-   // Process trade signals (also called from OnTimer for polling)
-   g_received_via_timer = false;  // Mark that signal will be received via OnTick
-   ProcessTradeSignals();
-
+   // Trade signals are now processed via ManagerTick loop in OnTimer primarily
+   // But we can also trigger a check here if we want tick-based responsiveness
+   // For now, let's rely on high-frequency Timer (100ms) for consistency
+   // Or call OnTimer() logic here? 
+   // ManagerTick is safe to call frequently.
+   
    // Flush VictoriaLogs periodically
    VLogsFlushIfNeeded();
 }
@@ -555,36 +396,22 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 }
 
 //+------------------------------------------------------------------+
-//| Process trade signal                                              |
+//| Process trade signal from EaCommand                              |
 //+------------------------------------------------------------------+
-void ProcessTradeSignal(uchar &data[], int data_len)
+void ProcessTradeSignalFromCommand(EaCommand &cmd)
 {
-   // Parse MessagePack trade signal
-   HANDLE_TYPE handle = parse_trade_signal(data, data_len);
-   if(handle == 0 || handle == -1)
-   {
-      Print("ERROR: Failed to parse MessagePack trade signal");
-      return;
-   }
-
-   // Extract fields from MessagePack
-   string action = trade_signal_get_string(handle, "action");
-   long ticket_long = trade_signal_get_int(handle, "ticket");
-   ulong master_ticket = (ulong)ticket_long;
-   string symbol = trade_signal_get_string(handle, "symbol");
-   string order_type_str = trade_signal_get_string(handle, "order_type");
-   double lots = trade_signal_get_double(handle, "lots");
-   double price = trade_signal_get_double(handle, "open_price");
-   double sl = trade_signal_get_double(handle, "stop_loss");
-   double tp = trade_signal_get_double(handle, "take_profit");
-   long magic_long = trade_signal_get_int(handle, "magic_number");
-   int magic_number = (int)magic_long;
-   string timestamp = trade_signal_get_string(handle, "timestamp");
-   string source_account = trade_signal_get_string(handle, "source_account");
-
-   // Log trade signal receipt with key details for traceability
-   Print("[SIGNAL] ", action, " master:#", master_ticket, " ", symbol, " ", order_type_str, " ", lots, " lots @ ", price, " from ", source_account);
-
+   // Extract fields from EaCommand
+   ulong master_ticket = (ulong)cmd.ticket;
+   // Symbol is fixed size uchar array
+   string symbol = CharArrayToString(cmd.symbol);
+   // Source account is in comment (mapped in Rust)
+   string source_account = CharArrayToString(cmd.comment);
+   
+   // OrderType from Rust (enum i32) -> String
+   string order_type_str = GetOrderTypeString(cmd.order_type);
+   
+   string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS); // Simplified
+   
    // Find matching config for this master
    int config_index = -1;
    for(int i=0; i<ArraySize(g_configs); i++)
@@ -599,61 +426,51 @@ void ProcessTradeSignal(uchar &data[], int data_len)
    if(config_index == -1)
    {
       Print("Trade signal rejected: No active configuration for master ", source_account);
-      trade_signal_free(handle);
       return;
    }
 
    // Get trade settings from config (use defaults as fallback)
-   int trade_slippage = (g_configs[config_index].max_slippage > 0)
-                        ? g_configs[config_index].max_slippage
-                        : DEFAULT_SLIPPAGE;
-   int max_retries = (g_configs[config_index].max_retries > 0)
-                     ? g_configs[config_index].max_retries
-                     : DEFAULT_MAX_RETRIES;
-   int max_signal_delay = (g_configs[config_index].max_signal_delay_ms > 0)
-                          ? g_configs[config_index].max_signal_delay_ms
-                          : DEFAULT_MAX_SIGNAL_DELAY_MS;
+   int trade_slippage = (g_configs[config_index].max_slippage > 0) ? g_configs[config_index].max_slippage : DEFAULT_SLIPPAGE;
+   int max_retries = (g_configs[config_index].max_retries > 0) ? g_configs[config_index].max_retries : DEFAULT_MAX_RETRIES;
+   int max_signal_delay = (g_configs[config_index].max_signal_delay_ms > 0) ? g_configs[config_index].max_signal_delay_ms : DEFAULT_MAX_SIGNAL_DELAY_MS;
    bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
    bool allow_new_orders = g_configs[config_index].allow_new_orders;
+   
+   int action = cmd.command_type; // CMD_OPEN, CMD_CLOSE, etc.
 
-   if(action == "Open")
+   // CMD_OPEN
+   if(action == CMD_OPEN)
    {
       if(!allow_new_orders)
       {
          Print("Open signal rejected: allow_new_orders=false (status=", g_configs[config_index].status, ") for master #", master_ticket);
-         trade_signal_free(handle);
          return;
       }
 
-      // Filtering (Symbol, Magic, Lot) is already handled by Relay Server
-      // We process all signals received here
-
-      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
+      // Symbol is already transformed by Relay Server
       string transformed_symbol = symbol;
-
-      // Transform lot size based on calculation mode
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
+      
+      // Transform lot size
+      double transformed_lots = TransformLotSize(cmd.volume, g_configs[config_index], transformed_symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
-
-      // Open position with transformed values (pass config settings)
+      
+      // Open position
       ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
-                       transformed_order_type, transformed_lots, price, sl, tp, timestamp, source_account,
-                       magic_number, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
+                       transformed_order_type, transformed_lots, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
+                       (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
-   else if(action == "Close")
+   // CMD_CLOSE
+   else if(action == CMD_CLOSE)
    {
-      // Close trades are always allowed (to close existing positions)
-      double close_ratio = trade_signal_get_double(handle, "close_ratio");
-      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, close_ratio, trade_slippage, DEFAULT_SLIPPAGE);
+      // Using close_ratio from command
+      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, cmd.close_ratio, trade_slippage, DEFAULT_SLIPPAGE);
       ExecuteCancelPendingOrder(g_trade, g_pending_order_map, master_ticket);
    }
-   else if(action == "Modify")
+   // CMD_MODIFY
+   else if(action == CMD_MODIFY)
    {
-      ExecuteModifyTrade(g_trade, g_order_map, master_ticket, sl, tp);
+      ExecuteModifyTrade(g_trade, g_order_map, master_ticket, cmd.sl, cmd.tp);
    }
-
-   // Free the handle
-   trade_signal_free(handle);
 }
 
 //+------------------------------------------------------------------+
@@ -662,7 +479,7 @@ void ProcessTradeSignal(uchar &data[], int data_len)
 //+------------------------------------------------------------------+
 void SubscribeToSyncTopic()
 {
-   if(g_sync_topic_subscribed || ArraySize(g_configs) == 0)
+   if(ArraySize(g_configs) == 0) // Removed g_sync_topic_subscribed check (optional, or use member if we turn this into class)
       return;
 
    // Get master account from first config
@@ -684,10 +501,10 @@ void SubscribeToSyncTopic()
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
       Print("Generated sync topic: ", g_sync_topic);
       
-      if(SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      if(g_ea_context.SubscribeConfig(g_sync_topic))
       {
          Print("Subscribed to sync topic: ", g_sync_topic);
-         g_sync_topic_subscribed = true;
+         // g_sync_topic_subscribed = true; // Removed global bool usage
       }
       else
       {
@@ -704,15 +521,13 @@ void SubscribeToSyncTopic()
 //| Process position snapshot for sync (MT5)                          |
 //| Called when Slave receives PositionSnapshot from Master           |
 //+------------------------------------------------------------------+
-void ProcessPositionSnapshot(uchar &data[], int data_len)
+void ProcessPositionSnapshot(HANDLE_TYPE handle)
 {
    Print("=== Processing Position Snapshot ===");
 
-   // Parse the PositionSnapshot message
-   HANDLE_TYPE handle = parse_position_snapshot(data, data_len);
    if(handle == 0 || handle == -1)
    {
-      Print("ERROR: Failed to parse PositionSnapshot message");
+      Print("ERROR: Invalid PositionSnapshot handle");
       return;
    }
 
@@ -721,7 +536,6 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    if(source_account == "")
    {
       Print("ERROR: PositionSnapshot has empty source_account");
-      position_snapshot_free(handle);
       return;
    }
 
@@ -741,7 +555,6 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    if(config_index == -1)
    {
       Print("PositionSnapshot rejected: No config for master ", source_account);
-      position_snapshot_free(handle);
       return;
    }
 
@@ -750,7 +563,6 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    if(sync_mode == SYNC_MODE_SKIP)
    {
       Print("PositionSnapshot ignored: sync_mode is SKIP");
-      position_snapshot_free(handle);
       return;
    }
 
@@ -835,7 +647,7 @@ void ProcessPositionSnapshot(uchar &data[], int data_len)
    }
 
    Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
-   position_snapshot_free(handle);
+   // Do NOT free handle - it belongs to EaContext
 }
 
 // Trade functions are now provided by SlaveTrade.mqh

@@ -10,7 +10,7 @@
 
 //--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
-#include "../Include/SankeyCopier/Zmq.mqh"
+// ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
@@ -250,107 +250,92 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 //| Timer function (called every 1 second)                            |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Timer function (called every 1 second)                            |
+//+------------------------------------------------------------------+
 void OnTimer()
 {
    if(!g_initialized) return;
 
-   // Check for auto-trading state change (IsTradeAllowed)
+   // 1. Run ManagerTick (Handles Heartbeats, Config Requests, ZMQ Polling internally)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
-
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
-   // Use TimeLocal() instead of TimeCurrent() to ensure heartbeat works even when market is closed
-   datetime now = TimeLocal();
-   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
-
-      // Send Register Message (Once)
-   if(!g_register_sent && g_initialized)
-   {
-      if(g_ea_context.SendRegister())
-      {
-         g_register_sent = true;
-         Print("Register message sent for ", AccountID);
-      }
-   }
-
-   if(should_send_heartbeat)
-   {
-      // Use efficient FFI heartbeat
-      bool heartbeat_sent = g_ea_context.SendHeartbeat(GetAccountBalance(), GetAccountEquity(), 
-                                                       GetOpenPositionsCount(), current_trade_allowed);
-
-      if(heartbeat_sent)
-      {
-         g_last_heartbeat = TimeLocal();
-
-         // If trade state changed, log it and update tracking variable
-         // Server will send updated status via config message based on is_trade_allowed
-         if(trade_state_changed)
-         {
-            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
-            g_last_trade_allowed = current_trade_allowed;
-         }
-
-         // Request configuration logic using Rust EaContext
-         if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
-         {
-            Print("[INFO] Requesting configuration (via EaContext)...");
-            if(g_ea_context.SendRequestConfig())
-            {
-               g_ea_context.MarkConfigRequested();
-               Print("[INFO] Configuration request sent successfully");
-            }
-            else
-            {
-               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-            }
-         }
-      }
-   }
-
-   // Check for configuration messages (MessagePack format)
-   uchar config_buffer[];
-   ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
    
-   // Loop to process all pending messages
-   int msg_count = 0;
-   while(msg_count < 10) // Limit to 10 messages per timer tick to prevent freezing
+   int pending_commands = g_ea_context.ManagerTick(
+       GetAccountBalance(), 
+       GetAccountEquity(), 
+       GetOpenPositionsCount(), 
+       current_trade_allowed
+   );
+
+   // 2. Process all pending commands from Rust
+   EaCommand cmd;
+   int processed_count = 0;
+   
+   while(pending_commands > 0 || processed_count < 100) // Limit per tick
    {
-       int config_bytes = g_ea_context.ReceiveConfig(config_buffer, MESSAGE_BUFFER_SIZE);
-       if(config_bytes <= 0) break;
-       
-       msg_count++;
-       
-       // Attempt to parse as SyncRequest (from Slave)
-       HANDLE_TYPE sync_handle = parse_sync_request(config_buffer, config_bytes);
-       if(sync_handle != 0 && sync_handle != -1)
+       if(!g_ea_context.GetCommand(cmd)) break;
+       processed_count++;
+
+       switch(cmd.command_type)
        {
-           ProcessSyncRequest(sync_handle);
-           continue; 
+           case CMD_UPDATE_UI:
+           {
+               // Config updated (Master or Global VLogs) via ManagerTick parsing
+               // Rust parsed it and set cached config, we just need to update UI if needed.
+               // We can get cached config if we need specific fields for UI.
+               HANDLE_TYPE config_handle = g_ea_context.GetMasterConfig();
+               if(config_handle != 0 && config_handle != -1) // -1 or 0? Wrapper returns 0 on fail.
+               {
+                   ProcessMasterConfigMessage(config_handle);
+                   // Note: We don't free cached config handle from GetMasterConfig? 
+                   // No, GetMasterConfig returns pointer to internal cached struct, NOT a new object?
+                   // Wait, FFI `ea_context_get_master_config` returns `*const MasterConfigMessage`.
+                   // `master_config_get_string` takes this pointer. We do NOT free it.
+               }
+               
+               // Also check global VLogs? (Maybe stored separately or we just assume updated)
+               break;
+           }
+           case CMD_SEND_SNAPSHOT: // SyncRequest Received
+           {
+               // "comment" field contains slave_account for SendSnapshot command
+               string slave_account = CharArrayToString(cmd.comment);
+               
+               // We need full SyncRequest to check master_account? 
+               // Rust already filtered `req.master_account == self.account_id`.
+               // But let's check correct target just in case, or trust Rust.
+               // We can access cached SyncRequest via accessor.
+               HANDLE_TYPE req_handle = g_ea_context.GetSyncRequest();
+               if(req_handle != 0)
+               {
+                   // Validate just in case (optional, Rust did it)
+                   string req_master = sync_request_get_string(req_handle, "master_account");
+                   if(req_master == AccountID)
+                   {
+                        string req_slave = sync_request_get_string(req_handle, "slave_account"); // Should match cmd.comment
+                        if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
+                        {
+                             Print("[SYNC] Position snapshot sent to slave: ", req_slave);
+                        }
+                        else
+                        {
+                             Print("[ERROR] Failed to send position snapshot to slave: ", req_slave);
+                        }
+                   }
+               }
+               break;
+           }
+           default:
+               break;
        }
        
-       // Attempt to parse as MasterConfig (from Server)
-       HANDLE_TYPE master_handle = parse_master_config(config_buffer, config_bytes);
-       if(master_handle != 0 && master_handle != -1)
-       {
-           ProcessMasterConfigMessage(master_handle);
-           continue;
-       }
-       
-       // Attempt to parse as VLogs Config (Global)
-       HANDLE_TYPE vlogs_handle = parse_vlogs_config(config_buffer, config_bytes);
-       if(vlogs_handle != 0 && vlogs_handle != -1)
-       {
-           VLogsApplyConfig(vlogs_handle, "master", AccountID);
-           vlogs_config_free(vlogs_handle);
-           continue;
-       }
-       
-       // Unknown message type
-       // Print("Received unknown config message of size: ", config_bytes);
+       // Check if more commands pending?
+       // ManagerTick returns 1 if pending > 0. But we consumed one.
+       // We loop until GetCommand returns false? 
+       // Rust `get_next_command` pops one. If empty, GetCommand returns false (0).
    }
 
-   // Flush VictoriaLogs periodically
+   // 3. Flush VLogs
    VLogsFlushIfNeeded();
 }
 

@@ -14,11 +14,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::{
-    ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_init, ea_receive_config, ea_send_close_signal,
-    ea_send_heartbeat, ea_send_modify_signal, ea_send_open_signal, ea_send_push, ea_send_register,
-    ea_subscribe_config,
+    ea_connect, ea_context_free, ea_context_get_master_config, ea_context_get_sync_request,
+    ea_context_mark_config_requested, ea_get_command, ea_init, ea_manager_tick,
+    ea_send_close_signal, ea_send_modify_signal, ea_send_open_signal, ea_send_push,
+    ea_send_unregister, ea_subscribe_config, sync_request_get_string,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -50,18 +51,18 @@ struct MasterEaCore {
     _shutdown_flag: Arc<AtomicBool>,
     is_trade_allowed: Arc<AtomicBool>,
 
-    g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
-    g_config_requested: Arc<AtomicBool>,
-    g_last_trade_allowed: Arc<AtomicBool>,
+    _g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
+    _g_config_requested: Arc<AtomicBool>,
+    _g_last_trade_allowed: Arc<AtomicBool>,
     g_server_status: Arc<AtomicI32>,
     g_symbol_prefix: Arc<Mutex<String>>,
     g_symbol_suffix: Arc<Mutex<String>>,
 
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
-    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
     received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
-    g_register_sent: Arc<AtomicBool>,
+    _g_register_sent: Arc<AtomicBool>,
     context: Arc<Mutex<Option<ContextWrapper>>>,
     push_address: String,
     config_address: String,
@@ -149,7 +150,7 @@ impl ExpertAdvisor for MasterEaCore {
         };
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
-        // Process pending subscriptions
+        // Process pending subscriptions (One-off or manual subscriptions still valid)
         {
             let mut subs = self.pending_subscriptions.lock().unwrap();
             if !subs.is_empty() {
@@ -163,107 +164,89 @@ impl ExpertAdvisor for MasterEaCore {
             }
         }
 
-        // Register (should be done once)
-        if !self.g_register_sent.load(Ordering::SeqCst) {
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
-            if len > 0 {
-                unsafe {
-                    ea_send_push(ctx, buffer.as_ptr(), len);
-                }
-                self.g_register_sent.store(true, Ordering::SeqCst);
-            }
-        }
-
         let current_trade_allowed = self.is_trade_allowed.load(Ordering::SeqCst);
-        let last_trade_allowed_val = self.g_last_trade_allowed.load(Ordering::SeqCst);
-        let trade_state_changed = current_trade_allowed != last_trade_allowed_val;
 
-        let now = Instant::now();
-        let last_hb = *self.g_last_heartbeat.lock().unwrap();
-        let should_send_heartbeat = match last_hb {
-            None => true,
-            Some(last) => {
-                now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
-                    || trade_state_changed
-            }
+        // 1. Rust Manager Tick (Handles Heartbeat, IO polling)
+        // Return value: 1 if commands pending, 0 otherwise
+        let status = unsafe {
+            ea_manager_tick(
+                ctx,
+                self.heartbeat_params.balance,
+                self.heartbeat_params.equity,
+                0, // open_positions (TODO: track if needed)
+                if current_trade_allowed { 1 } else { 0 },
+            )
         };
 
-        if should_send_heartbeat {
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe {
-                ea_send_heartbeat(
-                    ctx,
-                    self.heartbeat_params.balance,
-                    self.heartbeat_params.equity,
-                    0, // open_positions
-                    if current_trade_allowed { 1 } else { 0 },
-                    buffer.as_mut_ptr(),
-                    buffer.len() as i32,
-                )
-            };
+        // 2. Process Commands
+        if status == 1 {
+            let mut cmd = EaCommand::default();
+            while unsafe { ea_get_command(ctx, &mut cmd) } == 1 {
+                let cmd_type =
+                    unsafe { std::mem::transmute::<i32, EaCommandType>(cmd.command_type) };
+                match cmd_type {
+                    EaCommandType::SendSnapshot => {
+                        // Slave requested sync.
+                        // Use FFI accessor to get the full SyncRequestMessage
+                        let req_ptr = unsafe { ea_context_get_sync_request(ctx) };
+                        if !req_ptr.is_null() {
+                            let to_u16 =
+                                |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
-            if len > 0 {
-                unsafe {
-                    ea_send_push(ctx, buffer.as_ptr(), len);
-                }
+                            // Helper to get string field
+                            let get_str = |field: &str| -> String {
+                                let f_u16 = to_u16(field);
+                                let val_ptr =
+                                    unsafe { sync_request_get_string(req_ptr, f_u16.as_ptr()) };
+                                if val_ptr.is_null() {
+                                    return String::new();
+                                }
+                                let mut len = 0;
+                                unsafe {
+                                    while *val_ptr.add(len) != 0 {
+                                        len += 1;
+                                    }
+                                    let slice = std::slice::from_raw_parts(val_ptr, len);
+                                    String::from_utf16_lossy(slice)
+                                }
+                            };
 
-                *self.g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-                if trade_state_changed {
-                    self.g_last_trade_allowed
-                        .store(current_trade_allowed, Ordering::SeqCst);
-                }
+                            let slave_account = get_str("slave_account");
+                            let last_sync_time_str = get_str("last_sync_time");
+                            let last_sync_time = if last_sync_time_str.is_empty() {
+                                None
+                            } else {
+                                Some(last_sync_time_str)
+                            };
 
-                let should_request = unsafe {
-                    ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
-                };
-
-                if should_request == 1 {
-                    unsafe {
-                        sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0);
-                    }
-                    self.g_config_requested.store(true, Ordering::SeqCst);
-                }
-            }
-        }
-
-        // Config Receive Loop
-        loop {
-            let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-
-            let received_bytes = unsafe {
-                ea_receive_config(ctx, buffer.as_mut_ptr(), crate::types::BUFFER_SIZE as i32)
-            };
-
-            if received_bytes <= 0 {
-                break;
-            }
-
-            let bytes = &buffer[..received_bytes as usize];
-            if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                let payload = &bytes[space_pos + 1..];
-
-                if topic.starts_with("sync/") {
-                    if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
-                        self.received_sync_requests.lock().unwrap().push(msg);
-                    }
-                } else if topic.starts_with("config/") {
-                    if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(payload) {
-                        self.g_server_status.store(config.status, Ordering::SeqCst);
-                        if let Some(prefix) = &config.symbol_prefix {
-                            *self.g_symbol_prefix.lock().unwrap() = prefix.clone();
+                            let req = SyncRequestMessage {
+                                message_type: "SyncRequest".to_string(),
+                                slave_account,
+                                master_account: self.account_id.clone(),
+                                last_sync_time,
+                                timestamp: Utc::now().to_rfc3339(),
+                            };
+                            self.received_sync_requests.lock().unwrap().push(req);
                         }
-                        if let Some(suffix) = &config.symbol_suffix {
-                            *self.g_symbol_suffix.lock().unwrap() = suffix.clone();
-                        }
-                        unsafe {
-                            ea_context_mark_config_requested(ctx);
-                        }
-                        *self.received_config.lock().unwrap() = Some(config);
-                    } else if let Ok(vlogs) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
-                        self.received_vlogs_configs.lock().unwrap().push(vlogs);
                     }
+                    EaCommandType::UpdateUi => {
+                        // Config updated. Retrieve it.
+                        let cfg_ptr = unsafe { ea_context_get_master_config(ctx) };
+                        if !cfg_ptr.is_null() {
+                            let cfg = unsafe { &*cfg_ptr };
+                            // Update internal state
+                            self.g_server_status.store(cfg.status, Ordering::SeqCst);
+                            if let Some(prefix) = &cfg.symbol_prefix {
+                                *self.g_symbol_prefix.lock().unwrap() = prefix.clone();
+                            }
+                            if let Some(suffix) = &cfg.symbol_suffix {
+                                *self.g_symbol_suffix.lock().unwrap() = suffix.clone();
+                            }
+                            // Push to received queue for verification
+                            *self.received_config.lock().unwrap() = Some(cfg.clone());
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -344,16 +327,16 @@ impl MasterEaSimulator {
             heartbeat_params: self.base.heartbeat_params.clone(),
             _shutdown_flag: self.base.shutdown_flag.clone(),
             is_trade_allowed: self.base.is_trade_allowed_arc(),
-            g_last_heartbeat: self.g_last_heartbeat.clone(),
-            g_config_requested: self.g_config_requested.clone(),
-            g_last_trade_allowed: self.g_last_trade_allowed.clone(),
+            _g_last_heartbeat: self.g_last_heartbeat.clone(),
+            _g_config_requested: self.g_config_requested.clone(),
+            _g_last_trade_allowed: self.g_last_trade_allowed.clone(),
             g_server_status: self.g_server_status.clone(),
             g_symbol_prefix: self.g_symbol_prefix.clone(),
             g_symbol_suffix: self.g_symbol_suffix.clone(),
             received_sync_requests: self.received_sync_requests.clone(),
-            received_vlogs_configs: self.received_vlogs_configs.clone(),
+            _received_vlogs_configs: self.received_vlogs_configs.clone(),
             received_config: self.received_config.clone(),
-            g_register_sent: self.g_register_sent.clone(),
+            _g_register_sent: self.g_register_sent.clone(),
             context: self.context.clone(),
             push_address: self.push_address.clone(),
             config_address: self.config_address.clone(),

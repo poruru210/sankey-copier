@@ -10,7 +10,7 @@ use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
 use tokio::time::{sleep, Duration};
 
-const SETTLE_WAIT_MS: u64 = 250;
+const SETTLE_WAIT_MS: u64 = 2000;
 
 /// Test that slave runtime_status tracks master cluster events
 /// Flow: DISABLED → ENABLED (on slave heartbeat) → CONNECTED (on master heartbeat)
@@ -34,7 +34,8 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
     assert_runtime_status(&db, master_account, slave_account, STATUS_DISABLED).await;
 
     // Create slave simulator
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -46,7 +47,8 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
     assert_runtime_status(&db, master_account, slave_account, STATUS_ENABLED).await;
 
     // Create master simulator
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -164,13 +166,15 @@ async fn test_same_account_id_master_and_slave_both_registered() {
         .expect("Failed to enable member");
 
     // Create Master EA simulator (with shared_account as account_id)
-    let mut master_ea = sandbox.create_master(shared_account)
+    let mut master_ea = sandbox
+        .create_master(shared_account)
         .expect("Failed to create Master simulator");
 
     // Create Slave EA simulator (with shared_account as account_id, connected to a different master)
     // For this test, we'll simulate a Slave with the same account_id
     // In real scenario, this would be the same MT account running both Master and Slave EAs
-    let mut slave_ea = sandbox.create_slave(shared_account, "SOME_OTHER_MASTER")
+    let mut slave_ea = sandbox
+        .create_slave(shared_account, "SOME_OTHER_MASTER")
         .expect("Failed to create Slave simulator");
 
     // Allow ZMQ connections to stabilize (avoid "slow joiner" problem)

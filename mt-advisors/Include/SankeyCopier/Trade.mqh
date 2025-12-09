@@ -16,54 +16,7 @@
 // Note: Messages.mqh removed - using Common.mqh for declarations
 #include "Logging.mqh"
 
-//+------------------------------------------------------------------+
-//| Send sync request message (local helper for ProcessConfigMessage) |
-//| Creates transient PUSH socket to send SyncRequest to server      |
-//+------------------------------------------------------------------+
-bool SendSyncRequestMessage_Local(HANDLE_TYPE zmq_context, string server_address,
-                                  string slave_account, string master_account)
-{
-   // Create temporary PUSH socket for sync request
-   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-   if(push_socket < 0)
-   {
-      LogError(CAT_SYNC, "Failed to create sync request socket");
-      return false;
-   }
-
-   if(zmq_socket_connect(push_socket, server_address) == 0)
-   {
-      LogError(CAT_SYNC, StringFormat("Failed to connect for sync request: %s", server_address));
-      zmq_socket_destroy(push_socket);
-      return false;
-   }
-
-   // Create and serialize SyncRequest message
-   uchar buffer[];
-   ArrayResize(buffer, MESSAGE_BUFFER_SIZE);
-   int len = create_sync_request(slave_account, master_account, buffer, MESSAGE_BUFFER_SIZE);
-
-   if(len <= 0)
-   {
-      LogError(CAT_SYNC, "Failed to create sync request message");
-      zmq_socket_destroy(push_socket);
-      return false;
-   }
-
-   // Resize buffer to actual size
-   ArrayResize(buffer, len);
-
-   // Send binary MessagePack data
-   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
-
-   if(success)
-      LogInfo(CAT_SYNC, StringFormat("Request sent to master: %s", master_account));
-   else
-      LogError(CAT_SYNC, "Failed to send sync request message");
-
-   zmq_socket_destroy(push_socket);
-   return success;
-}
+// SendSyncRequestMessage_Local removed - using EaContextWrapper
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
@@ -152,25 +105,14 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 }
 
 //+------------------------------------------------------------------+
-//| Process configuration message (MessagePack)                      |
-//| Extended version with sync request support                       |
+//| Process configuration message from handle (Stateful FFI)         |
 //+------------------------------------------------------------------+
-void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
-                          CopyConfig &configs[],
-                          HANDLE_TYPE zmq_trade_socket,
-                          HANDLE_TYPE zmq_context = -1,
-                          string server_address = "",
-                          string slave_account = "")
+void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
+                                    CopyConfig &configs[],
+                                    EaContextWrapper &context, 
+                                    string slave_account)
 {
-   LogInfo(CAT_CONFIG, "Processing configuration message");
-
-   // Parse MessagePack once and get a handle to the Slave config structure
-   HANDLE_TYPE config_handle = parse_slave_config(msgpack_data, data_len);
-   if(config_handle == 0)
-   {
-      LogError(CAT_CONFIG, "Failed to parse MessagePack Slave config");
-      return;
-   }
+   if(config_handle == 0) return;
 
    // Extract fields from the parsed config using the handle
    string new_master = slave_config_get_string(config_handle, "master_account");
@@ -292,7 +234,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          configs[index].master_account = new_master;
 
          // Subscribe to new trade topic
-         if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
+         if(!context.SubscribeConfig(new_trade_topic))
          {
             LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
          }
@@ -307,7 +249,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          if(configs[index].trade_group_id != new_trade_topic)
          {
             // Topic changed, subscribe to new one
-            if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
+            if(!context.SubscribeConfig(new_trade_topic))
             {
                 LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
             }
@@ -389,32 +331,29 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       // 2. Status is CONNECTED (Master is online)
       // 3. sync_mode is not SKIP (user wants to sync existing positions)
       // 4. ZMQ context is valid (caller provided sync parameters)
-      if(is_new_config &&
-         new_status == STATUS_CONNECTED &&
-         new_sync_mode != SYNC_MODE_SKIP &&
-         zmq_context >= 0 &&
-         server_address != "" &&
-         slave_account != "")
-      {
-         LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
-               (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
+       if(is_new_config &&
+          new_status == STATUS_CONNECTED &&
+          new_sync_mode != SYNC_MODE_SKIP &&
+          context.IsInitialized())
+       {
+          LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
+                (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
 
-         if(SendSyncRequestMessage_Local(zmq_context, server_address, slave_account, new_master))
-         {
-            LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
-         }
-         else
-         {
-            LogError(CAT_SYNC, StringFormat("Failed to send SyncRequest to master: %s", new_master));
-         }
-      }
+          if(context.SendSyncRequest(new_master))
+          {
+             LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
+          }
+          else
+          {
+             LogError(CAT_SYNC, StringFormat("Failed to send SyncRequest to master: %s", new_master));
+          }
+       }
    }
-
-   // Free the config handle
-   slave_config_free(config_handle);
 
    LogInfo(CAT_CONFIG, "Configuration updated");
 }
+
+// ProcessConfigMessage (Legacy wrapper) removed
 
 //+------------------------------------------------------------------+
 //| Normalize lot size based on symbol properties                    |
