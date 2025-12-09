@@ -50,7 +50,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rcgen = "0.13"
-rustls-pemfile = "2.2"
 time = "0.3"
 
 # Windows Registry (for MT4/MT5 detection)
