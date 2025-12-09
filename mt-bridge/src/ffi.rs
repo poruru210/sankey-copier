@@ -2,6 +2,7 @@
 // Purpose: Unified FFI functions for MQL4/MQL5 integration (ZMQ + MessagePack)
 // Why: Provides C-compatible interface for ZMQ operations and MessagePack message handling
 
+use crate::constants::OrderType;
 use crate::constants::{self, TOPIC_GLOBAL_CONFIG};
 use crate::ea_context::EaContext;
 use crate::ffi_helpers::{
@@ -10,7 +11,7 @@ use crate::ffi_helpers::{
 };
 use crate::types::{
     LotCalculationMode, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
-    SlaveConfigMessage, SyncMode, SyncRequestMessage, TradeSignalMessage, VLogsConfigMessage,
+    SlaveConfigMessage, SyncMode, SyncRequestMessage, VLogsConfigMessage,
 };
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -419,7 +420,7 @@ pub unsafe extern "C" fn slave_config_get_allowed_magic_count(
 pub unsafe extern "C" fn slave_config_get_allowed_magic_at(
     handle: *const SlaveConfigMessage,
     index: i32,
-) -> i32 {
+) -> i64 {
     if handle.is_null() || index < 0 {
         return 0;
     }
@@ -575,8 +576,6 @@ pub unsafe extern "C" fn ea_send_request_config(context: *mut EaContext, version
     }
 }
 
-
-
 /// Send raw data via PUSH socket
 ///
 /// # Safety
@@ -620,10 +619,7 @@ pub unsafe extern "C" fn ea_receive_config(
         return 0;
     }
     let slice = std::slice::from_raw_parts_mut(buffer, buffer_size as usize);
-    match ctx.receive_config(slice) {
-        Ok(n) => n,
-        Err(_) => 0,
-    }
+    ctx.receive_config(slice).unwrap_or_default()
 }
 
 /// Receive message from Trade socket (high-level, Slave only, non-blocking)
@@ -645,10 +641,7 @@ pub unsafe extern "C" fn ea_receive_trade(
         return 0;
     }
     let slice = std::slice::from_raw_parts_mut(buffer, buffer_size as usize);
-    match ctx.receive_trade(slice) {
-        Ok(n) => n,
-        Err(_) => 0,
-    }
+    ctx.receive_trade(slice).unwrap_or_default()
 }
 
 /// Subscribe to topic on Config socket
@@ -657,10 +650,7 @@ pub unsafe extern "C" fn ea_receive_trade(
 /// - context: Valid EaContext pointer
 /// - topic: Valid null-terminated UTF-16 string
 #[no_mangle]
-pub unsafe extern "C" fn ea_subscribe_config(
-    context: *mut EaContext,
-    topic: *const u16,
-) -> i32 {
+pub unsafe extern "C" fn ea_subscribe_config(context: *mut EaContext, topic: *const u16) -> i32 {
     let ctx = match context.as_mut() {
         Some(c) => c,
         None => return 0,
@@ -674,15 +664,6 @@ pub unsafe extern "C" fn ea_subscribe_config(
         Err(_) => 0,
     }
 }
-
-/// - handle must not be used after calling this function
-
-
-
-
-
-
-
 
 // ===========================================================================
 // PositionSnapshot FFI Functions
@@ -2266,17 +2247,6 @@ pub unsafe extern "C" fn ea_context_mark_config_requested(context: *mut crate::E
     }
 }
 
-/// Reset the EA state to initial conditions
-///
-/// This should be called when:
-/// - Connection to relay server is lost
-/// - EA needs to re-request configuration
-///
-/// After calling this, `ea_context_should_request_config()` will return true on the next call.
-///
-/// # Safety
-/// - `context` must be a valid pointer returned by `ea_init()`
-/// - `context` must not have been freed
 /// Send a Sync Request (Slave -> Master)
 ///
 /// # Safety
@@ -2304,9 +2274,6 @@ pub unsafe extern "C" fn ea_send_sync_request(
         None
     };
 
-    // Need to implement send_sync_request in EaContext first! 
-    // Wait, let's check EaContext.
-    // Assuming EaContext needs this method too.
     match ctx.send_sync_request(&master, last_sync) {
         Ok(_) => 1,
         Err(e) => {
@@ -2316,6 +2283,17 @@ pub unsafe extern "C" fn ea_send_sync_request(
     }
 }
 
+/// Reset the EA state to initial conditions
+///
+/// This should be called when:
+/// - Connection to relay server is lost
+/// - EA needs to re-request configuration
+///
+/// After calling this, `ea_context_should_request_config()` will return true on the next call.
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `context` must not have been freed
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_reset(context: *mut crate::EaContext) {
     if !context.is_null() {
@@ -2354,16 +2332,23 @@ pub unsafe extern "C" fn ea_send_open_signal(
         Some(s) => s,
         None => return 0,
     };
-    let o_type = match utf16_to_string(order_type) {
+    let o_type_str = match utf16_to_string(order_type) {
         Some(s) => s,
         None => return 0,
+    };
+    let o_type = match OrderType::try_parse(&o_type_str) {
+        Some(ot) => ot,
+        None => {
+            eprintln!("ea_send_open_signal: unknown order_type '{}'", o_type_str);
+            return 0;
+        }
     };
     let cmt = match utf16_to_string(comment) {
         Some(s) => s,
         None => return 0,
     };
 
-    match ctx.send_open_signal(ticket, &sym, &o_type, lots, price, sl, tp, magic, &cmt) {
+    match ctx.send_open_signal(ticket, &sym, o_type, lots, price, sl, tp, magic, &cmt) {
         Ok(_) => 1,
         Err(e) => {
             eprintln!("ea_send_open_signal failed: {}", e);
@@ -2380,6 +2365,7 @@ pub unsafe extern "C" fn ea_send_open_signal(
 pub unsafe extern "C" fn ea_send_close_signal(
     context: *mut crate::EaContext,
     ticket: i64,
+    lots: f64,
     close_ratio: f64,
 ) -> i32 {
     if context.is_null() {
@@ -2387,7 +2373,7 @@ pub unsafe extern "C" fn ea_send_close_signal(
     }
     let ctx = &mut *context;
 
-    match ctx.send_close_signal(ticket, close_ratio) {
+    match ctx.send_close_signal(ticket, lots, close_ratio) {
         Ok(_) => 1,
         Err(e) => {
             eprintln!("ea_send_close_signal failed: {}", e);

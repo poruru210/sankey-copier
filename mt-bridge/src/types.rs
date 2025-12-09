@@ -3,7 +3,6 @@
 // Why: Centralized type definitions for all configuration and trade signal messages
 
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Symbol mapping structure
 /// Maps source symbols to target symbols for cross-broker trading
@@ -22,9 +21,9 @@ pub struct TradeFilters {
     #[serde(default)]
     pub blocked_symbols: Option<Vec<String>>,
     #[serde(default)]
-    pub allowed_magic_numbers: Option<Vec<i32>>,
+    pub allowed_magic_numbers: Option<Vec<i64>>,
     #[serde(default)]
-    pub blocked_magic_numbers: Option<Vec<i32>>,
+    pub blocked_magic_numbers: Option<Vec<i64>>,
 }
 
 /// Lot calculation mode
@@ -258,14 +257,15 @@ pub struct HeartbeatMessage {
 
 /// Trade signal message structure
 /// Represents a trade action (Open, Close, Modify) to be copied
+/// This is the shared type used across mt-bridge, relay-server, and e2e-tests
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeSignalMessage {
-    pub action: String, // "Open", "Close", "Modify"
+pub struct TradeSignal {
+    pub action: crate::constants::TradeAction,
     pub ticket: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order_type: Option<String>,
+    pub order_type: Option<crate::constants::OrderType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lots: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

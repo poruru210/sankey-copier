@@ -1,6 +1,6 @@
 // Top-level modules
-pub mod constants;
 pub mod communication;
+pub mod constants;
 pub mod ea_context;
 pub mod ffi;
 pub mod ffi_helpers;
@@ -16,9 +16,12 @@ mod symbol_filter_tests;
 pub use types::{
     HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RegisterMessage, RequestConfigMessage, SlaveConfigMessage,
-    SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignalMessage,
-    UnregisterMessage, VLogsConfigMessage, WarningCode,
+    SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignal, UnregisterMessage,
+    VLogsConfigMessage, WarningCode,
 };
+
+// Re-export enums for TradeSignal
+pub use constants::{OrderType, TradeAction};
 
 // Re-export traits for polymorphic config handling
 pub use traits::{ConfigMessage, MasterConfig, SlaveConfig};
@@ -31,9 +34,9 @@ pub use msgpack::GlobalConfigMessage;
 
 // Re-export constants for protocol consistency
 pub use constants::{
-    build_config_topic, build_sync_topic, build_trade_topic, OrderType, TradeAction,
-    MSG_TYPE_HEARTBEAT, MSG_TYPE_POSITION_SNAPSHOT, MSG_TYPE_REGISTER, MSG_TYPE_REQUEST_CONFIG,
-    MSG_TYPE_SYNC_REQUEST, MSG_TYPE_TRADE_SIGNAL, MSG_TYPE_UNREGISTER, STATUS_CONNECTED,
-    STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG, TOPIC_CONFIG_PREFIX, TOPIC_GLOBAL_CONFIG,
-    TOPIC_SYNC_PREFIX, TOPIC_TRADE_PREFIX,
+    build_config_topic, build_sync_topic, build_trade_topic, MSG_TYPE_HEARTBEAT,
+    MSG_TYPE_POSITION_SNAPSHOT, MSG_TYPE_REGISTER, MSG_TYPE_REQUEST_CONFIG, MSG_TYPE_SYNC_REQUEST,
+    MSG_TYPE_TRADE_SIGNAL, MSG_TYPE_UNREGISTER, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
+    STATUS_NO_CONFIG, TOPIC_CONFIG_PREFIX, TOPIC_GLOBAL_CONFIG, TOPIC_SYNC_PREFIX,
+    TOPIC_TRADE_PREFIX,
 };

@@ -119,6 +119,30 @@ impl OrderType {
     }
 }
 
+impl std::str::FromStr for OrderType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Buy" => Ok(OrderType::Buy),
+            "Sell" => Ok(OrderType::Sell),
+            "BuyLimit" => Ok(OrderType::BuyLimit),
+            "SellLimit" => Ok(OrderType::SellLimit),
+            "BuyStop" => Ok(OrderType::BuyStop),
+            "SellStop" => Ok(OrderType::SellStop),
+            _ => Err(()),
+        }
+    }
+}
+
+impl OrderType {
+    /// Convert from string representation (opt)
+    pub fn try_parse(s: &str) -> Option<Self> {
+        use std::str::FromStr;
+        Self::from_str(s).ok()
+    }
+}
+
 // =============================================================================
 // Trade Action Enum
 // =============================================================================

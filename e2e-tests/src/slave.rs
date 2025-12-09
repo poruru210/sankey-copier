@@ -13,17 +13,16 @@ use std::time::Instant;
 
 use sankey_copier_zmq::ffi::{
     build_trade_topic, ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_init, ea_send_heartbeat,
-    ea_send_push, ea_send_register, ea_send_unregister, ea_receive_config, ea_subscribe_config,
-    ea_send_sync_request,
+    ea_context_should_request_config, ea_init, ea_receive_config, ea_send_heartbeat, ea_send_push,
+    ea_send_register, ea_send_sync_request, ea_send_unregister, ea_subscribe_config,
 };
 use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
 use crate::types::{
-    EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, SyncRequestMessage,
-    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
-    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, TradeAction, TradeSignal,
+    UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
+    STATUS_NO_CONFIG,
 };
 
 // Wrapper for thread-safe passing of EaContext pointer
@@ -52,7 +51,7 @@ pub struct SlaveEaSimulator {
     g_register_sent: Arc<AtomicBool>,
 
     // --- Received Data Queues (Verification) ---
-    received_trade_signals: Arc<Mutex<Vec<TradeSignalMessage>>>,
+    received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
 
@@ -297,14 +296,18 @@ impl SlaveEaSimulator {
                         let payload = &bytes[space_pos + 1..];
 
                         if topic.starts_with("trade/") {
-                            match rmp_serde::from_slice::<TradeSignalMessage>(payload) {
+                            match rmp_serde::from_slice::<TradeSignal>(payload) {
                                 Ok(signal) => {
                                     received_trade_signals.lock().unwrap().push(signal);
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to deserialize TradeSignalMessage: {}", e);
+                                    eprintln!("Failed to deserialize TradeSignal: {}", e);
                                     // Debug payload
-                                    eprintln!("Payload len: {}, bytes: {:?}", payload.len(), payload);
+                                    eprintln!(
+                                        "Payload len: {}, bytes: {:?}",
+                                        payload.len(),
+                                        payload
+                                    );
                                 }
                             }
                         } else if topic.starts_with("sync/") {
@@ -491,7 +494,7 @@ impl SlaveEaSimulator {
         self.g_configs.lock().unwrap().clone()
     }
 
-    pub fn try_receive_trade_signal(&self, timeout_ms: i32) -> Result<Option<TradeSignalMessage>> {
+    pub fn try_receive_trade_signal(&self, timeout_ms: i32) -> Result<Option<TradeSignal>> {
         let start = std::time::Instant::now();
         while start.elapsed().as_millis() < timeout_ms as u128 {
             let mut lock = self.received_trade_signals.lock().unwrap();
@@ -504,11 +507,11 @@ impl SlaveEaSimulator {
         Ok(None)
     }
 
-    pub fn wait_for_trade_action(
+    pub fn try_receive_specific_signal(
         &self,
-        expected: &str,
+        expected: TradeAction,
         timeout_ms: i32,
-    ) -> Result<Option<TradeSignalMessage>> {
+    ) -> Result<Option<TradeSignal>> {
         let start = std::time::Instant::now();
         while start.elapsed().as_millis() < timeout_ms as u128 {
             // Instead of calling try_receive which consumes, we might peeking?
@@ -524,7 +527,27 @@ impl SlaveEaSimulator {
         Ok(None)
     }
 
-    pub fn get_received_trade_signals(&self) -> Vec<TradeSignalMessage> {
+    pub fn wait_for_trade_action(
+        &self,
+        expected: TradeAction,
+        timeout_ms: i32,
+    ) -> Result<Option<TradeSignal>> {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            // Instead of calling try_receive which consumes, we might peeking?
+            // But simple implementation consumes. If multiple signals arrive, this might skip mismatching ones.
+            // For test simplicity, assume sequential checks.
+            if let Some(signal) = self.try_receive_trade_signal(10)? {
+                if signal.action == expected {
+                    return Ok(Some(signal));
+                }
+                // Discard mismatching signal in this simple implementation
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn get_received_trade_signals(&self) -> Vec<TradeSignal> {
         self.received_trade_signals.lock().unwrap().clone()
     }
 
@@ -536,7 +559,7 @@ impl SlaveEaSimulator {
         };
 
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
-        
+
         let master_u16 = to_u16(&self.master_account);
         // Handle optional last_sync_time
         let last_sync_u16_vec = last_sync_time.as_ref().map(|s| to_u16(s));
@@ -545,14 +568,12 @@ impl SlaveEaSimulator {
             None => std::ptr::null(),
         };
 
-        let ret = unsafe {
-            ea_send_sync_request(ctx, master_u16.as_ptr(), last_sync_ptr)
-        };
-        
+        let ret = unsafe { ea_send_sync_request(ctx, master_u16.as_ptr(), last_sync_ptr) };
+
         if ret != 1 {
             return Err(anyhow::anyhow!("Failed to send sync request"));
         }
-        
+
         Ok(())
     }
 

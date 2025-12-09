@@ -5,9 +5,10 @@
 // Re-export types for test files
 pub use sankey_copier_zmq::SlaveConfigMessage as SlaveConfig;
 pub use sankey_copier_zmq::{
-    HeartbeatMessage as Heartbeat, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
-    RegisterMessage, RequestConfigMessage, SymbolMapping, SyncMode, SyncRequestMessage,
-    TradeFilters, TradeSignalMessage, UnregisterMessage, VLogsConfigMessage,
+    HeartbeatMessage as Heartbeat, MasterConfigMessage, OrderType, PositionInfo,
+    PositionSnapshotMessage, RegisterMessage, RequestConfigMessage, SymbolMapping, SyncMode,
+    SyncRequestMessage, TradeAction, TradeFilters, TradeSignal, UnregisterMessage,
+    VLogsConfigMessage,
 };
 
 /// Buffer size for ZMQ message reception

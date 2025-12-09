@@ -2,6 +2,7 @@
 // Purpose: Tests for MessagePack type serialization/deserialization
 // Why: Ensures all message types correctly roundtrip through MessagePack format
 
+use crate::constants::{OrderType, TradeAction};
 use crate::msgpack::*;
 use chrono::Utc;
 
@@ -101,11 +102,11 @@ fn test_heartbeat_message_serialization() {
 
 #[test]
 fn test_trade_signal_message_serialization() {
-    let msg = TradeSignalMessage {
-        action: "Open".to_string(),
+    let msg = TradeSignal {
+        action: TradeAction::Open,
         ticket: 123456,
         symbol: Some("EURUSD".to_string()),
-        order_type: Some("Buy".to_string()),
+        order_type: Some(OrderType::Buy),
         lots: Some(0.1),
         open_price: Some(1.0850),
         stop_loss: Some(1.0800),
@@ -118,7 +119,7 @@ fn test_trade_signal_message_serialization() {
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-    let deserialized: TradeSignalMessage =
+    let deserialized: TradeSignal =
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(msg.action, deserialized.action);
@@ -139,8 +140,8 @@ fn test_trade_signal_message_serialization() {
 #[test]
 fn test_trade_signal_close_action() {
     // Close action should have minimal fields (full close)
-    let msg = TradeSignalMessage {
-        action: "Close".to_string(),
+    let msg = TradeSignal {
+        action: TradeAction::Close,
         ticket: 123456,
         symbol: None,
         order_type: None,
@@ -156,7 +157,7 @@ fn test_trade_signal_close_action() {
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-    let deserialized: TradeSignalMessage =
+    let deserialized: TradeSignal =
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(msg.action, deserialized.action);
@@ -170,8 +171,8 @@ fn test_trade_signal_close_action() {
 #[test]
 fn test_trade_signal_partial_close() {
     // Partial close with close_ratio
-    let msg = TradeSignalMessage {
-        action: "Close".to_string(),
+    let msg = TradeSignal {
+        action: TradeAction::Close,
         ticket: 123456,
         symbol: None,
         order_type: None,
@@ -187,7 +188,7 @@ fn test_trade_signal_partial_close() {
     };
 
     let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-    let deserialized: TradeSignalMessage =
+    let deserialized: TradeSignal =
         rmp_serde::from_slice(&serialized).expect("Failed to deserialize");
 
     assert_eq!(msg.action, deserialized.action);
@@ -256,11 +257,11 @@ fn test_config_message_serialization() {
 #[test]
 fn test_messagepack_size_optimization() {
     // Test that optional None fields are omitted in serialization
-    let msg_full = TradeSignalMessage {
-        action: "Open".to_string(),
+    let msg_full = TradeSignal {
+        action: TradeAction::Open,
         ticket: 123456,
         symbol: Some("EURUSD".to_string()),
-        order_type: Some("Buy".to_string()),
+        order_type: Some(OrderType::Buy),
         lots: Some(0.1),
         open_price: Some(1.0850),
         stop_loss: Some(1.0800),
@@ -272,8 +273,8 @@ fn test_messagepack_size_optimization() {
         close_ratio: None,
     };
 
-    let msg_minimal = TradeSignalMessage {
-        action: "Close".to_string(),
+    let msg_minimal = TradeSignal {
+        action: TradeAction::Close,
         ticket: 123456,
         symbol: None,
         order_type: None,

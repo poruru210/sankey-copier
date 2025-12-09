@@ -15,17 +15,17 @@ use std::time::Instant;
 
 use sankey_copier_zmq::ffi::{
     ea_connect, ea_context_free, ea_context_mark_config_requested,
-    ea_context_should_request_config, ea_init, ea_send_heartbeat,
-    ea_send_push, ea_send_register, ea_receive_config, ea_subscribe_config,
-    ea_send_open_signal, ea_send_close_signal, ea_send_modify_signal,
+    ea_context_should_request_config, ea_init, ea_receive_config, ea_send_close_signal,
+    ea_send_heartbeat, ea_send_modify_signal, ea_send_open_signal, ea_send_push, ea_send_register,
+    ea_subscribe_config,
 };
 use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
 use crate::types::{
-    EaType, MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SyncRequestMessage,
-    TradeSignalMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
-    STATUS_NO_CONFIG,
+    EaType, MasterConfigMessage, OrderType, PositionInfo, PositionSnapshotMessage,
+    SyncRequestMessage, TradeAction, TradeSignal, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
+    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
 // Wrapper for thread-safe passing of EaContext pointer (which is !Send !Sync by default)
@@ -399,7 +399,7 @@ impl MasterEaSimulator {
         Ok(None)
     }
 
-    pub fn send_trade_signal(&self, signal: &TradeSignalMessage) -> Result<()> {
+    pub fn send_trade_signal(&self, signal: &TradeSignal) -> Result<()> {
         let guard = self.context.lock().unwrap();
         let ctx = match guard.as_ref() {
             Some(w) => w.0,
@@ -408,12 +408,30 @@ impl MasterEaSimulator {
 
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
-        match signal.action.as_str() {
-            "Open" => {
+        // If signal has a custom timestamp (simulated delay), use raw bytes to bypass FFI timestamp generation
+        if (Utc::now() - signal.timestamp).num_seconds().abs() > 1 {
+            let bytes = rmp_serde::to_vec_named(signal)?;
+            let ret = unsafe { ea_send_push(ctx, bytes.as_ptr(), bytes.len() as i32) };
+            if ret == 1 {
+                return Ok(());
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Failed to send push (raw timestamp bypass)"
+                ));
+            }
+        }
+
+        match signal.action {
+            TradeAction::Open => {
                 let symbol = to_u16(signal.symbol.as_deref().unwrap_or(""));
-                let order_type = to_u16(signal.order_type.as_deref().unwrap_or(""));
+                let ot_str = signal
+                    .order_type
+                    .as_ref()
+                    .map(|ot| format!("{:?}", ot))
+                    .unwrap_or_default();
+                let order_type = to_u16(&ot_str);
                 let comment = to_u16(signal.comment.as_deref().unwrap_or(""));
-                
+
                 let ret = unsafe {
                     ea_send_open_signal(
                         ctx,
@@ -432,11 +450,12 @@ impl MasterEaSimulator {
                     return Err(anyhow::anyhow!("Failed to send open signal"));
                 }
             }
-            "Close" => {
+            TradeAction::Close => {
                 let ret = unsafe {
                     ea_send_close_signal(
                         ctx,
                         signal.ticket,
+                        signal.lots.unwrap_or(0.0),
                         signal.close_ratio.unwrap_or(1.0), // Default to full close if not specified
                     )
                 };
@@ -444,7 +463,7 @@ impl MasterEaSimulator {
                     return Err(anyhow::anyhow!("Failed to send close signal"));
                 }
             }
-            "Modify" => {
+            TradeAction::Modify => {
                 let ret = unsafe {
                     ea_send_modify_signal(
                         ctx,
@@ -457,9 +476,8 @@ impl MasterEaSimulator {
                     return Err(anyhow::anyhow!("Failed to send modify signal"));
                 }
             }
-            _ => return Err(anyhow::anyhow!("Unknown signal action: {}", signal.action)),
         }
-        
+
         Ok(())
     }
 
@@ -482,18 +500,18 @@ impl MasterEaSimulator {
         &self,
         ticket: i64,
         symbol: &str,
-        order_type: &str,
+        order_type: OrderType,
         lots: f64,
         price: f64,
         sl: Option<f64>,
         tp: Option<f64>,
         magic: i64,
-    ) -> TradeSignalMessage {
-        TradeSignalMessage {
-            action: "Open".to_string(),
+    ) -> TradeSignal {
+        TradeSignal {
+            action: TradeAction::Open,
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some(order_type.to_string()),
+            order_type: Some(order_type),
             lots: Some(lots),
             open_price: Some(price),
             stop_loss: sl,
@@ -506,12 +524,12 @@ impl MasterEaSimulator {
         }
     }
 
-    pub fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignalMessage {
-        TradeSignalMessage {
-            action: "Close".to_string(),
+    pub fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignal {
+        TradeSignal {
+            action: TradeAction::Close,
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some("Buy".to_string()),
+            order_type: None,
             lots: Some(lots),
             open_price: None,
             stop_loss: None,
@@ -530,12 +548,12 @@ impl MasterEaSimulator {
         symbol: &str,
         lots: f64,
         close_ratio: f64,
-    ) -> TradeSignalMessage {
-        TradeSignalMessage {
-            action: "Close".to_string(),
+    ) -> TradeSignal {
+        TradeSignal {
+            action: TradeAction::Close,
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some("Buy".to_string()),
+            order_type: None,
             lots: Some(lots),
             open_price: None,
             stop_loss: None,
@@ -554,9 +572,9 @@ impl MasterEaSimulator {
         symbol: &str,
         sl: Option<f64>,
         tp: Option<f64>,
-    ) -> TradeSignalMessage {
-        TradeSignalMessage {
-            action: "Modify".to_string(),
+    ) -> TradeSignal {
+        TradeSignal {
+            action: TradeAction::Modify,
             ticket,
             symbol: Some(symbol.to_string()),
             order_type: None,
@@ -572,11 +590,7 @@ impl MasterEaSimulator {
         }
     }
 
-    pub fn create_delayed_signal(
-        &self,
-        mut signal: TradeSignalMessage,
-        delay_ms: i64,
-    ) -> TradeSignalMessage {
+    pub fn create_delayed_signal(&self, mut signal: TradeSignal, delay_ms: i64) -> TradeSignal {
         let past_time = Utc::now() - chrono::Duration::milliseconds(delay_ms);
         signal.timestamp = past_time;
         signal

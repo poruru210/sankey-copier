@@ -16,17 +16,6 @@ use tokio::time::{sleep, Duration};
 // Helper Functions
 // =============================================================================
 
-fn order_type_to_string(order_type: OrderType) -> &'static str {
-    match order_type {
-        OrderType::Buy => "Buy",
-        OrderType::Sell => "Sell",
-        OrderType::BuyLimit => "BuyLimit",
-        OrderType::SellLimit => "SellLimit",
-        OrderType::BuyStop => "BuyStop",
-        OrderType::SellStop => "SellStop",
-    }
-}
-
 // =============================================================================
 // Basic Order Lifecycle Tests
 // =============================================================================
@@ -75,7 +64,7 @@ async fn test_open_close_cycle() {
     let open_signal = master.create_open_signal(
         12345,
         "EURUSD",
-        order_type_to_string(OrderType::Buy),
+        OrderType::Buy,
         0.1,
         1.0850,
         Some(1.0800),
@@ -95,7 +84,7 @@ async fn test_open_close_cycle() {
 
     assert!(received_open.is_some(), "Slave should receive Open signal");
     let open_sig = received_open.unwrap();
-    assert_eq!(open_sig.action, "Open");
+    assert_eq!(open_sig.action, e2e_tests::types::TradeAction::Open);
     assert_eq!(open_sig.ticket, 12345);
     assert_eq!(open_sig.symbol.as_deref(), Some("EURUSD"));
     assert_eq!(open_sig.lots, Some(0.1));
@@ -118,7 +107,7 @@ async fn test_open_close_cycle() {
         "Slave should receive Close signal"
     );
     let close_sig = received_close.unwrap();
-    assert_eq!(close_sig.action, "Close");
+    assert_eq!(close_sig.action, e2e_tests::types::TradeAction::Close);
     assert_eq!(close_sig.ticket, 12345);
 
     println!("✅ test_open_close_cycle passed");
@@ -168,7 +157,7 @@ async fn test_open_modify_close_cycle() {
     let open_signal = master.create_open_signal(
         22222,
         "GBPUSD",
-        order_type_to_string(OrderType::Sell),
+        OrderType::Sell,
         0.2,
         1.2500,
         Some(1.2600),
@@ -182,7 +171,10 @@ async fn test_open_modify_close_cycle() {
         .try_receive_trade_signal(2000)
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Open");
-    assert_eq!(received.unwrap().action, "Open");
+    assert_eq!(
+        received.unwrap().action,
+        e2e_tests::types::TradeAction::Open
+    );
 
     // Modify
     let modify_signal = master.create_modify_signal(22222, "GBPUSD", Some(1.2550), Some(1.2350));
@@ -196,7 +188,7 @@ async fn test_open_modify_close_cycle() {
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, "Modify");
+    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(1.2550));
     assert_eq!(mod_sig.take_profit, Some(1.2350));
 
@@ -211,7 +203,10 @@ async fn test_open_modify_close_cycle() {
         .try_receive_trade_signal(2000)
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Close");
-    assert_eq!(received.unwrap().action, "Close");
+    assert_eq!(
+        received.unwrap().action,
+        e2e_tests::types::TradeAction::Close
+    );
 
     println!("✅ test_open_modify_close_cycle passed");
 }
@@ -257,16 +252,8 @@ async fn test_modify_sl_only() {
     sleep(Duration::from_millis(2000)).await;
 
     // Open position first
-    let open_signal = master.create_open_signal(
-        33333,
-        "USDJPY",
-        order_type_to_string(OrderType::Buy),
-        0.5,
-        150.00,
-        None,
-        None,
-        0,
-    );
+    let open_signal =
+        master.create_open_signal(33333, "USDJPY", OrderType::Buy, 0.5, 150.00, None, None, 0);
     master.send_trade_signal(&open_signal).unwrap();
     sleep(Duration::from_millis(300)).await;
     let _ = slave.try_receive_trade_signal(2000).unwrap();
@@ -279,7 +266,7 @@ async fn test_modify_sl_only() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, "Modify");
+    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(149.50));
     assert_eq!(mod_sig.take_profit, None);
 
@@ -327,16 +314,8 @@ async fn test_modify_tp_only() {
     sleep(Duration::from_millis(2000)).await;
 
     // Open position first
-    let open_signal = master.create_open_signal(
-        44444,
-        "EURUSD",
-        order_type_to_string(OrderType::Sell),
-        0.3,
-        1.0900,
-        None,
-        None,
-        0,
-    );
+    let open_signal =
+        master.create_open_signal(44444, "EURUSD", OrderType::Sell, 0.3, 1.0900, None, None, 0);
     master.send_trade_signal(&open_signal).unwrap();
     sleep(Duration::from_millis(300)).await;
     let _ = slave.try_receive_trade_signal(2000).unwrap();
@@ -349,7 +328,7 @@ async fn test_modify_tp_only() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, "Modify");
+    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, None);
     assert_eq!(mod_sig.take_profit, Some(1.0800));
 
@@ -397,16 +376,8 @@ async fn test_modify_both_sl_tp() {
     sleep(Duration::from_millis(2000)).await;
 
     // Open position first
-    let open_signal = master.create_open_signal(
-        55555,
-        "GBPJPY",
-        order_type_to_string(OrderType::Buy),
-        0.2,
-        188.00,
-        None,
-        None,
-        0,
-    );
+    let open_signal =
+        master.create_open_signal(55555, "GBPJPY", OrderType::Buy, 0.2, 188.00, None, None, 0);
     master.send_trade_signal(&open_signal).unwrap();
     sleep(Duration::from_millis(300)).await;
     let _ = slave.try_receive_trade_signal(2000).unwrap();
@@ -419,7 +390,7 @@ async fn test_modify_both_sl_tp() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, "Modify");
+    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(187.00));
     assert_eq!(mod_sig.take_profit, Some(190.00));
 
@@ -472,7 +443,7 @@ async fn test_multiple_open_sequential() {
         let open_signal = master.create_open_signal(
             ticket,
             "EURUSD",
-            order_type_to_string(OrderType::Buy),
+            OrderType::Buy,
             0.1,
             1.0850 + (i as f64 * 0.001),
             None,
@@ -538,16 +509,8 @@ async fn test_rapid_fire_signals() {
     let signal_count = 10;
     for i in 0..signal_count {
         let ticket = 70000 + i;
-        let open_signal = master.create_open_signal(
-            ticket,
-            "EURUSD",
-            order_type_to_string(OrderType::Buy),
-            0.1,
-            1.0850,
-            None,
-            None,
-            0,
-        );
+        let open_signal =
+            master.create_open_signal(ticket, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
         master.send_trade_signal(&open_signal).unwrap();
         // No sleep between sends - rapid fire
     }
@@ -638,7 +601,7 @@ async fn test_close_nonexistent_position() {
         "Close signal for non-existent position should be relayed"
     );
     let signal = received.unwrap();
-    assert_eq!(signal.action, "Close");
+    assert_eq!(signal.action, e2e_tests::types::TradeAction::Close);
     assert_eq!(signal.ticket, 99999);
 
     println!("✅ test_close_nonexistent_position passed");
@@ -686,16 +649,8 @@ async fn test_close_already_closed() {
     sleep(Duration::from_millis(2000)).await;
 
     // Open
-    let open_signal = master.create_open_signal(
-        12347,
-        "EURUSD",
-        order_type_to_string(OrderType::Buy),
-        0.1,
-        1.0850,
-        None,
-        None,
-        0,
-    );
+    let open_signal =
+        master.create_open_signal(12347, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");

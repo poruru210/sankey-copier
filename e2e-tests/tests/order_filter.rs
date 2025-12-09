@@ -7,6 +7,7 @@
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
 use e2e_tests::relay_server_process::RelayServerProcess;
+use e2e_tests::types::{OrderType, TradeAction};
 use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, TradeFilters};
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
@@ -59,13 +60,16 @@ async fn test_partial_close_signal() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    
+
     // Wait for connection
-    slave.wait_for_status(2, 5000).expect("Failed to reach CONNECTED status");
+    slave
+        .wait_for_status(2, 5000)
+        .expect("Failed to reach CONNECTED status");
     sleep(Duration::from_millis(1000)).await;
 
     // Step 1: Open a position (lots passed through unchanged, Slave EA applies multiplier)
-    let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
+    let open_signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
     master
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
@@ -96,7 +100,7 @@ async fn test_partial_close_signal() {
     assert!(received_close.is_some(), "Should receive Close signal");
 
     let received_signal = received_close.unwrap();
-    assert_eq!(received_signal.action, "Close");
+    assert_eq!(received_signal.action, TradeAction::Close);
     assert_eq!(
         received_signal.close_ratio,
         Some(0.5),
@@ -165,7 +169,7 @@ async fn test_full_close_signal_no_ratio() {
     assert!(received.is_some(), "Should receive Close signal");
 
     let received_signal = received.unwrap();
-    assert_eq!(received_signal.action, "Close");
+    assert_eq!(received_signal.action, TradeAction::Close);
     assert_eq!(
         received_signal.close_ratio, None,
         "close_ratio should be None for full close"
@@ -223,17 +227,20 @@ async fn test_allowed_symbols_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    
+
     // Wait for connection to be established (STATUS_CONNECTED = 2)
-    slave.wait_for_status(2, 5000).expect("Failed to reach CONNECTED status");
-    
+    slave
+        .wait_for_status(2, 5000)
+        .expect("Failed to reach CONNECTED status");
+
     // Allow time for Trade Topic subscription to propagate to Relay Server (ZMQ Slow Joiner)
     sleep(Duration::from_millis(1000)).await;
 
     // Send allowed symbol - should be received
-    let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
-        .send_trade_signal(&signal1)
+        .send_trade_signal(&signal)
         .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
@@ -243,9 +250,10 @@ async fn test_allowed_symbols_filter() {
     assert!(received1.is_some(), "EURUSD should be received (allowed)");
 
     // Send non-allowed symbol - should NOT be received
-    let signal2 = master.create_open_signal(12346, "USDJPY", "Buy", 0.1, 150.0, None, None, 0);
+    let open_signal =
+        master.create_open_signal(12345, "USDJPY", OrderType::Buy, 1.0, 150.00, None, None, 0);
     master
-        .send_trade_signal(&signal2)
+        .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
@@ -308,7 +316,8 @@ async fn test_blocked_symbols_filter() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send non-blocked symbol - should be received
-    let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal1 =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
@@ -323,9 +332,10 @@ async fn test_blocked_symbols_filter() {
     );
 
     // Send blocked symbol - should NOT be received
-    let signal2 = master.create_open_signal(12346, "XAUUSD", "Buy", 0.1, 2000.0, None, None, 0);
+    let open_signal =
+        master.create_open_signal(12345, "XAUUSD", OrderType::Buy, 1.0, 2000.00, None, None, 0);
     master
-        .send_trade_signal(&signal2)
+        .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
@@ -392,7 +402,16 @@ async fn test_allowed_magic_numbers_filter() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send allowed magic number - should be received
-    let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 12345);
+    let signal1 = master.create_open_signal(
+        1001,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        12345,
+    );
     master
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
@@ -407,7 +426,16 @@ async fn test_allowed_magic_numbers_filter() {
     );
 
     // Send non-allowed magic number - should NOT be received
-    let signal2 = master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 99999);
+    let signal2 = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        99999,
+    );
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -472,7 +500,16 @@ async fn test_blocked_magic_numbers_filter() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send non-blocked magic number - should be received
-    let signal1 = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 33333);
+    let signal1 = master.create_open_signal(
+        1001,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        33333,
+    );
     master
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
@@ -487,7 +524,16 @@ async fn test_blocked_magic_numbers_filter() {
     );
 
     // Send blocked magic number - should NOT be received
-    let signal2 = master.create_open_signal(1002, "EURUSD", "Buy", 0.1, 1.0850, None, None, 11111);
+    let signal2 = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        11111,
+    );
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -551,9 +597,10 @@ async fn test_source_lot_min_filter() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send signal above minimum - should be received
-    let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
+    let open_signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0800, None, None, 0);
     master
-        .send_trade_signal(&signal1)
+        .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
@@ -566,7 +613,8 @@ async fn test_source_lot_min_filter() {
     );
 
     // Send signal below minimum - should NOT be received
-    let signal2 = master.create_open_signal(12346, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal2 =
+        master.create_open_signal(12346, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -626,9 +674,18 @@ async fn test_source_lot_max_filter() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send signal below maximum - should be received
-    let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.5, 1.0850, None, None, 0);
+    let open_signal = master.create_open_signal(
+        12345,
+        "EURUSD",
+        OrderType::Buy,
+        0.5,
+        1.0850,
+        None,
+        None,
+        1001,
+    );
     master
-        .send_trade_signal(&signal1)
+        .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
     sleep(Duration::from_millis(500)).await;
@@ -641,7 +698,8 @@ async fn test_source_lot_max_filter() {
     );
 
     // Send signal above maximum - should NOT be received
-    let signal2 = master.create_open_signal(12346, "EURUSD", "Buy", 5.0, 1.0850, None, None, 0);
+    let signal2 =
+        master.create_open_signal(12346, "EURUSD", OrderType::Buy, 5.0, 1.0850, None, None, 0);
     master
         .send_trade_signal(&signal2)
         .expect("Failed to send signal");
@@ -704,7 +762,8 @@ async fn test_multiple_sequential_partial_closes() {
     sleep(Duration::from_millis(2000)).await;
 
     // Open position with 1.0 lots
-    let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
+    let open_signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 1.0, 1.0850, None, None, 0);
     master
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
@@ -808,7 +867,7 @@ async fn test_pending_order_types() {
     let buy_limit = master.create_open_signal(
         1001,
         "EURUSD",
-        "BuyLimit",
+        OrderType::BuyLimit,
         0.1,
         1.0800,
         Some(1.0750),
@@ -824,13 +883,13 @@ async fn test_pending_order_types() {
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
     assert!(received1.is_some(), "BuyLimit should be received");
-    assert_eq!(received1.unwrap().order_type.as_deref(), Some("BuyLimit"));
+    assert_eq!(received1.unwrap().order_type, Some(OrderType::BuyLimit));
 
     // Test SellLimit
     let sell_limit = master.create_open_signal(
         1002,
         "EURUSD",
-        "SellLimit",
+        OrderType::SellLimit,
         0.1,
         1.0900,
         Some(1.0950),
@@ -846,13 +905,13 @@ async fn test_pending_order_types() {
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
     assert!(received2.is_some(), "SellLimit should be received");
-    assert_eq!(received2.unwrap().order_type.as_deref(), Some("SellLimit"));
+    assert_eq!(received2.unwrap().order_type, Some(OrderType::SellLimit));
 
     // Test BuyStop
     let buy_stop = master.create_open_signal(
         1003,
         "EURUSD",
-        "BuyStop",
+        OrderType::BuyStop,
         0.1,
         1.0900,
         Some(1.0850),
@@ -868,13 +927,13 @@ async fn test_pending_order_types() {
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
     assert!(received3.is_some(), "BuyStop should be received");
-    assert_eq!(received3.unwrap().order_type.as_deref(), Some("BuyStop"));
+    assert_eq!(received3.unwrap().order_type, Some(OrderType::BuyStop));
 
     // Test SellStop
     let sell_stop = master.create_open_signal(
         1004,
         "EURUSD",
-        "SellStop",
+        OrderType::SellStop,
         0.1,
         1.0800,
         Some(1.0850),
@@ -890,7 +949,7 @@ async fn test_pending_order_types() {
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
     assert!(received4.is_some(), "SellStop should be received");
-    assert_eq!(received4.unwrap().order_type.as_deref(), Some("SellStop"));
+    assert_eq!(received4.unwrap().order_type, Some(OrderType::SellStop));
 
     println!("✅ test_pending_order_types passed");
 }
@@ -938,7 +997,8 @@ async fn test_pending_orders_disabled() {
     sleep(Duration::from_millis(500)).await;
 
     // Market order should be received
-    let market_order = master.create_open_signal(1001, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let market_order =
+        master.create_open_signal(1001, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&market_order)
         .expect("Failed to send signal");
@@ -950,8 +1010,16 @@ async fn test_pending_orders_disabled() {
     assert!(received1.is_some(), "Market order (Buy) should be received");
 
     // Pending order should NOT be received
-    let pending_order =
-        master.create_open_signal(1002, "EURUSD", "BuyLimit", 0.1, 1.0800, None, None, 0);
+    let pending_order = master.create_open_signal(
+        1002,
+        "EURUSD",
+        OrderType::BuyLimit,
+        0.1,
+        1.0800,
+        None,
+        None,
+        0,
+    );
     master
         .send_trade_signal(&pending_order)
         .expect("Failed to send signal");

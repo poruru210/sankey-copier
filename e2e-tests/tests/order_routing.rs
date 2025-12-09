@@ -7,7 +7,8 @@
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
 use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, TradeSignalMessage};
+use e2e_tests::types::{OrderType, TradeSignal};
+use e2e_tests::{MasterEaSimulator, SlaveEaSimulator};
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use tokio::time::{sleep, Duration};
@@ -16,23 +17,12 @@ use tokio::time::{sleep, Duration};
 // Helper Functions
 // =============================================================================
 
-fn order_type_to_string(order_type: sankey_copier_relay_server::models::OrderType) -> &'static str {
-    match order_type {
-        sankey_copier_relay_server::models::OrderType::Buy => "Buy",
-        sankey_copier_relay_server::models::OrderType::Sell => "Sell",
-        sankey_copier_relay_server::models::OrderType::BuyLimit => "BuyLimit",
-        sankey_copier_relay_server::models::OrderType::SellLimit => "SellLimit",
-        sankey_copier_relay_server::models::OrderType::BuyStop => "BuyStop",
-        sankey_copier_relay_server::models::OrderType::SellStop => "SellStop",
-    }
-}
-
 /// Helper function to collect multiple trade signals from a slave
 fn collect_trade_signals(
     slave: &SlaveEaSimulator,
     timeout_ms: i32,
     max_signals: usize,
-) -> Result<Vec<TradeSignalMessage>, String> {
+) -> Result<Vec<TradeSignal>, String> {
     let mut signals = Vec::new();
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_millis(timeout_ms as u64);
@@ -130,31 +120,15 @@ async fn test_multi_master_signal_isolation() {
     sleep(Duration::from_millis(500)).await;
 
     // Master1 sends ticket 100
-    let sig1 = master1.create_open_signal(
-        100,
-        "EURUSD",
-        order_type_to_string(sankey_copier_relay_server::models::OrderType::Buy),
-        0.1,
-        1.0850,
-        None,
-        None,
-        0,
-    );
+    let sig1 =
+        master1.create_open_signal(100, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master1
         .send_trade_signal(&sig1)
         .expect("Failed to send signal");
 
     // Master2 sends ticket 200
-    let sig2 = master2.create_open_signal(
-        200,
-        "GBPUSD",
-        order_type_to_string(sankey_copier_relay_server::models::OrderType::Sell),
-        0.2,
-        1.2500,
-        None,
-        None,
-        0,
-    );
+    let sig2 =
+        master2.create_open_signal(200, "GBPUSD", OrderType::Sell, 0.2, 1.2500, None, None, 0);
     master2
         .send_trade_signal(&sig2)
         .expect("Failed to send signal");
@@ -245,8 +219,10 @@ async fn test_multi_master_same_symbol_open() {
     sleep(Duration::from_millis(500)).await;
 
     // Both masters send Open for EURUSD (same symbol)
-    let sig1 = master1.create_open_signal(100, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
-    let sig2 = master2.create_open_signal(200, "EURUSD", "Sell", 0.2, 1.0850, None, None, 0);
+    let sig1 =
+        master1.create_open_signal(100, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
+    let sig2 =
+        master2.create_open_signal(200, "EURUSD", OrderType::Sell, 0.2, 1.0850, None, None, 0);
 
     master1
         .send_trade_signal(&sig1)
@@ -263,11 +239,11 @@ async fn test_multi_master_same_symbol_open() {
     // Each slave receives only its master's signal (no cross-contamination)
     assert_eq!(signals1.len(), 1);
     assert_eq!(signals1[0].ticket, 100);
-    assert_eq!(signals1[0].order_type.as_deref(), Some("Buy"));
+    assert_eq!(signals1[0].order_type, Some(OrderType::Buy));
 
     assert_eq!(signals2.len(), 1);
     assert_eq!(signals2[0].ticket, 200);
-    assert_eq!(signals2[0].order_type.as_deref(), Some("Sell"));
+    assert_eq!(signals2[0].order_type, Some(OrderType::Sell));
 
     println!("✅ test_multi_master_same_symbol_open passed");
 }
@@ -346,7 +322,8 @@ async fn test_signal_broadcast_to_all_slaves() {
     sleep(Duration::from_millis(500)).await;
 
     // Master sends one signal
-    let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
@@ -431,7 +408,8 @@ async fn test_slave_individual_lot_multiplier() {
     sleep(Duration::from_millis(2000)).await;
 
     // Master sends 0.1 lot
-    let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     master
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
@@ -503,7 +481,8 @@ async fn test_signal_latency_measurement() {
 
     for i in 1..=10 {
         let send_time = std::time::Instant::now();
-        let signal = master.create_open_signal(i, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+        let signal =
+            master.create_open_signal(i, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
         master
             .send_trade_signal(&signal)
             .expect("Failed to send signal");
@@ -587,7 +566,8 @@ async fn test_delayed_signal_immediate() {
     sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 100ms old timestamp
-    let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12345, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     let delayed_signal = master.create_delayed_signal(signal, 100);
     master
         .send_trade_signal(&delayed_signal)
@@ -649,7 +629,8 @@ async fn test_delayed_signal_acceptable() {
     sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 3 second old timestamp
-    let signal = master.create_open_signal(12346, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12346, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     let delayed_signal = master.create_delayed_signal(signal, 3000);
     master
         .send_trade_signal(&delayed_signal)
@@ -672,7 +653,7 @@ async fn test_delayed_signal_acceptable() {
 /// Test stale signal (10+ seconds old) - should still be delivered with old timestamp
 #[tokio::test]
 async fn test_stale_signal_too_old() {
-    use chrono::{DateTime, Utc};
+    use chrono::Utc;
 
     let server = RelayServerProcess::start().expect("Failed to start relay-server");
 
@@ -713,7 +694,8 @@ async fn test_stale_signal_too_old() {
     sleep(Duration::from_millis(2000)).await;
 
     // Create signal with 10 second old timestamp
-    let signal = master.create_open_signal(12347, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    let signal =
+        master.create_open_signal(12347, "EURUSD", OrderType::Buy, 0.1, 1.0850, None, None, 0);
     let stale_signal = master.create_delayed_signal(signal, 10000);
     master
         .send_trade_signal(&stale_signal)

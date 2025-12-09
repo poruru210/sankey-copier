@@ -4,9 +4,10 @@
 //
 // Refactored to use Strategy Pattern for Master/Slave communication logic.
 
-use crate::types::{RequestConfigMessage, TradeSignalMessage};
+use crate::communication::{CommunicationStrategy, MasterStrategy, NoOpStrategy, SlaveStrategy};
+use crate::constants::{OrderType, TradeAction};
+use crate::types::{RequestConfigMessage, TradeSignal};
 use std::fmt::Debug;
-use crate::communication::{CommunicationStrategy, MasterStrategy, SlaveStrategy, NoOpStrategy};
 
 // ===========================================================================
 // EaContext (Context)
@@ -101,8 +102,8 @@ impl EaContext {
             ea_type: self.ea_type.clone(),
         };
 
-        let data =
-            rmp_serde::encode::to_vec_named(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
 
         // Mark as requested to prevent duplicate requests
@@ -116,7 +117,7 @@ impl EaContext {
         &mut self,
         ticket: i64,
         symbol: &str,
-        order_type: &str,
+        order_type: OrderType,
         lots: f64,
         price: f64,
         sl: f64,
@@ -124,11 +125,11 @@ impl EaContext {
         magic: i64,
         comment: &str,
     ) -> Result<(), String> {
-        let msg = TradeSignalMessage {
-            action: "Open".to_string(),
+        let msg = TradeSignal {
+            action: TradeAction::Open,
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some(order_type.to_string()),
+            order_type: Some(order_type),
             lots: Some(lots),
             open_price: Some(price),
             stop_loss: Some(sl),
@@ -140,8 +141,8 @@ impl EaContext {
             close_ratio: None,
         };
 
-        let data =
-            rmp_serde::encode::to_vec_named(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
@@ -150,15 +151,15 @@ impl EaContext {
     pub fn send_close_signal(
         &mut self,
         ticket: i64,
+        lots: f64,
         close_ratio: f64,
     ) -> Result<(), String> {
-        let msg = TradeSignalMessage {
-            action: "Close".to_string(),
+        let msg = TradeSignal {
+            action: crate::constants::TradeAction::Close,
             ticket,
             symbol: None,
             order_type: None,
-            lots: None, // Could be partial close, but typically handled by ratio or separate logic.
-                        // Protocol often just uses ticket + close_ratio for basic close.
+            lots: Some(lots),
             open_price: None,
             stop_loss: None,
             take_profit: None,
@@ -166,31 +167,30 @@ impl EaContext {
             comment: None,
             timestamp: chrono::Utc::now(),
             source_account: self.account_id.clone(),
-            close_ratio: Some(close_ratio),
+            close_ratio: if (close_ratio - 1.0).abs() < 1e-6 {
+                None
+            } else {
+                Some(close_ratio)
+            },
         };
 
-        let data =
-            rmp_serde::encode::to_vec_named(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn send_modify_signal(
-        &mut self,
-        ticket: i64,
-        sl: f64,
-        tp: f64,
-    ) -> Result<(), String> {
-        let msg = TradeSignalMessage {
-            action: "Modify".to_string(),
+    pub fn send_modify_signal(&mut self, ticket: i64, sl: f64, tp: f64) -> Result<(), String> {
+        let msg = TradeSignal {
+            action: TradeAction::Modify,
             ticket,
             symbol: None,
             order_type: None,
             lots: None,
             open_price: None,
-            stop_loss: Some(sl),
-            take_profit: Some(tp),
+            stop_loss: if sl.abs() < 1e-6 { None } else { Some(sl) },
+            take_profit: if tp.abs() < 1e-6 { None } else { Some(tp) },
             magic_number: None,
             comment: None,
             timestamp: chrono::Utc::now(),
@@ -198,8 +198,8 @@ impl EaContext {
             close_ratio: None,
         };
 
-        let data =
-            rmp_serde::encode::to_vec_named(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
@@ -217,8 +217,8 @@ impl EaContext {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        let data =
-            rmp_serde::encode::to_vec_named(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data = rmp_serde::encode::to_vec_named(&msg)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
@@ -382,7 +382,7 @@ mod tests {
         ctx.send_open_signal(
             12345,
             "EURUSD",
-            "Buy",
+            OrderType::Buy,
             0.1,
             1.1050,
             1.1000,

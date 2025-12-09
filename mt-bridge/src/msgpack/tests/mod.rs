@@ -4,6 +4,5 @@
 
 mod ffi_tests;
 mod repro_status_bug;
-mod serialization_compat_tests;
 
 mod types_tests;

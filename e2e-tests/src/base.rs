@@ -13,9 +13,9 @@
 use anyhow::Result;
 use chrono::Utc;
 use sankey_copier_zmq::ffi::{
-    build_config_topic, zmq_context_create, zmq_context_destroy,
-    zmq_socket_connect, zmq_socket_create, zmq_socket_destroy, zmq_socket_receive,
-    zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
+    build_config_topic, zmq_context_create, zmq_context_destroy, zmq_socket_connect,
+    zmq_socket_create, zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary,
+    zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
 };
 use sankey_copier_zmq::HeartbeatMessage;
 use std::ffi::c_char;
