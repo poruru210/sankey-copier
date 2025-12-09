@@ -13,7 +13,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use sankey_copier_zmq::ffi::{
-    build_config_topic, get_global_config_topic, zmq_context_create, zmq_context_destroy,
+    build_config_topic, zmq_context_create, zmq_context_destroy,
     zmq_socket_connect, zmq_socket_create, zmq_socket_destroy, zmq_socket_receive,
     zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
 };
@@ -193,10 +193,7 @@ impl EaSimulatorBase {
         })
     }
 
-    pub fn new_without_zmq(
-        account_id: &str,
-        ea_type: EaType,
-    ) -> Result<Self> {
+    pub fn new_without_zmq(account_id: &str, ea_type: EaType) -> Result<Self> {
         let heartbeat_params = match ea_type {
             EaType::Master => HeartbeatParams::master_default(),
             EaType::Slave => HeartbeatParams::slave_default(),
@@ -219,7 +216,6 @@ impl EaSimulatorBase {
     pub fn account_id(&self) -> &str {
         &self.account_id
     }
-    
 
     /// Get is_trade_allowed Arc for sharing with OnTimer thread
     pub(crate) fn is_trade_allowed_arc(&self) -> Arc<AtomicBool> {
@@ -278,54 +274,6 @@ impl EaSimulatorBase {
                 != 1
             {
                 anyhow::bail!("Failed to send heartbeat");
-            }
-        }
-        Ok(())
-    }
-
-    /// Send binary data on PUSH socket
-    pub(crate) fn send_binary(&self, data: &[u8]) -> Result<()> {
-        unsafe {
-            if zmq_socket_send_binary(self.push_socket_handle, data.as_ptr(), data.len() as i32)
-                != 1
-            {
-                anyhow::bail!("Failed to send binary data");
-            }
-        }
-        Ok(())
-    }
-
-    /// Subscribe to an additional topic on the config socket
-    ///
-    /// Used for config-related topics (config/{account}, config/global).
-    /// For trade topics, use subscribe_to_trade_topic() instead.
-    pub(crate) fn subscribe_to_topic(&self, topic: &str) -> Result<()> {
-        let topic_utf16: Vec<u16> = topic.encode_utf16().chain(Some(0)).collect();
-        unsafe {
-            if zmq_socket_subscribe(self.config_socket_handle, topic_utf16.as_ptr()) != 1 {
-                anyhow::bail!("Failed to subscribe to topic: {}", topic);
-            }
-        }
-        Ok(())
-    }
-
-    /// Get trade socket handle (for passing to OnTimer thread)
-    pub(crate) fn trade_socket_handle(&self) -> Option<i32> {
-        self.trade_socket_handle
-    }
-
-    /// Subscribe to global config topic ("config/global") for VLogs settings
-    pub(crate) fn subscribe_to_global_config(&self) -> Result<()> {
-        let mut topic_buffer = vec![0u16; TOPIC_BUFFER_SIZE as usize];
-        let topic_len =
-            unsafe { get_global_config_topic(topic_buffer.as_mut_ptr(), TOPIC_BUFFER_SIZE) };
-        if topic_len <= 0 {
-            anyhow::bail!("Failed to get global config topic");
-        }
-
-        unsafe {
-            if zmq_socket_subscribe(self.config_socket_handle, topic_buffer.as_ptr()) != 1 {
-                anyhow::bail!("Failed to subscribe to global config topic");
             }
         }
         Ok(())

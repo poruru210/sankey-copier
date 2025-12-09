@@ -4,6 +4,8 @@
 //
 // Refactored to use EaContext via FFI, demonstrating strict encapsulation and Strategy Pattern.
 
+#![allow(unused_imports)]
+
 use anyhow::Result;
 use chrono::Utc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -11,18 +13,18 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use sankey_copier_zmq::EaContext;
 use sankey_copier_zmq::ffi::{
-    ea_init, ea_connect, ea_context_free, ea_send_register, 
-    ea_send_heartbeat, ea_send_push, ea_get_config_socket, ea_socket_receive,
-    ea_socket_subscribe, ea_context_should_request_config, ea_context_mark_config_requested
+    ea_connect, ea_context_free, ea_context_mark_config_requested,
+    ea_context_should_request_config, ea_get_config_socket, ea_init, ea_send_heartbeat,
+    ea_send_push, ea_send_register, ea_socket_receive, ea_socket_subscribe,
 };
+use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
 use crate::types::{
-    EaType, MasterConfigMessage, PositionInfo, PositionSnapshotMessage, RequestConfigMessage,
-    SyncRequestMessage, TradeSignalMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
-    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, MasterConfigMessage, PositionInfo, PositionSnapshotMessage, SyncRequestMessage,
+    TradeSignalMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS,
+    STATUS_NO_CONFIG,
 };
 
 // Wrapper for thread-safe passing of EaContext pointer (which is !Send !Sync by default)
@@ -44,8 +46,7 @@ pub struct MasterEaSimulator {
     g_server_status: Arc<AtomicI32>,
     g_symbol_prefix: Arc<Mutex<String>>,
     g_symbol_suffix: Arc<Mutex<String>>,
-    g_config_version: Arc<Mutex<u32>>,
-    
+
     // --- Received Data Queues (Verification) ---
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
@@ -54,14 +55,14 @@ pub struct MasterEaSimulator {
     // --- State ---
     g_register_sent: Arc<AtomicBool>,
     ontimer_thread: Option<JoinHandle<()>>,
-    
+
     // --- Context (Managed in OnTimer thread, accessible via FFI wrapper) ---
     context: Arc<Mutex<Option<ContextWrapper>>>,
-    
+
     // Connection Params (Passed to Init/Connect)
     push_address: String,
     config_address: String,
-    
+
     // Pending Subscriptions (Thread-safe queue)
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
 }
@@ -69,10 +70,7 @@ pub struct MasterEaSimulator {
 impl MasterEaSimulator {
     pub fn new(push_address: &str, config_address: &str, account_id: &str) -> Result<Self> {
         // Use new_without_zmq to avoid creating raw sockets in base
-        let base = EaSimulatorBase::new_without_zmq(
-            account_id,
-            EaType::Master,
-        )?;
+        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master)?;
 
         Ok(Self {
             base,
@@ -82,7 +80,6 @@ impl MasterEaSimulator {
             g_server_status: Arc::new(AtomicI32::new(STATUS_NO_CONFIG)),
             g_symbol_prefix: Arc::new(Mutex::new(String::new())),
             g_symbol_suffix: Arc::new(Mutex::new(String::new())),
-            g_config_version: Arc::new(Mutex::new(0)),
             received_sync_requests: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
             received_config: Arc::new(Mutex::new(None)),
@@ -164,15 +161,15 @@ impl MasterEaSimulator {
 
             unsafe {
                 if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
-                     eprintln!("Failed to connect EA context!");
-                     return;
+                    eprintln!("Failed to connect EA context!");
+                    return;
                 }
             }
-            
+
             let config_socket = unsafe { ea_get_config_socket(ctx) };
             if config_socket.is_null() {
-                 eprintln!("Failed to get config socket!");
-                 return;
+                eprintln!("Failed to get config socket!");
+                return;
             }
 
             // 3. OnTimer Loop
@@ -181,23 +178,30 @@ impl MasterEaSimulator {
                 {
                     let mut subs = pending_subs.lock().unwrap();
                     if !subs.is_empty() {
-                         for topic in subs.iter() {
-                             let topic_u16 = to_u16(topic);
-                             unsafe { ea_socket_subscribe(config_socket, topic_u16.as_ptr()); }
-                         }
-                         subs.clear();
+                        for topic in subs.iter() {
+                            let topic_u16 = to_u16(topic);
+                            unsafe {
+                                ea_socket_subscribe(config_socket, topic_u16.as_ptr());
+                            }
+                        }
+                        subs.clear();
                     }
                 }
-                
+
                 std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
-                if shutdown_flag.load(Ordering::SeqCst) { break; }
+                if shutdown_flag.load(Ordering::SeqCst) {
+                    break;
+                }
 
                 // P. Register
                 if !g_register_sent.load(Ordering::SeqCst) {
                     let mut buffer = vec![0u8; 1024];
-                    let len = unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
+                    let len =
+                        unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
                     if len > 0 {
-                        unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
+                        unsafe {
+                            ea_send_push(ctx, buffer.as_ptr(), len);
+                        }
                         g_register_sent.store(true, Ordering::SeqCst);
                     }
                 }
@@ -210,7 +214,10 @@ impl MasterEaSimulator {
                 let last_hb = *g_last_heartbeat.lock().unwrap();
                 let should_send_heartbeat = match last_hb {
                     None => true,
-                    Some(last) => now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS || trade_state_changed
+                    Some(last) => {
+                        now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
+                            || trade_state_changed
+                    }
                 };
 
                 if should_send_heartbeat {
@@ -228,30 +235,35 @@ impl MasterEaSimulator {
                     };
 
                     if len > 0 {
-                         unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
-                         
-                         *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-                         if trade_state_changed {
-                             g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
-                         }
-                         
-                         let should_request = unsafe {
-                             ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
-                         };
-                         
-                         if should_request == 1 {
-                             unsafe {
-                                 sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0); 
-                             }
-                             g_config_requested.store(true, Ordering::SeqCst);
-                         }
+                        unsafe {
+                            ea_send_push(ctx, buffer.as_ptr(), len);
+                        }
+
+                        *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
+                        if trade_state_changed {
+                            g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
+                        }
+
+                        let should_request = unsafe {
+                            ea_context_should_request_config(
+                                ctx,
+                                if current_trade_allowed { 1 } else { 0 },
+                            )
+                        };
+
+                        if should_request == 1 {
+                            unsafe {
+                                sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0);
+                            }
+                            g_config_requested.store(true, Ordering::SeqCst);
+                        }
                     }
                 }
 
                 // Config Receive Loop
                 loop {
                     let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-                    
+
                     let received_bytes = unsafe {
                         ea_socket_receive(
                             config_socket,
@@ -260,32 +272,40 @@ impl MasterEaSimulator {
                         )
                     };
 
-                    if received_bytes <= 0 { break; }
+                    if received_bytes <= 0 {
+                        break;
+                    }
 
                     let bytes = &buffer[..received_bytes as usize];
                     if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                         let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                         let payload = &bytes[space_pos + 1..];
+                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
+                        let payload = &bytes[space_pos + 1..];
 
-                         if topic.starts_with("sync/") {
-                             if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
-                                 received_sync_requests.lock().unwrap().push(msg);
-                             }
-                         } else if topic.starts_with("config/") {
-                             if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(payload) {
-                                  g_server_status.store(config.status, Ordering::SeqCst);
-                                  if let Some(prefix) = &config.symbol_prefix {
-                                      *g_symbol_prefix.lock().unwrap() = prefix.clone();
-                                  }
-                                  if let Some(suffix) = &config.symbol_suffix {
-                                      *g_symbol_suffix.lock().unwrap() = suffix.clone();
-                                  }
-                                  unsafe { ea_context_mark_config_requested(ctx); }
-                                  *received_config.lock().unwrap() = Some(config);
-                             } else if let Ok(vlogs) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
-                                  received_vlogs_configs.lock().unwrap().push(vlogs);
-                             }
-                         }
+                        if topic.starts_with("sync/") {
+                            if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
+                                received_sync_requests.lock().unwrap().push(msg);
+                            }
+                        } else if topic.starts_with("config/") {
+                            if let Ok(config) =
+                                rmp_serde::from_slice::<MasterConfigMessage>(payload)
+                            {
+                                g_server_status.store(config.status, Ordering::SeqCst);
+                                if let Some(prefix) = &config.symbol_prefix {
+                                    *g_symbol_prefix.lock().unwrap() = prefix.clone();
+                                }
+                                if let Some(suffix) = &config.symbol_suffix {
+                                    *g_symbol_suffix.lock().unwrap() = suffix.clone();
+                                }
+                                unsafe {
+                                    ea_context_mark_config_requested(ctx);
+                                }
+                                *received_config.lock().unwrap() = Some(config);
+                            } else if let Ok(vlogs) =
+                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
+                            {
+                                received_vlogs_configs.lock().unwrap().push(vlogs);
+                            }
+                        }
                     }
                 }
             } // End While
@@ -299,14 +319,18 @@ impl MasterEaSimulator {
                 )
             };
             if len > 0 {
-                unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
+                unsafe {
+                    ea_send_push(ctx, buffer.as_ptr(), len);
+                }
             }
-            
+
             {
                 let mut guard = context_mutex.lock().unwrap();
                 *guard = None;
             }
-            unsafe { ea_context_free(ctx); }
+            unsafe {
+                ea_context_free(ctx);
+            }
         });
 
         self.ontimer_thread = Some(handle);
@@ -319,8 +343,10 @@ impl MasterEaSimulator {
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        
-        Err(anyhow::anyhow!("Timed out waiting for EA context initialization"))
+
+        Err(anyhow::anyhow!(
+            "Timed out waiting for EA context initialization"
+        ))
     }
 
     // =========================================================================
@@ -329,64 +355,86 @@ impl MasterEaSimulator {
     pub fn account_id(&self) -> &str {
         self.base.account_id()
     }
-    
+
     pub fn set_trade_allowed(&self, allowed: bool) {
         self.base.set_trade_allowed(allowed);
     }
 
-    pub fn wait_for_status(&self, expected: i32, timeout_ms: i32) -> Result<Option<MasterConfigMessage>> {
-         let start = std::time::Instant::now();
-         while start.elapsed().as_millis() < timeout_ms as u128 {
-             if self.g_server_status.load(Ordering::SeqCst) == expected {
-                 return Ok(self.received_config.lock().unwrap().clone());
-             }
-             std::thread::sleep(std::time::Duration::from_millis(50));
-         }
-         Ok(None)
+    pub fn wait_for_status(
+        &self,
+        expected: i32,
+        timeout_ms: i32,
+    ) -> Result<Option<MasterConfigMessage>> {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            if self.g_server_status.load(Ordering::SeqCst) == expected {
+                return Ok(self.received_config.lock().unwrap().clone());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        Ok(None)
     }
 
     pub fn try_receive_sync_request(&self, timeout_ms: i32) -> Result<Option<SyncRequestMessage>> {
-         let start = std::time::Instant::now();
-         while start.elapsed().as_millis() < timeout_ms as u128 {
-             let mut lock = self.received_sync_requests.lock().unwrap();
-             if !lock.is_empty() {
-                 return Ok(Some(lock.remove(0)));
-             }
-             drop(lock);
-             std::thread::sleep(std::time::Duration::from_millis(10));
-         }
-         Ok(None)
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let mut lock = self.received_sync_requests.lock().unwrap();
+            if !lock.is_empty() {
+                return Ok(Some(lock.remove(0)));
+            }
+            drop(lock);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(None)
     }
-    
+
     // For test compatibility - returns config if received, but does NOT consume from socket directly
-    pub fn try_receive_master_config(&self, timeout_ms: i32) -> Result<Option<MasterConfigMessage>> {
-         let start = std::time::Instant::now();
-         while start.elapsed().as_millis() < timeout_ms as u128 {
-             let cfg = self.received_config.lock().unwrap().clone();
-             if let Some(c) = cfg {
-                 return Ok(Some(c));
-             }
-             std::thread::sleep(std::time::Duration::from_millis(10));
-         }
-         Ok(None)
+    pub fn try_receive_master_config(
+        &self,
+        timeout_ms: i32,
+    ) -> Result<Option<MasterConfigMessage>> {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let cfg = self.received_config.lock().unwrap().clone();
+            if let Some(c) = cfg {
+                return Ok(Some(c));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(None)
     }
 
     pub fn send_trade_signal(&self, _signal: &TradeSignalMessage) -> Result<()> {
-         let bytes = rmp_serde::to_vec_named(_signal)?;
-         self.send_raw_bytes(&bytes)
+        let bytes = rmp_serde::to_vec_named(_signal)?;
+        self.send_raw_bytes(&bytes)
     }
 
     fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
         let guard = self.context.lock().unwrap();
         if let Some(wrapper) = guard.as_ref() {
-             let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
-             if ret == 1 { Ok(()) } else { Err(anyhow::anyhow!("Failed to send push")) }
+            let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
+            if ret == 1 {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("Failed to send push"))
+            }
         } else {
-             Err(anyhow::anyhow!("Context not initialized"))
+            Err(anyhow::anyhow!("Context not initialized"))
         }
     }
 
-    pub fn create_open_signal(&self, ticket: i64, symbol: &str, order_type: &str, lots: f64, price: f64, sl: Option<f64>, tp: Option<f64>, magic: i64) -> TradeSignalMessage {
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_open_signal(
+        &self,
+        ticket: i64,
+        symbol: &str,
+        order_type: &str,
+        lots: f64,
+        price: f64,
+        sl: Option<f64>,
+        tp: Option<f64>,
+        magic: i64,
+    ) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Open".to_string(),
             ticket,
@@ -409,7 +457,7 @@ impl MasterEaSimulator {
             action: "Close".to_string(),
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some("Buy".to_string()), 
+            order_type: Some("Buy".to_string()),
             lots: Some(lots),
             open_price: None,
             stop_loss: None,
@@ -422,7 +470,13 @@ impl MasterEaSimulator {
         }
     }
 
-    pub fn create_partial_close_signal(&self, ticket: i64, symbol: &str, lots: f64, close_ratio: f64) -> TradeSignalMessage {
+    pub fn create_partial_close_signal(
+        &self,
+        ticket: i64,
+        symbol: &str,
+        lots: f64,
+        close_ratio: f64,
+    ) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Close".to_string(),
             ticket,
@@ -440,7 +494,13 @@ impl MasterEaSimulator {
         }
     }
 
-    pub fn create_modify_signal(&self, ticket: i64, symbol: &str, sl: Option<f64>, tp: Option<f64>) -> TradeSignalMessage {
+    pub fn create_modify_signal(
+        &self,
+        ticket: i64,
+        symbol: &str,
+        sl: Option<f64>,
+        tp: Option<f64>,
+    ) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Modify".to_string(),
             ticket,
@@ -458,7 +518,11 @@ impl MasterEaSimulator {
         }
     }
 
-    pub fn create_delayed_signal(&self, mut signal: TradeSignalMessage, delay_ms: i64) -> TradeSignalMessage {
+    pub fn create_delayed_signal(
+        &self,
+        mut signal: TradeSignalMessage,
+        delay_ms: i64,
+    ) -> TradeSignalMessage {
         let past_time = Utc::now() - chrono::Duration::milliseconds(delay_ms);
         signal.timestamp = past_time.to_rfc3339();
         signal
@@ -475,7 +539,13 @@ impl MasterEaSimulator {
         self.send_raw_bytes(&bytes)
     }
 
-    pub fn create_test_position(ticket: i64, symbol: &str, order_type: &str, lots: f64, open_price: f64) -> PositionInfo {
+    pub fn create_test_position(
+        ticket: i64,
+        symbol: &str,
+        order_type: &str,
+        lots: f64,
+        open_price: f64,
+    ) -> PositionInfo {
         PositionInfo {
             ticket,
             symbol: symbol.to_string(),
@@ -495,23 +565,26 @@ impl MasterEaSimulator {
         self.pending_subscriptions.lock().unwrap().push(topic);
         Ok(())
     }
-    
+
     pub fn subscribe_to_global_config(&self) -> Result<()> {
-        self.pending_subscriptions.lock().unwrap().push("config/global".to_string());
+        self.pending_subscriptions
+            .lock()
+            .unwrap()
+            .push("config/global".to_string());
         Ok(())
     }
-    
+
     pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
-         let start = std::time::Instant::now();
-         while start.elapsed().as_millis() < timeout_ms as u128 {
-             let mut lock = self.received_vlogs_configs.lock().unwrap();
-             if !lock.is_empty() {
-                 return Ok(Some(lock.remove(0)));
-             }
-             drop(lock);
-             std::thread::sleep(std::time::Duration::from_millis(10));
-         }
-         Ok(None)
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let mut lock = self.received_vlogs_configs.lock().unwrap();
+            if !lock.is_empty() {
+                return Ok(Some(lock.remove(0)));
+            }
+            drop(lock);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(None)
     }
 }
 

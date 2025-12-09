@@ -4,9 +4,9 @@
 //
 // Refactored to use Strategy Pattern for Master/Slave communication logic.
 
-use zmq::{Context, Socket, PUSH, SUB};
-use std::fmt::Debug;
 use crate::types::{RequestConfigMessage, TradeSignalMessage};
+use std::fmt::Debug;
+use zmq::{Context, Socket, PUSH, SUB};
 
 // ===========================================================================
 // Communication Strategy Interface
@@ -15,13 +15,13 @@ use crate::types::{RequestConfigMessage, TradeSignalMessage};
 pub trait CommunicationStrategy: Send + Debug {
     /// Connect to Relay Server and set up strict subscription rules
     fn connect(&mut self, push_addr: &str, sub_addr: &str, account_id: &str) -> Result<(), String>;
-    
+
     /// Disconnect and cleanup resources
     fn disconnect(&mut self);
-    
+
     /// Send data via PUSH socket
     fn send_push(&mut self, data: &[u8]) -> Result<(), String>;
-    
+
     /// Subscribe to a Master's trade topic (Slave only)
     fn subscribe_trade(&mut self, master_id: &str) -> Result<(), String>;
 
@@ -38,7 +38,7 @@ pub trait CommunicationStrategy: Send + Debug {
 // ===========================================================================
 
 struct ZmqResources {
-    ctx: Context,
+    _ctx: Context,
     push: Socket,
     sub: Socket,
 }
@@ -46,24 +46,30 @@ struct ZmqResources {
 impl Debug for ZmqResources {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ZmqResources")
-         .field("ctx", &"<zmq::Context>")
-         .field("push", &"<zmq::Socket>")
-         .field("sub", &"<zmq::Socket>")
-         .finish()
+            .field("ctx", &"<zmq::Context>")
+            .field("push", &"<zmq::Socket>")
+            .field("sub", &"<zmq::Socket>")
+            .finish()
     }
 }
 
 impl ZmqResources {
     fn new(push_addr: &str, sub_addr: &str) -> Result<Self, String> {
         let ctx = Context::new();
-        
+
         let push = ctx.socket(PUSH).map_err(|e| e.to_string())?;
-        push.connect(push_addr).map_err(|e| format!("PUSH connect failed: {}", e))?;
-        
+        push.connect(push_addr)
+            .map_err(|e| format!("PUSH connect failed: {}", e))?;
+
         let sub = ctx.socket(SUB).map_err(|e| e.to_string())?;
-        sub.connect(sub_addr).map_err(|e| format!("SUB connect failed: {}", e))?;
-        
-        Ok(Self { ctx, push, sub })
+        sub.connect(sub_addr)
+            .map_err(|e| format!("SUB connect failed: {}", e))?;
+
+        Ok(Self {
+            _ctx: ctx,
+            push,
+            sub,
+        })
     }
 }
 
@@ -79,12 +85,14 @@ pub struct MasterStrategy {
 impl CommunicationStrategy for MasterStrategy {
     fn connect(&mut self, push_addr: &str, sub_addr: &str, account_id: &str) -> Result<(), String> {
         let res = ZmqResources::new(push_addr, sub_addr)?;
-        
+
         // Master: Subscribe only to my own config
         // Topic: "config/{account_id}"
         let topic = format!("config/{}", account_id);
-        res.sub.set_subscribe(topic.as_bytes()).map_err(|e| format!("Subscribe config failed: {}", e))?;
-        
+        res.sub
+            .set_subscribe(topic.as_bytes())
+            .map_err(|e| format!("Subscribe config failed: {}", e))?;
+
         self.resources = Some(res);
         Ok(())
     }
@@ -124,11 +132,13 @@ pub struct SlaveStrategy {
 impl CommunicationStrategy for SlaveStrategy {
     fn connect(&mut self, push_addr: &str, sub_addr: &str, account_id: &str) -> Result<(), String> {
         let res = ZmqResources::new(push_addr, sub_addr)?;
-        
+
         // Slave: Subscribe to my own config
         let topic = format!("config/{}", account_id);
-        res.sub.set_subscribe(topic.as_bytes()).map_err(|e| format!("Subscribe config failed: {}", e))?;
-        
+        res.sub
+            .set_subscribe(topic.as_bytes())
+            .map_err(|e| format!("Subscribe config failed: {}", e))?;
+
         self.resources = Some(res);
         Ok(())
     }
@@ -147,7 +157,9 @@ impl CommunicationStrategy for SlaveStrategy {
         // Slave: Subscribe to trade signals from a specific master
         // Topic: "trade/{master_id}/"
         let topic = format!("trade/{}/", master_id);
-        res.sub.set_subscribe(topic.as_bytes()).map_err(|e| format!("Subscribe trade failed: {}", e))?;
+        res.sub
+            .set_subscribe(topic.as_bytes())
+            .map_err(|e| format!("Subscribe trade failed: {}", e))?;
         Ok(())
     }
 
@@ -170,12 +182,22 @@ impl CommunicationStrategy for SlaveStrategy {
 struct NoOpStrategy;
 
 impl CommunicationStrategy for NoOpStrategy {
-    fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), String> { Ok(()) }
+    fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), String> {
+        Ok(())
+    }
     fn disconnect(&mut self) {}
-    fn send_push(&mut self, _: &[u8]) -> Result<(), String> { Ok(()) }
-    fn subscribe_trade(&mut self, _: &str) -> Result<(), String> { Ok(()) }
-    fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> { Err("NoOp".to_string()) }
-    fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> { Err("NoOp".to_string()) }
+    fn send_push(&mut self, _: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+    fn subscribe_trade(&mut self, _: &str) -> Result<(), String> {
+        Ok(())
+    }
+    fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+        Err("NoOp".to_string())
+    }
+    fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+        Err("NoOp".to_string())
+    }
 }
 
 // ===========================================================================
@@ -271,27 +293,28 @@ impl EaContext {
             ea_type: self.ea_type.clone(),
         };
 
-        let data = rmp_serde::encode::to_vec(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data =
+            rmp_serde::encode::to_vec(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
-        
+
         // Mark as requested to prevent duplicate requests
         self.mark_config_requested();
-        
+
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn send_open_signal(
-        &mut self, 
-        ticket: i64, 
-        symbol: &str, 
-        order_type: &str, 
-        lots: f64, 
-        price: f64, 
-        sl: f64, 
-        tp: f64, 
-        magic: i64, 
-        comment: &str
+        &mut self,
+        ticket: i64,
+        symbol: &str,
+        order_type: &str,
+        lots: f64,
+        price: f64,
+        sl: f64,
+        tp: f64,
+        magic: i64,
+        comment: &str,
     ) -> Result<(), String> {
         let msg = TradeSignalMessage {
             action: "Open".to_string(),
@@ -309,16 +332,17 @@ impl EaContext {
             close_ratio: None,
         };
 
-        let data = rmp_serde::encode::to_vec(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
+        let data =
+            rmp_serde::encode::to_vec(&msg).map_err(|e| format!("Serialization failed: {}", e))?;
         self.strategy.send_push(&data)?;
         Ok(())
     }
-    
+
     // --- Socket Accessors for FFI (Raw Pointers) ---
     pub fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
         self.strategy.get_config_socket_ptr()
     }
-    
+
     pub fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
         self.strategy.get_trade_socket_ptr()
     }
@@ -371,7 +395,7 @@ mod tests {
     fn test_strategy_selection() {
         let master = create_test_context("Master");
         assert_eq!(master.ea_type, "Master");
-        
+
         let slave = create_test_context("Slave");
         assert_eq!(slave.ea_type, "Slave");
     }
@@ -399,31 +423,40 @@ mod tests {
     struct MockStrategy {
         sent_data: Arc<Mutex<Vec<Vec<u8>>>>,
     }
-    
+
     impl CommunicationStrategy for MockStrategy {
-        fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), String> { Ok(()) }
+        fn connect(&mut self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Ok(())
+        }
         fn disconnect(&mut self) {}
         fn send_push(&mut self, data: &[u8]) -> Result<(), String> {
             self.sent_data.lock().unwrap().push(data.to_vec());
             Ok(())
         }
-        fn subscribe_trade(&mut self, _: &str) -> Result<(), String> { Ok(()) }
-        fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> { Err("Mock".to_string()) }
-        fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> { Err("Mock".to_string()) }
+        fn subscribe_trade(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+            Err("Mock".to_string())
+        }
+        fn get_trade_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, String> {
+            Err("Mock".to_string())
+        }
     }
 
     #[test]
     fn test_send_request_config() {
         let mut ctx = create_test_context("Slave");
         let sent_data = Arc::new(Mutex::new(Vec::new()));
-        
+
         ctx.strategy = Box::new(MockStrategy {
-            sent_data: sent_data.clone()
+            sent_data: sent_data.clone(),
         });
-        
+
         // This should invoke send_push
-        ctx.send_request_config(1).expect("Failed to send request config");
-        
+        ctx.send_request_config(1)
+            .expect("Failed to send request config");
+
         let data = sent_data.lock().unwrap();
         assert_eq!(data.len(), 1, "Should have sent one message");
     }
@@ -432,14 +465,24 @@ mod tests {
     fn test_send_open_signal() {
         let mut ctx = create_test_context("Master");
         let sent_data = Arc::new(Mutex::new(Vec::new()));
-        
+
         ctx.strategy = Box::new(MockStrategy {
-            sent_data: sent_data.clone()
+            sent_data: sent_data.clone(),
         });
-        
-        ctx.send_open_signal(12345, "EURUSD", "Buy", 0.1, 1.1050, 1.1000, 1.1100, 123, "Test Comment")
-           .expect("Failed to send open signal");
-           
+
+        ctx.send_open_signal(
+            12345,
+            "EURUSD",
+            "Buy",
+            0.1,
+            1.1050,
+            1.1000,
+            1.1100,
+            123,
+            "Test Comment",
+        )
+        .expect("Failed to send open signal");
+
         let data = sent_data.lock().unwrap();
         assert_eq!(data.len(), 1, "Should have sent one message");
     }
