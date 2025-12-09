@@ -6,9 +6,9 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::relay_server_process::RelayServerProcess;
+use e2e_tests::TestSandbox;
 use e2e_tests::types::{OrderType, TradeAction};
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, TradeFilters};
+use e2e_tests::TradeFilters;
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
 
@@ -22,7 +22,8 @@ use tokio::time::{sleep, Duration};
 /// 2. Lots are passed through unchanged (Slave EA handles lot calculation)
 #[tokio::test]
 async fn test_partial_close_signal() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -40,21 +41,11 @@ async fn test_partial_close_signal() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -74,10 +65,10 @@ async fn test_partial_close_signal() {
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
+    // Wait for Open signal
     let received_open = slave
-        .try_receive_trade_signal(3000)
-        .expect("Failed to receive signal");
+        .wait_for_trade_action(TradeAction::Open, 3000)
+        .expect("Failed to receive Open signal");
     assert!(received_open.is_some(), "Should receive Open signal");
     let open_sig = received_open.unwrap();
     assert_eq!(
@@ -93,10 +84,11 @@ async fn test_partial_close_signal() {
         .send_trade_signal(&partial_close_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
+    // Wait for Close signal
+    // Note: wait_for_trade_action calls try_receive_trade_signal internally which consumes the queue
     let received_close = slave
-        .try_receive_trade_signal(3000)
-        .expect("Failed to receive signal");
+        .wait_for_trade_action(TradeAction::Close, 3000)
+        .expect("Failed to receive Close signal");
     assert!(received_close.is_some(), "Should receive Close signal");
 
     let received_signal = received_close.unwrap();
@@ -119,7 +111,8 @@ async fn test_partial_close_signal() {
 /// Verifies backward compatibility - close without close_ratio works as full close
 #[tokio::test]
 async fn test_full_close_signal_no_ratio() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -134,21 +127,11 @@ async fn test_full_close_signal_no_ratio() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -162,9 +145,8 @@ async fn test_full_close_signal_no_ratio() {
         .send_trade_signal(&close_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Close, 3000)
         .expect("Failed to receive signal");
     assert!(received.is_some(), "Should receive Close signal");
 
@@ -185,7 +167,8 @@ async fn test_full_close_signal_no_ratio() {
 /// Test allowed symbols filter - only specified symbols are copied
 #[tokio::test]
 async fn test_allowed_symbols_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -207,21 +190,11 @@ async fn test_allowed_symbols_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -243,9 +216,8 @@ async fn test_allowed_symbols_filter() {
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received1.is_some(), "EURUSD should be received (allowed)");
 
@@ -271,7 +243,8 @@ async fn test_allowed_symbols_filter() {
 /// Test blocked symbols filter - specified symbols are excluded
 #[tokio::test]
 async fn test_blocked_symbols_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -293,21 +266,11 @@ async fn test_blocked_symbols_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -322,9 +285,8 @@ async fn test_blocked_symbols_filter() {
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(
         received1.is_some(),
@@ -357,7 +319,8 @@ async fn test_blocked_symbols_filter() {
 /// Test allowed magic numbers filter
 #[tokio::test]
 async fn test_allowed_magic_numbers_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -379,21 +342,11 @@ async fn test_allowed_magic_numbers_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -416,9 +369,8 @@ async fn test_allowed_magic_numbers_filter() {
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(
         received1.is_some(),
@@ -455,7 +407,8 @@ async fn test_allowed_magic_numbers_filter() {
 /// Test blocked magic numbers filter
 #[tokio::test]
 async fn test_blocked_magic_numbers_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -477,21 +430,11 @@ async fn test_blocked_magic_numbers_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -514,9 +457,8 @@ async fn test_blocked_magic_numbers_filter() {
         .send_trade_signal(&signal1)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(
         received1.is_some(),
@@ -557,7 +499,8 @@ async fn test_blocked_magic_numbers_filter() {
 /// Test source_lot_min filter - signals below minimum are excluded
 #[tokio::test]
 async fn test_source_lot_min_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -574,21 +517,11 @@ async fn test_source_lot_min_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -603,9 +536,8 @@ async fn test_source_lot_min_filter() {
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(
         received1.is_some(),
@@ -634,7 +566,8 @@ async fn test_source_lot_min_filter() {
 /// Test source_lot_max filter - signals above maximum are excluded
 #[tokio::test]
 async fn test_source_lot_max_filter() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -651,21 +584,11 @@ async fn test_source_lot_max_filter() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -688,9 +611,8 @@ async fn test_source_lot_max_filter() {
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(
         received1.is_some(),
@@ -724,7 +646,8 @@ async fn test_source_lot_max_filter() {
 /// 1.0 lot -> 50% close -> 0.5 lot -> 50% close -> 0.25 lot
 #[tokio::test]
 async fn test_multiple_sequential_partial_closes() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -739,21 +662,11 @@ async fn test_multiple_sequential_partial_closes() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -768,9 +681,8 @@ async fn test_multiple_sequential_partial_closes() {
         .send_trade_signal(&open_signal)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received_open = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received_open.is_some(), "Should receive Open signal");
 
@@ -780,9 +692,8 @@ async fn test_multiple_sequential_partial_closes() {
         .send_trade_signal(&partial1)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received_partial1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Close, 3000)
         .expect("Failed to receive signal");
     assert!(
         received_partial1.is_some(),
@@ -800,9 +711,8 @@ async fn test_multiple_sequential_partial_closes() {
         .send_trade_signal(&partial2)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received_partial2 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Close, 3000)
         .expect("Failed to receive signal");
     assert!(
         received_partial2.is_some(),
@@ -824,7 +734,8 @@ async fn test_multiple_sequential_partial_closes() {
 /// Test pending order types (BuyLimit, SellLimit, BuyStop, SellStop)
 #[tokio::test]
 async fn test_pending_order_types() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -841,21 +752,11 @@ async fn test_pending_order_types() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -878,9 +779,8 @@ async fn test_pending_order_types() {
         .send_trade_signal(&buy_limit)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received1.is_some(), "BuyLimit should be received");
     assert_eq!(received1.unwrap().order_type, Some(OrderType::BuyLimit));
@@ -900,9 +800,8 @@ async fn test_pending_order_types() {
         .send_trade_signal(&sell_limit)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received2 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received2.is_some(), "SellLimit should be received");
     assert_eq!(received2.unwrap().order_type, Some(OrderType::SellLimit));
@@ -922,9 +821,8 @@ async fn test_pending_order_types() {
         .send_trade_signal(&buy_stop)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received3 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received3.is_some(), "BuyStop should be received");
     assert_eq!(received3.unwrap().order_type, Some(OrderType::BuyStop));
@@ -944,9 +842,8 @@ async fn test_pending_order_types() {
         .send_trade_signal(&sell_stop)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received4 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received4.is_some(), "SellStop should be received");
     assert_eq!(received4.unwrap().order_type, Some(OrderType::SellStop));
@@ -957,7 +854,8 @@ async fn test_pending_order_types() {
 /// Test copy_pending_orders = false - pending orders should not be copied
 #[tokio::test]
 async fn test_pending_orders_disabled() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -974,21 +872,11 @@ async fn test_pending_orders_disabled() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -1003,9 +891,8 @@ async fn test_pending_orders_disabled() {
         .send_trade_signal(&market_order)
         .expect("Failed to send signal");
 
-    sleep(Duration::from_millis(500)).await;
     let received1 = slave
-        .try_receive_trade_signal(3000)
+        .wait_for_trade_action(TradeAction::Open, 3000)
         .expect("Failed to receive signal");
     assert!(received1.is_some(), "Market order (Buy) should be received");
 

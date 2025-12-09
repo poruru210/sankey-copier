@@ -6,9 +6,9 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::relay_server_process::RelayServerProcess;
+use e2e_tests::TestSandbox;
 use e2e_tests::types::{OrderType, TradeSignal};
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator};
+use e2e_tests::SlaveEaSimulator;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use tokio::time::{sleep, Duration};
@@ -52,7 +52,8 @@ fn collect_trade_signals(
 /// Master1 -> Slave1, Master2 -> Slave2 (no cross-contamination)
 #[tokio::test]
 async fn test_multi_master_signal_isolation() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -76,37 +77,17 @@ async fn test_multi_master_signal_isolation() {
     .await
     .expect("Failed to setup test scenario for master2");
 
-    let mut master1 = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master1_account,
-    )
-    .expect("Failed to create master1 simulator");
+    let mut master1 = sandbox.create_master(master1_account)
+        .expect("Failed to create master1 simulator");
 
-    let mut master2 = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master2_account,
-    )
-    .expect("Failed to create master2 simulator");
+    let mut master2 = sandbox.create_master(master2_account)
+        .expect("Failed to create master2 simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave1_account,
-        master1_account,
-    )
-    .expect("Failed to create slave1 simulator");
+    let mut slave1 = sandbox.create_slave(slave1_account, master1_account)
+        .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave2_account,
-        master2_account,
-    )
-    .expect("Failed to create slave2 simulator");
+    let mut slave2 = sandbox.create_slave(slave2_account, master2_account)
+        .expect("Failed to create slave2 simulator");
 
     // Start all EAs
     master1.set_trade_allowed(true);
@@ -152,7 +133,8 @@ async fn test_multi_master_signal_isolation() {
 /// Test same symbol from different masters
 #[tokio::test]
 async fn test_multi_master_same_symbol_open() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -175,37 +157,17 @@ async fn test_multi_master_same_symbol_open() {
     .await
     .expect("Failed to setup test scenario for master2");
 
-    let mut master1 = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master1_account,
-    )
-    .expect("Failed to create master1 simulator");
+    let mut master1 = sandbox.create_master(master1_account)
+        .expect("Failed to create master1 simulator");
 
-    let mut master2 = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master2_account,
-    )
-    .expect("Failed to create master2 simulator");
+    let mut master2 = sandbox.create_master(master2_account)
+        .expect("Failed to create master2 simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave1_account,
-        master1_account,
-    )
-    .expect("Failed to create slave1 simulator");
+    let mut slave1 = sandbox.create_slave(slave1_account, master1_account)
+        .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave2_account,
-        master2_account,
-    )
-    .expect("Failed to create slave2 simulator");
+    let mut slave2 = sandbox.create_slave(slave2_account, master2_account)
+        .expect("Failed to create slave2 simulator");
 
     // Start all EAs
     master1.set_trade_allowed(true);
@@ -255,7 +217,8 @@ async fn test_multi_master_same_symbol_open() {
 /// Test signal broadcast to all slaves
 #[tokio::test]
 async fn test_signal_broadcast_to_all_slaves() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -276,39 +239,17 @@ async fn test_signal_broadcast_to_all_slaves() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave1 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave1_account,
-        master_account,
-    )
-    .expect("Failed to create slave1 simulator");
+    let mut slave1 = sandbox.create_slave(slave1_account, master_account)
+        .expect("Failed to create slave1 simulator");
 
-    let mut slave2 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave2_account,
-        master_account,
-    )
-    .expect("Failed to create slave2 simulator");
+    let mut slave2 = sandbox.create_slave(slave2_account, master_account)
+        .expect("Failed to create slave2 simulator");
 
-    let mut slave3 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave3_account,
-        master_account,
-    )
-    .expect("Failed to create slave3 simulator");
+    let mut slave3 = sandbox.create_slave(slave3_account, master_account)
+        .expect("Failed to create slave3 simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
@@ -351,7 +292,8 @@ async fn test_signal_broadcast_to_all_slaves() {
 /// Note: Lot multiplier is handled by Slave EA, Relay Server passes through original lots
 #[tokio::test]
 async fn test_slave_individual_lot_multiplier() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -384,21 +326,11 @@ async fn test_slave_individual_lot_multiplier() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
@@ -438,7 +370,8 @@ async fn test_slave_individual_lot_multiplier() {
 /// Test signal latency measurement
 #[tokio::test]
 async fn test_signal_latency_measurement() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -453,21 +386,11 @@ async fn test_signal_latency_measurement() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
@@ -527,7 +450,8 @@ async fn test_signal_latency_measurement() {
 /// Server delivers all signals regardless of timestamp - EA is responsible for validation
 #[tokio::test]
 async fn test_delayed_signal_immediate() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -542,21 +466,11 @@ async fn test_delayed_signal_immediate() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
@@ -590,7 +504,8 @@ async fn test_delayed_signal_immediate() {
 /// Test delayed signal (3 seconds old) - should still be delivered
 #[tokio::test]
 async fn test_delayed_signal_acceptable() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -605,21 +520,11 @@ async fn test_delayed_signal_acceptable() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
@@ -655,7 +560,8 @@ async fn test_delayed_signal_acceptable() {
 async fn test_stale_signal_too_old() {
     use chrono::Utc;
 
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -670,21 +576,11 @@ async fn test_stale_signal_too_old() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox.create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox.create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     // Start all EAs
     master.set_trade_allowed(true);
