@@ -17,7 +17,7 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 #include "../Include/SankeyCopier/Zmq.mqh"
 #include "../Include/SankeyCopier/Mapping.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
-#include "../Include/SankeyCopier/Messages.mqh"
+//--- Include common headers (Messages.mqh removed - using high-level FFI)
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/SlaveTrade.mqh"
 #include "../Include/SankeyCopier/MessageParsing.mqh"
@@ -44,7 +44,6 @@ string g_TradeAddress = "";  // Unified SUB address for trades and configs
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
 HANDLE_TYPE g_zmq_context = -1;
-HANDLE_TYPE g_zmq_socket = -1;
 HANDLE_TYPE g_zmq_trade_socket = -1;    // Socket for receiving trade signals
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving configuration
 TicketMapping g_order_map[];
@@ -129,7 +128,13 @@ int OnInit()
       Print("[ERROR] Failed to initialize EA Context");
       return INIT_FAILED;
    }
-
+   
+   // Connect via FFI (High-Level) - creates internal PUSH socket for sending
+   if(!g_ea_context.Connect(g_RelayAddress, g_TradeAddress))
+   {
+      Print("[ERROR] Failed to connect via EA Context");
+      return INIT_FAILED;
+   }
 
    // Create and connect trade signal socket (SUB) - uses unified PUB address
    g_zmq_trade_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_TradeAddress, "Slave Trade SUB");
@@ -216,7 +221,7 @@ void OnDeinit(const int reason)
    // Send unregister message to server
    if(g_ea_context.IsInitialized())
    {
-      g_ea_context.SendUnregister(g_zmq_context, g_RelayAddress);
+      g_ea_context.SendUnregister();
    }
 
    // Kill timer
@@ -261,7 +266,7 @@ void OnTimer()
    // Send Register Message (Once)
    if(!g_register_sent && g_initialized)
    {
-      if(g_ea_context.SendRegister(g_zmq_context, g_RelayAddress))
+      if(g_ea_context.SendRegister())
       {
          g_register_sent = true;
          Print("Register message sent for ", AccountID);
@@ -271,8 +276,8 @@ void OnTimer()
    if(should_send_heartbeat)
    {
       // Slave doesn't send symbol settings in heartbeat - those are managed per-Master config by relay server
-      // Use transient socket helper
-      bool heartbeat_sent = g_ea_context.SendHeartbeat(g_zmq_context, g_RelayAddress, GetAccountBalance(), GetAccountEquity(), 
+      // Use high-level FFI
+      bool heartbeat_sent = g_ea_context.SendHeartbeat(GetAccountBalance(), GetAccountEquity(), 
                                                        GetOpenPositionsCount(), current_trade_allowed);
 
       if(heartbeat_sent)
@@ -306,7 +311,7 @@ void OnTimer()
             if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
             {
                Print("[INFO] Requesting configuration (via EaContext)...");
-               if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
+               if(g_ea_context.SendRequestConfig())
                {
                   g_ea_context.MarkConfigRequested();
                   Print("[INFO] Configuration request sent successfully");
@@ -323,7 +328,7 @@ void OnTimer()
          if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
          {
             Print("[INFO] First heartbeat/periodic check, requesting configuration (via EaContext)...");
-            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Slave"))
+            if(g_ea_context.SendRequestConfig())
             {
                g_ea_context.MarkConfigRequested();
                Print("[INFO] Configuration request sent successfully");
@@ -435,11 +440,11 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void ProcessTradeSignals()
 {
-   // Check for trade signal messages (MessagePack format)
+   // Check for trade signal messages (MessagePack format) via EaContext
    // Note: PositionSnapshot is received via config socket in OnTimer
    uchar trade_buffer[];
    ArrayResize(trade_buffer, MESSAGE_BUFFER_SIZE);
-   int trade_bytes = zmq_socket_receive(g_zmq_trade_socket, trade_buffer, MESSAGE_BUFFER_SIZE);
+   int trade_bytes = g_ea_context.ReceiveTrade(trade_buffer, MESSAGE_BUFFER_SIZE);
 
    if(trade_bytes > 0)
    {

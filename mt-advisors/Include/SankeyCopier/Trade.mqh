@@ -13,8 +13,57 @@
 
 #include "Common.mqh"
 #include "SlaveTypes.mqh"
-#include "Messages.mqh"
+// Note: Messages.mqh removed - using Common.mqh for declarations
 #include "Logging.mqh"
+
+//+------------------------------------------------------------------+
+//| Send sync request message (local helper for ProcessConfigMessage) |
+//| Creates transient PUSH socket to send SyncRequest to server      |
+//+------------------------------------------------------------------+
+bool SendSyncRequestMessage_Local(HANDLE_TYPE zmq_context, string server_address,
+                                  string slave_account, string master_account)
+{
+   // Create temporary PUSH socket for sync request
+   HANDLE_TYPE push_socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
+   if(push_socket < 0)
+   {
+      LogError(CAT_SYNC, "Failed to create sync request socket");
+      return false;
+   }
+
+   if(zmq_socket_connect(push_socket, server_address) == 0)
+   {
+      LogError(CAT_SYNC, StringFormat("Failed to connect for sync request: %s", server_address));
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Create and serialize SyncRequest message
+   uchar buffer[];
+   ArrayResize(buffer, MESSAGE_BUFFER_SIZE);
+   int len = create_sync_request(slave_account, master_account, buffer, MESSAGE_BUFFER_SIZE);
+
+   if(len <= 0)
+   {
+      LogError(CAT_SYNC, "Failed to create sync request message");
+      zmq_socket_destroy(push_socket);
+      return false;
+   }
+
+   // Resize buffer to actual size
+   ArrayResize(buffer, len);
+
+   // Send binary MessagePack data
+   bool success = (zmq_socket_send_binary(push_socket, buffer, len) == 1);
+
+   if(success)
+      LogInfo(CAT_SYNC, StringFormat("Request sent to master: %s", master_account));
+   else
+      LogError(CAT_SYNC, "Failed to send sync request message");
+
+   zmq_socket_destroy(push_socket);
+   return success;
+}
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
@@ -350,7 +399,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
                (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
 
-         if(SendSyncRequestMessage(zmq_context, server_address, slave_account, new_master))
+         if(SendSyncRequestMessage_Local(zmq_context, server_address, slave_account, new_master))
          {
             LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
          }

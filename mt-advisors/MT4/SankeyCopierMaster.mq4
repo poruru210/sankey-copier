@@ -12,7 +12,7 @@
 //--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
 #include "../Include/SankeyCopier/Zmq.mqh"
-#include "../Include/SankeyCopier/Messages.mqh"
+#include "../Include/SankeyCopier/MasterSignals.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
@@ -52,7 +52,6 @@ struct OrderInfo
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
 HANDLE_TYPE g_zmq_context = -1;
-HANDLE_TYPE g_zmq_socket = -1;
 HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving config/sync requests
 OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
@@ -126,13 +125,11 @@ int OnInit()
       Print("[ERROR] Failed to initialize EA Context");
       return INIT_FAILED;
    }
-
-
-   // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
-   if(g_zmq_socket < 0)
+   
+   // Connect via FFI (High-Level) - creates internal PUSH socket for sending
+   if(!g_ea_context.Connect(g_RelayAddress, g_ConfigAddress))
    {
-      CleanupZmqContext(g_zmq_context);
+      Print("[ERROR] Failed to connect via EA Context");
       return INIT_FAILED;
    }
 
@@ -140,16 +137,14 @@ int OnInit()
    g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Master Config SUB");
    if(g_zmq_config_socket < 0)
    {
-      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
       CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
 
    // Subscribe to messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
+   if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
       CleanupZmqSocket(g_zmq_config_socket, "Master Config SUB");
-      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
       CleanupZmqContext(g_zmq_context);
       return INIT_FAILED;
    }
@@ -222,7 +217,7 @@ void OnDeinit(const int reason)
    // Send unregister message
    if(g_ea_context.IsInitialized())
    {
-      g_ea_context.SendUnregister(g_zmq_socket);
+      g_ea_context.SendUnregister();
    }
 
    // Kill timer
@@ -233,7 +228,8 @@ void OnDeinit(const int reason)
       g_config_panel.Delete();
 
    // Cleanup ZMQ resources
-   CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
+   CleanupZmqSocket(g_zmq_config_socket, "Master Config SUB");
+   CleanupZmqContext(g_zmq_context);
 
    // Cleanup EA Context handled by wrapper destructor
    // ea_context_free is called by ~EaContextWrapper
@@ -262,7 +258,7 @@ void OnTimer()
    // Send Register Message (Once)
    if(!g_register_sent && g_initialized)
    {
-      if(g_ea_context.SendRegister(g_zmq_socket))
+      if(g_ea_context.SendRegister())
       {
          g_register_sent = true;
          Print("Register message sent for ", AccountID);
@@ -272,7 +268,7 @@ void OnTimer()
    if(should_send_heartbeat)
    {
       // Use efficient FFI heartbeat
-      bool heartbeat_sent = g_ea_context.SendHeartbeat(g_zmq_socket, GetAccountBalance(), GetAccountEquity(), 
+      bool heartbeat_sent = g_ea_context.SendHeartbeat(GetAccountBalance(), GetAccountEquity(), 
                                                        GetOpenPositionsCount(), current_trade_allowed);
       if(heartbeat_sent)
       {
@@ -289,7 +285,7 @@ void OnTimer()
          if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
          {
             Print("[INFO] Requesting configuration (via EaContext)...");
-            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
+            if(g_ea_context.SendRequestConfig())
             {
                g_ea_context.MarkConfigRequested();
                Print("[INFO] Configuration request sent successfully");
@@ -470,7 +466,7 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
    sync_request_free(handle);
 
    // Send position snapshot
-   if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
+   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
    {
       Print("[SYNC] Position snapshot sent to slave: ", slave_account);
    }
@@ -603,7 +599,7 @@ void CheckForPartialCloses()
             Print("[ORDER] Partial close: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (ratio: ", DoubleToString(close_ratio * 100, 1), "%)");
 
             // Send partial close signal
-            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, close_ratio, AccountID);
+            SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, close_ratio, AccountID);
 
             // Update tracked volume (order still exists)
             g_tracked_orders[i].lots = current_lots;
@@ -640,7 +636,7 @@ void CheckForClosedOrders()
          // Order was closed (full close)
          if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
          {
-            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, 0.0, AccountID);
+            SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, 0.0, AccountID);
             RemoveTrackedOrder(ticket);
             Print("[ORDER] Closed: #", ticket);
          }
@@ -667,7 +663,7 @@ void SendOpenSignalFromOrder(int ticket)
    string raw_symbol = OrderSymbol();
    string symbol = GetCleanSymbol(raw_symbol, g_symbol_prefix, g_symbol_suffix);
    
-   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, symbol,
+   SendOpenSignal(g_ea_context, (TICKET_TYPE)ticket, symbol,
                   order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
                   OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
 }
@@ -677,7 +673,7 @@ void SendOpenSignalFromOrder(int ticket)
 //+------------------------------------------------------------------+
 void SendOrderModifySignal(int ticket, double sl, double tp)
 {
-   SendModifySignal(g_zmq_socket, (TICKET_TYPE)ticket, sl, tp, AccountID);
+   SendModifySignal(g_ea_context, (TICKET_TYPE)ticket, sl, tp, AccountID);
 }
 
 //+------------------------------------------------------------------+
