@@ -193,10 +193,33 @@ impl EaSimulatorBase {
         })
     }
 
+    pub fn new_without_zmq(
+        account_id: &str,
+        ea_type: EaType,
+    ) -> Result<Self> {
+        let heartbeat_params = match ea_type {
+            EaType::Master => HeartbeatParams::master_default(),
+            EaType::Slave => HeartbeatParams::slave_default(),
+        };
+
+        Ok(Self {
+            context_handle: -1,
+            push_socket_handle: -1,
+            config_socket_handle: -1,
+            trade_socket_handle: None,
+            account_id: account_id.to_string(),
+            ea_type,
+            is_trade_allowed: Arc::new(AtomicBool::new(false)),
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
+            heartbeat_params,
+        })
+    }
+
     /// Get account ID
     pub fn account_id(&self) -> &str {
         &self.account_id
     }
+    
 
     /// Get is_trade_allowed Arc for sharing with OnTimer thread
     pub(crate) fn is_trade_allowed_arc(&self) -> Arc<AtomicBool> {
@@ -373,12 +396,19 @@ impl Drop for EaSimulatorBase {
         self.shutdown_flag.store(true, Ordering::SeqCst);
 
         // Clean up ZMQ resources
-        // MQL5: CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, ...)
         if let Some(ts) = self.trade_socket_handle {
-            zmq_socket_destroy(ts);
+            if ts >= 0 {
+                zmq_socket_destroy(ts);
+            }
         }
-        zmq_socket_destroy(self.config_socket_handle);
-        zmq_socket_destroy(self.push_socket_handle);
-        zmq_context_destroy(self.context_handle);
+        if self.config_socket_handle >= 0 {
+            zmq_socket_destroy(self.config_socket_handle);
+        }
+        if self.push_socket_handle >= 0 {
+            zmq_socket_destroy(self.push_socket_handle);
+        }
+        if self.context_handle >= 0 {
+            zmq_context_destroy(self.context_handle);
+        }
     }
 }

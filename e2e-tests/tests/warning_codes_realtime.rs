@@ -509,7 +509,7 @@ async fn test_reconnection_after_deletion() {
     // 4. Perform Deletion (Unregister)
     println!("[TEST] Stopping and unregistering slave...");
     slave.stop().expect("Failed to stop slave");
-    slave.send_unregister().expect("Failed to send unregister");
+    // slave.send_unregister() is handled inside stop()'s thread shutdown now
     drop(slave); // Close sockets
 
     // Wait a bit for server to process Unregister

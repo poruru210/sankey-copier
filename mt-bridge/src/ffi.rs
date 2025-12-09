@@ -479,6 +479,274 @@ pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
     }
 }
 
+// ===========================================================================
+// Connection Management (Phase 2)
+// ===========================================================================
+
+/// Connect to Relay Server (Initialize ZMQ sockets and subscribe context-specifically)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - push_addr: Valid UTF-16 string (e.g. "tcp://localhost:5555")
+/// - sub_addr: Valid UTF-16 string (e.g. "tcp://localhost:5556")
+#[no_mangle]
+pub unsafe extern "C" fn ea_connect(
+    context: *mut EaContext,
+    push_addr: *const u16,
+    sub_addr: *const u16,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    
+    let push = match utf16_to_string(push_addr) {
+        Some(s) => s,
+        None => return 0,
+    };
+    let sub = match utf16_to_string(sub_addr) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    match ctx.connect(&push, &sub) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_connect failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Disconnect and cleanup ZMQ resources
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_disconnect(context: *mut EaContext) {
+    if let Some(ctx) = context.as_mut() {
+        ctx.disconnect();
+    }
+}
+
+/// Subscribe to a master's trade topic (for Slave EAs)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - master_id: Valid UTF-16 string (UUID)
+#[no_mangle]
+pub unsafe extern "C" fn ea_subscribe_trade(
+    context: *mut EaContext,
+    master_id: *const u16,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    
+    let mid = match utf16_to_string(master_id) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    match ctx.subscribe_trade(&mid) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_subscribe_trade failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Send RequestConfig message (Slave only)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_request_config(
+    context: *mut EaContext,
+    version: u32,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    
+    match ctx.send_request_config(version) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_send_request_config failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Send Open Trade Signal (Master only)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - symbol, order_type, comment: Valid UTF-16 strings
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_open_signal(
+    context: *mut EaContext,
+    ticket: i64,
+    symbol: *const u16,
+    order_type: *const u16,
+    lots: f64,
+    price: f64,
+    sl: f64,
+    tp: f64,
+    magic: i64,
+    comment: *const u16,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    
+    // String conversions
+    let sym = match utf16_to_string(symbol) { Some(s) => s, None => return 0 };
+    let typ = match utf16_to_string(order_type) { Some(s) => s, None => return 0 };
+    let cmt = match utf16_to_string(comment) { Some(s) => s, None => return 0 };
+    
+    match ctx.send_open_signal(ticket, &sym, &typ, lots, price, sl, tp, magic, &cmt) {
+        Ok(_) => 1,
+        Err(e) => {
+             eprintln!("ea_send_open_signal failed: {}", e);
+             0
+        }
+    }
+}
+
+/// Get raw pointer to Config SUB socket
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_config_socket(context: *mut EaContext) -> *mut std::ffi::c_void {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return std::ptr::null_mut(),
+    };
+    match ctx.get_config_socket_ptr() {
+        Ok(ptr) => ptr,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Get raw pointer to Trade SUB socket (Slave only)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_trade_socket(context: *mut EaContext) -> *mut std::ffi::c_void {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return std::ptr::null_mut(),
+    };
+    match ctx.get_trade_socket_ptr() {
+        Ok(ptr) => ptr,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Send raw data via PUSH socket
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - data: Valid buffer
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_push(
+    context: *mut EaContext,
+    data: *const u8,
+    len: i32,
+) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+    if data.is_null() || len <= 0 {
+        return 0;
+    }
+    let slice = std::slice::from_raw_parts(data, len as usize);
+    match ctx.send_push(slice) {
+        Ok(_) => 1,
+        Err(e) => {
+             eprintln!("ea_send_push failed: {}", e);
+             0
+        }
+    }
+}
+
+// ===========================================================================
+// Direct ZMQ Socket Operations (for use with raw pointers from ea_get_*_socket)
+// ===========================================================================
+
+extern "C" {
+    fn zmq_recv(socket: *mut std::ffi::c_void, buf: *mut std::ffi::c_void, len: usize, flags: i32) -> i32;
+    fn zmq_send(socket: *mut std::ffi::c_void, buf: *const std::ffi::c_void, len: usize, flags: i32) -> i32;
+    fn zmq_setsockopt(socket: *mut std::ffi::c_void, option_name: i32, option_value: *const std::ffi::c_void, option_len: usize) -> i32;
+}
+
+const ZMQ_DONTWAIT: i32 = 1;
+const ZMQ_SUBSCRIBE: i32 = 6;
+
+/// Receive data from raw ZMQ socket pointer
+///
+/// # Safety
+/// - socket must be valid raw ZMQ socket pointer
+/// - buffer must be valid buffer of size
+#[no_mangle]
+pub unsafe extern "C" fn ea_socket_receive(
+    socket: *mut std::ffi::c_void,
+    buffer: *mut std::ffi::c_char,
+    size: i32
+) -> i32 {
+    if socket.is_null() || buffer.is_null() || size <= 0 { return -1; }
+    // Invoke libzmq directly
+    let rc = zmq_recv(socket, buffer as *mut std::ffi::c_void, size as usize, ZMQ_DONTWAIT);
+    if rc >= 0 && rc < size {
+        // Null terminate if possible
+        *buffer.add(rc as usize) = 0;
+    }
+    rc as i32
+}
+
+/// Subscribe to topic on raw ZMQ socket pointer
+///
+/// # Safety
+/// - socket must be valid raw ZMQ socket pointer
+/// - topic must be valid utf-16 string
+#[no_mangle]
+pub unsafe extern "C" fn ea_socket_subscribe(
+    socket: *mut std::ffi::c_void,
+    topic: *const u16
+) -> i32 {
+    if socket.is_null() || topic.is_null() { return 0; }
+    let topic_str = match utf16_to_string(topic) {
+        Some(s) => s,
+        None => return 0,
+    };
+    let topic_bytes = topic_str.as_bytes();
+    let rc = zmq_setsockopt(socket, ZMQ_SUBSCRIBE, topic_bytes.as_ptr() as *const std::ffi::c_void, topic_bytes.len());
+    if rc == 0 { 1 } else { 0 }
+}
+
+/// Send raw data to raw ZMQ socket pointer
+///
+/// # Safety
+/// - socket must be valid raw ZMQ socket pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_socket_send(
+   socket: *mut std::ffi::c_void,
+   data: *const u8,
+   len: i32
+) -> i32 {
+   if socket.is_null() || data.is_null() || len <= 0 { return -1; }
+   let rc = zmq_send(socket, data as *const std::ffi::c_void, len as usize, ZMQ_DONTWAIT);
+   if rc >= 0 { 1 } else { 0 }
+}
+
 /// Parse a TradeSignalMessage from MessagePack data
 ///
 /// # Safety

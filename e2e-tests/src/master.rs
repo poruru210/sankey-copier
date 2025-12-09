@@ -2,13 +2,7 @@
 //
 // Master EA Simulator - MQL5 SankeyCopierMaster.mq5 完全準拠実装
 //
-// このSimulatorはMQL5 EAの実装を忠実に再現します:
-// - OnInit(): ZMQ接続、トピック購読
-// - OnTimer(): Heartbeat判定、RequestConfig送信、Config受信
-// - グローバル変数: g_initialized, g_last_heartbeat, g_config_requested, etc.
-//
-// Trade送信メソッド (send_trade_signal, send_position_snapshot) は
-// OnTick/OnTradeTransaction相当として外部から呼び出し可能。
+// Refactored to use EaContext via FFI, demonstrating strict encapsulation and Strategy Pattern.
 
 use anyhow::Result;
 use chrono::Utc;
@@ -17,6 +11,13 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use sankey_copier_zmq::EaContext;
+use sankey_copier_zmq::ffi::{
+    ea_init, ea_connect, ea_context_free, ea_send_register, 
+    ea_send_heartbeat, ea_send_push, ea_get_config_socket, ea_socket_receive,
+    ea_socket_subscribe, ea_context_should_request_config, ea_context_mark_config_requested
+};
+
 use crate::base::EaSimulatorBase;
 use crate::types::{
     EaType, MasterConfigMessage, PositionInfo, PositionSnapshotMessage, RequestConfigMessage,
@@ -24,80 +25,51 @@ use crate::types::{
     ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
+// Wrapper for thread-safe passing of EaContext pointer (which is !Send !Sync by default)
+struct ContextWrapper(pub *mut EaContext);
+unsafe impl Send for ContextWrapper {}
+unsafe impl Sync for ContextWrapper {}
+
 // =============================================================================
 // Master EA Simulator
 // =============================================================================
 
-/// Master EA Simulator - MQL5 SankeyCopierMaster.mq5 完全準拠
-///
-/// ## MQL5グローバル変数対応表
-/// | MQL5 | Rust | 説明 |
-/// |------|------|------|
-/// | g_initialized | ontimer_thread.is_some() | 初期化完了 |
-/// | g_last_heartbeat | g_last_heartbeat | 最後のHeartbeat送信時刻 |
-/// | g_config_requested | g_config_requested | Config要求送信済み |
-/// | g_last_trade_allowed | g_last_trade_allowed | 前回のauto-trading状態 |
-/// | g_server_status | g_server_status | サーバーからのステータス |
-/// | g_symbol_prefix | g_symbol_prefix | シンボルプレフィックス |
-/// | g_symbol_suffix | g_symbol_suffix | シンボルサフィックス |
 pub struct MasterEaSimulator {
     base: EaSimulatorBase,
 
-    // =========================================================================
-    // MQL5 グローバル変数 (L46-67)
-    // =========================================================================
-    /// MQL5: g_last_heartbeat
+    // --- MQL5 Global Variables ---
     g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
-
-    /// MQL5: g_config_requested
     g_config_requested: Arc<AtomicBool>,
-
-    /// MQL5: g_last_trade_allowed (初期値 false)
     g_last_trade_allowed: Arc<AtomicBool>,
-
-    /// MQL5: g_server_status (STATUS_NO_CONFIG, DISABLED, CONNECTED)
     g_server_status: Arc<AtomicI32>,
-
-    /// MQL5: g_symbol_prefix
     g_symbol_prefix: Arc<Mutex<String>>,
-
-    /// MQL5: g_symbol_suffix
     g_symbol_suffix: Arc<Mutex<String>>,
-
-    /// MQL5: g_config_version
-    #[allow(dead_code)]
     g_config_version: Arc<Mutex<u32>>,
-
-    /// 受信したSyncRequestキュー (テスト用)
-    /// MQL5: OnTimerでconfig_socketから受信し、ProcessSyncRequest()で処理
+    
+    // --- Received Data Queues (Verification) ---
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
-
-    /// 受信したVLogsConfigキュー (テスト用)
-    /// MQL5: OnTimerでconfig_socketから受信し、ProcessVLogsConfig()で処理
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    received_config: Arc<Mutex<Option<MasterConfigMessage>>>, // For test verification
 
-    /// Register送信済みフラグ
-    /// OnTimer初回でRegister送信後にtrueになる
+    // --- State ---
     g_register_sent: Arc<AtomicBool>,
-
-    /// OnTimerスレッドハンドル
     ontimer_thread: Option<JoinHandle<()>>,
+    
+    // --- Context (Managed in OnTimer thread, accessible via FFI wrapper) ---
+    context: Arc<Mutex<Option<ContextWrapper>>>,
+    
+    // Connection Params (Passed to Init/Connect)
+    push_address: String,
+    config_address: String,
+    
+    // Pending Subscriptions (Thread-safe queue)
+    pending_subscriptions: Arc<Mutex<Vec<String>>>,
 }
 
 impl MasterEaSimulator {
-    /// Create a new Master EA simulator (OnInit相当)
-    ///
-    /// ## MQL5 Socket Architecture (SankeyCopierMaster.mq5)
-    /// - `g_zmq_socket` (PUSH): Send heartbeat, trade signals to server
-    /// - `g_zmq_config_socket` (SUB): Receive config/vlogs_config from server
-    /// - Master EA does NOT have trade_socket (only Slave receives trade signals)
     pub fn new(push_address: &str, config_address: &str, account_id: &str) -> Result<Self> {
-        // Master EA: No trade_socket (only PUSH + config_socket)
-        // MQL5: g_zmq_socket + g_zmq_config_socket
-        let base = EaSimulatorBase::new(
-            push_address,
-            config_address,
-            None, // No trade_address for Master EA
+        // Use new_without_zmq to avoid creating raw sockets in base
+        let base = EaSimulatorBase::new_without_zmq(
             account_id,
             EaType::Master,
         )?;
@@ -106,30 +78,28 @@ impl MasterEaSimulator {
             base,
             g_last_heartbeat: Arc::new(Mutex::new(None)),
             g_config_requested: Arc::new(AtomicBool::new(false)),
-            g_last_trade_allowed: Arc::new(AtomicBool::new(false)), // MQL5と同じ初期値
+            g_last_trade_allowed: Arc::new(AtomicBool::new(false)),
             g_server_status: Arc::new(AtomicI32::new(STATUS_NO_CONFIG)),
             g_symbol_prefix: Arc::new(Mutex::new(String::new())),
             g_symbol_suffix: Arc::new(Mutex::new(String::new())),
             g_config_version: Arc::new(Mutex::new(0)),
             received_sync_requests: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
+            received_config: Arc::new(Mutex::new(None)),
             g_register_sent: Arc::new(AtomicBool::new(false)),
             ontimer_thread: None,
+            context: Arc::new(Mutex::new(None)),
+            push_address: push_address.to_string(),
+            config_address: config_address.to_string(),
+            pending_subscriptions: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
-    /// Start the OnTimer loop (EventSetTimer相当)
-    ///
-    /// MQL5: EventSetTimer(1) at L182 (1 second interval)
-    /// Note: Simulator uses 100ms for faster test execution
     pub fn start(&mut self) -> Result<()> {
         if self.ontimer_thread.is_some() {
-            return Ok(()); // Already started
+            return Ok(());
         }
 
-        // Clone Arcs for the thread
-        let push_socket = self.base.push_socket_handle;
-        let config_socket = self.base.config_socket_handle;
         let account_id = self.base.account_id().to_string();
         let shutdown_flag = self.base.shutdown_flag.clone();
         let is_trade_allowed = self.base.is_trade_allowed_arc();
@@ -144,14 +114,17 @@ impl MasterEaSimulator {
         let g_symbol_suffix = self.g_symbol_suffix.clone();
         let received_sync_requests = self.received_sync_requests.clone();
         let received_vlogs_configs = self.received_vlogs_configs.clone();
+        let received_config = self.received_config.clone();
         let g_register_sent = self.g_register_sent.clone();
+        let context_mutex = self.context.clone();
+        let push_addr = self.push_address.clone();
+        let config_addr = self.config_address.clone();
+        let pending_subs = self.pending_subscriptions.clone();
 
         let handle = std::thread::spawn(move || {
-            // Helper to convert to UTF-16
             let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
-            // --- OnInit logic (mocked) ---
-            // Create inputs for ea_init
+            // 1. ea_init
             let acc_id_u16 = to_u16(&account_id);
             let ea_type_u16 = to_u16(ea_type_val.as_str());
             let platform_u16 = to_u16("MT5");
@@ -160,9 +133,8 @@ impl MasterEaSimulator {
             let server_u16 = to_u16("TestServer");
             let currency_u16 = to_u16("USD");
 
-            // Call ea_init via FFI
             let ctx = unsafe {
-                sankey_copier_zmq::ffi::ea_init(
+                ea_init(
                     acc_id_u16.as_ptr(),
                     ea_type_u16.as_ptr(),
                     platform_u16.as_ptr(),
@@ -180,66 +152,71 @@ impl MasterEaSimulator {
                 return;
             }
 
-            // MQL5: OnTimer() loop
-            while !shutdown_flag.load(Ordering::SeqCst) {
-                std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
+            {
+                let mut guard = context_mutex.lock().unwrap();
+                *guard = Some(ContextWrapper(ctx));
+            }
 
-                if shutdown_flag.load(Ordering::SeqCst) {
-                    break;
+            // 2. ea_connect
+            let push_u16 = to_u16(&push_addr);
+            let sub_u16 = to_u16(&config_addr);
+            // trade_u16 not used in ea_connect signature anymore (Strategy handles sub reuse)
+
+            unsafe {
+                if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
+                     eprintln!("Failed to connect EA context!");
+                     return;
                 }
+            }
+            
+            let config_socket = unsafe { ea_get_config_socket(ctx) };
+            if config_socket.is_null() {
+                 eprintln!("Failed to get config socket!");
+                 return;
+            }
 
-                // =============================================================
-                // MQL5 OnTimer() L225-343 準拠
-                // =============================================================
+            // 3. OnTimer Loop
+            while !shutdown_flag.load(Ordering::SeqCst) {
+                // Process pending subscriptions
+                {
+                    let mut subs = pending_subs.lock().unwrap();
+                    if !subs.is_empty() {
+                         for topic in subs.iter() {
+                             let topic_u16 = to_u16(topic);
+                             unsafe { ea_socket_subscribe(config_socket, topic_u16.as_ptr()); }
+                         }
+                         subs.clear();
+                    }
+                }
+                
+                std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
+                if shutdown_flag.load(Ordering::SeqCst) { break; }
 
-                // 0. Register送信 (OnTimer初回のみ)
+                // P. Register
                 if !g_register_sent.load(Ordering::SeqCst) {
-                    // Use FFI ea_send_register
                     let mut buffer = vec![0u8; 1024];
-                    let len = unsafe {
-                        sankey_copier_zmq::ffi::ea_send_register(
-                            ctx,
-                            buffer.as_mut_ptr(),
-                            buffer.len() as i32,
-                        )
-                    };
-
+                    let len = unsafe { ea_send_register(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
                     if len > 0 {
-                        let sent = unsafe {
-                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                push_socket,
-                                buffer.as_ptr(),
-                                len,
-                            ) == 1
-                        };
-                        if sent {
-                            g_register_sent.store(true, Ordering::SeqCst);
-                        }
+                        unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
+                        g_register_sent.store(true, Ordering::SeqCst);
                     }
                 }
 
-                // 1. Auto-trading状態変化の検出 (MQL5 L230-232)
                 let current_trade_allowed = is_trade_allowed.load(Ordering::SeqCst);
-                let last_trade_allowed = g_last_trade_allowed.load(Ordering::SeqCst);
-                let trade_state_changed = current_trade_allowed != last_trade_allowed;
+                let last_trade_allowed_val = g_last_trade_allowed.load(Ordering::SeqCst);
+                let trade_state_changed = current_trade_allowed != last_trade_allowed_val;
 
-                // 2. Heartbeat判定 (MQL5 L235-236)
                 let now = Instant::now();
                 let last_hb = *g_last_heartbeat.lock().unwrap();
                 let should_send_heartbeat = match last_hb {
                     None => true,
-                    Some(last) => {
-                        now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
-                            || trade_state_changed
-                    }
+                    Some(last) => now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS || trade_state_changed
                 };
 
-                // 3. Heartbeat送信 (MQL5 L238-269)
                 if should_send_heartbeat {
-                    // Use FFI ea_send_heartbeat
                     let mut buffer = vec![0u8; 1024];
                     let len = unsafe {
-                        sankey_copier_zmq::ffi::ea_send_heartbeat(
+                        ea_send_heartbeat(
                             ctx,
                             heartbeat_params.balance,
                             heartbeat_params.equity,
@@ -251,125 +228,68 @@ impl MasterEaSimulator {
                     };
 
                     if len > 0 {
-                        let heartbeat_sent = unsafe {
-                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                push_socket,
-                                buffer.as_ptr(),
-                                len,
-                            ) == 1
-                        };
-
-                        if heartbeat_sent {
-                            *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-
-                            if trade_state_changed {
-                                g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
-                            }
-
-                            // RequestConfig送信 (MQL5 L253-267)
-                            // Note: RequestConfig is also managed by EaContext internally
-                            // via should_request_config logic.
-                            // However, ea_send_heartbeat does NOT send RequestConfig.
-                            // We should check ea_context_should_request_config via FFI.
-
-                            // Replicating MQL logic using FFI:
-                            let should_request = unsafe {
-                                sankey_copier_zmq::ffi::ea_context_should_request_config(
-                                    ctx,
-                                    if current_trade_allowed { 1 } else { 0 },
-                                )
-                            };
-
-                            if should_request == 1 {
-                                let req_msg = RequestConfigMessage {
-                                    message_type: "RequestConfig".to_string(),
-                                    account_id: account_id.clone(),
-                                    ea_type: "Master".to_string(),
-                                    timestamp: Utc::now().to_rfc3339(),
-                                };
-                                if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
-                                    unsafe {
-                                        if sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                            push_socket,
-                                            req_bytes.as_ptr(),
-                                            req_bytes.len() as i32,
-                                        ) == 1
-                                        {
-                                            g_config_requested.store(true, Ordering::SeqCst);
-                                            // Must mark as requested in context too! (Wait, MQL logic is: send -> wait for config)
-                                            // The FFI `should_request_config` returns true until `mark_config_requested` is called.
-                                            // But MQL typically calls `mark_config_requested` when Config is RECEIVED.
-                                            // So here we just send.
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                         unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
+                         
+                         *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
+                         if trade_state_changed {
+                             g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
+                         }
+                         
+                         let should_request = unsafe {
+                             ea_context_should_request_config(ctx, if current_trade_allowed { 1 } else { 0 })
+                         };
+                         
+                         if should_request == 1 {
+                             unsafe {
+                                 sankey_copier_zmq::ffi::ea_send_request_config(ctx, 0); 
+                             }
+                             g_config_requested.store(true, Ordering::SeqCst);
+                         }
                     }
                 }
 
-                // 4. Config受信 (MQL5 L271-343) - Non-blocking, drain all messages
+                // Config Receive Loop
                 loop {
                     let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
+                    
                     let received_bytes = unsafe {
-                        sankey_copier_zmq::ffi::zmq_socket_receive(
+                        ea_socket_receive(
                             config_socket,
                             buffer.as_mut_ptr() as *mut std::ffi::c_char,
                             crate::types::BUFFER_SIZE as i32,
                         )
                     };
 
-                    if received_bytes <= 0 {
-                        break; // No more messages
-                    }
+                    if received_bytes <= 0 { break; }
 
                     let bytes = &buffer[..received_bytes as usize];
-
                     if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                        let payload = &bytes[space_pos + 1..];
+                         let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
+                         let payload = &bytes[space_pos + 1..];
 
-                        // Check if this is a sync/ topic message (SyncRequest)
-                        if topic.starts_with("sync/") {
-                            if let Ok(sync_req) =
-                                rmp_serde::from_slice::<SyncRequestMessage>(payload)
-                            {
-                                // MQL5: ProcessSyncRequest() - キューに格納 (L325-340)
-                                let mut requests = received_sync_requests.lock().unwrap();
-                                requests.push(sync_req);
-                            }
-                        } else if topic.starts_with("config/") {
-                            // Try to parse as MasterConfig (MQL5 L305-323)
-                            if let Ok(config) =
-                                rmp_serde::from_slice::<MasterConfigMessage>(payload)
-                            {
-                                // Update status and symbol settings
-                                g_server_status.store(config.status, Ordering::SeqCst);
-                                if let Some(prefix) = &config.symbol_prefix {
-                                    *g_symbol_prefix.lock().unwrap() = prefix.clone();
-                                }
-                                if let Some(suffix) = &config.symbol_suffix {
-                                    *g_symbol_suffix.lock().unwrap() = suffix.clone();
-                                }
-
-                                // Mark config as requested (FFI logic)
-                                unsafe {
-                                    sankey_copier_zmq::ffi::ea_context_mark_config_requested(ctx);
-                                }
-                            } else if let Ok(vlogs_config) =
-                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
-                            {
-                                // MQL5: ProcessVLogsConfig() - キューに格納
-                                let mut configs = received_vlogs_configs.lock().unwrap();
-                                configs.push(vlogs_config);
-                            }
-                        }
+                         if topic.starts_with("sync/") {
+                             if let Ok(msg) = rmp_serde::from_slice::<SyncRequestMessage>(payload) {
+                                 received_sync_requests.lock().unwrap().push(msg);
+                             }
+                         } else if topic.starts_with("config/") {
+                             if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(payload) {
+                                  g_server_status.store(config.status, Ordering::SeqCst);
+                                  if let Some(prefix) = &config.symbol_prefix {
+                                      *g_symbol_prefix.lock().unwrap() = prefix.clone();
+                                  }
+                                  if let Some(suffix) = &config.symbol_suffix {
+                                      *g_symbol_suffix.lock().unwrap() = suffix.clone();
+                                  }
+                                  unsafe { ea_context_mark_config_requested(ctx); }
+                                  *received_config.lock().unwrap() = Some(config);
+                             } else if let Ok(vlogs) = rmp_serde::from_slice::<VLogsConfigMessage>(payload) {
+                                  received_vlogs_configs.lock().unwrap().push(vlogs);
+                             }
+                         }
                     }
                 }
-            }
+            } // End While
 
-            // Clean up calling OnDeinit logic
-            // Send Unregister via FFI
             let mut buffer = vec![0u8; 1024];
             let len = unsafe {
                 sankey_copier_zmq::ffi::ea_send_unregister(
@@ -379,99 +299,94 @@ impl MasterEaSimulator {
                 )
             };
             if len > 0 {
-                unsafe {
-                    sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                        push_socket,
-                        buffer.as_ptr(),
-                        len,
-                    );
-                }
+                unsafe { ea_send_push(ctx, buffer.as_ptr(), len); }
             }
-
-            // Free context
-            unsafe {
-                sankey_copier_zmq::ffi::ea_context_free(ctx);
+            
+            {
+                let mut guard = context_mutex.lock().unwrap();
+                *guard = None;
             }
+            unsafe { ea_context_free(ctx); }
         });
 
         self.ontimer_thread = Some(handle);
-        Ok(())
+
+        // Wait for initialization
+        let start = std::time::Instant::now();
+        while start.elapsed().as_secs() < 5 {
+            if self.context.lock().unwrap().is_some() {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        
+        Err(anyhow::anyhow!("Timed out waiting for EA context initialization"))
     }
 
     // =========================================================================
-    // Read-only observation methods
+    // Helpers
     // =========================================================================
-
-    /// Get account ID
     pub fn account_id(&self) -> &str {
         self.base.account_id()
     }
-
-    /// Get server status
-    pub fn get_server_status(&self) -> i32 {
-        self.g_server_status.load(Ordering::SeqCst)
-    }
-
-    /// Set is_trade_allowed state
+    
     pub fn set_trade_allowed(&self, allowed: bool) {
         self.base.set_trade_allowed(allowed);
     }
 
-    /// Get is_trade_allowed state
-    pub fn is_trade_allowed(&self) -> bool {
-        self.base.is_trade_allowed()
+    pub fn wait_for_status(&self, expected: i32, timeout_ms: i32) -> Result<Option<MasterConfigMessage>> {
+         let start = std::time::Instant::now();
+         while start.elapsed().as_millis() < timeout_ms as u128 {
+             if self.g_server_status.load(Ordering::SeqCst) == expected {
+                 return Ok(self.received_config.lock().unwrap().clone());
+             }
+             std::thread::sleep(std::time::Duration::from_millis(50));
+         }
+         Ok(None)
     }
 
-    /// Wait for server status (test helper)
-    pub fn wait_for_status(
-        &self,
-        expected_status: i32,
-        timeout_ms: i32,
-    ) -> Result<Option<MasterConfigMessage>> {
-        let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
+    pub fn try_receive_sync_request(&self, timeout_ms: i32) -> Result<Option<SyncRequestMessage>> {
+         let start = std::time::Instant::now();
+         while start.elapsed().as_millis() < timeout_ms as u128 {
+             let mut lock = self.received_sync_requests.lock().unwrap();
+             if !lock.is_empty() {
+                 return Ok(Some(lock.remove(0)));
+             }
+             drop(lock);
+             std::thread::sleep(std::time::Duration::from_millis(10));
+         }
+         Ok(None)
+    }
+    
+    // For test compatibility - returns config if received, but does NOT consume from socket directly
+    pub fn try_receive_master_config(&self, timeout_ms: i32) -> Result<Option<MasterConfigMessage>> {
+         let start = std::time::Instant::now();
+         while start.elapsed().as_millis() < timeout_ms as u128 {
+             let cfg = self.received_config.lock().unwrap().clone();
+             if let Some(c) = cfg {
+                 return Ok(Some(c));
+             }
+             std::thread::sleep(std::time::Duration::from_millis(10));
+         }
+         Ok(None)
+    }
 
-        while start.elapsed() < timeout_duration {
-            let current_status = self.g_server_status.load(Ordering::SeqCst);
-            if current_status == expected_status {
-                return Ok(Some(MasterConfigMessage {
-                    account_id: self.base.account_id().to_string(),
-                    status: current_status,
-                    symbol_prefix: Some(self.g_symbol_prefix.lock().unwrap().clone()),
-                    symbol_suffix: Some(self.g_symbol_suffix.lock().unwrap().clone()),
-                    config_version: 0,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                    warning_codes: vec![],
-                }));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
+    pub fn send_trade_signal(&self, _signal: &TradeSignalMessage) -> Result<()> {
+         let bytes = rmp_serde::to_vec_named(_signal)?;
+         self.send_raw_bytes(&bytes)
+    }
+
+    fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
+        let guard = self.context.lock().unwrap();
+        if let Some(wrapper) = guard.as_ref() {
+             let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
+             if ret == 1 { Ok(()) } else { Err(anyhow::anyhow!("Failed to send push")) }
+        } else {
+             Err(anyhow::anyhow!("Context not initialized"))
         }
-        Ok(None)
     }
 
-    // =========================================================================
-    // TradeSignal methods (OnTick/OnTradeTransaction相当)
-    // =========================================================================
-
-    /// Send a TradeSignal message
-    pub fn send_trade_signal(&self, signal: &TradeSignalMessage) -> Result<()> {
-        let bytes = rmp_serde::to_vec_named(signal)?;
-        self.base.send_binary(&bytes)
-    }
-
-    /// Create an Open signal
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_open_signal(
-        &self,
-        ticket: i64,
-        symbol: &str,
-        order_type: &str,
-        lots: f64,
-        price: f64,
-        sl: Option<f64>,
-        tp: Option<f64>,
-        magic: i64,
-    ) -> TradeSignalMessage {
+    pub fn create_open_signal(&self, ticket: i64, symbol: &str, order_type: &str, lots: f64, price: f64, sl: Option<f64>, tp: Option<f64>, magic: i64) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Open".to_string(),
             ticket,
@@ -489,13 +404,12 @@ impl MasterEaSimulator {
         }
     }
 
-    /// Create a Close signal (full close)
     pub fn create_close_signal(&self, ticket: i64, symbol: &str, lots: f64) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Close".to_string(),
             ticket,
             symbol: Some(symbol.to_string()),
-            order_type: Some("Buy".to_string()),
+            order_type: Some("Buy".to_string()), 
             lots: Some(lots),
             open_price: None,
             stop_loss: None,
@@ -508,14 +422,7 @@ impl MasterEaSimulator {
         }
     }
 
-    /// Create a Partial Close signal
-    pub fn create_partial_close_signal(
-        &self,
-        ticket: i64,
-        symbol: &str,
-        lots: f64,
-        close_ratio: f64,
-    ) -> TradeSignalMessage {
+    pub fn create_partial_close_signal(&self, ticket: i64, symbol: &str, lots: f64, close_ratio: f64) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Close".to_string(),
             ticket,
@@ -533,14 +440,7 @@ impl MasterEaSimulator {
         }
     }
 
-    /// Create a Modify signal for SL/TP changes
-    pub fn create_modify_signal(
-        &self,
-        ticket: i64,
-        symbol: &str,
-        sl: Option<f64>,
-        tp: Option<f64>,
-    ) -> TradeSignalMessage {
+    pub fn create_modify_signal(&self, ticket: i64, symbol: &str, sl: Option<f64>, tp: Option<f64>) -> TradeSignalMessage {
         TradeSignalMessage {
             action: "Modify".to_string(),
             ticket,
@@ -558,23 +458,12 @@ impl MasterEaSimulator {
         }
     }
 
-    /// Create a delayed signal by setting timestamp to the past
-    pub fn create_delayed_signal(
-        &self,
-        mut signal: TradeSignalMessage,
-        delay_ms: i64,
-    ) -> TradeSignalMessage {
-        use chrono::Duration as ChronoDuration;
-        let past_time = Utc::now() - ChronoDuration::milliseconds(delay_ms);
+    pub fn create_delayed_signal(&self, mut signal: TradeSignalMessage, delay_ms: i64) -> TradeSignalMessage {
+        let past_time = Utc::now() - chrono::Duration::milliseconds(delay_ms);
         signal.timestamp = past_time.to_rfc3339();
         signal
     }
 
-    // =========================================================================
-    // Position Sync methods
-    // =========================================================================
-
-    /// Send a PositionSnapshot message
     pub fn send_position_snapshot(&self, positions: Vec<PositionInfo>) -> Result<()> {
         let msg = PositionSnapshotMessage {
             message_type: "PositionSnapshot".to_string(),
@@ -582,19 +471,11 @@ impl MasterEaSimulator {
             positions,
             timestamp: Utc::now().to_rfc3339(),
         };
-
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.base.send_binary(&bytes)
+        self.send_raw_bytes(&bytes)
     }
 
-    /// Create a test position for PositionSnapshot
-    pub fn create_test_position(
-        ticket: i64,
-        symbol: &str,
-        order_type: &str,
-        lots: f64,
-        open_price: f64,
-    ) -> PositionInfo {
+    pub fn create_test_position(ticket: i64, symbol: &str, order_type: &str, lots: f64, open_price: f64) -> PositionInfo {
         PositionInfo {
             ticket,
             symbol: symbol.to_string(),
@@ -609,96 +490,34 @@ impl MasterEaSimulator {
         }
     }
 
-    /// Subscribe to sync requests for this master
     pub fn subscribe_to_sync_requests(&self) -> Result<()> {
-        // Subscribe to sync/{account_id}/ with prefix to receive all sync requests from slaves
-        let sync_topic = format!("sync/{}/", self.base.account_id());
-        self.base.subscribe_to_topic(&sync_topic)
+        let topic = format!("sync/{}/", self.base.account_id());
+        self.pending_subscriptions.lock().unwrap().push(topic);
+        Ok(())
     }
-
-    /// Try to receive a SyncRequest message with timeout
-    ///
-    /// SyncRequests are received by OnTimer thread on config_socket and
-    /// queued in received_sync_requests. This method reads from that queue.
-    ///
-    /// MQL5: ProcessSyncRequest() receives on g_zmq_config_socket
-    pub fn try_receive_sync_request(&self, timeout_ms: i32) -> Result<Option<SyncRequestMessage>> {
-        let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            // Check the queue for sync requests received by OnTimer thread
-            {
-                let mut requests = self.received_sync_requests.lock().unwrap();
-                if !requests.is_empty() {
-                    return Ok(Some(requests.remove(0)));
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        Ok(None)
-    }
-
-    // =========================================================================
-    // Config methods (test helpers)
-    // =========================================================================
-
-    /// Try to receive a MasterConfigMessage with timeout (test helper)
-    pub fn try_receive_master_config(
-        &self,
-        timeout_ms: i32,
-    ) -> Result<Option<MasterConfigMessage>> {
-        let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            if let Some((_, payload)) = self.base.try_receive_raw_nonblocking()? {
-                if let Ok(config) = rmp_serde::from_slice::<MasterConfigMessage>(&payload) {
-                    return Ok(Some(config));
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        Ok(None)
-    }
-
-    // =========================================================================
-    // VLogs Config methods
-    // =========================================================================
-
-    /// Subscribe to global config topic for VLogs configuration
+    
     pub fn subscribe_to_global_config(&self) -> Result<()> {
-        self.base.subscribe_to_global_config()
+        self.pending_subscriptions.lock().unwrap().push("config/global".to_string());
+        Ok(())
     }
-
-    /// Try to receive a VLogsConfigMessage with timeout
-    ///
-    /// VLogsConfigs are received by OnTimer thread on config_socket and
-    /// queued in received_vlogs_configs. This method reads from that queue.
-    ///
-    /// MQL5: ProcessVLogsConfig() receives on g_zmq_config_socket
+    
     pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
-        let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            // Check the queue for vlogs configs received by OnTimer thread
-            {
-                let mut configs = self.received_vlogs_configs.lock().unwrap();
-                if !configs.is_empty() {
-                    return Ok(Some(configs.remove(0)));
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        Ok(None)
+         let start = std::time::Instant::now();
+         while start.elapsed().as_millis() < timeout_ms as u128 {
+             let mut lock = self.received_vlogs_configs.lock().unwrap();
+             if !lock.is_empty() {
+                 return Ok(Some(lock.remove(0)));
+             }
+             drop(lock);
+             std::thread::sleep(std::time::Duration::from_millis(10));
+         }
+         Ok(None)
     }
 }
 
 impl Drop for MasterEaSimulator {
     fn drop(&mut self) {
         self.base.shutdown_flag.store(true, Ordering::SeqCst);
-
         if let Some(handle) = self.ontimer_thread.take() {
             let _ = handle.join();
         }
