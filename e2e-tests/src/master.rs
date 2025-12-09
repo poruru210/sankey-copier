@@ -17,6 +17,7 @@ use sankey_copier_zmq::ffi::{
     ea_connect, ea_context_free, ea_context_mark_config_requested,
     ea_context_should_request_config, ea_init, ea_send_heartbeat,
     ea_send_push, ea_send_register, ea_receive_config, ea_subscribe_config,
+    ea_send_open_signal, ea_send_close_signal, ea_send_modify_signal,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -398,9 +399,68 @@ impl MasterEaSimulator {
         Ok(None)
     }
 
-    pub fn send_trade_signal(&self, _signal: &TradeSignalMessage) -> Result<()> {
-        let bytes = rmp_serde::to_vec_named(_signal)?;
-        self.send_raw_bytes(&bytes)
+    pub fn send_trade_signal(&self, signal: &TradeSignalMessage) -> Result<()> {
+        let guard = self.context.lock().unwrap();
+        let ctx = match guard.as_ref() {
+            Some(w) => w.0,
+            None => return Err(anyhow::anyhow!("Context not initialized")),
+        };
+
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        match signal.action.as_str() {
+            "Open" => {
+                let symbol = to_u16(signal.symbol.as_deref().unwrap_or(""));
+                let order_type = to_u16(signal.order_type.as_deref().unwrap_or(""));
+                let comment = to_u16(signal.comment.as_deref().unwrap_or(""));
+                
+                let ret = unsafe {
+                    ea_send_open_signal(
+                        ctx,
+                        signal.ticket,
+                        symbol.as_ptr(),
+                        order_type.as_ptr(),
+                        signal.lots.unwrap_or(0.0),
+                        signal.open_price.unwrap_or(0.0),
+                        signal.stop_loss.unwrap_or(0.0),
+                        signal.take_profit.unwrap_or(0.0),
+                        signal.magic_number.unwrap_or(0),
+                        comment.as_ptr(),
+                    )
+                };
+                if ret != 1 {
+                    return Err(anyhow::anyhow!("Failed to send open signal"));
+                }
+            }
+            "Close" => {
+                let ret = unsafe {
+                    ea_send_close_signal(
+                        ctx,
+                        signal.ticket,
+                        signal.close_ratio.unwrap_or(1.0), // Default to full close if not specified
+                    )
+                };
+                if ret != 1 {
+                    return Err(anyhow::anyhow!("Failed to send close signal"));
+                }
+            }
+            "Modify" => {
+                let ret = unsafe {
+                    ea_send_modify_signal(
+                        ctx,
+                        signal.ticket,
+                        signal.stop_loss.unwrap_or(0.0),
+                        signal.take_profit.unwrap_or(0.0),
+                    )
+                };
+                if ret != 1 {
+                    return Err(anyhow::anyhow!("Failed to send modify signal"));
+                }
+            }
+            _ => return Err(anyhow::anyhow!("Unknown signal action: {}", signal.action)),
+        }
+        
+        Ok(())
     }
 
     fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
@@ -440,7 +500,7 @@ impl MasterEaSimulator {
             take_profit: tp,
             magic_number: Some(magic),
             comment: Some("E2E Test".to_string()),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now(),
             source_account: self.base.account_id().to_string(),
             close_ratio: None,
         }
@@ -458,7 +518,7 @@ impl MasterEaSimulator {
             take_profit: None,
             magic_number: Some(0),
             comment: Some("E2E Test Close".to_string()),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now(),
             source_account: self.base.account_id().to_string(),
             close_ratio: None,
         }
@@ -482,7 +542,7 @@ impl MasterEaSimulator {
             take_profit: None,
             magic_number: Some(0),
             comment: Some("E2E Test Partial Close".to_string()),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now(),
             source_account: self.base.account_id().to_string(),
             close_ratio: Some(close_ratio),
         }
@@ -506,7 +566,7 @@ impl MasterEaSimulator {
             take_profit: tp,
             magic_number: None,
             comment: Some("E2E Test Modify".to_string()),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now(),
             source_account: self.base.account_id().to_string(),
             close_ratio: None,
         }
@@ -518,7 +578,7 @@ impl MasterEaSimulator {
         delay_ms: i64,
     ) -> TradeSignalMessage {
         let past_time = Utc::now() - chrono::Duration::milliseconds(delay_ms);
-        signal.timestamp = past_time.to_rfc3339();
+        signal.timestamp = past_time;
         signal
     }
 

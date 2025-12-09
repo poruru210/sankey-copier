@@ -575,83 +575,7 @@ pub unsafe extern "C" fn ea_send_request_config(context: *mut EaContext, version
     }
 }
 
-/// Send Open Trade Signal (Master only)
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-/// - symbol, order_type, comment: Valid UTF-16 strings
-#[no_mangle]
-pub unsafe extern "C" fn ea_send_open_signal(
-    context: *mut EaContext,
-    ticket: i64,
-    symbol: *const u16,
-    order_type: *const u16,
-    lots: f64,
-    price: f64,
-    sl: f64,
-    tp: f64,
-    magic: i64,
-    comment: *const u16,
-) -> i32 {
-    let ctx = match context.as_mut() {
-        Some(c) => c,
-        None => return 0,
-    };
 
-    // String conversions
-    let sym = match utf16_to_string(symbol) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let typ = match utf16_to_string(order_type) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let cmt = match utf16_to_string(comment) {
-        Some(s) => s,
-        None => return 0,
-    };
-
-    match ctx.send_open_signal(ticket, &sym, &typ, lots, price, sl, tp, magic, &cmt) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_send_open_signal failed: {}", e);
-            0
-        }
-    }
-}
-
-/// Get raw pointer to Config SUB socket
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-#[no_mangle]
-pub unsafe extern "C" fn ea_get_config_socket(context: *mut EaContext) -> *mut std::ffi::c_void {
-    let ctx = match context.as_mut() {
-        Some(c) => c,
-        None => return std::ptr::null_mut(),
-    };
-    match ctx.get_config_socket_ptr() {
-        Ok(ptr) => ptr,
-        Err(_) => std::ptr::null_mut(),
-    }
-}
-
-/// Get raw pointer to Trade SUB socket (Slave only)
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-#[no_mangle]
-pub unsafe extern "C" fn ea_get_trade_socket(context: *mut EaContext) -> *mut std::ffi::c_void {
-    let ctx = match context.as_mut() {
-        Some(c) => c,
-        None => return std::ptr::null_mut(),
-    };
-    match ctx.get_trade_socket_ptr() {
-        Ok(ptr) => ptr,
-        Err(_) => std::ptr::null_mut(),
-    }
-}
 
 /// Send raw data via PUSH socket
 ///
@@ -751,234 +675,14 @@ pub unsafe extern "C" fn ea_subscribe_config(
     }
 }
 
-// ===========================================================================
-// Direct ZMQ Socket Operations (for use with raw pointers from ea_get_*_socket)
-// ===========================================================================
-
-extern "C" {
-    fn zmq_recv(
-        socket: *mut std::ffi::c_void,
-        buf: *mut std::ffi::c_void,
-        len: usize,
-        flags: i32,
-    ) -> i32;
-    fn zmq_send(
-        socket: *mut std::ffi::c_void,
-        buf: *const std::ffi::c_void,
-        len: usize,
-        flags: i32,
-    ) -> i32;
-    fn zmq_setsockopt(
-        socket: *mut std::ffi::c_void,
-        option_name: i32,
-        option_value: *const std::ffi::c_void,
-        option_len: usize,
-    ) -> i32;
-}
-
-const ZMQ_DONTWAIT: i32 = 1;
-const ZMQ_SUBSCRIBE: i32 = 6;
-
-/// Receive data from raw ZMQ socket pointer
-///
-/// # Safety
-/// - socket must be valid raw ZMQ socket pointer
-/// - buffer must be valid buffer of size
-#[no_mangle]
-pub unsafe extern "C" fn ea_socket_receive(
-    socket: *mut std::ffi::c_void,
-    buffer: *mut std::ffi::c_char,
-    size: i32,
-) -> i32 {
-    if socket.is_null() || buffer.is_null() || size <= 0 {
-        return -1;
-    }
-    // Invoke libzmq directly
-    let rc = zmq_recv(
-        socket,
-        buffer as *mut std::ffi::c_void,
-        size as usize,
-        ZMQ_DONTWAIT,
-    );
-    if rc >= 0 && rc < size {
-        // Null terminate if possible
-        *buffer.add(rc as usize) = 0;
-    }
-    rc as i32
-}
-
-/// Subscribe to topic on raw ZMQ socket pointer
-///
-/// # Safety
-/// - socket must be valid raw ZMQ socket pointer
-/// - topic must be valid utf-16 string
-#[no_mangle]
-pub unsafe extern "C" fn ea_socket_subscribe(
-    socket: *mut std::ffi::c_void,
-    topic: *const u16,
-) -> i32 {
-    if socket.is_null() || topic.is_null() {
-        return 0;
-    }
-    let topic_str = match utf16_to_string(topic) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let topic_bytes = topic_str.as_bytes();
-    let rc = zmq_setsockopt(
-        socket,
-        ZMQ_SUBSCRIBE,
-        topic_bytes.as_ptr() as *const std::ffi::c_void,
-        topic_bytes.len(),
-    );
-    if rc == 0 {
-        1
-    } else {
-        0
-    }
-}
-
-/// Send raw data to raw ZMQ socket pointer
-///
-/// # Safety
-/// - socket must be valid raw ZMQ socket pointer
-#[no_mangle]
-pub unsafe extern "C" fn ea_socket_send(
-    socket: *mut std::ffi::c_void,
-    data: *const u8,
-    len: i32,
-) -> i32 {
-    if socket.is_null() || data.is_null() || len <= 0 {
-        return -1;
-    }
-    let rc = zmq_send(
-        socket,
-        data as *const std::ffi::c_void,
-        len as usize,
-        ZMQ_DONTWAIT,
-    );
-    if rc >= 0 {
-        1
-    } else {
-        0
-    }
-}
-
-/// Parse a TradeSignalMessage from MessagePack data
-///
-/// # Safety
-/// - data must be a valid pointer to a buffer of at least data_len bytes
-/// - data_len must accurately represent the buffer size
-#[no_mangle]
-pub unsafe extern "C" fn parse_trade_signal(
-    data: *const u8,
-    data_len: i32,
-) -> *mut TradeSignalMessage {
-    parse_msgpack(data, data_len)
-}
-
-/// Free a TradeSignalMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer created by parse_trade_signal or null
 /// - handle must not be used after calling this function
-#[no_mangle]
-pub unsafe extern "C" fn trade_signal_free(handle: *mut TradeSignalMessage) {
-    free_handle(handle)
-}
 
-/// Get a string field from TradeSignalMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to TradeSignalMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn trade_signal_get_string(
-    handle: *const TradeSignalMessage,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || field_name.is_null() {
-        return std::ptr::null();
-    }
 
-    let msg = &*handle;
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return std::ptr::null(),
-    };
 
-    let value = match field.as_str() {
-        "action" => Some(&msg.action),
-        "symbol" => msg.symbol.as_ref(),
-        "order_type" => msg.order_type.as_ref(),
-        "comment" => msg.comment.as_ref(),
-        "timestamp" => Some(&msg.timestamp),
-        "source_account" => Some(&msg.source_account),
-        _ => return std::ptr::null(),
-    };
 
-    match value {
-        Some(s) => string_to_utf16_buffer(s),
-        None => std::ptr::null(),
-    }
-}
 
-/// Get a numeric field from TradeSignalMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to TradeSignalMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn trade_signal_get_double(
-    handle: *const TradeSignalMessage,
-    field_name: *const u16,
-) -> f64 {
-    if handle.is_null() || field_name.is_null() {
-        return 0.0;
-    }
 
-    let msg = &*handle;
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0.0,
-    };
 
-    match field.as_str() {
-        "lots" => msg.lots.unwrap_or(0.0),
-        "open_price" => msg.open_price.unwrap_or(0.0),
-        "stop_loss" => msg.stop_loss.unwrap_or(0.0),
-        "take_profit" => msg.take_profit.unwrap_or(0.0),
-        "close_ratio" => msg.close_ratio.unwrap_or(0.0),
-        _ => 0.0,
-    }
-}
-
-/// Get an integer field from TradeSignalMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to TradeSignalMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn trade_signal_get_int(
-    handle: *const TradeSignalMessage,
-    field_name: *const u16,
-) -> i64 {
-    if handle.is_null() || field_name.is_null() {
-        return 0;
-    }
-
-    let msg = &*handle;
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0,
-    };
-
-    match field.as_str() {
-        "ticket" => msg.ticket,
-        "magic_number" => msg.magic_number.unwrap_or(0),
-        _ => 0,
-    }
-}
 
 // ===========================================================================
 // PositionSnapshot FFI Functions
@@ -2573,9 +2277,146 @@ pub unsafe extern "C" fn ea_context_mark_config_requested(context: *mut crate::E
 /// # Safety
 /// - `context` must be a valid pointer returned by `ea_init()`
 /// - `context` must not have been freed
+/// Send a Sync Request (Slave -> Master)
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `master_account` must be a valid null-terminated UTF-16 string
+/// - `last_sync_time` can be null (for full sync) or valid UTF-16 string
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_sync_request(
+    context: *mut crate::EaContext,
+    master_account: *const u16,
+    last_sync_time: *const u16,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &mut *context;
+
+    let master = match utf16_to_string(master_account) {
+        Some(s) => s,
+        None => return 0,
+    };
+    let last_sync = if !last_sync_time.is_null() {
+        utf16_to_string(last_sync_time)
+    } else {
+        None
+    };
+
+    // Need to implement send_sync_request in EaContext first! 
+    // Wait, let's check EaContext.
+    // Assuming EaContext needs this method too.
+    match ctx.send_sync_request(&master, last_sync) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_send_sync_request failed: {}", e);
+            0
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_reset(context: *mut crate::EaContext) {
     if !context.is_null() {
         (*context).reset();
+    }
+}
+
+// ============================================================================
+// Trade Signal FFI Functions (High-Level)
+// ============================================================================
+
+/// Send an Open Trade Signal
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+/// - `symbol`, `order_type`, `comment` must be valid null-terminated UTF-16 strings
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_open_signal(
+    context: *mut crate::EaContext,
+    ticket: i64,
+    symbol: *const u16,
+    order_type: *const u16,
+    lots: f64,
+    price: f64,
+    sl: f64,
+    tp: f64,
+    magic: i64,
+    comment: *const u16,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &mut *context;
+
+    let sym = match utf16_to_string(symbol) {
+        Some(s) => s,
+        None => return 0,
+    };
+    let o_type = match utf16_to_string(order_type) {
+        Some(s) => s,
+        None => return 0,
+    };
+    let cmt = match utf16_to_string(comment) {
+        Some(s) => s,
+        None => return 0,
+    };
+
+    match ctx.send_open_signal(ticket, &sym, &o_type, lots, price, sl, tp, magic, &cmt) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_send_open_signal failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Send a Close Trade Signal
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_close_signal(
+    context: *mut crate::EaContext,
+    ticket: i64,
+    close_ratio: f64,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &mut *context;
+
+    match ctx.send_close_signal(ticket, close_ratio) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_send_close_signal failed: {}", e);
+            0
+        }
+    }
+}
+
+/// Send a Modify Trade Signal
+///
+/// # Safety
+/// - `context` must be a valid pointer returned by `ea_init()`
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_modify_signal(
+    context: *mut crate::EaContext,
+    ticket: i64,
+    sl: f64,
+    tp: f64,
+) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let ctx = &mut *context;
+
+    match ctx.send_modify_signal(ticket, sl, tp) {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("ea_send_modify_signal failed: {}", e);
+            0
+        }
     }
 }

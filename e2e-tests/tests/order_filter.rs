@@ -59,7 +59,10 @@ async fn test_partial_close_signal() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(2000)).await;
+    
+    // Wait for connection
+    slave.wait_for_status(2, 5000).expect("Failed to reach CONNECTED status");
+    sleep(Duration::from_millis(1000)).await;
 
     // Step 1: Open a position (lots passed through unchanged, Slave EA applies multiplier)
     let open_signal = master.create_open_signal(12345, "EURUSD", "Buy", 1.0, 1.0850, None, None, 0);
@@ -220,7 +223,12 @@ async fn test_allowed_symbols_filter() {
     master.start().expect("Failed to start master");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
-    sleep(Duration::from_millis(2000)).await;
+    
+    // Wait for connection to be established (STATUS_CONNECTED = 2)
+    slave.wait_for_status(2, 5000).expect("Failed to reach CONNECTED status");
+    
+    // Allow time for Trade Topic subscription to propagate to Relay Server (ZMQ Slow Joiner)
+    sleep(Duration::from_millis(1000)).await;
 
     // Send allowed symbol - should be received
     let signal1 = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);

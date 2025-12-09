@@ -3,6 +3,7 @@
 // Why: Ensures all message types correctly roundtrip through MessagePack format
 
 use crate::msgpack::*;
+use chrono::Utc;
 
 #[test]
 fn test_request_config_message_serialization() {
@@ -111,7 +112,7 @@ fn test_trade_signal_message_serialization() {
         take_profit: Some(1.0900),
         magic_number: Some(0),
         comment: Some("Test trade".to_string()),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: Utc::now(),
         source_account: "master_account".to_string(),
         close_ratio: None,
     };
@@ -149,7 +150,7 @@ fn test_trade_signal_close_action() {
         take_profit: None,
         magic_number: None,
         comment: None,
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: Utc::now(),
         source_account: "master_account".to_string(),
         close_ratio: None, // None = full close
     };
@@ -180,7 +181,7 @@ fn test_trade_signal_partial_close() {
         take_profit: None,
         magic_number: None,
         comment: None,
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: Utc::now(),
         source_account: "master_account".to_string(),
         close_ratio: Some(0.5), // 50% partial close
     };
@@ -266,7 +267,7 @@ fn test_messagepack_size_optimization() {
         take_profit: Some(1.0900),
         magic_number: Some(0),
         comment: Some("Test".to_string()),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: Utc::now(),
         source_account: "master".to_string(),
         close_ratio: None,
     };
@@ -282,7 +283,7 @@ fn test_messagepack_size_optimization() {
         take_profit: None,
         magic_number: None,
         comment: None,
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: Utc::now(),
         source_account: "master".to_string(),
         close_ratio: None,
     };

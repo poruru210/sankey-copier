@@ -732,10 +732,8 @@ async fn test_stale_signal_too_old() {
 
     let signal = received.unwrap();
 
-    // Verify timestamp is indeed old
-    let signal_time: DateTime<Utc> = DateTime::parse_from_rfc3339(&signal.timestamp)
-        .expect("Failed to parse timestamp")
-        .with_timezone(&Utc);
+    // Verify timestamp is indeed old (timestamp is already DateTime<Utc>)
+    let signal_time = signal.timestamp;
     let now = Utc::now();
     let signal_age = now - signal_time;
 

@@ -3,6 +3,7 @@
 // Why: Centralized type definitions for all configuration and trade signal messages
 
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
 /// Symbol mapping structure
 /// Maps source symbols to target symbols for cross-broker trading
@@ -277,7 +278,7 @@ pub struct TradeSignalMessage {
     pub magic_number: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
-    pub timestamp: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
     pub source_account: String,
     /// Close ratio for partial close (0.0-1.0)
     /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close

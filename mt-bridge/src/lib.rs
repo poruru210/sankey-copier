@@ -1,5 +1,6 @@
 // Top-level modules
 pub mod constants;
+pub mod communication;
 pub mod ea_context;
 pub mod ffi;
 pub mod ffi_helpers;

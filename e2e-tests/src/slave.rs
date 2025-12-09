@@ -15,6 +15,7 @@ use sankey_copier_zmq::ffi::{
     build_trade_topic, ea_connect, ea_context_free, ea_context_mark_config_requested,
     ea_context_should_request_config, ea_init, ea_send_heartbeat,
     ea_send_push, ea_send_register, ea_send_unregister, ea_receive_config, ea_subscribe_config,
+    ea_send_sync_request,
 };
 use sankey_copier_zmq::EaContext;
 
@@ -296,9 +297,15 @@ impl SlaveEaSimulator {
                         let payload = &bytes[space_pos + 1..];
 
                         if topic.starts_with("trade/") {
-                            if let Ok(signal) = rmp_serde::from_slice::<TradeSignalMessage>(payload)
-                            {
-                                received_trade_signals.lock().unwrap().push(signal);
+                            match rmp_serde::from_slice::<TradeSignalMessage>(payload) {
+                                Ok(signal) => {
+                                    received_trade_signals.lock().unwrap().push(signal);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to deserialize TradeSignalMessage: {}", e);
+                                    // Debug payload
+                                    eprintln!("Payload len: {}, bytes: {:?}", payload.len(), payload);
+                                }
                             }
                         } else if topic.starts_with("sync/") {
                             if let Ok(snapshot) =
@@ -522,15 +529,31 @@ impl SlaveEaSimulator {
     }
 
     pub fn send_sync_request(&self, last_sync_time: Option<String>) -> Result<()> {
-        let msg = SyncRequestMessage {
-            message_type: "SyncRequest".to_string(),
-            slave_account: self.base.account_id().to_string(),
-            master_account: self.master_account.clone(),
-            last_sync_time,
-            timestamp: Utc::now().to_rfc3339(),
+        let guard = self.context.lock().unwrap();
+        let ctx = match guard.as_ref() {
+            Some(w) => w.0,
+            None => return Err(anyhow::anyhow!("Context not initialized")),
         };
-        let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.send_raw_bytes(&bytes)
+
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+        
+        let master_u16 = to_u16(&self.master_account);
+        // Handle optional last_sync_time
+        let last_sync_u16_vec = last_sync_time.as_ref().map(|s| to_u16(s));
+        let last_sync_ptr = match last_sync_u16_vec.as_ref() {
+            Some(v) => v.as_ptr(),
+            None => std::ptr::null(),
+        };
+
+        let ret = unsafe {
+            ea_send_sync_request(ctx, master_u16.as_ptr(), last_sync_ptr)
+        };
+        
+        if ret != 1 {
+            return Err(anyhow::anyhow!("Failed to send sync request"));
+        }
+        
+        Ok(())
     }
 
     pub fn try_receive_position_snapshot(
