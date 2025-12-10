@@ -677,11 +677,13 @@ impl EaContext {
 
     /// Determine if RequestConfig should be sent
     pub fn should_request_config(&mut self, current_trade_allowed: bool) -> bool {
+        let trade_allowed_turned_on = current_trade_allowed && !self.last_trade_allowed;
         self.last_trade_allowed = current_trade_allowed;
-        if self.is_config_requested {
-            return false;
+
+        if !self.is_config_requested || trade_allowed_turned_on {
+            return true;
         }
-        true
+        false
     }
 
     /// Mark that specific config has been requested
