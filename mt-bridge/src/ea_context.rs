@@ -204,7 +204,19 @@ impl EaContext {
     }
 
     /// Enqueue a command for MQL to execute
+    /// Includes queue size limit as safety net against excessive duplicate configs
     pub fn enqueue_command(&mut self, cmd: EaCommand) {
+        // Safety limit: prevent unbounded queue growth
+        const MAX_QUEUE_SIZE: usize = 100;
+        if self.pending_commands.len() >= MAX_QUEUE_SIZE {
+            eprintln!(
+                "[WARN] Command queue full ({} commands), dropping oldest command to prevent overflow",
+                MAX_QUEUE_SIZE
+            );
+            // Drop oldest command
+            self.pending_commands.pop_front();
+        }
+
         self.pending_commands.push_back(cmd);
     }
 

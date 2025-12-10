@@ -64,7 +64,9 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
 
    #ifdef IS_MT5
       // MT5: Iterate through all positions
-      for(int i = 0; i < PositionsTotal(); i++)
+      int total = PositionsTotal();
+      
+      for(int i = 0; i < total; i++)
       {
          ulong ticket = PositionGetTicket(i);
          if(ticket > 0 && PositionSelectByTicket(ticket))
@@ -72,7 +74,6 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
             string raw_symbol = PositionGetString(POSITION_SYMBOL);
 
             // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
-            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             long type = PositionGetInteger(POSITION_TYPE);
@@ -88,8 +89,10 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
 
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
-            if(result == 1)
+            
+            if(result == 1) {
                position_count++;
+            }
          }
       }
    #else
@@ -107,7 +110,6 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
             string raw_symbol = OrderSymbol();
 
             // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
-            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             double lots = OrderLots();
@@ -122,8 +124,9 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
 
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
-            if(result == 1)
+            if(result == 1) {
                position_count++;
+            }
          }
       }
    #endif

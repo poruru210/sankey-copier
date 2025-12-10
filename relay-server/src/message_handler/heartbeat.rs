@@ -308,6 +308,32 @@ impl MessageHandler {
                                     })
                                     .await;
 
+                                // Calculate OLD Slave Status to check if changed
+                                let slave_conn = self
+                                    .connection_manager
+                                    .get_slave(&member.slave_account)
+                                    .await;
+                                let slave_snapshot =
+                                    crate::models::status_engine::ConnectionSnapshot {
+                                        connection_status: slave_conn.as_ref().map(|c| c.status),
+                                        is_trade_allowed: slave_conn
+                                            .as_ref()
+                                            .map(|c| c.is_trade_allowed)
+                                            .unwrap_or(false),
+                                    };
+
+                                let old_slave_result =
+                                    crate::models::status_engine::evaluate_member_status(
+                                        crate::models::status_engine::SlaveIntent {
+                                            web_ui_enabled: member.enabled_flag,
+                                        },
+                                        slave_snapshot,
+                                        &old_master_status,
+                                    );
+
+                                let new_slave_result = &slave_bundle.status_result;
+                                let slave_changed = new_slave_result.has_changed(&old_slave_result);
+
                                 let payload = SlaveConfigWithMaster {
                                     master_account: account_id.clone(),
                                     slave_account: member.slave_account.clone(),
@@ -317,20 +343,32 @@ impl MessageHandler {
                                     slave_settings: member.slave_settings.clone(),
                                 };
 
-                                // 1. Send ZMQ update to Slave EA (Safety net)
-                                if let Err(e) = self.publisher.send(&slave_bundle.config).await {
-                                    tracing::error!(
-                                        "Failed to send config update to Slave {} (bulk): {}",
-                                        member.slave_account,
-                                        e
-                                    );
-                                }
+                                // DEBUG: Track safety net broadcast
+                                eprintln!(
+                                    "[DEBUG] Safety net: Slave {} slave_changed={}",
+                                    member.slave_account, slave_changed
+                                );
 
-                                // 2. Send WebSocket update to UI
-                                if let Ok(json) = serde_json::to_string(&payload) {
-                                    let _ = self
-                                        .broadcast_tx
-                                        .send(format!("settings_updated:{}", json));
+                                // Only send if slave status/warnings actually changed
+                                if slave_changed {
+                                    eprintln!("[DEBUG] Safety net: Sending config to Slave {} (slave_changed=true)", member.slave_account);
+
+                                    // 1. Send ZMQ update to Slave EA (Safety net)
+                                    if let Err(e) = self.publisher.send(&slave_bundle.config).await
+                                    {
+                                        tracing::error!(
+                                            "Failed to send config update to Slave {} (bulk): {}",
+                                            member.slave_account,
+                                            e
+                                        );
+                                    }
+
+                                    // 2. Send WebSocket update to UI
+                                    if let Ok(json) = serde_json::to_string(&payload) {
+                                        let _ = self
+                                            .broadcast_tx
+                                            .send(format!("settings_updated:{}", json));
+                                    }
                                 }
                             }
                         }

@@ -776,3 +776,170 @@ async fn test_per_connection_and_bulk_update_produce_same_result() {
 
     ctx.cleanup().await;
 }
+
+/// Test: Same account acts as both Master and Slave (Exness pattern)
+/// This reproduces the scenario where duplicate configs were sent
+#[tokio::test]
+async fn test_same_account_as_master_and_slave() {
+    let ctx = create_test_context().await;
+    let account_id = "Exness_Technologies_Ltd_277195421";
+
+    // Setup 1: This account is a Master
+    ctx.db.create_trade_group(account_id).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            account_id,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Setup 2: This same account is also a Slave (of another Master)
+    let other_master = "Tradexfin_Limited_122037252";
+    ctx.db.create_trade_group(other_master).await.unwrap();
+    ctx.db
+        .update_master_settings(
+            other_master,
+            crate::models::MasterSettings {
+                enabled: true,
+                config_version: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    ctx.db
+        .add_member(
+            other_master,
+            account_id,
+            crate::models::SlaveSettings::default(),
+            crate::models::STATUS_ENABLED,
+        )
+        .await
+        .unwrap();
+
+    // Act: Send heartbeat as Master
+    // This should NOT cause duplicate config sends to itself as Slave
+    ctx.handle_heartbeat(build_heartbeat(account_id, "Master", true))
+        .await;
+
+    // Act: Send heartbeat as Slave
+    ctx.handle_heartbeat(build_heartbeat(account_id, "Slave", true))
+        .await;
+
+    // Verify: Slave config should be ENABLED (other_master is offline)
+    let member = ctx
+        .db
+        .get_member(other_master, account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member.status,
+        crate::models::STATUS_ENABLED,
+        "Exness account as Slave should be ENABLED (Master offline)"
+    );
+
+    // Act: Other Master comes online
+    ctx.handle_heartbeat(build_heartbeat(other_master, "Master", true))
+        .await;
+
+    // Verify: Slave config should be CONNECTED
+    let member = ctx
+        .db
+        .get_member(other_master, account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        member.status,
+        crate::models::STATUS_CONNECTED,
+        "Exness account as Slave should be CONNECTED (Master online)"
+    );
+
+    ctx.cleanup().await;
+}
+
+/// Test: Multiple Masters connected to same Slave (N:1 pattern)
+#[tokio::test]
+async fn test_multiple_masters_to_one_slave() {
+    let ctx = create_test_context().await;
+    let slave_account = "SLAVE_MULTI_MASTER";
+    let masters = vec!["MASTER_A", "MASTER_B", "MASTER_C"];
+
+    // Setup: Create multiple Masters
+    for master in &masters {
+        ctx.db.create_trade_group(master).await.unwrap();
+        ctx.db
+            .update_master_settings(
+                master,
+                crate::models::MasterSettings {
+                    enabled: true,
+                    config_version: 1,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Add same Slave to all Masters
+        ctx.db
+            .add_member(
+                master,
+                slave_account,
+                crate::models::SlaveSettings::default(),
+                crate::models::STATUS_ENABLED,
+            )
+            .await
+            .unwrap();
+    }
+
+    // Slave comes online first
+    ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
+        .await;
+
+    // Verify: All connections are ENABLED (Masters offline)
+    for master in &masters {
+        let member = ctx
+            .db
+            .get_member(master, slave_account)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            member.status,
+            crate::models::STATUS_ENABLED,
+            "Slave should be ENABLED for {} (Master offline)",
+            master
+        );
+    }
+
+    // Act: Masters come online one by one
+    for master in &masters {
+        ctx.handle_heartbeat(build_heartbeat(master, "Master", true))
+            .await;
+    }
+
+    // Verify: All connections are CONNECTED
+    for master in &masters {
+        let member = ctx
+            .db
+            .get_member(master, slave_account)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            member.status,
+            crate::models::STATUS_CONNECTED,
+            "Slave should be CONNECTED for {} (Master online)",
+            master
+        );
+    }
+
+    ctx.cleanup().await;
+}

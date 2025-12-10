@@ -24,7 +24,11 @@ pub enum PlatformEvent {
     Timer,
     Tick, // 引数としてMqlTickを渡すことも考えられるが、通常はSymbolInfoTickで取得する
     Trade,
-    TradeTransaction(MqlTradeTransaction, MqlTradeRequest, MqlTradeResult),
+    TradeTransaction(
+        Box<MqlTradeTransaction>,
+        Box<MqlTradeRequest>,
+        MqlTradeResult,
+    ),
     Shutdown,
 }
 
@@ -121,9 +125,11 @@ impl PlatformRunner {
         req: MqlTradeRequest,
         res: MqlTradeResult,
     ) {
-        let _ = self
-            .sender
-            .send(PlatformEvent::TradeTransaction(trans, req, res));
+        let _ = self.sender.send(PlatformEvent::TradeTransaction(
+            Box::new(trans),
+            Box::new(req),
+            res,
+        ));
     }
 
     /// プラットフォームを停止します（OnDeinitを呼び出してスレッドを終了）

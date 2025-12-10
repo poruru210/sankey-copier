@@ -2083,7 +2083,7 @@ pub unsafe extern "C" fn ea_send_heartbeat(
     output_len: i32,
 ) -> i32 {
     // Reduce logging spam for heartbeat (maybe only log if error or panic, or use verbose mode)
-    // crate::logger::log_to_file("ea_send_heartbeat called");
+
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
             crate::logger::log_to_file("ea_send_heartbeat: context is null");
@@ -2156,10 +2156,7 @@ pub unsafe extern "C" fn ea_send_unregister(
         crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
     }));
 
-    match result {
-        Ok(code) => code,
-        Err(_) => -1,
-    }
+    result.unwrap_or(-1)
 }
 
 /// Create and initialize an EA Context
@@ -2279,11 +2276,10 @@ pub unsafe extern "C" fn ea_context_should_request_config(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
-            crate::logger::log_to_file("ea_context_should_request_config: context is null");
             return 0;
         }
         let ctx = &mut *context;
-        // crate::logger::log_to_file(&format!("ea_context_should_request_config check on {:?} ", context));
+
         if ctx.should_request_config(current_trade_allowed != 0) {
             1
         } else {
@@ -2385,7 +2381,7 @@ pub unsafe extern "C" fn ea_context_get_sync_request(
             Some(c) => c,
             None => return std::ptr::null(),
         };
-        // crate::logger::log_to_file("ea_context_get_sync_request called"); // Verbose
+
         match &ctx.last_sync_request {
             Some(c) => c as *const _,
             None => std::ptr::null(),

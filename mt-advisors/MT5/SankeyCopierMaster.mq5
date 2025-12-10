@@ -298,21 +298,18 @@ void OnTimer()
            }
            case CMD_SEND_SNAPSHOT: // SyncRequest Received
            {
-               // "comment" field contains slave_account for SendSnapshot command
-               string slave_account = CharArrayToString(cmd.comment);
-               
-               // We need full SyncRequest to check master_account? 
-               // Rust already filtered `req.master_account == self.account_id`.
-               // But let's check correct target just in case, or trust Rust.
-               // We can access cached SyncRequest via accessor.
+               // Retrieve cached SyncRequest handle (Managed by Rust, DO NOT FREE)
                HANDLE_TYPE req_handle = g_ea_context.GetSyncRequest();
+               
                if(req_handle != 0)
                {
-                   // Validate just in case (optional, Rust did it)
                    string req_master = sync_request_get_string(req_handle, "master_account");
+                   string req_slave = sync_request_get_string(req_handle, "slave_account");
+
+                   // Validate Master Account
                    if(req_master == AccountID)
                    {
-                        string req_slave = sync_request_get_string(req_handle, "slave_account"); // Should match cmd.comment
+                        // Send the snapshot
                         if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                         {
                              Print("[SYNC] Position snapshot sent to slave: ", req_slave);
@@ -322,6 +319,21 @@ void OnTimer()
                              Print("[ERROR] Failed to send position snapshot to slave: ", req_slave);
                         }
                    }
+                   else
+                   {
+                        Print(StringFormat("[ERROR] SyncRequest Master Mismatch. Req: '%s', Self: '%s'", req_master, AccountID));
+                   }
+               }
+               else
+               {
+                    // Fallback: Use comment if handle is null (should not happen if Rust logic works)
+                    string slave_account = CharArrayToString(cmd.comment);
+                    Print("[WARNING] GetSyncRequest returned 0, using comment for slave account: ", slave_account);
+                    
+                    if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
+                    {
+                         Print("[SYNC] Position snapshot sent to slave: ", slave_account);
+                    }
                }
                break;
            }
@@ -952,7 +964,8 @@ void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
    }
 
    // Free the config handle (Ownership transferred to this function)
-   master_config_free(config_handle);
+   // CRITICAL FIX: Do NOT free the handle if it retrieved via GetMasterConfig() (EaContext managed)
+   // master_config_free(config_handle);
 
    Print("=== Master Configuration Updated ===");
 }
