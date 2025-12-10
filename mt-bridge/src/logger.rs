@@ -11,7 +11,7 @@ pub fn log_to_file(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("mt-bridge.log")
+        .open("C:\\Users\\AKIRA\\mt-bridge.log")
     {
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
         let _ = writeln!(file, "[{}] {}", timestamp, msg);

@@ -2091,6 +2091,8 @@ pub unsafe extern "C" fn ea_send_heartbeat(
         }
 
         let ctx = &*context;
+        // Verify version string at least once or on error
+        crate::logger::log_to_file(&format!("Heartbeat version: {}", env!("BUILD_INFO")));
 
         let msg = crate::types::HeartbeatMessage {
             message_type: "Heartbeat".to_string(),
