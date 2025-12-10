@@ -2029,8 +2029,13 @@ pub unsafe extern "C" fn ea_send_register(
     output: *mut u8,
     output_len: i32,
 ) -> i32 {
+    crate::logger::log_to_file(&format!(
+        "ea_send_register called with context: {:?}, output_len: {}",
+        context, output_len
+    ));
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_register: context is null");
             return -1;
         }
 
@@ -2056,7 +2061,10 @@ pub unsafe extern "C" fn ea_send_register(
 
     match result {
         Ok(code) => code,
-        Err(_) => -1,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_register: panicked!");
+            -1
+        }
     }
 }
 
@@ -2074,8 +2082,11 @@ pub unsafe extern "C" fn ea_send_heartbeat(
     output: *mut u8,
     output_len: i32,
 ) -> i32 {
+    // Reduce logging spam for heartbeat (maybe only log if error or panic, or use verbose mode)
+    // crate::logger::log_to_file("ea_send_heartbeat called");
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_heartbeat: context is null");
             return -1;
         }
 
@@ -2109,7 +2120,10 @@ pub unsafe extern "C" fn ea_send_heartbeat(
 
     match result {
         Ok(code) => code,
-        Err(_) => -1,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_heartbeat: panicked!");
+            -1
+        }
     }
 }
 
@@ -2164,6 +2178,7 @@ pub unsafe extern "C" fn ea_init(
     currency: *const u16,
     leverage: i64,
 ) -> *mut EaContext {
+    crate::logger::log_to_file("ea_init called");
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let acc_id = match utf16_to_string(account_id) {
             Some(s) => s,
@@ -2194,6 +2209,8 @@ pub unsafe extern "C" fn ea_init(
             None => return std::ptr::null_mut(),
         };
 
+        crate::logger::log_to_file(&format!("ea_init: creating context for {}", acc_id));
+
         let context = Box::new(crate::EaContext::new(
             acc_id,
             et,
@@ -2205,12 +2222,17 @@ pub unsafe extern "C" fn ea_init(
             curr,
             leverage,
         ));
-        Box::into_raw(context)
+        let raw = Box::into_raw(context);
+        crate::logger::log_to_file(&format!("ea_init: context created at {:?}", raw));
+        raw
     }));
 
     match result {
         Ok(ptr) => ptr,
-        Err(_) => std::ptr::null_mut(),
+        Err(_) => {
+            crate::logger::log_to_file("ea_init: panicked!");
+            std::ptr::null_mut()
+        }
     }
 }
 
@@ -2224,9 +2246,13 @@ pub unsafe extern "C" fn ea_init(
 /// - `context` must only be freed once
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_free(context: *mut crate::EaContext) {
+    crate::logger::log_to_file(&format!("ea_context_free called for {:?}", context));
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if !context.is_null() {
             let _ = Box::from_raw(context);
+            crate::logger::log_to_file("ea_context_free: context freed");
+        } else {
+            crate::logger::log_to_file("ea_context_free: context is null");
         }
     }));
 }
@@ -2251,9 +2277,11 @@ pub unsafe extern "C" fn ea_context_should_request_config(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_context_should_request_config: context is null");
             return 0;
         }
         let ctx = &mut *context;
+        // crate::logger::log_to_file(&format!("ea_context_should_request_config check on {:?} ", context));
         if ctx.should_request_config(current_trade_allowed != 0) {
             1
         } else {
@@ -2263,7 +2291,10 @@ pub unsafe extern "C" fn ea_context_should_request_config(
 
     match result {
         Ok(code) => code,
-        Err(_) => 0,
+        Err(_) => {
+            crate::logger::log_to_file("ea_context_should_request_config: panicked!");
+            0
+        }
     }
 }
 
@@ -2299,12 +2330,16 @@ pub unsafe extern "C" fn ea_send_sync_request(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_sync_request: context is null");
             return 0;
         }
 
         let ma = match utf16_to_string(master_account) {
             Some(s) => s,
-            None => return 0, // Should be valid
+            None => {
+                crate::logger::log_to_file("ea_send_sync_request: master_account invalid");
+                return 0;
+            }
         };
 
         // last_sync_time can be null or empty
@@ -2315,10 +2350,11 @@ pub unsafe extern "C" fn ea_send_sync_request(
         };
 
         let ctx = &mut *context;
+        crate::logger::log_to_file(&format!("ea_send_sync_request: sending sync for ma={}", ma));
         match ctx.send_sync_request(&ma, lst) {
             Ok(_) => 1,
             Err(e) => {
-                eprintln!("ea_send_sync_request failed: {}", e);
+                crate::logger::log_to_file(&format!("ea_send_sync_request failed: {}", e));
                 0
             }
         }
@@ -2326,7 +2362,10 @@ pub unsafe extern "C" fn ea_send_sync_request(
 
     match result {
         Ok(code) => code,
-        Err(_) => 0,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_sync_request: panicked!");
+            0
+        }
     }
 }
 
@@ -2344,6 +2383,7 @@ pub unsafe extern "C" fn ea_context_get_sync_request(
             Some(c) => c,
             None => return std::ptr::null(),
         };
+        // crate::logger::log_to_file("ea_context_get_sync_request called"); // Verbose
         match &ctx.last_sync_request {
             Some(c) => c as *const _,
             None => std::ptr::null(),
@@ -2369,9 +2409,12 @@ pub unsafe extern "C" fn ea_context_get_sync_request(
 /// - `context` must not have been freed
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_reset(context: *mut crate::EaContext) {
+    crate::logger::log_to_file("ea_context_reset called");
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if !context.is_null() {
             (*context).reset();
+        } else {
+            crate::logger::log_to_file("ea_context_reset: context is null");
         }
     }));
 }
@@ -2400,6 +2443,7 @@ pub unsafe extern "C" fn ea_send_open_signal(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_open_signal: context is null");
             return 0;
         }
         let ctx = &mut *context;
@@ -2415,7 +2459,10 @@ pub unsafe extern "C" fn ea_send_open_signal(
         let o_type = match OrderType::try_parse(&o_type_str) {
             Some(ot) => ot,
             None => {
-                eprintln!("ea_send_open_signal: unknown order_type '{}'", o_type_str);
+                crate::logger::log_to_file(&format!(
+                    "ea_send_open_signal: unknown order_type '{}'",
+                    o_type_str
+                ));
                 return 0;
             }
         };
@@ -2424,10 +2471,15 @@ pub unsafe extern "C" fn ea_send_open_signal(
             None => return 0,
         };
 
+        crate::logger::log_to_file(&format!(
+            "ea_send_open_signal: ticket={}, sym={}",
+            ticket, sym
+        ));
+
         match ctx.send_open_signal(ticket, &sym, o_type, lots, price, sl, tp, magic, &cmt) {
             Ok(_) => 1,
             Err(e) => {
-                eprintln!("ea_send_open_signal failed: {}", e);
+                crate::logger::log_to_file(&format!("ea_send_open_signal failed: {}", e));
                 0
             }
         }
@@ -2435,7 +2487,10 @@ pub unsafe extern "C" fn ea_send_open_signal(
 
     match result {
         Ok(code) => code,
-        Err(_) => 0,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_open_signal: panicked!");
+            0
+        }
     }
 }
 
@@ -2452,14 +2507,16 @@ pub unsafe extern "C" fn ea_send_close_signal(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_close_signal: context is null");
             return 0;
         }
         let ctx = &mut *context;
+        crate::logger::log_to_file(&format!("ea_send_close_signal: ticket={}", ticket));
 
         match ctx.send_close_signal(ticket, lots, close_ratio) {
             Ok(_) => 1,
             Err(e) => {
-                eprintln!("ea_send_close_signal failed: {}", e);
+                crate::logger::log_to_file(&format!("ea_send_close_signal failed: {}", e));
                 0
             }
         }
@@ -2467,7 +2524,10 @@ pub unsafe extern "C" fn ea_send_close_signal(
 
     match result {
         Ok(code) => code,
-        Err(_) => 0,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_close_signal: panicked!");
+            0
+        }
     }
 }
 
@@ -2484,14 +2544,16 @@ pub unsafe extern "C" fn ea_send_modify_signal(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
+            crate::logger::log_to_file("ea_send_modify_signal: context is null");
             return 0;
         }
         let ctx = &mut *context;
+        crate::logger::log_to_file(&format!("ea_send_modify_signal: ticket={}", ticket));
 
         match ctx.send_modify_signal(ticket, sl, tp) {
             Ok(_) => 1,
             Err(e) => {
-                eprintln!("ea_send_modify_signal failed: {}", e);
+                crate::logger::log_to_file(&format!("ea_send_modify_signal failed: {}", e));
                 0
             }
         }
@@ -2499,7 +2561,10 @@ pub unsafe extern "C" fn ea_send_modify_signal(
 
     match result {
         Ok(code) => code,
-        Err(_) => 0,
+        Err(_) => {
+            crate::logger::log_to_file("ea_send_modify_signal: panicked!");
+            0
+        }
     }
 }
 // ===========================================================================
