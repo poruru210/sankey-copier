@@ -3,32 +3,32 @@ name: CI Pull Request
 
 on:
   pull_request:
-    branches: [ main ]
-    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       force_web:
-        description: 'Force all Web UI checks'
+        description: "Force all Web UI checks"
         required: false
         default: false
         type: boolean
       force_rust:
-        description: 'Force relay-server Linux tests'
+        description: "Force relay-server Linux tests"
         required: false
         default: false
         type: boolean
       force_rust_dll:
-        description: 'Force mt-bridge DLL builds'
+        description: "Force mt-bridge DLL builds"
         required: false
         default: false
         type: boolean
       force_mql:
-        description: 'Force MQL compiles'
+        description: "Force MQL compiles"
         required: false
         default: false
         type: boolean
       force_vercel:
-        description: 'Deploy preview even when Web UI unchanged'
+        description: "Deploy preview even when Web UI unchanged"
         required: false
         default: false
         type: boolean
@@ -302,22 +302,22 @@ jobs:
         working-directory: web-ui
         run: pnpm exec tsc --noEmit
 
-#  deploy-preview:
-#    name: Deploy Vercel Preview
-#    needs:
-#      - paths-filter
-#      - manual-flags
-#      - event-context
-#      - web-lint
-#      - web-typecheck
-#    if: ${{ fromJSON(needs.event-context.outputs.is_pr) && !fromJSON(needs.event-context.outputs.pr_is_draft) && !fromJSON(needs.event-context.outputs.pr_is_from_fork) && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
-#    uses: ./.github/workflows/deploy-vercel.yml
-#    with:
-#      deployment_target: preview
-#      is_pr: ${{ fromJSON(needs.event-context.outputs.is_pr) }}
-#      pr_number: ${{ needs.event-context.outputs.pr_number }}
-#      pr_is_from_fork: ${{ fromJSON(needs.event-context.outputs.pr_is_from_fork) }}
-#    secrets: inherit
+  #  deploy-preview:
+  #    name: Deploy Vercel Preview
+  #    needs:
+  #      - paths-filter
+  #      - manual-flags
+  #      - event-context
+  #      - web-lint
+  #      - web-typecheck
+  #    if: ${{ fromJSON(needs.event-context.outputs.is_pr) && !fromJSON(needs.event-context.outputs.pr_is_draft) && !fromJSON(needs.event-context.outputs.pr_is_from_fork) && (needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_vercel == 'true') }}
+  #    uses: ./.github/workflows/deploy-vercel.yml
+  #    with:
+  #      deployment_target: preview
+  #      is_pr: ${{ fromJSON(needs.event-context.outputs.is_pr) }}
+  #      pr_number: ${{ needs.event-context.outputs.pr_number }}
+  #      pr_is_from_fork: ${{ fromJSON(needs.event-context.outputs.pr_is_from_fork) }}
+  #    secrets: inherit
 
   summarize:
     name: Publish Workflow Summary
@@ -346,4 +346,3 @@ jobs:
 
           _Note: Individual job statuses remain visible under the **Checks** tab. Use the table above to confirm which components were targeted in this run._
           EOF
-
