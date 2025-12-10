@@ -193,8 +193,36 @@ jobs:
             echo "pr_is_from_fork=$PR_IS_FROM_FORK"
           } >> "$GITHUB_OUTPUT"
 
-  rust-tests:
-    name: Relay Server Tests & Clippy
+  # --- Optimized Jobs ---
+
+  web-checks:
+    name: Web UI Checks
+    runs-on: ubuntu-latest
+    needs: [paths-filter, manual-flags]
+    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js with pnpm
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: web-ui
+
+      - name: Install dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Linting
+        working-directory: web-ui
+        run: pnpm lint
+
+      - name: Check Types
+        working-directory: web-ui
+        run: pnpm exec tsc --noEmit
+
+  rust-linux-check:
+    name: Rust Check (Linux)
     runs-on: ubuntu-latest
     needs: [version-info, paths-filter, manual-flags]
     if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
@@ -218,35 +246,43 @@ jobs:
           cargo clippy --all-targets --all-features -- -D warnings
           cargo test --workspace --all-features
 
-  rust-dll:
-    name: Build mt-bridge DLLs
-    needs: [version-info, paths-filter, manual-flags]
-    if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust_dll == 'true' }}
-    uses: ./.github/workflows/build-rust.yml
-    with:
-      package_version: ${{ needs.version-info.outputs.package_version }}
-      file_version: ${{ needs.version-info.outputs.file_version }}
-      build_target: rust-dll
-
-  rust-server:
-    name: Build Relay Server
+  rust-windows-check:
+    name: Rust Check (Windows)
+    runs-on: windows-latest
     needs: [version-info, paths-filter, manual-flags]
     if: ${{ needs.paths-filter.outputs.rust == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
-    uses: ./.github/workflows/build-rust.yml
-    with:
-      package_version: ${{ needs.version-info.outputs.package_version }}
-      file_version: ${{ needs.version-info.outputs.file_version }}
-      build_target: relay-server
+    env:
+      PACKAGE_VERSION: ${{ needs.version-info.outputs.package_version }}
+      FILE_VERSION: ${{ needs.version-info.outputs.file_version }}
+      BUILD_INFO: ${{ needs.version-info.outputs.build_info }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  tray-build:
-    name: Build Tray Application
-    needs: [version-info, paths-filter, manual-flags]
-    if: ${{ needs.paths-filter.outputs.tray == 'true' || needs.manual-flags.outputs.force_rust == 'true' }}
-    uses: ./.github/workflows/build-rust.yml
-    with:
-      package_version: ${{ needs.version-info.outputs.package_version }}
-      file_version: ${{ needs.version-info.outputs.file_version }}
-      build_target: tray-app
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc, x86_64-pc-windows-msvc
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # 1. MT-Bridge (DLL) - Check compilation for both 32-bit and 64-bit
+      # Actual linking is important for DLLs, so we use build (Debug is fast)
+      - name: Build DLL (32-bit)
+        run: cargo build --package sankey-copier-mt-bridge --target i686-pc-windows-msvc
+
+      - name: Build DLL (64-bit)
+        run: cargo build --package sankey-copier-mt-bridge --target x86_64-pc-windows-msvc
+
+      # 2. Run Windows-specific tests (Registry, etc)
+      - name: Test (Windows)
+        run: cargo test --workspace --all-features
+
+      # 3. Check Tray App (excluded from workspace, manual check needed)
+      - name: Check Tray App
+        working-directory: tray-app
+        run: cargo check
 
   mql-build:
     name: Compile MQL Advisors
@@ -258,49 +294,7 @@ jobs:
       build_target: mql
     secrets: inherit
 
-  web-lint:
-    name: Web UI Lint
-    runs-on: ubuntu-latest
-    needs: [paths-filter, manual-flags]
-    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js with pnpm
-        uses: ./.github/actions/setup-node
-        with:
-          working-directory: web-ui
-
-      - name: Install dependencies
-        working-directory: web-ui
-        run: pnpm install --frozen-lockfile
-
-      - name: Run lint
-        working-directory: web-ui
-        run: pnpm lint
-
-  web-typecheck:
-    name: Web UI Type Check
-    runs-on: ubuntu-latest
-    needs: [paths-filter, manual-flags]
-    if: ${{ needs.paths-filter.outputs.web == 'true' || needs.manual-flags.outputs.force_web == 'true' || needs.manual-flags.outputs.force_vercel == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js with pnpm
-        uses: ./.github/actions/setup-node
-        with:
-          working-directory: web-ui
-
-      - name: Install dependencies
-        working-directory: web-ui
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check via tsc
-        working-directory: web-ui
-        run: pnpm exec tsc --noEmit
+  # web-lint and web-typecheck replaced by web-checks above
 
   #  deploy-preview:
   #    name: Deploy Vercel Preview
