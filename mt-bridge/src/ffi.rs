@@ -2029,27 +2029,35 @@ pub unsafe extern "C" fn ea_send_register(
     output: *mut u8,
     output_len: i32,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return -1;
+        }
+
+        let ctx = &*context;
+
+        // Build RegisterMessage using cached context data
+        let msg = crate::types::RegisterMessage {
+            message_type: "Register".to_string(),
+            account_id: ctx.account_id.clone(),
+            ea_type: ctx.ea_type.clone(),
+            platform: ctx.platform.clone(),
+            account_number: ctx.account_number,
+            broker: ctx.broker.clone(),
+            account_name: ctx.account_name.clone(),
+            server: ctx.server.clone(),
+            currency: ctx.currency.clone(),
+            leverage: ctx.leverage,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => -1,
     }
-    let ctx = &*context;
-
-    // Build RegisterMessage using cached context data
-    let msg = crate::types::RegisterMessage {
-        message_type: "Register".to_string(),
-        account_id: ctx.account_id.clone(),
-        ea_type: ctx.ea_type.clone(),
-        platform: ctx.platform.clone(),
-        account_number: ctx.account_number,
-        broker: ctx.broker.clone(),
-        account_name: ctx.account_name.clone(),
-        server: ctx.server.clone(),
-        currency: ctx.currency.clone(),
-        leverage: ctx.leverage,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    };
-
-    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
 }
 
 /// Create and serialize a HeartbeatMessage using context data + dynamic args
@@ -2066,35 +2074,43 @@ pub unsafe extern "C" fn ea_send_heartbeat(
     output: *mut u8,
     output_len: i32,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return -1;
+        }
+
+        let ctx = &*context;
+
+        let msg = crate::types::HeartbeatMessage {
+            message_type: "Heartbeat".to_string(),
+            account_id: ctx.account_id.clone(),
+            balance,
+            equity,
+            open_positions,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            version: env!("BUILD_INFO").to_string(),
+            ea_type: ctx.ea_type.clone(),
+            platform: ctx.platform.clone(),
+            account_number: ctx.account_number,
+            broker: ctx.broker.clone(),
+            account_name: ctx.account_name.clone(),
+            server: ctx.server.clone(),
+            currency: ctx.currency.clone(),
+            leverage: ctx.leverage,
+            is_trade_allowed: is_trade_allowed != 0,
+            // Optional fields (defaults)
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => -1,
     }
-    let ctx = &*context;
-
-    let msg = crate::types::HeartbeatMessage {
-        message_type: "Heartbeat".to_string(),
-        account_id: ctx.account_id.clone(),
-        balance,
-        equity,
-        open_positions,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        version: env!("BUILD_INFO").to_string(),
-        ea_type: ctx.ea_type.clone(),
-        platform: ctx.platform.clone(),
-        account_number: ctx.account_number,
-        broker: ctx.broker.clone(),
-        account_name: ctx.account_name.clone(),
-        server: ctx.server.clone(),
-        currency: ctx.currency.clone(),
-        leverage: ctx.leverage,
-        is_trade_allowed: is_trade_allowed != 0,
-        // Optional fields (defaults)
-        symbol_prefix: None,
-        symbol_suffix: None,
-        symbol_map: None,
-    };
-
-    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
 }
 
 /// Create and serialize an UnregisterMessage using context data
@@ -2108,19 +2124,26 @@ pub unsafe extern "C" fn ea_send_unregister(
     output: *mut u8,
     output_len: i32,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return -1;
+        }
+        let ctx = &*context;
+
+        let msg = crate::types::UnregisterMessage {
+            message_type: "Unregister".to_string(),
+            account_id: ctx.account_id.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            ea_type: Some(ctx.ea_type.clone()),
+        };
+
+        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => -1,
     }
-    let ctx = &*context;
-
-    let msg = crate::types::UnregisterMessage {
-        message_type: "Unregister".to_string(),
-        account_id: ctx.account_id.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        ea_type: Some(ctx.ea_type.clone()),
-    };
-
-    crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
 }
 
 /// Create and initialize an EA Context
@@ -2141,47 +2164,54 @@ pub unsafe extern "C" fn ea_init(
     currency: *const u16,
     leverage: i64,
 ) -> *mut EaContext {
-    let acc_id = match utf16_to_string(account_id) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let et = match utf16_to_string(ea_type) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let plt = match utf16_to_string(platform) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let brk = match utf16_to_string(broker) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let acc_name = match utf16_to_string(account_name) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let srv = match utf16_to_string(server) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let curr = match utf16_to_string(currency) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let acc_id = match utf16_to_string(account_id) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let et = match utf16_to_string(ea_type) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let plt = match utf16_to_string(platform) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let brk = match utf16_to_string(broker) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let acc_name = match utf16_to_string(account_name) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let srv = match utf16_to_string(server) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+        let curr = match utf16_to_string(currency) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
 
-    let context = Box::new(crate::EaContext::new(
-        acc_id,
-        et,
-        plt,
-        account_number,
-        brk,
-        acc_name,
-        srv,
-        curr,
-        leverage,
-    ));
-    Box::into_raw(context)
+        let context = Box::new(crate::EaContext::new(
+            acc_id,
+            et,
+            plt,
+            account_number,
+            brk,
+            acc_name,
+            srv,
+            curr,
+            leverage,
+        ));
+        Box::into_raw(context)
+    }));
+
+    match result {
+        Ok(ptr) => ptr,
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 /// Free an EA Context instance
@@ -2194,9 +2224,11 @@ pub unsafe extern "C" fn ea_init(
 /// - `context` must only be freed once
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_free(context: *mut crate::EaContext) {
-    if !context.is_null() {
-        drop(Box::from_raw(context));
-    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if !context.is_null() {
+            let _ = Box::from_raw(context);
+        }
+    }));
 }
 
 /// Determine if RequestConfig should be sent based on current state
@@ -2217,17 +2249,21 @@ pub unsafe extern "C" fn ea_context_should_request_config(
     context: *mut crate::EaContext,
     current_trade_allowed: i32,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
-    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return 0;
+        }
+        let ctx = &mut *context;
+        if ctx.should_request_config(current_trade_allowed != 0) {
+            1
+        } else {
+            0
+        }
+    }));
 
-    let ea_ctx = &mut *context;
-    let trade_allowed = current_trade_allowed != 0;
-
-    if ea_ctx.should_request_config(trade_allowed) {
-        1
-    } else {
-        0
+    match result {
+        Ok(code) => code,
+        Err(_) => 0,
     }
 }
 
@@ -2242,9 +2278,11 @@ pub unsafe extern "C" fn ea_context_should_request_config(
 /// - `context` must not have been freed
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_mark_config_requested(context: *mut crate::EaContext) {
-    if !context.is_null() {
-        (*context).mark_config_requested();
-    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if !context.is_null() {
+            (*context).mark_config_requested();
+        }
+    }));
 }
 
 /// Send a Sync Request (Slave -> Master)
@@ -2259,27 +2297,36 @@ pub unsafe extern "C" fn ea_send_sync_request(
     master_account: *const u16,
     last_sync_time: *const u16,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
-    }
-    let ctx = &mut *context;
-
-    let master = match utf16_to_string(master_account) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let last_sync = if !last_sync_time.is_null() {
-        utf16_to_string(last_sync_time)
-    } else {
-        None
-    };
-
-    match ctx.send_sync_request(&master, last_sync) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_send_sync_request failed: {}", e);
-            0
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return 0;
         }
+
+        let ma = match utf16_to_string(master_account) {
+            Some(s) => s,
+            None => return 0, // Should be valid
+        };
+
+        // last_sync_time can be null or empty
+        let lst = if !last_sync_time.is_null() {
+            utf16_to_string(last_sync_time)
+        } else {
+            None
+        };
+
+        let ctx = &mut *context;
+        match ctx.send_sync_request(&ma, lst) {
+            Ok(_) => 1,
+            Err(e) => {
+                eprintln!("ea_send_sync_request failed: {}", e);
+                0
+            }
+        }
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => 0,
     }
 }
 
@@ -2292,13 +2339,20 @@ pub unsafe extern "C" fn ea_send_sync_request(
 pub unsafe extern "C" fn ea_context_get_sync_request(
     context: *const crate::EaContext,
 ) -> *const crate::types::SyncRequestMessage {
-    let ctx = match context.as_ref() {
-        Some(c) => c,
-        None => return std::ptr::null(),
-    };
-    match &ctx.last_sync_request {
-        Some(c) => c as *const _,
-        None => std::ptr::null(),
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let ctx = match context.as_ref() {
+            Some(c) => c,
+            None => return std::ptr::null(),
+        };
+        match &ctx.last_sync_request {
+            Some(c) => c as *const _,
+            None => std::ptr::null(),
+        }
+    }));
+
+    match result {
+        Ok(ptr) => ptr,
+        Err(_) => std::ptr::null(),
     }
 }
 
@@ -2315,9 +2369,11 @@ pub unsafe extern "C" fn ea_context_get_sync_request(
 /// - `context` must not have been freed
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_reset(context: *mut crate::EaContext) {
-    if !context.is_null() {
-        (*context).reset();
-    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if !context.is_null() {
+            (*context).reset();
+        }
+    }));
 }
 
 // ============================================================================
@@ -2342,37 +2398,44 @@ pub unsafe extern "C" fn ea_send_open_signal(
     magic: i64,
     comment: *const u16,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
-    }
-    let ctx = &mut *context;
-
-    let sym = match utf16_to_string(symbol) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let o_type_str = match utf16_to_string(order_type) {
-        Some(s) => s,
-        None => return 0,
-    };
-    let o_type = match OrderType::try_parse(&o_type_str) {
-        Some(ot) => ot,
-        None => {
-            eprintln!("ea_send_open_signal: unknown order_type '{}'", o_type_str);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
             return 0;
         }
-    };
-    let cmt = match utf16_to_string(comment) {
-        Some(s) => s,
-        None => return 0,
-    };
+        let ctx = &mut *context;
 
-    match ctx.send_open_signal(ticket, &sym, o_type, lots, price, sl, tp, magic, &cmt) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_send_open_signal failed: {}", e);
-            0
+        let sym = match utf16_to_string(symbol) {
+            Some(s) => s,
+            None => return 0,
+        };
+        let o_type_str = match utf16_to_string(order_type) {
+            Some(s) => s,
+            None => return 0,
+        };
+        let o_type = match OrderType::try_parse(&o_type_str) {
+            Some(ot) => ot,
+            None => {
+                eprintln!("ea_send_open_signal: unknown order_type '{}'", o_type_str);
+                return 0;
+            }
+        };
+        let cmt = match utf16_to_string(comment) {
+            Some(s) => s,
+            None => return 0,
+        };
+
+        match ctx.send_open_signal(ticket, &sym, o_type, lots, price, sl, tp, magic, &cmt) {
+            Ok(_) => 1,
+            Err(e) => {
+                eprintln!("ea_send_open_signal failed: {}", e);
+                0
+            }
         }
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => 0,
     }
 }
 
@@ -2387,17 +2450,24 @@ pub unsafe extern "C" fn ea_send_close_signal(
     lots: f64,
     close_ratio: f64,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
-    }
-    let ctx = &mut *context;
-
-    match ctx.send_close_signal(ticket, lots, close_ratio) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_send_close_signal failed: {}", e);
-            0
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return 0;
         }
+        let ctx = &mut *context;
+
+        match ctx.send_close_signal(ticket, lots, close_ratio) {
+            Ok(_) => 1,
+            Err(e) => {
+                eprintln!("ea_send_close_signal failed: {}", e);
+                0
+            }
+        }
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => 0,
     }
 }
 
@@ -2412,17 +2482,24 @@ pub unsafe extern "C" fn ea_send_modify_signal(
     sl: f64,
     tp: f64,
 ) -> i32 {
-    if context.is_null() {
-        return 0;
-    }
-    let ctx = &mut *context;
-
-    match ctx.send_modify_signal(ticket, sl, tp) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_send_modify_signal failed: {}", e);
-            0
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() {
+            return 0;
         }
+        let ctx = &mut *context;
+
+        match ctx.send_modify_signal(ticket, sl, tp) {
+            Ok(_) => 1,
+            Err(e) => {
+                eprintln!("ea_send_modify_signal failed: {}", e);
+                0
+            }
+        }
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => 0,
     }
 }
 // ===========================================================================
