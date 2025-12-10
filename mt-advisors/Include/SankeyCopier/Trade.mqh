@@ -20,9 +20,8 @@
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Check if trade should be processed based on filters              |
+//| NOTE: Main trade logic is now in Rust (mt-bridge).               |
+//| This function is kept for legacy support or local checks if needed|
 //+------------------------------------------------------------------+
 bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 {
@@ -529,6 +528,8 @@ bool IsLotWithinFilter(double lots, double lot_min, double lot_max)
 
 //+------------------------------------------------------------------+
 //| Transform lot size based on calculation mode                     |
+//| Note: This logic is partially duplicated in mt-bridge.           |
+//| Kept here for PositionSnapshot Sync which bypasses EaContext.    |
 //+------------------------------------------------------------------+
 double TransformLotSize(double lots, CopyConfig &config, string symbol)
 {
@@ -574,6 +575,7 @@ double TransformLotSize(double lots, double multiplier, string symbol)
 //+------------------------------------------------------------------+
 //| Reverse order type if enabled                                    |
 //| Uses PascalCase format matching relay-server's OrderType enum    |
+//| Note: Logic also present in mt-bridge.                           |
 //+------------------------------------------------------------------+
 string ReverseOrderType(string type, bool reverse)
 {

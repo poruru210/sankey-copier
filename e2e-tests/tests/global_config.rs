@@ -174,7 +174,8 @@ async fn test_master_receives_vlogs_on_registration() {
     sleep(Duration::from_millis(500)).await;
 
     // Create master EA
-    let mut master = sandbox.create_master("VLOGS_MASTER_001")
+    let mut master = sandbox
+        .create_master("VLOGS_MASTER_001")
         .expect("Failed to create master");
 
     // Subscribe to global config topic (where VLogs is broadcast)
@@ -219,7 +220,8 @@ async fn test_slave_receives_vlogs_on_registration() {
     sleep(Duration::from_millis(500)).await;
 
     // Create slave EA
-    let mut slave = sandbox.create_slave("VLOGS_SLAVE_001", "VLOGS_MASTER_001")
+    let mut slave = sandbox
+        .create_slave("VLOGS_SLAVE_001", "VLOGS_MASTER_001")
         .expect("Failed to create slave");
 
     // Subscribe to global config topic
@@ -260,11 +262,13 @@ async fn test_vlogs_broadcast_on_api_update() {
     sleep(Duration::from_millis(500)).await;
 
     // Create master EA
-    let mut master = sandbox.create_master("VLOGS_MASTER_002")
+    let mut master = sandbox
+        .create_master("VLOGS_MASTER_002")
         .expect("Failed to create master");
 
     // Create slave EA
-    let mut slave = sandbox.create_slave("VLOGS_SLAVE_002", "VLOGS_MASTER_002")
+    let mut slave = sandbox
+        .create_slave("VLOGS_SLAVE_002", "VLOGS_MASTER_002")
         .expect("Failed to create slave");
 
     // Subscribe both to global config topic

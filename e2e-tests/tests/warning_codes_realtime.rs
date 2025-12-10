@@ -70,7 +70,8 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED AFTER WebSocket connection
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
@@ -137,7 +138,8 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Slave with auto-trading DISABLED
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(false); // Auto-trading OFF
@@ -200,7 +202,8 @@ async fn test_warning_broadcast_timing() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
@@ -259,7 +262,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
@@ -269,7 +273,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
 
     // Start Slave with auto-trading ENABLED
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true); // Slave auto-trading ON
@@ -339,7 +344,8 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 1. Start Slave FIRST (Master is offline)
     println!("[TEST] Starting Slave...");
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true);
@@ -366,7 +372,8 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 3. Start Master LATER
     println!("[TEST] Starting Master...");
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(true);
@@ -434,13 +441,15 @@ async fn test_reconnection_after_deletion() {
     sleep(Duration::from_millis(1000)).await;
 
     // 1. Start Master
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
 
     // 2. Start Slave
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
@@ -479,7 +488,8 @@ async fn test_reconnection_after_deletion() {
 
     // 5. Reconnect (New Simulator instance)
     println!("[TEST] Reconnecting slave...");
-    let mut slave_new = sandbox.create_slave(slave_account, master_account)
+    let mut slave_new = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create new slave");
     slave_new.set_trade_allowed(true);
     slave_new.start().expect("Failed to start new slave");

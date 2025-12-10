@@ -2078,7 +2078,7 @@ pub unsafe extern "C" fn ea_send_heartbeat(
         equity,
         open_positions,
         timestamp: chrono::Utc::now().to_rfc3339(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        version: env!("BUILD_INFO").to_string(),
         ea_type: ctx.ea_type.clone(),
         platform: ctx.platform.clone(),
         account_number: ctx.account_number,

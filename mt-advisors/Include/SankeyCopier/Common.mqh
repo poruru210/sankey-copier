@@ -47,6 +47,10 @@
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
 #define STATUS_NO_CONFIG -1 // No configuration received yet
 
+//--- EA Type Constants
+#define EA_TYPE_MASTER "Master"
+#define EA_TYPE_SLAVE  "Slave"
+
 //--- Command types matching Rust
 #define CMD_NONE 0
 #define CMD_OPEN 1
@@ -76,6 +80,7 @@ struct EaCommand {
    double close_ratio;
    long timestamp;
    uchar comment[64];
+   uchar source_account[64];
 };
 
 //--- Import Rust ZeroMQ DLL

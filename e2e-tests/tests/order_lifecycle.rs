@@ -38,10 +38,12 @@ async fn test_open_close_cycle() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -122,10 +124,12 @@ async fn test_open_modify_close_cycle() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -211,10 +215,12 @@ async fn test_modify_sl_only() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -264,10 +270,12 @@ async fn test_modify_tp_only() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -317,10 +325,12 @@ async fn test_modify_both_sl_tp() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -370,10 +380,12 @@ async fn test_multiple_open_sequential() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -429,10 +441,12 @@ async fn test_rapid_fire_signals() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -499,10 +513,12 @@ async fn test_close_nonexistent_position() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -554,10 +570,12 @@ async fn test_close_already_closed() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -629,10 +647,12 @@ async fn test_modify_multiple_times() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master simulator");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);

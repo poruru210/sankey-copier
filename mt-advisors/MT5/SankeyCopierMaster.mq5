@@ -134,7 +134,7 @@ int OnInit()
    }
 
    // Initialize EA Context (Stateful FFI)
-   if(!g_ea_context.Initialize(AccountID, "Master", "MT5", GetAccountNumber(), 
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_MASTER, "MT5", GetAccountNumber(), 
                                GetBrokerName(), GetAccountName(), GetServerName(), 
                                GetAccountCurrency(), GetAccountLeverage()))
    {

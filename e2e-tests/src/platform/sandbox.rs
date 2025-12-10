@@ -34,7 +34,8 @@ impl TestSandbox {
     /// 3. Start the relay-server on random available ports.
     /// 4. Wait for the server to become ready.
     pub fn new() -> Result<Self> {
-        let server = RelayServerProcess::start().context("Failed to start relay server in sandbox")?;
+        let server =
+            RelayServerProcess::start().context("Failed to start relay server in sandbox")?;
         Ok(Self { server })
     }
 
@@ -61,7 +62,11 @@ impl TestSandbox {
     /// # Arguments
     /// * `account_id` - Unique identifier for this Slave EA (e.g., "slave-01").
     /// * `master_account_id` - The Master Account ID to subscribe to.
-    pub fn create_slave(&self, account_id: &str, master_account_id: &str) -> Result<SlaveEaSimulator> {
+    pub fn create_slave(
+        &self,
+        account_id: &str,
+        master_account_id: &str,
+    ) -> Result<SlaveEaSimulator> {
         let push_address = self.server.zmq_pull_address();
         let config_address = self.server.zmq_pub_address();
         // Slave also subscribes to trade signals on the same PUB socket (in this architecture)

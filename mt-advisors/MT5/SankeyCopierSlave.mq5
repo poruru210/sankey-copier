@@ -129,7 +129,7 @@ int OnInit()
    }
 
    // Initialize EaContext (handles ZMQ internally)
-   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT5", AccountNumber(), 
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT5", GetAccountNumber(), 
                                AccountInfoString(ACCOUNT_COMPANY), AccountInfoString(ACCOUNT_NAME),
                                AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
                                AccountInfoInteger(ACCOUNT_LEVERAGE)))
@@ -258,56 +258,12 @@ void OnTimer()
        switch(cmd.command_type)
        {
            case CMD_OPEN:
+           case CMD_CLOSE:
+           case CMD_MODIFY:
            {
-               ulong master_ticket = (ulong)cmd.ticket;
-               
-               // OrderType from Rust (enum i32) -> String for our helpers?
-               // Common.mqh: GetOrderTypeString(int type)
-               string order_type_str = GetOrderTypeString(cmd.order_type); 
-               
-               // Note: cmd.comment holds "source_account" for Open/Modify/Close?
-               // Rust `process_incoming_trade`: 
-               //   if let Some(c) = signal.comment { copy_string_to_array(&c, &mut cmd.comment); }
-               // Wait, `TradeSignal` comment usually holds MQL comment.
-               // `source_account` is in `TradeSignal` strict but NOT mapped to `EaCommand` fields explicitly?
-               // Let's check `ea_context.rs`.
-               // `cmd.timestamp = signal.timestamp...`
-               // `if let Some(c) = signal.comment { copy... }` -> This is the TRADE comment.
-               // Where is source_account??
-               // Rust `process_incoming_trade` converts `TradeSignal` to `EaCommand`.
-               // `EaCommand` has NO field for `source_account`. 
-               // Issue: We need `source_account` to find the correct config (slippage, etc).
-               // The `EaCommand` struct is generic.
-               // We might have lost `source_account` mapping!
-               // 
-               // Check `ea_context.rs`:
-               // `process_incoming_trade` payload logic.
-               // `TradeSignal` has `source_account`. `EaCommand` does not.
-               // WE NEED SOURCE ACCOUNT.
-               // Quick fix: Should we pack source_account into `comment` field in Rust?
-               // Or add `source_id` field to `EaCommand`?
-               // If we add field, we break strict genericness but valid for this system.
-               // Or we assume 1 Master for now? No, multi-master support is key.
-               // 
-               // Proposal: Update `ea_context.rs` to copy `source_account` into `EaCommand`? 
-               // We have `comment[64]`. MQL comment is rarely used for critical logic, but nice to have.
-               // Maybe `EaCommand` needs `extra[64]`?
-               // OR, since filtering is done in Relay, maybe we don't *need* source_account for logic?
-               // We utilize `g_configs` to look up settings (Slippage etc).
-               // If we don't know which master it came from, we can't look up specific config.
-               // We could use DEFAULT config if not found.
-               // 
-               // Alternative: The topic `trade/master_id` is parsed in Rust.
-               // Can we use `magic` number? 
-               // 
-               // Let's pause and check `ea_context.rs` again.
+               ProcessTradeSignalFromCommand(cmd);
                break;
            }
-           case CMD_CLOSE:
-           { // Added scope
-              // ...
-              break;
-           } // Added scope
            case CMD_PROCESS_SNAPSHOT:
            {
                HANDLE_TYPE snapshot_handle = g_ea_context.GetPositionSnapshot();
@@ -404,15 +360,16 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
    ulong master_ticket = (ulong)cmd.ticket;
    // Symbol is fixed size uchar array
    string symbol = CharArrayToString(cmd.symbol);
-   // Source account is in comment (mapped in Rust)
-   string source_account = CharArrayToString(cmd.comment);
+   // Source account is in source_account field (mapped in Rust)
+   string source_account = CharArrayToString(cmd.source_account);
    
    // OrderType from Rust (enum i32) -> String
    string order_type_str = GetOrderTypeString(cmd.order_type);
    
    string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS); // Simplified
    
-   // Find matching config for this master
+   // Find matching config for this master (ONLY to get trade execution settings)
+   // Business logic (filters, multipliers) is already applied by mt-bridge
    int config_index = -1;
    for(int i=0; i<ArraySize(g_configs); i++)
    {
@@ -423,40 +380,32 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       }
    }
 
-   if(config_index == -1)
+   int trade_slippage = DEFAULT_SLIPPAGE;
+   int max_retries = DEFAULT_MAX_RETRIES;
+   int max_signal_delay = DEFAULT_MAX_SIGNAL_DELAY_MS;
+   bool use_pending_for_delayed = false;
+
+   if(config_index != -1)
    {
-      Print("Trade signal rejected: No active configuration for master ", source_account);
-      return;
+       if(g_configs[config_index].max_slippage > 0) trade_slippage = g_configs[config_index].max_slippage;
+       if(g_configs[config_index].max_retries > 0) max_retries = g_configs[config_index].max_retries;
+       if(g_configs[config_index].max_signal_delay_ms > 0) max_signal_delay = g_configs[config_index].max_signal_delay_ms;
+       use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
    }
 
-   // Get trade settings from config (use defaults as fallback)
-   int trade_slippage = (g_configs[config_index].max_slippage > 0) ? g_configs[config_index].max_slippage : DEFAULT_SLIPPAGE;
-   int max_retries = (g_configs[config_index].max_retries > 0) ? g_configs[config_index].max_retries : DEFAULT_MAX_RETRIES;
-   int max_signal_delay = (g_configs[config_index].max_signal_delay_ms > 0) ? g_configs[config_index].max_signal_delay_ms : DEFAULT_MAX_SIGNAL_DELAY_MS;
-   bool use_pending_for_delayed = g_configs[config_index].use_pending_order_for_delayed;
-   bool allow_new_orders = g_configs[config_index].allow_new_orders;
-   
    int action = cmd.command_type; // CMD_OPEN, CMD_CLOSE, etc.
 
    // CMD_OPEN
    if(action == CMD_OPEN)
    {
-      if(!allow_new_orders)
-      {
-         Print("Open signal rejected: allow_new_orders=false (status=", g_configs[config_index].status, ") for master #", master_ticket);
-         return;
-      }
-
-      // Symbol is already transformed by Relay Server
-      string transformed_symbol = symbol;
+      // Open position using pre-calculated values from Rust
+      // Note: order_type_str is already reversed if needed
+      // Note: cmd.volume is already transformed
+      // Note: symbol is passed as is (usually pre-transformed by Relay, or local config)
       
-      // Transform lot size
-      double transformed_lots = TransformLotSize(cmd.volume, g_configs[config_index], transformed_symbol);
-      string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
-      
-      // Open position
-      ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
-                       transformed_order_type, transformed_lots, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
+      // Execute Open Trade
+      ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, symbol,
+                       order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
                        (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
    // CMD_CLOSE
@@ -613,6 +562,14 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
 
       // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
       string transformed_symbol = symbol;
+
+      // NOTE: Position Snapshot sync still calculates lots in MQL because
+      // position snapshots are currently passed as raw handles to MQL, not via `EaCommand`.
+      // To unify this, `EaContext` should also process PositionSnapshot and emit
+      // individual `CMD_OPEN` commands for sync, OR we leave sync logic in MQL for now.
+      // Given the task scope, we focused on Trade Signals.
+      // Sync logic remains in MQL for now (it uses `TransformLotSize` below).
+      // This means we CANNOT remove `TransformLotSize` from `Trade.mqh` yet.
 
       // Transform lot size
       double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);

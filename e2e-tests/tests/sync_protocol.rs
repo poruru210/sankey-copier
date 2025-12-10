@@ -9,8 +9,8 @@
 //! 3. Full Sync Cycle - Complete sync flow testing
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::TestSandbox;
 use e2e_tests::MasterEaSimulator;
+use e2e_tests::TestSandbox;
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
 
@@ -38,10 +38,12 @@ async fn test_position_snapshot_single_slave() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
 
     // Subscribe master to sync requests
@@ -113,13 +115,16 @@ async fn test_position_snapshot_multiple_slaves() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave1 = sandbox.create_slave(slave_accounts[0], master_account)
+    let mut slave1 = sandbox
+        .create_slave(slave_accounts[0], master_account)
         .expect("Failed to create slave1");
 
-    let mut slave2 = sandbox.create_slave(slave_accounts[1], master_account)
+    let mut slave2 = sandbox
+        .create_slave(slave_accounts[1], master_account)
         .expect("Failed to create slave2");
 
     // Start EAs with auto-trading enabled
@@ -202,10 +207,12 @@ async fn test_position_snapshot_empty() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
 
     // Subscribe to sync topic early (before start) to avoid slow joiner issues
@@ -271,10 +278,12 @@ async fn test_sync_request_to_master() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
 
     // Master subscribes to sync requests
@@ -335,10 +344,12 @@ async fn test_sync_request_with_last_sync_time() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
 
     // Master subscribes to sync requests
@@ -400,11 +411,13 @@ async fn test_sync_request_non_member_rejected() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
     // Create non-member slave (not registered in trade group)
-    let mut non_member = sandbox.create_slave(non_member_slave, master_account)
+    let mut non_member = sandbox
+        .create_slave(non_member_slave, master_account)
         .expect("Failed to create non-member slave");
 
     // Master subscribes to sync requests
@@ -462,10 +475,12 @@ async fn test_full_sync_cycle() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = sandbox.create_master(master_account)
+    let mut master = sandbox
+        .create_master(master_account)
         .expect("Failed to create master");
 
-    let mut slave = sandbox.create_slave(slave_account, master_account)
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
         .expect("Failed to create slave");
 
     // Setup subscriptions
