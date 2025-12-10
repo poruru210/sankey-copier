@@ -357,7 +357,8 @@ impl EaContext {
                 if config.status == -1 {
                     self.slave_configs.remove(&master_acc);
                 } else {
-                    self.slave_configs.insert(master_acc.clone(), config.clone());
+                    self.slave_configs
+                        .insert(master_acc.clone(), config.clone());
                 }
 
                 // For UI Update, we set this one as the "last received" one so UI can update this specific entry
@@ -403,7 +404,6 @@ impl EaContext {
     fn process_incoming_trade(&mut self, data: &[u8]) {
         // Parse trade signal
         if let Ok(signal) = rmp_serde::from_slice::<TradeSignal>(data) {
-
             // --- Business Logic: Config Lookup & Transformation ---
 
             // 1. Find Config
@@ -412,7 +412,10 @@ impl EaContext {
                 None => {
                     // Config not found for this master - ignore trade
                     // In future we might log this to a structured log
-                    eprintln!("Ignored trade from {}: No active config", signal.source_account);
+                    eprintln!(
+                        "Ignored trade from {}: No active config",
+                        signal.source_account
+                    );
                     return;
                 }
             };
@@ -421,20 +424,25 @@ impl EaContext {
             // allow_new_orders check for Open signals
             if signal.action == TradeAction::Open {
                 if !config.allow_new_orders || config.status <= 0 {
-                    eprintln!("Ignored open from {}: New orders disabled", signal.source_account);
+                    eprintln!(
+                        "Ignored open from {}: New orders disabled",
+                        signal.source_account
+                    );
                     return;
                 }
 
                 // Check allowed symbols (if list is not empty)
                 if let Some(allowed) = &config.filters.allowed_symbols {
-                    if !allowed.is_empty() && !allowed.contains(signal.symbol.as_ref().unwrap_or(&"".to_string())) {
+                    if !allowed.is_empty()
+                        && !allowed.contains(signal.symbol.as_ref().unwrap_or(&"".to_string()))
+                    {
                         return; // Symbol not allowed
                     }
                 }
 
                 // Check blocked symbols
                 if let Some(blocked) = &config.filters.blocked_symbols {
-                     if blocked.contains(signal.symbol.as_ref().unwrap_or(&"".to_string())) {
+                    if blocked.contains(signal.symbol.as_ref().unwrap_or(&"".to_string())) {
                         return; // Symbol blocked
                     }
                 }
@@ -443,7 +451,7 @@ impl EaContext {
                 // Assuming signal.magic is the Master's magic.
                 if let Some(magic) = signal.magic_number {
                     if let Some(allowed) = &config.filters.allowed_magic_numbers {
-                         if !allowed.is_empty() && !allowed.contains(&magic) {
+                        if !allowed.is_empty() && !allowed.contains(&magic) {
                             return;
                         }
                     }
@@ -491,11 +499,7 @@ impl EaContext {
 
             // Lot Calculation
             let raw_lots = signal.lots.unwrap_or(0.0);
-            let final_lots = transform_lot_size(
-                raw_lots,
-                config,
-                self.current_equity
-            );
+            let final_lots = transform_lot_size(raw_lots, config, self.current_equity);
             cmd.volume = final_lots;
 
             // Price, SL, TP - passed as is?
@@ -703,15 +707,15 @@ fn transform_lot_size(lots: f64, config: &SlaveConfigMessage, slave_equity: f64)
 
     match config.lot_calculation_mode {
         LotCalculationMode::MarginRatio => {
-             if let Some(master_equity) = config.master_equity {
+            if let Some(master_equity) = config.master_equity {
                 if master_equity > 0.0 {
                     let ratio = slave_equity / master_equity;
                     new_lots = lots * ratio;
                 }
             }
-        },
+        }
         LotCalculationMode::Multiplier => {
-             if let Some(mult) = config.lot_multiplier {
+            if let Some(mult) = config.lot_multiplier {
                 new_lots = lots * mult;
             }
         }

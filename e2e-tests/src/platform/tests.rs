@@ -3,7 +3,7 @@
 use super::runner::PlatformRunner;
 use super::traits::ExpertAdvisor;
 use super::types::{
-    ENUM_DEINIT_REASON, ENUM_INIT_RETCODE, MqlTradeRequest, MqlTradeResult, MqlTradeTransaction,
+    MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -17,10 +17,7 @@ struct MockEA {
 impl ExpertAdvisor for MockEA {
     fn on_init(&mut self) -> ENUM_INIT_RETCODE {
         self.events.lock().unwrap().push("OnInit".to_string());
-        self.thread_ids
-            .lock()
-            .unwrap()
-            .push(thread::current().id());
+        self.thread_ids.lock().unwrap().push(thread::current().id());
         ENUM_INIT_RETCODE::INIT_SUCCEEDED
     }
 
@@ -29,28 +26,19 @@ impl ExpertAdvisor for MockEA {
             .lock()
             .unwrap()
             .push(format!("OnDeinit({:?})", reason));
-        self.thread_ids
-            .lock()
-            .unwrap()
-            .push(thread::current().id());
+        self.thread_ids.lock().unwrap().push(thread::current().id());
     }
 
     fn on_tick(&mut self) {
         self.events.lock().unwrap().push("OnTick".to_string());
-        self.thread_ids
-            .lock()
-            .unwrap()
-            .push(thread::current().id());
+        self.thread_ids.lock().unwrap().push(thread::current().id());
         // Simulate blocking work
         thread::sleep(Duration::from_millis(50));
     }
 
     fn on_timer(&mut self) {
         self.events.lock().unwrap().push("OnTimer".to_string());
-        self.thread_ids
-            .lock()
-            .unwrap()
-            .push(thread::current().id());
+        self.thread_ids.lock().unwrap().push(thread::current().id());
     }
 
     fn on_trade_transaction(
@@ -63,10 +51,7 @@ impl ExpertAdvisor for MockEA {
             .lock()
             .unwrap()
             .push("OnTradeTransaction".to_string());
-        self.thread_ids
-            .lock()
-            .unwrap()
-            .push(thread::current().id());
+        self.thread_ids.lock().unwrap().push(thread::current().id());
     }
 }
 

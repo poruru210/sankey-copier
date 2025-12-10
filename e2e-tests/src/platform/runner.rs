@@ -14,7 +14,7 @@ use std::thread::{self, JoinHandle};
 
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{
-    ENUM_DEINIT_REASON, ENUM_INIT_RETCODE, MqlTradeRequest, MqlTradeResult, MqlTradeTransaction,
+    MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
 
 /// プラットフォームで発生するイベントの種類

@@ -11,7 +11,10 @@ async fn test_sandbox_creates_server() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
     let server = sandbox.server();
-    println!("Sandbox Server Ports: Pull={}, Pub={}", server.zmq_pull_port, server.zmq_pub_port);
+    println!(
+        "Sandbox Server Ports: Pull={}, Pub={}",
+        server.zmq_pull_port, server.zmq_pub_port
+    );
 
     assert!(server.zmq_pull_port > 0);
     assert!(server.zmq_pub_port > 0);
@@ -26,7 +29,8 @@ async fn test_sandbox_creates_server() {
 async fn test_sandbox_master_creation() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
-    let mut master = sandbox.create_master("master-test-01")
+    let mut master = sandbox
+        .create_master("master-test-01")
         .expect("Failed to create master");
 
     master.set_trade_allowed(true);
@@ -52,7 +56,8 @@ async fn test_sandbox_master_creation() {
 async fn test_sandbox_slave_creation() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
-    let mut slave = sandbox.create_slave("slave-test-01", "master-test-01")
+    let mut slave = sandbox
+        .create_slave("slave-test-01", "master-test-01")
         .expect("Failed to create slave");
 
     slave.set_trade_allowed(true);

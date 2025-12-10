@@ -6,7 +6,7 @@
 // MQL5のイベントハンドラ関数をモデル化しています。
 
 use crate::platform::types::{
-    ENUM_DEINIT_REASON, ENUM_INIT_RETCODE, MqlTradeRequest, MqlTradeResult, MqlTradeTransaction,
+    MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
 
 /// MQL5のExpert Advisorを表すトレイト
