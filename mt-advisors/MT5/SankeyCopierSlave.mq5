@@ -129,7 +129,7 @@ int OnInit()
    }
 
    // Initialize EaContext (handles ZMQ internally)
-   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT5", AccountNumber(), 
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT5", GetAccountNumber(), 
                                AccountInfoString(ACCOUNT_COMPANY), AccountInfoString(ACCOUNT_NAME),
                                AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
                                AccountInfoInteger(ACCOUNT_LEVERAGE)))

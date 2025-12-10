@@ -114,7 +114,7 @@ int OnInit()
    Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_TradeAddress, " (unified)");
 
    // Initialize EaContext (handles ZMQ internally)
-   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT4", AccountNumber(), 
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_SLAVE, "MT4", GetAccountNumber(), 
                                AccountInfoString(ACCOUNT_COMPANY), AccountInfoString(ACCOUNT_NAME),
                                AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
                                AccountInfoInteger(ACCOUNT_LEVERAGE)))
