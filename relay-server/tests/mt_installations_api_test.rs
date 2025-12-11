@@ -6,7 +6,7 @@ use serde_json::Value;
 use tower::util::ServiceExt;
 
 use sankey_copier_relay_server::api::create_router;
-use sankey_copier_relay_server::api::AppState;
+use sankey_copier_relay_server::api::{AppState, SnapshotBroadcaster};
 use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
@@ -36,6 +36,10 @@ async fn create_test_app() -> axum::Router {
         generated_at: None,
     });
 
+    // Create snapshot broadcaster for testing
+    let snapshot_broadcaster =
+        SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone());
+
     let app_state = AppState {
         db,
         tx: broadcast_tx,
@@ -48,6 +52,7 @@ async fn create_test_app() -> axum::Router {
         resolved_ports,
         vlogs_controller: None,
         runtime_status_metrics: Arc::new(RuntimeStatusMetrics::default()),
+        snapshot_broadcaster,
     };
 
     create_router(app_state)
