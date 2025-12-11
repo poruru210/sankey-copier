@@ -19,8 +19,6 @@ impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
     pub(super) async fn handle_heartbeat(&self, msg: HeartbeatMessage) {
         let account_id = msg.account_id.clone();
-        let balance = msg.balance;
-        let equity = msg.equity;
         let ea_type = msg.ea_type.clone();
         let new_is_trade_allowed = msg.is_trade_allowed;
         let runtime_updater = self.runtime_status_updater();
@@ -137,6 +135,22 @@ impl MessageHandler {
                         account_id,
                         master_status
                     );
+                }
+
+                // Broadcast trade_group_updated to UI
+                let view = crate::api::trade_groups::TradeGroupRuntimeView {
+                    id: trade_group.id.clone(),
+                    master_settings: trade_group.master_settings.clone(),
+                    master_runtime_status: master_bundle.status_result.status,
+                    master_warning_codes: master_bundle.status_result.warning_codes.clone(),
+                    created_at: trade_group.created_at.clone(),
+                    updated_at: trade_group.updated_at.clone(),
+                };
+
+                if let Ok(json) = serde_json::to_string(&view) {
+                    let _ = self
+                        .broadcast_tx
+                        .send(format!("trade_group_updated:{}", json));
                 }
             }
 
@@ -390,11 +404,9 @@ impl MessageHandler {
                 .await;
         }
 
-        // Notify WebSocket clients of heartbeat
-        let _ = self.broadcast_tx.send(format!(
-            "ea_heartbeat:{}:{:.2}:{:.2}",
-            account_id, balance, equity
-        ));
+        // Note: Individual heartbeat broadcasts are no longer sent here.
+        // The SnapshotBroadcaster sends periodic connections_snapshot messages
+        // to WebSocket clients when they are connected.
     }
 
     async fn update_slave_runtime_on_heartbeat(
