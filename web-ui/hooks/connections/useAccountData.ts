@@ -240,6 +240,7 @@ export function useAccountData({
     getConnectionStatus,
     getMasterRuntimeStatus,
     getMasterWarningCodes,
+    tradeGroups,
   ]);
 
   // Toggle expand state for source accounts
