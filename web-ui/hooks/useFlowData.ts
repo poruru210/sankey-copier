@@ -60,7 +60,7 @@ export function useFlowData({
   content,
   onToggle,
   onToggleMaster,
-}: UseFlowDataProps): { nodes: Node[]; edges: Edge[] } {
+}: UseFlowDataProps): { nodes: Node[]; edges: Edge[]; pendingAccountIds: Set<string> } {
   const hoveredSourceId = useAtomValue(hoveredSourceIdAtom);
   const hoveredReceiverId = useAtomValue(hoveredReceiverIdAtom);
   const selectedSourceId = useAtomValue(selectedSourceIdAtom);
@@ -94,7 +94,9 @@ export function useFlowData({
       } finally {
         const elapsed = Date.now() - start;
         const remaining = Math.max(0, MIN_PENDING_DURATION_MS - elapsed);
-        setTimeout(() => setAccountPending(accountId, false), remaining);
+        setTimeout(() => {
+          setAccountPending(accountId, false);
+        }, remaining);
       }
     };
 
@@ -268,14 +270,14 @@ export function useFlowData({
       // A connection is "active" when status === 2 (CONNECTED)
       // This means the Master is online and actively sending signals to this Slave
       let runtimeStatus = setting.status ?? 0;
-      
+
       // UI Display Override: Status Engine keeps status as CONNECTED (2) when Slave
       // has auto-trading OFF (to allow Close/Modify signals), but Web UI should stop animation.
       // Override to DISABLED (0) when slave_auto_trading_disabled warning exists.
       if ((setting.warning_codes ?? []).includes('slave_auto_trading_disabled')) {
         runtimeStatus = 0; // UI display override (Status Engine keeps it as 2)
       }
-      
+
       const isConnected = runtimeStatus === 2;
 
       // Direct edge from source to receiver with settings button
@@ -300,5 +302,5 @@ export function useFlowData({
     return edgeList;
   }, [settings, sourceAccounts, receiverAccounts, handleEditSetting]);
 
-  return { nodes, edges };
+  return { nodes, edges, pendingAccountIds };
 }
