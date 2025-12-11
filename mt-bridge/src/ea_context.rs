@@ -7,10 +7,12 @@
 use crate::communication::{CommunicationStrategy, MasterStrategy, NoOpStrategy, SlaveStrategy};
 use crate::constants::{OrderType, TradeAction};
 use crate::errors::BridgeError;
+use crate::ticket_mapper::TicketMapper;
 use crate::types::{RequestConfigMessage, SlaveConfigMessage, TradeSignal};
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
+use std::sync::Mutex;
 
 // Command types corresponding to MQL
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -38,7 +40,7 @@ pub struct EaCommand {
     pub symbol: [u8; 32], // 32 bytes (aligned to 8, safe)
 
     pub order_type: i32,
-    pub _pad2: i32, // [FIX] Explicit padding for alignment
+    pub param1: i32, // Reused padding: Expiration (min) or other int param
 
     pub volume: f64,
     pub price: f64,
@@ -61,7 +63,7 @@ impl Default for EaCommand {
             ticket: 0,
             symbol: [0; 32],
             order_type: 0,
-            _pad2: 0,
+            param1: 0,
             volume: 0.0,
             price: 0.0,
             sl: 0.0,
@@ -118,6 +120,9 @@ pub struct EaContext {
 
     // --- Communication Layer ---
     pub strategy: Box<dyn CommunicationStrategy>,
+
+    // --- Ticket Mapping (New) ---
+    pub ticket_mapper: Mutex<TicketMapper>,
 }
 
 impl EaContext {
@@ -164,6 +169,57 @@ impl EaContext {
             last_slave_config: None,
             last_position_snapshot: None,
             last_sync_request: None,
+            ticket_mapper: Mutex::new(TicketMapper::new()),
+        }
+    }
+
+    // --- Ticket Mapping Accessors ---
+
+    pub fn add_ticket_mapping(&self, master_ticket: i64, slave_ticket: i64) {
+        if let Ok(mut mapper) = self.ticket_mapper.lock() {
+            mapper.add_active(master_ticket, slave_ticket);
+        }
+    }
+
+    pub fn remove_ticket_mapping(&self, master_ticket: i64) {
+        if let Ok(mut mapper) = self.ticket_mapper.lock() {
+            mapper.remove_active(master_ticket);
+        }
+    }
+
+    pub fn add_pending_mapping(&self, master_ticket: i64, pending_ticket: i64) {
+        if let Ok(mut mapper) = self.ticket_mapper.lock() {
+            mapper.add_pending(master_ticket, pending_ticket);
+        }
+    }
+
+    pub fn remove_pending_mapping(&self, master_ticket: i64) {
+        if let Ok(mut mapper) = self.ticket_mapper.lock() {
+            mapper.remove_pending(master_ticket);
+        }
+    }
+
+    pub fn get_slave_ticket(&self, master_ticket: i64) -> i64 {
+        if let Ok(mapper) = self.ticket_mapper.lock() {
+            mapper.get_active(master_ticket).unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    pub fn get_pending_ticket(&self, master_ticket: i64) -> i64 {
+        if let Ok(mapper) = self.ticket_mapper.lock() {
+            mapper.get_pending(master_ticket).unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    pub fn get_master_ticket_from_pending(&self, pending_ticket: i64) -> i64 {
+        if let Ok(mapper) = self.ticket_mapper.lock() {
+            mapper.get_master_from_pending(pending_ticket).unwrap_or(0)
+        } else {
+            0
         }
     }
 

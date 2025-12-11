@@ -70,7 +70,7 @@ struct EaCommand {
    uchar symbol[32]; // Fixed size string buffer
 
    int order_type;
-   int _pad2;        // Rust alignment matches MQL4 pack(1) manually
+   int param1;       // Reused padding: Expiration (min) or other int param
 
    double volume;
    double price;
@@ -204,6 +204,16 @@ struct EaCommand {
    int         ea_send_request_config(HANDLE_TYPE context, uchar &output[], int output_len);
    int         ea_send_sync_request(HANDLE_TYPE context, string master_account, uchar &output[], int output_len);
    int         ea_subscribe_config(HANDLE_TYPE context, string topic);
+
+   // Ticket Mapping FFI (Phase 4)
+   int         ea_add_mapping(HANDLE_TYPE context, long master_ticket, long slave_ticket, int is_pending);
+   int         ea_report_trade(HANDLE_TYPE context, long master_ticket, long slave_ticket, int success);
+   int         ea_report_pending_fill(HANDLE_TYPE context, long master_ticket, long slave_ticket);
+   long        ea_get_master_ticket_from_pending(HANDLE_TYPE context, long pending_ticket);
+   long        ea_get_slave_ticket(HANDLE_TYPE context, long master_ticket);
+   long        ea_get_pending_ticket(HANDLE_TYPE context, long master_ticket);
+   int         ea_remove_mapping(HANDLE_TYPE context, long master_ticket);
+   int         ea_process_snapshot(HANDLE_TYPE context);
 
 #import
 
@@ -421,6 +431,52 @@ public:
       int len = ea_send_sync_request(m_context, master_account, buffer, 1024);
       if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
       return false;
+   }
+
+   // --- Ticket Mapping ---
+
+   void AddMapping(long master_ticket, long slave_ticket, bool is_pending)
+   {
+      if(m_initialized) ea_add_mapping(m_context, master_ticket, slave_ticket, is_pending ? 1 : 0);
+   }
+
+   void ReportTrade(long master_ticket, long slave_ticket, bool success)
+   {
+      if(m_initialized) ea_report_trade(m_context, master_ticket, slave_ticket, success ? 1 : 0);
+   }
+
+   void ReportPendingFill(long master_ticket, long slave_ticket)
+   {
+      if(m_initialized) ea_report_pending_fill(m_context, master_ticket, slave_ticket);
+   }
+
+   long GetMasterTicketFromPending(long pending_ticket)
+   {
+      if(!m_initialized) return 0;
+      return ea_get_master_ticket_from_pending(m_context, pending_ticket);
+   }
+
+   long GetSlaveTicket(long master_ticket)
+   {
+      if(!m_initialized) return 0;
+      return ea_get_slave_ticket(m_context, master_ticket);
+   }
+
+   long GetPendingTicket(long master_ticket)
+   {
+      if(!m_initialized) return 0;
+      return ea_get_pending_ticket(m_context, master_ticket);
+   }
+
+   void RemoveMapping(long master_ticket)
+   {
+      if(m_initialized) ea_remove_mapping(m_context, master_ticket);
+   }
+
+   int ProcessSnapshot()
+   {
+      if(!m_initialized) return 0;
+      return ea_process_snapshot(m_context);
    }
 };
 

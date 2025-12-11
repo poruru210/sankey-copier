@@ -46,8 +46,7 @@ string g_SubAddress = "";  // Unified SUB address for trades and configs
 string      AccountID;                  // Auto-generated from broker + account number
 // ZMQ globals removed - managed by EaContext
 CTrade      g_trade;
-TicketMapping g_order_map[];
-PendingTicketMapping g_pending_order_map[];
+// g_order_map/g_pending_order_map removed - managed by Rust EaContext
 // g_local_mappings removed - all symbol transformation now handled by Relay Server
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
@@ -163,15 +162,8 @@ int OnInit()
    g_trade.SetTypeFilling(ORDER_FILLING_IOC);
 
    // Recover ticket mappings from existing positions (restart recovery)
-   int recovered = RecoverMappingsFromPositions(g_order_map, g_pending_order_map);
-   if(recovered > 0)
-   {
-      Print("Recovered ", recovered, " position mappings from previous session");
-   }
-   else
-   {
-      Print("No previous position mappings to recover (fresh start)");
-   }
+   // We iterate local positions and tell Rust about them via FFI
+   RecoverMappingsToRust(g_ea_context);
 
    // Initialize configuration arrays
    ArrayResize(g_configs, 0);
@@ -266,11 +258,9 @@ void OnTimer()
            }
            case CMD_PROCESS_SNAPSHOT:
            {
-               HANDLE_TYPE snapshot_handle = g_ea_context.GetPositionSnapshot();
-               if(snapshot_handle != 0)
-               {
-                   ProcessPositionSnapshot(snapshot_handle);
-               }
+               // Process snapshot logic is now in Rust
+               // Calling ProcessSnapshot triggers logic in Rust which queues new CMD_OPEN commands
+               g_ea_context.ProcessSnapshot();
                break;
            }
 
@@ -355,7 +345,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       return;
 
    // Check if this order is in our pending order map
-   ulong master_ticket = GetMasterTicketFromPendingMapping(g_pending_order_map, order_ticket);
+   ulong master_ticket = (ulong)g_ea_context.GetMasterTicketFromPending((long)order_ticket);
    if(master_ticket == 0)
       return;  // Not our pending order
 
@@ -367,9 +357,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       return;
    }
 
-   // Move mapping from pending to active
-   RemovePendingTicketMapping(g_pending_order_map, master_ticket);
-   AddTicketMapping(g_order_map, master_ticket, position_ticket);
+   // Move mapping from pending to active (notify Rust)
+   g_ea_context.ReportPendingFill((long)master_ticket, (long)position_ticket);
 
    Print("[PENDING FILL] Order #", order_ticket, " -> Position #", position_ticket, " (master:#", master_ticket, ")");
 }
@@ -427,21 +416,25 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       // Note: symbol is passed as is (usually pre-transformed by Relay, or local config)
       
       // Execute Open Trade
-      ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, symbol,
+      // Reuse close_ratio for market_sync_max_pips (if sync)
+      double max_pips_deviation = cmd.close_ratio; // Set by Rust if SyncMode=MarketOrder
+
+      ExecuteOpenTrade(g_trade, g_ea_context, master_ticket, symbol,
                        order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
-                       (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
+                       (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE,
+                       cmd.param1, max_pips_deviation); // Pass param1 (expiry) and close_ratio (deviation)
    }
    // CMD_CLOSE
    else if(action == CMD_CLOSE)
    {
       // Using close_ratio from command
-      ExecuteCloseTrade(g_trade, g_order_map, master_ticket, cmd.close_ratio, trade_slippage, DEFAULT_SLIPPAGE);
-      ExecuteCancelPendingOrder(g_trade, g_pending_order_map, master_ticket);
+      ExecuteCloseTrade(g_trade, g_ea_context, master_ticket, cmd.close_ratio, trade_slippage, DEFAULT_SLIPPAGE);
+      ExecuteCancelPendingOrder(g_trade, g_ea_context, master_ticket);
    }
    // CMD_MODIFY
    else if(action == CMD_MODIFY)
    {
-      ExecuteModifyTrade(g_trade, g_order_map, master_ticket, cmd.sl, cmd.tp);
+      ExecuteModifyTrade(g_trade, g_ea_context, master_ticket, cmd.sl, cmd.tp);
    }
 }
 
@@ -490,144 +483,58 @@ void SubscribeToSyncTopic()
 }
 
 //+------------------------------------------------------------------+
-//| Process position snapshot for sync (MT5)                          |
-//| Called when Slave receives PositionSnapshot from Master           |
+//| Recover ticket mappings from existing positions (to Rust)         |
 //+------------------------------------------------------------------+
-void ProcessPositionSnapshot(HANDLE_TYPE handle)
+void RecoverMappingsToRust(EaContextWrapper &context)
 {
-   Print("=== Processing Position Snapshot ===");
+   int recovered_count = 0;
+   LogInfo(CAT_SYNC, "Recovering ticket mappings from existing positions");
 
-   if(handle == 0 || handle == -1)
+   // Scan all open positions
+   int pos_total = PositionsTotal();
+   for(int i = 0; i < pos_total; i++)
    {
-      Print("ERROR: Invalid PositionSnapshot handle");
-      return;
-   }
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
 
-   // Get source account (master)
-   string source_account = position_snapshot_get_string(handle, "source_account");
-   if(source_account == "")
-   {
-      Print("ERROR: PositionSnapshot has empty source_account");
-      return;
-   }
+      if(!PositionSelectByTicket(ticket)) continue;
 
-   Print("PositionSnapshot from master: ", source_account);
+      string comment = PositionGetString(POSITION_COMMENT);
+      bool is_pending = false;
+      ulong master_ticket = ParseMasterTicketFromComment(comment, is_pending);
 
-   // Find matching config for this master
-   int config_index = -1;
-   for(int i = 0; i < ArraySize(g_configs); i++)
-   {
-      if(g_configs[i].master_account == source_account)
+      if(master_ticket > 0 && !is_pending)
       {
-         config_index = i;
-         break;
+         // This is a position we copied from master
+         context.AddMapping((long)master_ticket, (long)ticket, false);
+         recovered_count++;
+         LogDebug(CAT_SYNC, StringFormat("Recovered mapping: master #%d -> slave #%d (comment: %s)", master_ticket, ticket, comment));
       }
    }
 
-   if(config_index == -1)
+   // Scan all pending orders
+   int order_total = OrdersTotal();
+   for(int i = 0; i < order_total; i++)
    {
-      Print("PositionSnapshot rejected: No config for master ", source_account);
-      return;
-   }
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
 
-   // Check sync_mode - should not be SKIP (shouldn't receive snapshot if SKIP)
-   int sync_mode = g_configs[config_index].sync_mode;
-   if(sync_mode == SYNC_MODE_SKIP)
-   {
-      Print("PositionSnapshot ignored: sync_mode is SKIP");
-      return;
-   }
+      if(!OrderSelect(ticket)) continue;
 
-   // Get sync parameters from config
-   int limit_order_expiry = g_configs[config_index].limit_order_expiry_min;
-   double market_sync_max_pips = g_configs[config_index].market_sync_max_pips;
-   int trade_slippage = (g_configs[config_index].max_slippage > 0)
-                        ? g_configs[config_index].max_slippage
-                        : DEFAULT_SLIPPAGE;
+      string comment = OrderGetString(ORDER_COMMENT);
+      bool is_pending = false;
+      ulong master_ticket = ParseMasterTicketFromComment(comment, is_pending);
 
-   Print("Sync mode: ", (sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
-   if(sync_mode == SYNC_MODE_LIMIT_ORDER)
-      Print("Limit order expiry: ", limit_order_expiry, " min (0=GTC)");
-   else
-      Print("Market sync max pips: ", market_sync_max_pips);
-
-   // Get position count
-   int position_count = position_snapshot_get_positions_count(handle);
-   Print("Positions to sync: ", position_count);
-
-   int synced_count = 0;
-   int skipped_count = 0;
-
-   // Process each position
-   for(int i = 0; i < position_count; i++)
-   {
-      // Extract position data
-      long master_ticket = position_snapshot_get_position_int(handle, i, "ticket");
-      string symbol = position_snapshot_get_position_string(handle, i, "symbol");
-      string order_type_str = position_snapshot_get_position_string(handle, i, "order_type");
-      double lots = position_snapshot_get_position_double(handle, i, "lots");
-      double open_price = position_snapshot_get_position_double(handle, i, "open_price");
-      double sl = position_snapshot_get_position_double(handle, i, "stop_loss");
-      double tp = position_snapshot_get_position_double(handle, i, "take_profit");
-      long magic_long = position_snapshot_get_position_int(handle, i, "magic_number");
-      int magic_number = (int)magic_long;
-
-      Print("Position ", i + 1, "/", position_count, ": #", master_ticket,
-            " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price);
-
-      // Check if we already have this position mapped
-      if(GetSlaveTicketFromMapping(g_order_map, (ulong)master_ticket) > 0)
+      if(master_ticket > 0 && is_pending)
       {
-         Print("  -> Already mapped, skipping");
-         skipped_count++;
-         continue;
-      }
-
-      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
-      string transformed_symbol = symbol;
-
-      // NOTE: Position Snapshot sync still calculates lots in MQL because
-      // position snapshots are currently passed as raw handles to MQL, not via `EaCommand`.
-      // To unify this, `EaContext` should also process PositionSnapshot and emit
-      // individual `CMD_OPEN` commands for sync, OR we leave sync logic in MQL for now.
-      // Given the task scope, we focused on Trade Signals.
-      // Sync logic remains in MQL for now (it uses `TransformLotSize` below).
-      // This means we CANNOT remove `TransformLotSize` from `Trade.mqh` yet.
-
-      // Transform lot size
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
-
-      // Reverse order type if configured
-      string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
-
-      // Execute sync based on mode
-      if(sync_mode == SYNC_MODE_LIMIT_ORDER)
-      {
-         // Place limit order at master's open price
-         SyncWithLimitOrder(g_trade, g_pending_order_map, (ulong)master_ticket, transformed_symbol,
-                            transformed_order_type, transformed_lots, open_price, sl, tp,
-                            source_account, magic_number, limit_order_expiry);
-         synced_count++;
-      }
-      else if(sync_mode == SYNC_MODE_MARKET_ORDER)
-      {
-         // Execute market order if within price deviation
-         if(SyncWithMarketOrder(g_trade, g_order_map, (ulong)master_ticket, transformed_symbol,
-                                transformed_order_type, transformed_lots, open_price, sl, tp,
-                                source_account, magic_number, trade_slippage, market_sync_max_pips, DEFAULT_SLIPPAGE))
-         {
-            synced_count++;
-         }
-         else
-         {
-            Print("  -> Price deviation too large, skipped");
-            skipped_count++;
-         }
+         // This is a pending order we created for delayed signal
+         context.AddMapping((long)master_ticket, (long)ticket, true);
+         recovered_count++;
+         LogDebug(CAT_SYNC, StringFormat("Recovered pending mapping: master #%d -> pending #%d (comment: %s)", master_ticket, ticket, comment));
       }
    }
 
-   Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
-   // Do NOT free handle - it belongs to EaContext
+   LogInfo(CAT_SYNC, StringFormat("Recovery complete: %d mappings restored", recovered_count));
 }
 
 // Trade functions are now provided by SlaveTrade.mqh
