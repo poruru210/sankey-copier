@@ -280,8 +280,31 @@ void OnTimer()
                if(config_handle != 0)
                {
                    // Process config handle
-                   // Updated signature: config_handle, configs array, context wrapper, slave_account
                    ProcessConfigMessageFromHandle(config_handle, g_configs, g_ea_context, AccountID);
+                   g_has_received_config = true;
+                   
+                   // Subscribe to sync/{master}/{slave} topic after receiving config
+                   if(!g_sync_topic_subscribed && ArraySize(g_configs) > 0)
+                   {
+                      SubscribeToSyncTopic();
+                   }
+                   
+                   g_ea_context.MarkConfigRequested();
+               }
+               
+               // Update configuration panel
+               if(ShowConfigPanel)
+               {
+                   if(!current_trade_allowed)
+                   {
+                      g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+                   }
+                   else
+                   {
+                      g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
+                   }
+                   g_config_panel.UpdateCarouselConfigs(g_configs);
+                   ChartRedraw();
                }
                break;
            }

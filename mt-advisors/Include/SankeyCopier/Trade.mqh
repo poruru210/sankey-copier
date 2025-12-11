@@ -121,7 +121,7 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
    if(new_master == "")
    {
       LogError(CAT_CONFIG, "Invalid config message received - missing master_account");
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
@@ -136,7 +136,7 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
    else
    {
       LogError(CAT_CONFIG, "Failed to build trade topic via FFI");
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
@@ -213,8 +213,7 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
          LogDebug(CAT_CONFIG, StringFormat("Removal requested but config not found for %s", new_master));
       }
 
-      // Free the config handle before returning
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
    else
