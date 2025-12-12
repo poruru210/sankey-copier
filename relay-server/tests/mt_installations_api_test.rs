@@ -38,7 +38,7 @@ async fn create_test_app() -> axum::Router {
 
     // Create snapshot broadcaster for testing
     let snapshot_broadcaster =
-        SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone());
+        SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone(), db.clone());
 
     let app_state = AppState {
         db,

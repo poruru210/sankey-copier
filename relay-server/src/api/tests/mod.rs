@@ -70,7 +70,8 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
     });
 
     // Create snapshot broadcaster for testing
-    let snapshot_broadcaster = SnapshotBroadcaster::new(tx.clone(), connection_manager.clone());
+    let snapshot_broadcaster =
+        SnapshotBroadcaster::new(tx.clone(), connection_manager.clone(), db.clone());
 
     AppState {
         db,

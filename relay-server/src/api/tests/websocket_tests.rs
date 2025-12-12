@@ -6,6 +6,7 @@ use tokio::sync::broadcast;
 
 use crate::api::SnapshotBroadcaster;
 use crate::connection_manager::ConnectionManager;
+use crate::db::Database;
 use crate::models::HeartbeatMessage;
 
 /// Create a test HeartbeatMessage
@@ -38,7 +39,8 @@ fn create_test_heartbeat(account_id: &str, ea_type: &str) -> HeartbeatMessage {
 async fn test_snapshot_broadcaster_initial_state() {
     let (tx, _rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager);
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager, db);
 
     assert_eq!(broadcaster.subscriber_count(), 0);
 }
@@ -48,7 +50,8 @@ async fn test_snapshot_broadcaster_initial_state() {
 async fn test_snapshot_broadcaster_on_connect() {
     let (tx, _rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager);
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager, db);
 
     broadcaster.on_connect().await;
     assert_eq!(broadcaster.subscriber_count(), 1);
@@ -62,7 +65,8 @@ async fn test_snapshot_broadcaster_on_connect() {
 async fn test_snapshot_broadcaster_on_disconnect() {
     let (tx, _rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager);
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager, db);
 
     broadcaster.on_connect().await;
     broadcaster.on_connect().await;
@@ -80,7 +84,8 @@ async fn test_snapshot_broadcaster_on_disconnect() {
 async fn test_snapshot_broadcaster_sends_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Add a test connection to the manager
     let heartbeat = create_test_heartbeat("TEST_123", "Master");
@@ -98,14 +103,17 @@ async fn test_snapshot_broadcaster_sends_snapshot() {
     // Verify we received a snapshot
     assert!(result.is_ok(), "Should receive a snapshot within timeout");
     let message = result.unwrap().unwrap();
+    // Changed from connections_snapshot to system_snapshot
     assert!(
-        message.starts_with("connections_snapshot:"),
-        "Message should be a connections snapshot"
+        message.starts_with("system_snapshot:"),
+        "Message should be a system snapshot, got: {}",
+        &message[..message.len().min(50)]
     );
 
     // Parse the snapshot and verify content
-    let json_part = message.strip_prefix("connections_snapshot:").unwrap();
-    let connections: Vec<serde_json::Value> = serde_json::from_str(json_part).unwrap();
+    let json_part = message.strip_prefix("system_snapshot:").unwrap();
+    let snapshot: serde_json::Value = serde_json::from_str(json_part).unwrap();
+    let connections = snapshot["connections"].as_array().unwrap();
     assert_eq!(connections.len(), 1);
     assert_eq!(connections[0]["account_id"], "TEST_123");
 }
@@ -115,7 +123,8 @@ async fn test_snapshot_broadcaster_sends_snapshot() {
 async fn test_snapshot_broadcaster_timer_stops() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager);
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager, db);
 
     // Connect and immediately disconnect
     broadcaster.on_connect().await;

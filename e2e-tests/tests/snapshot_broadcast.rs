@@ -3,11 +3,7 @@ use e2e_tests::helpers::setup_test_db;
 use e2e_tests::TestSandbox;
 use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{
-    WarningCode,
-    SystemStateSnapshot,
-    SlaveSettings,
-};
+use sankey_copier_relay_server::models::{SlaveSettings, SystemStateSnapshot, WarningCode};
 use std::time::Duration;
 use tokio_tungstenite::connect_async;
 
@@ -25,7 +21,10 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
     let master_account = "Master_1001";
     // Helper requires slave_settings_fn even if empty list
     setup_test_db(&db, master_account, &[], |_| SlaveSettings::default()).await?;
-    println!("DB Setup complete: TradeGroup created for {}", master_account);
+    println!(
+        "DB Setup complete: TradeGroup created for {}",
+        master_account
+    );
 
     // 3. Connect WebSocket client
     let ws_url = format!("wss://127.0.0.1:{}/ws", http_port);
@@ -39,7 +38,14 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
 
     let mut ws_stream = None;
     for _ in 0..10 {
-        match tokio_tungstenite::connect_async_tls_with_config(&ws_url, None, false, Some(connector.clone())).await {
+        match tokio_tungstenite::connect_async_tls_with_config(
+            &ws_url,
+            None,
+            false,
+            Some(connector.clone()),
+        )
+        .await
+        {
             Ok((stream, _)) => {
                 ws_stream = Some(stream);
                 break;
@@ -97,7 +103,9 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
     }
 
     if !found_master {
-        return Err(anyhow::anyhow!("Timed out waiting for system_snapshot with connected Master"));
+        return Err(anyhow::anyhow!(
+            "Timed out waiting for system_snapshot with connected Master"
+        ));
     }
 
     // 6. Toggle Master AutoTrading OFF
@@ -142,7 +150,9 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
     }
 
     if !update_received {
-        return Err(anyhow::anyhow!("Timed out waiting for AutoTrading disabled warning"));
+        return Err(anyhow::anyhow!(
+            "Timed out waiting for AutoTrading disabled warning"
+        ));
     }
 
     Ok(())
