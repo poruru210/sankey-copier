@@ -2,6 +2,8 @@ use crate::ea_context::{EaCommand, EaCommandType};
 use crate::ticket_mapper::TicketMapper;
 use crate::types::{PositionSnapshotMessage, SlaveConfigMessage, SyncMode};
 
+use std::collections::HashSet;
+
 pub fn process_snapshot(
     snapshot: &PositionSnapshotMessage,
     config: &SlaveConfigMessage,
@@ -15,6 +17,72 @@ pub fn process_snapshot(
         return commands;
     }
 
+    // 1. Identify Orphaned Slave Positions (Master Closed -> Slave Close)
+    // Create a set of master tickets present in the snapshot
+    let snapshot_tickets: HashSet<i64> = snapshot.positions.iter().map(|p| p.ticket).collect();
+
+    // Iterate over active mappings (clone keys to avoid borrow issues while mutating via commands)
+    let active_mappings: Vec<(i64, i64)> = mapper.get_all_active_mappings();
+    for (master_ticket, slave_ticket) in active_mappings {
+        if !snapshot_tickets.contains(&master_ticket) {
+            // Master position is gone, Slave should close
+            // Generate CLOSE command
+            let mut cmd = EaCommand::default();
+            cmd.command_type = EaCommandType::Close as i32;
+            cmd.ticket = slave_ticket; // Slave ticket to close
+            // We don't need other params for simple close, MQL handles it.
+            // Wait, we need master ticket for logging?
+            // EaCommand ticket field is usually "ticket to act on".
+            // For Close, it is slave ticket.
+            // But MQL `ProcessTradeSignalFromCommand` usually expects Master Ticket in `ticket` field
+            // because it uses `GetSlaveTicketFromMapping(master_ticket)`.
+            // Let's check MQL logic.
+            /*
+               void ProcessTradeSignalFromCommand(EaCommand &cmd) {
+                   ulong master_ticket = (ulong)cmd.ticket;
+                   ...
+                   else if(action == CMD_CLOSE) {
+                      ExecuteCloseTrade(..., master_ticket, ...);
+                   }
+               }
+               void ExecuteCloseTrade(..., master_ticket, ...) {
+                   ulong slave_ticket = context.GetSlaveTicket(master_ticket);
+                   ...
+               }
+            */
+            // So MQL expects MASTER ticket in cmd.ticket.
+
+            cmd.ticket = master_ticket;
+            // close_ratio 1.0 = full close
+            cmd.close_ratio = 1.0;
+
+            copy_string_to_array(&config.master_account, &mut cmd.source_account);
+
+            commands.push(cmd);
+        }
+    }
+
+    // 2. Identify Orphaned Pending Orders (Master Cancelled -> Slave Cancel)
+    let pending_mappings: Vec<(i64, i64)> = mapper.get_all_pending_mappings();
+    for (master_ticket, _pending_ticket) in pending_mappings {
+        if !snapshot_tickets.contains(&master_ticket) {
+            // Master pending is gone, Slave should cancel
+            // Generate CLOSE command (handled as Cancel for pending in MQL via ExecuteCloseTrade -> ExecuteCancelPendingOrder?)
+            // Check MQL: `ExecuteCloseTrade` calls `ExecuteCancelPendingOrder`?
+            // `ProcessTradeSignalFromCommand`:
+            // `else if(action == CMD_CLOSE) { ... ExecuteCloseTrade(...); ExecuteCancelPendingOrder(...); }`
+            // So CMD_CLOSE works for both Active and Pending cleanup.
+
+            let mut cmd = EaCommand::default();
+            cmd.command_type = EaCommandType::Close as i32;
+            cmd.ticket = master_ticket;
+            cmd.close_ratio = 1.0;
+            copy_string_to_array(&config.master_account, &mut cmd.source_account);
+            commands.push(cmd);
+        }
+    }
+
+    // 3. Identify New Positions (Master Open -> Slave Open)
     for pos in &snapshot.positions {
         // Skip if already mapped
         if mapper.get_active(pos.ticket).is_some() {
@@ -71,10 +139,10 @@ pub fn process_snapshot(
             let limit_type = convert_to_limit_type(cmd.order_type);
             cmd.order_type = limit_type;
 
-            // Set expiration using param1 (formerly _pad2)
+            // Set expiration
             if let Some(expiry) = config.limit_order_expiry_min {
                 if expiry > 0 {
-                    cmd.param1 = expiry;
+                    cmd.expiration = expiry;
                 }
             }
         }

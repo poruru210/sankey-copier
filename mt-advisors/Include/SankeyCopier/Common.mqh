@@ -70,7 +70,7 @@ struct EaCommand {
    uchar symbol[32]; // Fixed size string buffer
 
    int order_type;
-   int param1;       // Reused padding: Expiration (min) or other int param
+   int expiration;   // Expiration time in minutes (for Limit/Stop orders)
 
    double volume;
    double price;
@@ -117,14 +117,7 @@ struct EaCommand {
    long        trade_signal_get_int(HANDLE_TYPE handle, string field_name);
    void        trade_signal_free(HANDLE_TYPE handle);
 
-   // Position snapshot parsing (Slave receives from Master)
-   HANDLE_TYPE parse_position_snapshot(uchar &data[], int data_len);
-   string      position_snapshot_get_string(HANDLE_TYPE handle, string field_name);
-   int         position_snapshot_get_positions_count(HANDLE_TYPE handle);
-   string      position_snapshot_get_position_string(HANDLE_TYPE handle, int index, string field_name);
-   double      position_snapshot_get_position_double(HANDLE_TYPE handle, int index, string field_name);
-   long        position_snapshot_get_position_int(HANDLE_TYPE handle, int index, string field_name);
-   void        position_snapshot_free(HANDLE_TYPE handle);
+   // Position snapshot parsing functions removed (Slave logic moved to Rust)
 
    // SyncRequest creation (Slave sends to Master)
    int         create_sync_request(string slave_account, string master_account, uchar &output[], int output_len);
@@ -213,6 +206,7 @@ struct EaCommand {
    long        ea_get_slave_ticket(HANDLE_TYPE context, long master_ticket);
    long        ea_get_pending_ticket(HANDLE_TYPE context, long master_ticket);
    int         ea_remove_mapping(HANDLE_TYPE context, long master_ticket);
+   int         ea_remove_pending_mapping(HANDLE_TYPE context, long master_ticket);
    int         ea_process_snapshot(HANDLE_TYPE context);
 
 #import
@@ -471,6 +465,11 @@ public:
    void RemoveMapping(long master_ticket)
    {
       if(m_initialized) ea_remove_mapping(m_context, master_ticket);
+   }
+
+   void RemovePendingMapping(long master_ticket)
+   {
+      if(m_initialized) ea_remove_pending_mapping(m_context, master_ticket);
    }
 
    int ProcessSnapshot()

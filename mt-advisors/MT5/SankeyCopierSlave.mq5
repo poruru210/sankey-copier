@@ -422,7 +422,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       ExecuteOpenTrade(g_trade, g_ea_context, master_ticket, symbol,
                        order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
                        (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE,
-                       cmd.param1, max_pips_deviation); // Pass param1 (expiry) and close_ratio (deviation)
+                       cmd.expiration, max_pips_deviation); // Pass expiration and close_ratio (deviation)
    }
    // CMD_CLOSE
    else if(action == CMD_CLOSE)

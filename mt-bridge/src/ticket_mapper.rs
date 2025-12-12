@@ -40,6 +40,14 @@ impl TicketMapper {
         self.pending_map.remove(&master_ticket)
     }
 
+    pub fn get_all_active_mappings(&self) -> Vec<(i64, i64)> {
+        self.active_map.iter().map(|(&k, &v)| (k, v)).collect()
+    }
+
+    pub fn get_all_pending_mappings(&self) -> Vec<(i64, i64)> {
+        self.pending_map.iter().map(|(&k, &v)| (k, v)).collect()
+    }
+
     // Reverse lookup for pending orders (needed for OnTradeTransaction to find master ticket)
     pub fn get_master_from_pending(&self, pending_ticket: i64) -> Option<i64> {
         for (&m, &p) in &self.pending_map {

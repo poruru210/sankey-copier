@@ -405,8 +405,8 @@ void ExecuteCancelPendingOrder(CTrade &trade, EaContextWrapper &context, ulong m
       // It only removes active.
       // Since I am constrained on FFI changes now (already did a lot), I will leave pending cleanup for restart or trade transaction if it triggers.
       // Actually `OnTradeTransaction` TRADE_TRANSACTION_ORDER_DELETE should handle it if I implemented it.
-      // But I didn't touch `OnTradeTransaction` for delete.
-      // So let's just log.
+      // Remove pending mapping explicitly as Rust needs to know about manual/sync cancellation
+      context.RemovePendingMapping((long)master_ticket);
    }
    else
    {

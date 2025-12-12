@@ -40,7 +40,7 @@ pub struct EaCommand {
     pub symbol: [u8; 32], // 32 bytes (aligned to 8, safe)
 
     pub order_type: i32,
-    pub param1: i32, // Reused padding: Expiration (min) or other int param
+    pub expiration: i32, // Expiration time in minutes (for Limit/Stop orders)
 
     pub volume: f64,
     pub price: f64,
@@ -63,7 +63,7 @@ impl Default for EaCommand {
             ticket: 0,
             symbol: [0; 32],
             order_type: 0,
-            param1: 0,
+            expiration: 0,
             volume: 0.0,
             price: 0.0,
             sl: 0.0,
@@ -193,17 +193,17 @@ impl EaContext {
         }
     }
 
-    pub fn remove_pending_mapping(&self, master_ticket: i64) {
-        if let Ok(mut mapper) = self.ticket_mapper.lock() {
-            mapper.remove_pending(master_ticket);
-        }
-    }
-
     pub fn get_slave_ticket(&self, master_ticket: i64) -> i64 {
         if let Ok(mapper) = self.ticket_mapper.lock() {
             mapper.get_active(master_ticket).unwrap_or(0)
         } else {
             0
+        }
+    }
+
+    pub fn remove_pending_mapping(&self, master_ticket: i64) {
+        if let Ok(mut mapper) = self.ticket_mapper.lock() {
+            mapper.remove_pending(master_ticket);
         }
     }
 

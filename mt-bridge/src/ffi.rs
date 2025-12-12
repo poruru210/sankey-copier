@@ -669,187 +669,7 @@ pub unsafe extern "C" fn ea_subscribe_config(context: *mut EaContext, topic: *co
 // PositionSnapshot FFI Functions
 // ===========================================================================
 
-/// Parse MessagePack data as PositionSnapshotMessage and return an opaque handle
-///
-/// # Safety
-/// This function is unsafe because it dereferences raw pointers.
-/// The returned handle must be freed with `position_snapshot_free()`.
-#[no_mangle]
-pub unsafe extern "C" fn parse_position_snapshot(
-    data: *const u8,
-    data_len: i32,
-) -> *mut PositionSnapshotMessage {
-    parse_msgpack(data, data_len)
-}
-
-/// Free a PositionSnapshotMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer created by parse_position_snapshot or null
-/// - handle must not be used after calling this function
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_free(handle: *mut PositionSnapshotMessage) {
-    free_handle(handle)
-}
-
-/// Get a string field from PositionSnapshotMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_string(
-    handle: *const PositionSnapshotMessage,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || field_name.is_null() {
-        return std::ptr::null();
-    }
-
-    let snapshot = &*handle;
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return std::ptr::null(),
-    };
-
-    let value = match field.as_str() {
-        "message_type" => &snapshot.message_type,
-        "source_account" => &snapshot.source_account,
-        "timestamp" => &snapshot.timestamp,
-        _ => return std::ptr::null(),
-    };
-
-    string_to_utf16_buffer(value)
-}
-
-/// Get the number of positions in a PositionSnapshotMessage
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_positions_count(
-    handle: *const PositionSnapshotMessage,
-) -> i32 {
-    if handle.is_null() {
-        return 0;
-    }
-    let snapshot = &*handle;
-    snapshot.positions.len() as i32
-}
-
-/// Get a string field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_string(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return std::ptr::null();
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return std::ptr::null();
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return std::ptr::null(),
-    };
-
-    // For optional string fields, use static empty string
-    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
-
-    let value = match field.as_str() {
-        "symbol" => &pos.symbol,
-        "order_type" => &pos.order_type,
-        "open_time" => &pos.open_time,
-        "comment" => pos.comment.as_ref().unwrap_or(&EMPTY_STRING),
-        _ => return std::ptr::null(),
-    };
-
-    string_to_utf16_buffer(value)
-}
-
-/// Get a double field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_double(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> f64 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return 0.0;
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return 0.0;
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0.0,
-    };
-
-    match field.as_str() {
-        "lots" => pos.lots,
-        "open_price" => pos.open_price,
-        "stop_loss" => pos.stop_loss.unwrap_or(0.0),
-        "take_profit" => pos.take_profit.unwrap_or(0.0),
-        _ => 0.0,
-    }
-}
-
-/// Get an integer field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_int(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> i64 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return 0;
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return 0;
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0,
-    };
-
-    match field.as_str() {
-        "ticket" => pos.ticket,
-        "magic_number" => pos.magic_number.unwrap_or(0),
-        _ => 0,
-    }
-}
+// Reader functions removed - logic moved to Rust (ea_process_snapshot)
 
 // ===========================================================================
 // SyncRequest FFI Functions
@@ -2711,6 +2531,25 @@ pub unsafe extern "C" fn ea_remove_mapping(
     };
 
     ctx.remove_ticket_mapping(master_ticket);
+    1
+}
+
+/// Remove pending mapping (Master -> Slave)
+/// Called when pending order is cancelled
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_remove_pending_mapping(
+    context: *mut EaContext,
+    master_ticket: i64,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.remove_pending_mapping(master_ticket);
     1
 }
 
