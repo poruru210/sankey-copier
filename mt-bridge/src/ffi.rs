@@ -13,60 +13,12 @@ use crate::types::{
     LotCalculationMode, MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
     SlaveConfigMessage, SyncMode, SyncRequestMessage, VLogsConfigMessage,
 };
-use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};
 
-/// Parse MessagePack data as Slave ConfigMessage and return an opaque handle
-///
-/// # Safety
-/// This function is unsafe because it dereferences raw pointers.
-/// The returned handle must be freed with `slave_config_free()`.
-#[no_mangle]
-pub unsafe extern "C" fn parse_slave_config(
-    data: *const u8,
-    data_len: i32,
-) -> *mut SlaveConfigMessage {
-    parse_msgpack(data, data_len)
-}
-
-/// Free a Slave ConfigMessage handle
-///
-/// # Safety
-/// This function is unsafe because it takes ownership of a raw pointer.
-/// The caller must ensure:
-/// - `handle` was returned by `parse_slave_config()`
-/// - `handle` is only freed once
-#[no_mangle]
-pub unsafe extern "C" fn slave_config_free(handle: *mut SlaveConfigMessage) {
-    free_handle(handle)
-}
-
-/// Parse MessagePack data as MasterConfigMessage and return an opaque handle
-///
-/// # Safety
-/// This function is unsafe because it dereferences raw pointers.
-/// The returned handle must be freed with `master_config_free()`.
-#[no_mangle]
-pub unsafe extern "C" fn parse_master_config(
-    data: *const u8,
-    data_len: i32,
-) -> *mut MasterConfigMessage {
-    parse_msgpack(data, data_len)
-}
-
-/// Free a MasterConfigMessage handle
-///
-/// # Safety
-/// This function is unsafe because it takes ownership of a raw pointer.
-/// The caller must ensure:
-/// - `handle` was returned by `parse_master_config()`
-/// - `handle` is only freed once
-#[no_mangle]
-pub unsafe extern "C" fn master_config_free(handle: *mut MasterConfigMessage) {
-    free_handle(handle)
-}
+// Note: parse_slave_config, slave_config_free, parse_master_config, master_config_free
+// have been removed - handles are now obtained via ea_context_get_*() functions
 
 /// Get a string field from Slave ConfigMessage handle
 ///
@@ -466,19 +418,7 @@ pub unsafe extern "C" fn master_config_get_int(
     }
 }
 
-/// Free a string allocated by msgpack_deserialize_config
-///
-/// # Safety
-/// This function is unsafe because it takes ownership of a raw pointer.
-/// The caller must ensure:
-/// - `ptr` was returned by `msgpack_deserialize_config`
-/// - `ptr` is only freed once
-#[no_mangle]
-pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
-    if !ptr.is_null() {
-        drop(CString::from_raw(ptr));
-    }
-}
+// Note: free_string removed - no longer needed (MQL handles strings internally)
 
 // ===========================================================================
 // Connection Management (Phase 2)
@@ -519,42 +459,7 @@ pub unsafe extern "C" fn ea_connect(
     }
 }
 
-/// Disconnect and cleanup ZMQ resources
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-#[no_mangle]
-pub unsafe extern "C" fn ea_disconnect(context: *mut EaContext) {
-    if let Some(ctx) = context.as_mut() {
-        ctx.disconnect();
-    }
-}
-
-/// Subscribe to a master's trade topic (for Slave EAs)
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-/// - master_id: Valid UTF-16 string (UUID)
-#[no_mangle]
-pub unsafe extern "C" fn ea_subscribe_trade(context: *mut EaContext, master_id: *const u16) -> i32 {
-    let ctx = match context.as_mut() {
-        Some(c) => c,
-        None => return 0,
-    };
-
-    let mid = match utf16_to_string(master_id) {
-        Some(s) => s,
-        None => return 0,
-    };
-
-    match ctx.subscribe_trade(&mid) {
-        Ok(_) => 1,
-        Err(e) => {
-            eprintln!("ea_subscribe_trade failed: {}", e);
-            0
-        }
-    }
-}
+// Note: ea_disconnect and ea_subscribe_trade removed - use ea_context_free and ea_get_command
 
 /// Send RequestConfig message (Slave only)
 ///
@@ -622,27 +527,7 @@ pub unsafe extern "C" fn ea_receive_config(
     ctx.receive_config(slice).unwrap_or_default()
 }
 
-/// Receive message from Trade socket (high-level, Slave only, non-blocking)
-///
-/// # Safety
-/// - context: Valid EaContext pointer
-/// - buffer: Valid buffer pointer
-#[no_mangle]
-pub unsafe extern "C" fn ea_receive_trade(
-    context: *mut EaContext,
-    buffer: *mut u8,
-    buffer_size: i32,
-) -> i32 {
-    let ctx = match context.as_mut() {
-        Some(c) => c,
-        None => return 0,
-    };
-    if buffer.is_null() || buffer_size <= 0 {
-        return 0;
-    }
-    let slice = std::slice::from_raw_parts_mut(buffer, buffer_size as usize);
-    ctx.receive_trade(slice).unwrap_or_default()
-}
+// Note: ea_receive_trade removed - use ea_get_command for trade signals
 
 /// Subscribe to topic on Config socket
 ///

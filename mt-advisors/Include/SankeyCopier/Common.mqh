@@ -87,13 +87,12 @@ struct EaCommand {
 #import "sankey_copier_zmq.dll"
    // Raw ZMQ functions removed - using EaContext high-level API
 
-   // Slave config message parsing
-   HANDLE_TYPE parse_slave_config(uchar &data[], int data_len);
+   // Slave config message accessors (handles obtained via ea_context_get_slave_config)
+   // Note: parse_slave_config, slave_config_free removed
    string      slave_config_get_string(HANDLE_TYPE handle, string field_name);
    double      slave_config_get_double(HANDLE_TYPE handle, string field_name);
    int         slave_config_get_bool(HANDLE_TYPE handle, string field_name);
    int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
-   void        slave_config_free(HANDLE_TYPE handle);
 
    // Slave config symbol mappings array access
    int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
@@ -104,35 +103,24 @@ struct EaCommand {
    int         slave_config_get_allowed_magic_count(HANDLE_TYPE handle);
    int         slave_config_get_allowed_magic_at(HANDLE_TYPE handle, int index);
 
-   // Master config message parsing
-   HANDLE_TYPE parse_master_config(uchar &data[], int data_len);
+   // Master config message accessors (handles obtained via ea_context_get_master_config)
+   // Note: parse_master_config, master_config_free removed
    string      master_config_get_string(HANDLE_TYPE handle, string field_name);
    int         master_config_get_int(HANDLE_TYPE handle, string field_name);
-   void        master_config_free(HANDLE_TYPE handle);
 
-   // Trade signal parsing
-   HANDLE_TYPE parse_trade_signal(uchar &data[], int data_len);
-   string      trade_signal_get_string(HANDLE_TYPE handle, string field_name);
-   double      trade_signal_get_double(HANDLE_TYPE handle, string field_name);
-   long        trade_signal_get_int(HANDLE_TYPE handle, string field_name);
-   void        trade_signal_free(HANDLE_TYPE handle);
+   // Note: Trade signal functions removed - using EaCommand struct via ea_get_command()
 
-   // Position snapshot parsing (Slave receives from Master)
-   HANDLE_TYPE parse_position_snapshot(uchar &data[], int data_len);
+   // Position snapshot accessors (handles obtained via ea_context_get_position_snapshot)
+   // Note: parse_position_snapshot, position_snapshot_free removed
    string      position_snapshot_get_string(HANDLE_TYPE handle, string field_name);
    int         position_snapshot_get_positions_count(HANDLE_TYPE handle);
    string      position_snapshot_get_position_string(HANDLE_TYPE handle, int index, string field_name);
    double      position_snapshot_get_position_double(HANDLE_TYPE handle, int index, string field_name);
    long        position_snapshot_get_position_int(HANDLE_TYPE handle, int index, string field_name);
-   void        position_snapshot_free(HANDLE_TYPE handle);
 
-   // SyncRequest creation (Slave sends to Master)
-   int         create_sync_request(string slave_account, string master_account, uchar &output[], int output_len);
-
-   // SyncRequest parsing (Master receives from Slave)
-   HANDLE_TYPE parse_sync_request(uchar &data[], int data_len);
+   // SyncRequest accessors (handles obtained via ea_context_get_sync_request)
+   // Note: create_sync_request, parse_sync_request, sync_request_free removed
    string      sync_request_get_string(HANDLE_TYPE handle, string field_name);
-   void        sync_request_free(HANDLE_TYPE handle);
 
    // Position snapshot builder (Master sends to Slave)
    HANDLE_TYPE create_position_snapshot_builder(string source_account);
@@ -149,12 +137,11 @@ struct EaCommand {
    int         vlogs_disable();
    int         vlogs_buffer_size();
 
-   // VictoriaLogs config message parsing (for Web-UI settings)
-   HANDLE_TYPE parse_vlogs_config(uchar &data[], int data_len);
+   // VictoriaLogs config accessors (auto-applied in EaContext)
+   // Note: parse_vlogs_config, vlogs_config_free removed
    int         vlogs_config_get_bool(HANDLE_TYPE handle, string field_name);
    string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
    int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
-   void        vlogs_config_free(HANDLE_TYPE handle);
 
    // Topic generation functions
    int         build_config_topic(string account_id, ushort &output[], int output_len);
@@ -191,9 +178,8 @@ struct EaCommand {
    int         ea_connect(HANDLE_TYPE context, string push_addr, string sub_addr);
    int         ea_send_push(HANDLE_TYPE context, uchar &data[], int len);
    
-   // High-Level Receive (for EaContext abstraction)
    int         ea_receive_config(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
-   int         ea_receive_trade(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
+   // Note: ea_receive_trade removed - using ea_get_command()
    // High-Level Trade Signals (Master)
    int         ea_send_open_signal(HANDLE_TYPE context, long ticket, string symbol, string order_type, 
                                    double lots, double price, double sl, double tp, long magic, string comment, uchar &output[], int output_len);
@@ -293,12 +279,7 @@ public:
       if(!m_initialized) return 0;
       return ea_receive_config(m_context, buffer, buffer_size);
    }
-   
-   int ReceiveTrade(uchar &buffer[], int buffer_size)
-   {
-      if(!m_initialized) return 0;
-      return ea_receive_trade(m_context, buffer, buffer_size);
-   }
+   // Note: ReceiveTrade method removed - using ea_get_command()
    
    bool SubscribeConfig(string topic)
    {
