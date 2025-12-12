@@ -363,20 +363,18 @@ void ProcessSyncRequest(HANDLE_TYPE handle)
    if(slave_account == "" || master_account == "")
    {
       Print("Invalid SyncRequest received - missing fields");
-      sync_request_free(handle);
+      // Note: No need to free handle - managed by EaContext
       return;
    }
 
-   // Check if this request is for us
    if(master_account != AccountID)
    {
       Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      sync_request_free(handle);
+      // Note: No need to free handle - managed by EaContext
       return;
    }
 
-   // Free the handle before sending response
-   sync_request_free(handle);
+   // Note: No need to free handle - managed by EaContext
 
    // Send position snapshot
    // Note: SendPositionSnapshot helper now takes g_ea_context
@@ -919,15 +917,14 @@ void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
    if(config_account_id == "")
    {
       Print("ERROR: Invalid config message received - missing account_id");
-      master_config_free(config_handle);
+      // Note: No need to free handle - managed by EaContext
       return;
    }
 
-   // Verify this config is for us
    if(config_account_id != AccountID)
    {
       Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
-      master_config_free(config_handle);
+      // Note: No need to free handle - managed by EaContext
       return;
    }
 
