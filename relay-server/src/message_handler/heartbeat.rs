@@ -137,20 +137,12 @@ impl MessageHandler {
                     );
                 }
 
-                // Broadcast trade_group_updated to UI
-                let view = crate::api::trade_groups::TradeGroupRuntimeView {
-                    id: trade_group.id.clone(),
-                    master_settings: trade_group.master_settings.clone(),
-                    master_runtime_status: master_bundle.status_result.status,
-                    master_warning_codes: master_bundle.status_result.warning_codes.clone(),
-                    created_at: trade_group.created_at.clone(),
-                    updated_at: trade_group.updated_at.clone(),
-                };
-
-                if let Ok(json) = serde_json::to_string(&view) {
-                    let _ = self
-                        .broadcast_tx
-                        .send(format!("trade_group_updated:{}", json));
+                // Trigger immediate snapshot for UI
+                if let Some(broadcaster) = &self.snapshot_broadcaster {
+                    let broadcaster = broadcaster.clone();
+                    tokio::spawn(async move {
+                        broadcaster.broadcast_now().await;
+                    });
                 }
             }
 
@@ -236,25 +228,12 @@ impl MessageHandler {
                                     );
                                 }
 
-                                // 2. Send WebSocket update to UI
-                                let payload = SlaveConfigWithMaster {
-                                    master_account: account_id.clone(),
-                                    slave_account: slave_account.clone(),
-                                    status: new_slave_result.status,
-                                    enabled_flag: member.enabled_flag,
-                                    warning_codes: new_slave_result.warning_codes.clone(),
-                                    slave_settings: member.slave_settings.clone(),
-                                };
-
-                                if let Ok(json) = serde_json::to_string(&payload) {
-                                    let _ = self
-                                        .broadcast_tx
-                                        .send(format!("settings_updated:{}", json));
-                                    tracing::info!(
-                                        slave = %slave_account,
-                                        master = %account_id,
-                                        "Broadcast settings update (cascaded from Master change)"
-                                    );
+                                // 2. Send WebSocket update to UI (Trigger immediate snapshot)
+                                if let Some(broadcaster) = &self.snapshot_broadcaster {
+                                    let broadcaster = broadcaster.clone();
+                                    tokio::spawn(async move {
+                                        broadcaster.broadcast_now().await;
+                                    });
                                 }
 
                                 super::log_slave_runtime_trace(
@@ -348,7 +327,7 @@ impl MessageHandler {
                                 let new_slave_result = &slave_bundle.status_result;
                                 let slave_changed = new_slave_result.has_changed(&old_slave_result);
 
-                                let payload = SlaveConfigWithMaster {
+                                let _payload = SlaveConfigWithMaster {
                                     master_account: account_id.clone(),
                                     slave_account: member.slave_account.clone(),
                                     status: slave_bundle.status_result.status,
@@ -378,10 +357,11 @@ impl MessageHandler {
                                     }
 
                                     // 2. Send WebSocket update to UI
-                                    if let Ok(json) = serde_json::to_string(&payload) {
-                                        let _ = self
-                                            .broadcast_tx
-                                            .send(format!("settings_updated:{}", json));
+                                    if let Some(broadcaster) = &self.snapshot_broadcaster {
+                                        let broadcaster = broadcaster.clone();
+                                        tokio::spawn(async move {
+                                            broadcaster.broadcast_now().await;
+                                        });
                                     }
                                 }
                             }
@@ -526,24 +506,11 @@ impl MessageHandler {
             // WebSocket broadcast if Status OR Warning Codes changed
             // This covers AutoTrading toggles, Offline/Online changes, etc.
             if slave_bundle.status_result.has_changed(&old_status_result) {
-                let payload = SlaveConfigWithMaster {
-                    master_account: settings.master_account.clone(),
-                    slave_account: settings.slave_account.clone(),
-                    status: evaluated_status,
-                    enabled_flag: settings.enabled_flag,
-                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
-                    slave_settings: settings.slave_settings.clone(),
-                };
-
-                if let Ok(json) = serde_json::to_string(&payload) {
-                    let _ = self.broadcast_tx.send(format!("settings_updated:{}", json));
-                    tracing::debug!(
-                        "Broadcast settings for Slave {} (master {}): status {} -> {}",
-                        settings.slave_account,
-                        settings.master_account,
-                        previous_status,
-                        evaluated_status
-                    );
+                if let Some(broadcaster) = &self.snapshot_broadcaster {
+                    let broadcaster = broadcaster.clone();
+                    tokio::spawn(async move {
+                        broadcaster.broadcast_now().await;
+                    });
                 }
             }
         }

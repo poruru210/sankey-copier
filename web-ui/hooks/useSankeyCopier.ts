@@ -8,6 +8,7 @@ import type {
   TradeGroup,
   TradeGroupMember,
   WarningCode,
+  SystemStateSnapshot,
 } from '@/types';
 import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
 import { settingsAtom } from '@/lib/atoms/settings';
@@ -137,155 +138,47 @@ export function useSankeyCopier() {
       if (isCleanup) return;
       const message = event.data as string;
 
+      // Handle system_snapshot (Full State Replace)
+      if (message.startsWith('system_snapshot:')) {
+        try {
+          const jsonPart = message.slice('system_snapshot:'.length);
+          const snapshot = JSON.parse(jsonPart) as SystemStateSnapshot;
+
+          // 1. Update Connections
+          setConnections(snapshot.connections);
+
+          // 2. Update TradeGroups (Masters)
+          setTradeGroups(snapshot.trade_groups);
+
+          // 3. Update Settings (Members)
+          // Convert flat members list to Map for adapter
+          const membersMap = new Map<string, TradeGroupMember[]>();
+
+          snapshot.members.forEach(member => {
+            const existing = membersMap.get(member.trade_group_id) || [];
+            existing.push(member);
+            membersMap.set(member.trade_group_id, existing);
+          });
+
+          // Convert to CopySettings format
+          const copySettings = convertMembersToCopySettings(snapshot.trade_groups, membersMap);
+          setSettings(copySettings);
+
+        } catch (err) {
+          console.debug('Failed to parse system snapshot', err);
+        }
+        return;
+      }
+
+      // Legacy support for older server versions or partial updates (optional, keeping for robustness)
       // Handle connections snapshot from server (sent every 3 seconds when WS is connected)
-      // Format: connections_snapshot:<json_array>
       if (message.startsWith('connections_snapshot:')) {
         try {
           const jsonPart = message.slice('connections_snapshot:'.length);
           const snapshot = JSON.parse(jsonPart) as EaConnection[];
-
-          // Replace entire connections state with the snapshot
-          // This is efficient because the server only sends when there are changes
           setConnections(snapshot);
         } catch {
-          // Invalid JSON format - ignore silently
           console.debug('Failed to parse connections snapshot');
-        }
-        return; // Don't add snapshots to wsMessages
-      }
-
-      // Handle individual setting update (SlaveConfigWithMaster payload)
-      // Format: settings_updated:<json>
-      // Same structure as member_status_changed, uses master_account + slave_account for lookup
-      if (message.startsWith('settings_updated:')) {
-        try {
-          const jsonPart = message.slice('settings_updated:'.length);
-          const update = JSON.parse(jsonPart) as {
-            master_account: string;
-            slave_account: string;
-            status: number;
-            enabled_flag: boolean;
-            warning_codes: WarningCode[];
-            slave_settings: {
-              lot_multiplier?: number;
-              reverse_trade?: boolean;
-            };
-          };
-
-          // Update only the matching setting by master_account + slave_account
-          setSettings((prev) => {
-            const idx = prev.findIndex(
-              (s) => s.master_account === update.master_account && s.slave_account === update.slave_account
-            );
-            if (idx === -1) {
-              debouncedFetchSettings();
-              return prev;
-            }
-
-            const updated = [...prev];
-            updated[idx] = {
-              ...prev[idx],
-              status: update.status,
-              enabled_flag: update.enabled_flag,
-              warning_codes: update.warning_codes,
-              ...(update.slave_settings.lot_multiplier !== undefined && {
-                lot_multiplier: update.slave_settings.lot_multiplier,
-              }),
-              ...(update.slave_settings.reverse_trade !== undefined && {
-                reverse_trade: update.slave_settings.reverse_trade,
-              }),
-            };
-            return updated;
-          });
-        } catch (err) {
-          console.debug('Failed to parse settings_updated, falling back to fetchSettings', err);
-          debouncedFetchSettings();
-        }
-        return; // Don't add to wsMessages
-      }
-
-      // Handle trade_group updates (Master settings changed)
-      // Format: trade_group_updated:<json>
-      if (message.startsWith('trade_group_updated:')) {
-        try {
-          const jsonPart = message.slice('trade_group_updated:'.length);
-          const update = JSON.parse(jsonPart) as TradeGroup;
-
-          // Update only the matching trade group
-          setTradeGroups((prev) => {
-            const idx = prev.findIndex((tg) => tg.id === update.id);
-            if (idx === -1) {
-              // New trade group - trigger full refresh
-              fetchSettings();
-              return prev;
-            }
-            const updated = [...prev];
-            updated[idx] = update;
-            return updated;
-          });
-        } catch {
-          console.debug('Failed to parse trade_group_updated');
-        }
-        return; // Don't add to wsMessages, don't trigger fetchSettings
-
-      }
-
-      // Handle member status updates (Slave toggle, status changes)
-      // Format: member_status_changed:<json>
-      // Directly parse and update settings without API call for faster response
-      if (message.startsWith('member_status_changed:')) {
-        try {
-          const jsonPart = message.slice('member_status_changed:'.length);
-          const update = JSON.parse(jsonPart) as {
-            id: number;
-            trade_group_id: string;
-            slave_account: string;
-            slave_settings: {
-              lot_calculation_mode?: string;
-              lot_multiplier?: number;
-              reverse_trade?: boolean;
-              symbol_mappings?: Array<{ source_symbol: string; target_symbol: string }>;
-              filters?: {
-                allowed_symbols: string[] | null;
-                blocked_symbols: string[] | null;
-                allowed_magic_numbers: number[] | null;
-                blocked_magic_numbers: number[] | null;
-              };
-            };
-            status: number;
-            warning_codes: WarningCode[];
-            enabled_flag: boolean;
-          };
-
-          // Update only the matching setting
-          setSettings((prev) => {
-            const idx = prev.findIndex((s) => s.id === update.id);
-            if (idx === -1) {
-              // New setting - trigger full refresh
-              debouncedFetchSettings();
-              return prev;
-            }
-
-            // Update specific fields from the message
-            const updated = [...prev];
-            updated[idx] = {
-              ...prev[idx],
-              status: update.status,
-              enabled_flag: update.enabled_flag,
-              warning_codes: update.warning_codes,
-              // Update slave_settings fields if present
-              ...(update.slave_settings.lot_multiplier !== undefined && {
-                lot_multiplier: update.slave_settings.lot_multiplier,
-              }),
-              ...(update.slave_settings.reverse_trade !== undefined && {
-                reverse_trade: update.slave_settings.reverse_trade,
-              }),
-            };
-            return updated;
-          });
-        } catch (err) {
-          console.debug('Failed to parse member_status_changed, falling back to fetchSettings', err);
-          debouncedFetchSettings();
         }
         return;
       }

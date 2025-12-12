@@ -9,7 +9,8 @@ use tokio::sync::broadcast;
 
 use sankey_copier_relay_server::api::SnapshotBroadcaster;
 use sankey_copier_relay_server::connection_manager::ConnectionManager;
-use sankey_copier_relay_server::models::{EaConnection, HeartbeatMessage};
+use sankey_copier_relay_server::db::Database;
+use sankey_copier_relay_server::models::{EaConnection, HeartbeatMessage, SystemStateSnapshot};
 
 /// Create a test HeartbeatMessage with configurable parameters
 fn create_heartbeat(
@@ -42,12 +43,14 @@ fn create_heartbeat(
     }
 }
 
-/// Parse connections from a snapshot message
+/// Parse connections from a system snapshot message
 fn parse_snapshot(message: &str) -> Vec<EaConnection> {
     let json_part = message
-        .strip_prefix("connections_snapshot:")
-        .expect("Message should start with connections_snapshot:");
-    serde_json::from_str(json_part).expect("Should parse as EaConnection array")
+        .strip_prefix("system_snapshot:")
+        .expect("Message should start with system_snapshot:");
+    let snapshot: SystemStateSnapshot =
+        serde_json::from_str(json_part).expect("Should parse as SystemStateSnapshot");
+    snapshot.connections
 }
 
 /// Wait for the next snapshot and return it
@@ -64,7 +67,8 @@ async fn wait_for_snapshot(rx: &mut broadcast::Receiver<String>) -> Vec<EaConnec
 async fn test_master_startup_appears_in_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Start subscriber
     broadcaster.on_connect().await;
@@ -95,7 +99,8 @@ async fn test_master_startup_appears_in_snapshot() {
 async fn test_slave_startup_appears_in_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     broadcaster.on_connect().await;
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -120,7 +125,8 @@ async fn test_slave_startup_appears_in_snapshot() {
 async fn test_balance_equity_change_reflected_in_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Setup: Master with initial balance
     let heartbeat = create_heartbeat("MASTER_BALANCE", "Master", 10000.0, 10000.0, true);
@@ -152,7 +158,8 @@ async fn test_balance_equity_change_reflected_in_snapshot() {
 async fn test_trade_allowed_change_reflected_in_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Setup: Master with auto-trading enabled
     let heartbeat = create_heartbeat("MASTER_TRADE", "Master", 10000.0, 10000.0, true);
@@ -195,7 +202,8 @@ async fn test_trade_allowed_change_reflected_in_snapshot() {
 async fn test_multiple_eas_in_snapshot() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Setup: Both Master and Slave
     let master_hb = create_heartbeat("MASTER_MULTI", "Master", 20000.0, 20000.0, true);
@@ -225,7 +233,8 @@ async fn test_multiple_eas_in_snapshot() {
 async fn test_sequential_state_changes_in_snapshots() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     broadcaster.on_connect().await;
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -281,7 +290,8 @@ async fn test_sequential_state_changes_in_snapshots() {
 async fn test_same_account_as_master_and_slave() {
     let (tx, mut rx) = broadcast::channel(100);
     let connection_manager = Arc::new(ConnectionManager::new(30));
-    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone());
+    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+    let broadcaster = SnapshotBroadcaster::new(tx, connection_manager.clone(), db);
 
     // Same account_id but different ea_type
     let master_hb = create_heartbeat("EXNESS_123", "Master", 10000.0, 10000.0, true);

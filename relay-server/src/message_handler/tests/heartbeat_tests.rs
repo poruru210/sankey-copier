@@ -238,7 +238,8 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
     ctx.cleanup().await;
 }
 
-/// Test: Slave heartbeat broadcasts settings_updated when runtime status changes
+/// Test: Slave heartbeat updates runtime status when Master is offline
+/// (Snapshot-based sync: status changes are broadcast via system_snapshot)
 #[tokio::test]
 async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
     let mut ctx = create_test_context().await;
@@ -278,34 +279,27 @@ async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
     ctx.handle_heartbeat(build_heartbeat(slave_account, "Slave", true))
         .await;
 
-    // Assert: Check that settings_updated was broadcast
-    let messages = ctx.collect_broadcast_messages();
-
-    // Should have at least one settings_updated message
-    let settings_updated_msgs: Vec<_> = messages
-        .iter()
-        .filter(|m| m.starts_with("settings_updated:"))
-        .collect();
-
-    assert!(
-        !settings_updated_msgs.is_empty(),
-        "Expected settings_updated broadcast when Slave runtime status changes. Got messages: {:?}",
-        messages
+    // Assert: Verify DB state was updated correctly
+    let member = ctx
+        .db
+        .get_member(master_account, slave_account)
+        .await
+        .unwrap()
+        .expect("member should exist");
+    assert_eq!(
+        member.status,
+        crate::models::STATUS_ENABLED,
+        "Slave status should be ENABLED when Master is offline"
     );
 
-    // Verify the broadcast contains correct slave account
-    let msg = settings_updated_msgs[0];
-    assert!(
-        msg.contains(slave_account),
-        "Broadcast should contain slave account: {}. Got: {}",
-        slave_account,
-        msg
-    );
+    // Note: In snapshot-based architecture, status updates are broadcast via system_snapshot
+    // rather than individual settings_updated messages.
 
     ctx.cleanup().await;
 }
 
-/// Test: Master heartbeat broadcasts settings_updated when Slave status changes
+/// Test: Master heartbeat triggers Slave status change (ENABLED -> CONNECTED)
+/// (Snapshot-based sync: status changes are broadcast via system_snapshot)
 #[tokio::test]
 async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_change() {
     let mut ctx = create_test_context().await;
@@ -348,19 +342,21 @@ async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_chan
     ctx.handle_heartbeat(build_heartbeat(master_account, "Master", true))
         .await;
 
-    // Assert: Check that settings_updated was broadcast for the Slave
-    let messages = ctx.collect_broadcast_messages();
-
-    let settings_updated_msgs: Vec<_> = messages
-        .iter()
-        .filter(|m| m.starts_with("settings_updated:") && m.contains(slave_account))
-        .collect();
-
-    assert!(
-        !settings_updated_msgs.is_empty(),
-        "Expected settings_updated broadcast for Slave when Master heartbeat triggers status change. Got messages: {:?}",
-        messages
+    // Assert: Verify Slave status was updated correctly in DB
+    let member = ctx
+        .db
+        .get_member(master_account, slave_account)
+        .await
+        .unwrap()
+        .expect("member should exist");
+    assert_eq!(
+        member.status,
+        crate::models::STATUS_CONNECTED,
+        "Slave status should be CONNECTED after Master connects"
     );
+
+    // Note: In snapshot-based architecture, status updates are broadcast via system_snapshot
+    // rather than individual settings_updated messages.
 
     ctx.cleanup().await;
 }

@@ -50,6 +50,8 @@ impl Database {
             Ok(Some(TradeGroup {
                 id,
                 master_settings,
+                master_runtime_status: 0, // Runtime field, not stored in DB
+                master_warning_codes: Vec::new(), // Runtime field, not stored in DB
                 created_at,
                 updated_at,
             }))
@@ -112,6 +114,8 @@ impl Database {
             result.push(TradeGroup {
                 id,
                 master_settings,
+                master_runtime_status: 0, // Runtime field, not stored in DB
+                master_warning_codes: Vec::new(), // Runtime field, not stored in DB
                 created_at,
                 updated_at,
             });

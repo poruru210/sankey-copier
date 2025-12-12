@@ -17,7 +17,14 @@ use tokio::task::JoinHandle;
 
 use crate::api::AppState;
 use crate::connection_manager::ConnectionManager;
-use crate::models::EaConnection;
+use crate::db::Database;
+use crate::models::{
+    status_engine::{
+        evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,
+        SlaveIntent,
+    },
+    SystemStateSnapshot,
+};
 
 /// Interval for snapshot broadcasts (in seconds)
 const SNAPSHOT_INTERVAL_SECS: u64 = 3;
@@ -37,16 +44,23 @@ pub struct SnapshotBroadcaster {
     tx: broadcast::Sender<String>,
     /// Connection manager for fetching EA data
     connection_manager: Arc<ConnectionManager>,
+    /// Database for fetching config
+    db: Arc<Database>,
 }
 
 impl SnapshotBroadcaster {
     /// Create a new SnapshotBroadcaster
-    pub fn new(tx: broadcast::Sender<String>, connection_manager: Arc<ConnectionManager>) -> Self {
+    pub fn new(
+        tx: broadcast::Sender<String>,
+        connection_manager: Arc<ConnectionManager>,
+        db: Arc<Database>,
+    ) -> Self {
         Self {
             subscriber_count: Arc::new(AtomicUsize::new(0)),
             task_handle: Arc::new(Mutex::new(None)),
             tx,
             connection_manager,
+            db,
         }
     }
 
@@ -58,11 +72,16 @@ impl SnapshotBroadcaster {
             // First subscriber: start the timer task
             tracing::info!("First WebSocket subscriber connected, starting snapshot timer");
 
-            let tx = self.tx.clone();
-            let connection_manager = self.connection_manager.clone();
+            // Clone dependencies for the task
+            let broadcaster = self.clone();
 
             let handle = tokio::spawn(async move {
-                snapshot_broadcast_loop(tx, connection_manager).await;
+                let mut interval =
+                    tokio::time::interval(Duration::from_secs(SNAPSHOT_INTERVAL_SECS));
+                loop {
+                    interval.tick().await;
+                    broadcaster.build_and_broadcast_snapshot().await;
+                }
             });
 
             let mut task_handle = self.task_handle.lock().await;
@@ -97,33 +116,102 @@ impl SnapshotBroadcaster {
     pub fn subscriber_count(&self) -> usize {
         self.subscriber_count.load(Ordering::SeqCst)
     }
-}
 
-/// Background task that broadcasts connection snapshots at regular intervals
-async fn snapshot_broadcast_loop(
-    tx: broadcast::Sender<String>,
-    connection_manager: Arc<ConnectionManager>,
-) {
-    let mut interval = tokio::time::interval(Duration::from_secs(SNAPSHOT_INTERVAL_SECS));
+    /// Trigger an immediate snapshot broadcast (e.g., after toggle)
+    pub async fn broadcast_now(&self) {
+        // Only broadcast if there are subscribers to avoid wasted work
+        if self.subscriber_count.load(Ordering::SeqCst) > 0 {
+            self.build_and_broadcast_snapshot().await;
+        }
+    }
 
-    loop {
-        interval.tick().await;
+    /// Build the full system snapshot (with runtime status) and broadcast it
+    async fn build_and_broadcast_snapshot(&self) {
+        // 1. Fetch raw data from in-memory and DB
+        let connections = self.connection_manager.get_all_eas().await;
 
-        // Fetch all connections
-        let connections: Vec<EaConnection> = connection_manager.get_all_eas().await;
+        let trade_groups_result = self.db.list_trade_groups().await;
+        let members_result = self.db.get_all_members().await;
 
-        // Serialize and broadcast
-        match serde_json::to_string(&connections) {
-            Ok(json) => {
-                let message = format!("connections_snapshot:{}", json);
-                if tx.send(message).is_err() {
-                    // No receivers (shouldn't happen in normal operation)
-                    tracing::warn!("No WebSocket receivers for snapshot broadcast");
+        if let (Ok(mut trade_groups), Ok(mut members)) = (trade_groups_result, members_result) {
+            // 2. Evaluate runtime status for TradeGroups (Masters)
+            // Use HashMap for O(1) lookups during member evaluation
+            use std::collections::HashMap;
+            let mut master_results = HashMap::new();
+
+            for tg in &mut trade_groups {
+                // Get Master connection status from connections list
+                let master_conn = connections.iter().find(|c| c.account_id == tg.id);
+                let snapshot = ConnectionSnapshot {
+                    connection_status: master_conn.map(|c| c.status),
+                    is_trade_allowed: master_conn.map(|c| c.is_trade_allowed).unwrap_or(false),
+                };
+
+                let result = evaluate_master_status(
+                    MasterIntent {
+                        web_ui_enabled: tg.master_settings.enabled,
+                    },
+                    snapshot,
+                );
+
+                // Populate runtime fields on TradeGroup
+                tg.master_runtime_status = result.status;
+                tg.master_warning_codes = result.warning_codes.clone();
+
+                master_results.insert(tg.id.clone(), result);
+            }
+
+            // 3. Evaluate runtime status for Members (Slaves)
+            for member in &mut members {
+                // Get Slave connection status
+                let slave_conn = connections
+                    .iter()
+                    .find(|c| c.account_id == member.slave_account);
+                let slave_snapshot = ConnectionSnapshot {
+                    connection_status: slave_conn.map(|c| c.status),
+                    is_trade_allowed: slave_conn.map(|c| c.is_trade_allowed).unwrap_or(false),
+                };
+
+                // Get result of the specific Master this member is connected to
+                let master_result = master_results
+                    .get(&member.trade_group_id)
+                    .cloned()
+                    .unwrap_or_default();
+
+                let result = evaluate_member_status(
+                    SlaveIntent {
+                        web_ui_enabled: member.enabled_flag,
+                    },
+                    slave_snapshot,
+                    &master_result,
+                );
+
+                // Populate runtime fields on Member
+                member.status = result.status;
+                member.warning_codes = result.warning_codes;
+            }
+
+            // 4. Construct Snapshot
+            let snapshot = SystemStateSnapshot {
+                connections, // The original connections list (status is sufficient here)
+                trade_groups,
+                members,
+            };
+
+            // 5. Serialize and Broadcast
+            match serde_json::to_string(&snapshot) {
+                Ok(json) => {
+                    let message = format!("system_snapshot:{}", json);
+                    if self.tx.send(message).is_err() {
+                        tracing::warn!("No WebSocket receivers for system snapshot");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to serialize system snapshot: {}", e);
                 }
             }
-            Err(e) => {
-                tracing::error!("Failed to serialize connections snapshot: {}", e);
-            }
+        } else {
+            tracing::error!("Failed to fetch data for system snapshot");
         }
     }
 }

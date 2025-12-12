@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::WarningCode;
+
 /// Default value for enabled field (used when deserializing old DB records)
 fn default_enabled() -> bool {
     false
@@ -20,6 +22,14 @@ pub struct TradeGroup {
 
     /// Master-specific settings (stored as JSON in DB)
     pub master_settings: MasterSettings,
+
+    /// Runtime status of the Master (calculated by status engine)
+    #[serde(default)]
+    pub master_runtime_status: i32,
+
+    /// Runtime warning codes (calculated by status engine)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub master_warning_codes: Vec<WarningCode>,
 
     /// Timestamp when the TradeGroup was created
     pub created_at: String,
@@ -56,6 +66,8 @@ impl TradeGroup {
         Self {
             id: master_account,
             master_settings: MasterSettings::default(),
+            master_runtime_status: 0,
+            master_warning_codes: Vec::new(),
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
