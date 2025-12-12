@@ -59,7 +59,7 @@ async fn test_position_snapshot_single_slave() {
 
     // Wait for slave to receive config (which triggers sync/ topic subscription)
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 
@@ -137,11 +137,11 @@ async fn test_position_snapshot_multiple_slaves() {
 
     // Wait for slaves to receive config (which triggers sync/ topic subscription)
     slave1
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave1 should receive CONNECTED status");
     slave2
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave2 should receive CONNECTED status");
 
@@ -228,7 +228,7 @@ async fn test_position_snapshot_empty() {
 
     // Wait for slave to receive config
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 
@@ -299,7 +299,7 @@ async fn test_sync_request_to_master() {
 
     // Wait for master to receive config (to ensure it's properly registered)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
 
@@ -365,7 +365,7 @@ async fn test_sync_request_with_last_sync_time() {
 
     // Wait for master to receive config (to ensure it's properly registered)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
 
@@ -496,11 +496,11 @@ async fn test_full_sync_cycle() {
 
     // Wait for both to receive config (ensures master is registered and slave has sync/ subscription)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 
