@@ -62,19 +62,19 @@ if (shouldStartServer) {
 }
 const envAssignments = shouldStartServer
   ? {
-      PORT: String(allocatedPort),
-      NEXT_ASSET_PREFIX: resolvedBaseUrl,
-    }
+    PORT: String(allocatedPort),
+    NEXT_ASSET_PREFIX: resolvedBaseUrl,
+  }
   : undefined;
 
 const envPrefix = shouldStartServer
   ? process.platform === 'win32'
     ? `${Object.entries(envAssignments!)
-        .map(([key, value]) => `set ${key}=${value}`)
-        .join('&&')}&&`
+      .map(([key, value]) => `set ${key}=${value}`)
+      .join('&&')}&&`
     : Object.entries(envAssignments!)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(' ')
+      .map(([key, value]) => `${key}=${value}`)
+      .join(' ')
   : '';
 
 const config = defineConfig({
@@ -82,6 +82,9 @@ const config = defineConfig({
   testMatch: /.*\.spec\.ts$/, // limit to E2E specs only
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
+  expect: {
+    timeout: 10000,
+  },
   use: {
     baseURL: resolvedBaseUrl,
     headless: true,
@@ -89,11 +92,11 @@ const config = defineConfig({
   },
   webServer: shouldStartServer
     ? {
-        command: `${envPrefix} pnpm exec next dev --hostname 0.0.0.0 --port ${allocatedPort}`.trim(),
-        url: resolvedBaseUrl,
-        reuseExistingServer: false,
-        timeout: 120 * 1000,
-      }
+      command: `${envPrefix} bun run next dev --hostname 0.0.0.0 --port ${allocatedPort}`.trim(),
+      url: resolvedBaseUrl,
+      reuseExistingServer: false,
+      timeout: 120 * 1000,
+    }
     : undefined,
 });
 

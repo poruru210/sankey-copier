@@ -204,22 +204,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js with pnpm
-        uses: ./.github/actions/setup-node
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          working-directory: web-ui
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: web-ui
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Check Linting
         working-directory: web-ui
-        run: pnpm lint
+        run: bun run lint
 
       - name: Check Types
         working-directory: web-ui
-        run: pnpm exec tsc --noEmit
+        run: bun run tsc --noEmit
 
   rust-linux-check:
     name: Rust Check (Linux)
