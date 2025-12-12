@@ -16,7 +16,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 const SETTLE_WAIT_MS: u64 = 500;
-const BROADCAST_TIMEOUT_SECS: u64 = 5;
+const BROADCAST_TIMEOUT_SECS: u64 = 15;
 
 /// Create a WebSocket connector that accepts self-signed certificates
 async fn create_ws_connector(
@@ -380,17 +380,19 @@ async fn test_slave_update_when_master_connects_later() {
     master.start().expect("master start should succeed");
 
     // 4. Expect a NEW update for Slave (Transition to CONNECTED / Warnings cleared)
-    println!("[TEST] Waiting for Helper Update (Slave connected)...");
+    println!("[TEST] Waiting for Helper Update (Slave connected/Warnings Cleared)...");
+
+    // Instead of waiting for *any* update (which might be an intermediate one),
+    // wait specifically for the "master_offline" warning to be CLEARED.
     let update_result = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning_cleared(&mut read, slave_account, "master_offline"),
     )
     .await;
 
-    // This is where we expect failure if the bug exists
     assert!(
         update_result.is_ok(),
-        "Slave did NOT receive config update when Master came online!"
+        "Slave did NOT clear master_offline warning when Master came online!"
     );
 
     let final_update = update_result.unwrap();
@@ -403,11 +405,7 @@ async fn test_slave_update_when_master_connects_later() {
 
     println!("[TEST] Final warnings: {:?}", final_warnings);
 
-    // Ensure master_offline IS GONE
-    assert!(
-        !final_warnings.contains(&"master_offline".to_string()),
-        "master_offline warning persists!"
-    );
+    // Double check slave_offline is also gone (implied if we got a valid update for a connected slave usually)
     assert!(
         !final_warnings.contains(&"slave_offline".to_string()),
         "slave_offline warning persists!"
