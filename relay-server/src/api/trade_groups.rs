@@ -157,13 +157,10 @@ pub async fn update_trade_group_settings(
             // Send updated config to Master EA via ZMQ
             send_config_to_master(&state, &id, &updated_settings).await;
 
-            // Notify via WebSocket
-            if let Ok(Some(tg)) = state.db.get_trade_group(&id).await {
-                let response = build_trade_group_response(&state, tg).await;
-                if let Ok(json) = serde_json::to_string(&response) {
-                    let _ = state.tx.send(format!("trade_group_updated:{}", json));
-                }
-            }
+            // Trigger immediate snapshot via WebSocket
+            tokio::spawn(async move {
+                state.snapshot_broadcaster.broadcast_now().await;
+            });
 
             Ok(StatusCode::NO_CONTENT)
         }
@@ -215,10 +212,10 @@ pub async fn delete_trade_group(
                 "Successfully deleted TradeGroup and all its members (CASCADE)"
             );
 
-            // Notify via WebSocket with structured payload
-            if let Ok(json) = serde_json::to_string(&serde_json::json!({"id": id})) {
-                let _ = state.tx.send(format!("trade_group_deleted:{}", json));
-            }
+            // Trigger immediate snapshot via WebSocket
+            tokio::spawn(async move {
+                state.snapshot_broadcaster.broadcast_now().await;
+            });
 
             Ok(StatusCode::NO_CONTENT)
         }
@@ -312,13 +309,16 @@ pub async fn toggle_master(
     // Master toggle changes Slave status (e.g., adds/removes master_web_ui_disabled warning)
     reevaluate_and_broadcast_slaves(&state, &id).await;
 
-    // Fetch updated trade group, broadcast runtime-aware payload, and return response
+    // Trigger immediate snapshot
+    let snapshot_broadcaster = state.snapshot_broadcaster.clone();
+    tokio::spawn(async move {
+        snapshot_broadcaster.broadcast_now().await;
+    });
+
+    // Fetch updated trade group and return response
     match state.db.get_trade_group(&id).await {
         Ok(Some(updated_tg)) => {
             let response = build_trade_group_response(&state, updated_tg).await;
-            if let Ok(json) = serde_json::to_string(&response) {
-                let _ = state.tx.send(format!("trade_group_updated:{}", json));
-            }
             Ok(Json(response))
         }
         Ok(None) => Err(

@@ -1,6 +1,7 @@
 mod connection;
 mod global_settings;
 mod mt_installation;
+mod snapshot;
 pub mod status_engine;
 mod trade_group;
 mod trade_group_member;
@@ -8,6 +9,7 @@ mod trade_group_member;
 pub use connection::*;
 pub use global_settings::*;
 pub use mt_installation::*;
+pub use snapshot::*;
 pub use trade_group::*;
 pub use trade_group_member::*;
 

@@ -199,6 +199,13 @@ export interface TradeGroup {
   updated_at: string;
 }
 
+// Full System State Snapshot
+export interface SystemStateSnapshot {
+  connections: EaConnection[];
+  trade_groups: TradeGroup[];
+  members: TradeGroupMember[];
+}
+
 // TradeGroupMember (Slave settings) types
 export interface SlaveSettings {
   lot_calculation_mode: LotCalculationMode;

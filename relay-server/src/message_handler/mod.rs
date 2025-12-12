@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
+    api::SnapshotBroadcaster,
     connection_manager::ConnectionManager,
     db::Database,
     engine::CopyEngine,
@@ -39,9 +40,12 @@ pub struct MessageHandler {
     /// VictoriaLogs controller for EA config broadcasting
     vlogs_controller: Option<VLogsController>,
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+    /// Snapshot broadcaster for triggering immediate updates
+    snapshot_broadcaster: Option<SnapshotBroadcaster>,
 }
 
 impl MessageHandler {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
         copy_engine: Arc<CopyEngine>,
@@ -52,13 +56,22 @@ impl MessageHandler {
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     ) -> Self {
         Self {
-            connection_manager,
+            connection_manager: connection_manager.clone(),
             copy_engine,
-            broadcast_tx,
-            db,
+            broadcast_tx: broadcast_tx.clone(),
+            db: db.clone(),
             publisher,
             vlogs_controller,
             runtime_status_metrics,
+            // Lazy initialization or passed in?
+            // For now, let's construct it here as we have all deps,
+            // OR we should pass it in. Passing it in is cleaner but requires main.rs change.
+            // But we can construct it since we have deps.
+            snapshot_broadcaster: Some(SnapshotBroadcaster::new(
+                broadcast_tx,
+                connection_manager,
+                db,
+            )),
         }
     }
 

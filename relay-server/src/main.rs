@@ -445,7 +445,7 @@ async fn main() -> Result<()> {
 
     // Create on-demand snapshot broadcaster for WebSocket clients
     let snapshot_broadcaster =
-        api::SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone());
+        api::SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone(), db.clone());
 
     let app_state = AppState {
         db: db.clone(),

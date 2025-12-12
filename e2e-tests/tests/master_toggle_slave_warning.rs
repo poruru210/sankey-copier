@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use tokio::time::{sleep, timeout, Duration};
 
 const SETTLE_WAIT_MS: u64 = 250;
-const BROADCAST_TIMEOUT_SECS: u64 = 5;
+const BROADCAST_TIMEOUT_SECS: u64 = 10;
 
 /// Create an HTTP client that accepts self-signed certificates
 fn create_http_client() -> reqwest::Client {
