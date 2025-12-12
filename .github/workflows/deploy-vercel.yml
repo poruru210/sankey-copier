@@ -6,19 +6,19 @@ on:
   workflow_call:
     inputs:
       deployment_target:
-        description: 'Vercel deploy environment (production or preview)'
+        description: "Vercel deploy environment (production or preview)"
         required: true
         type: string
       is_pr:
-        description: 'Whether the caller event is a pull request'
+        description: "Whether the caller event is a pull request"
         required: true
         type: boolean
       pr_number:
-        description: 'Pull request number (empty when not a PR)'
+        description: "Pull request number (empty when not a PR)"
         required: false
         type: string
       pr_is_from_fork:
-        description: 'True when the source branch belongs to a forked repository'
+        description: "True when the source branch belongs to a forked repository"
         required: false
         default: false
         type: boolean
@@ -44,17 +44,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js with pnpm
-        uses: ./.github/actions/setup-node
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          working-directory: web-ui
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: web-ui
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=${{ inputs.deployment_target }} --token=${{ secrets.VERCEL_TOKEN }}
