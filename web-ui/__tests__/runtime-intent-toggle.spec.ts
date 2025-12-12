@@ -118,7 +118,7 @@ async function setupMockWebSocket(page: Page) {
         }, 10);
       }
 
-      send() {}
+      send() { }
 
       close() {
         this.readyState = 3;
@@ -180,6 +180,24 @@ test.describe('Runtime vs intent toggles', () => {
     const targetMaster = 'FxPro_12345001';
     const targetSlave = 'FxPro_22222004';
     const { tradeGroups, members } = buildApiState(mockSettings);
+
+    // Add warning codes to simulate auto-trading disabled
+    // The implementation uses warning_codes (not is_trade_allowed) to determine badge display
+    const targetTradeGroup = tradeGroups.get(targetMaster);
+    if (targetTradeGroup) {
+      targetTradeGroup.master_runtime_status = 0; // DISABLED
+      targetTradeGroup.master_warning_codes = ['master_auto_trading_disabled'];
+    }
+
+    // Add warning codes to the slave member
+    const targetMembers = members.get(targetMaster);
+    if (targetMembers) {
+      const slaveMember = targetMembers.find((m) => m.slave_account === targetSlave);
+      if (slaveMember) {
+        slaveMember.status = 0; // DISABLED
+        slaveMember.warning_codes = ['slave_auto_trading_disabled'];
+      }
+    }
 
     const connections = mockConnections.map((connection) => ({ ...connection }));
     const targetConnection = connections.find((conn) => conn.account_id === targetMaster);
@@ -308,9 +326,16 @@ test.describe('Runtime vs intent toggles', () => {
     if (masterGroup) {
       masterGroup.master_runtime_status = 2;
     }
-    await page.evaluate(() => {
-      (window as unknown as { __emitWsMessage?: (message: string) => void }).__emitWsMessage?.('member_runtime_update');
-    });
+
+    // Build a proper system_snapshot message (the implementation expects this format)
+    const snapshotData = {
+      connections: mockConnections,
+      trade_groups: Array.from(tradeGroups.values()),
+      members: Array.from(members.values()).flat(),
+    };
+    await page.evaluate((snapshot) => {
+      (window as unknown as { __emitWsMessage?: (message: string) => void }).__emitWsMessage?.(`system_snapshot:${JSON.stringify(snapshot)}`);
+    }, snapshotData);
 
     await expect(receiverCard.getByText('Receiving')).toBeVisible();
     await expect.poll(async () => toggleSwitch.getAttribute('data-pending')).toBeNull();

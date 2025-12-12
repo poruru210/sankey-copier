@@ -1,5 +1,6 @@
 import { defineConfig } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
+import { createConnection } from 'node:net';
 
 function findAvailablePortSync(): number {
   const script = `
@@ -46,37 +47,43 @@ function findAvailablePortSync(): number {
   return port;
 }
 
+// Check if a port is already in use (dev server running)
+function isPortInUseSync(port: number): boolean {
+  const script = `
+    const net = require('node:net');
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.on('connect', () => { socket.destroy(); process.stdout.write('1'); process.exit(0); });
+    socket.on('timeout', () => { socket.destroy(); process.stdout.write('0'); process.exit(0); });
+    socket.on('error', () => { process.stdout.write('0'); process.exit(0); });
+    socket.connect(${port}, '127.0.0.1');
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return result.stdout?.toString().trim() === '1';
+}
+
+const DEFAULT_PORT = 8080;
 const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
-const shouldStartServer = !externalBaseUrl;
+
+// Check if dev server is already running on default port
+const devServerRunning = !externalBaseUrl && isPortInUseSync(DEFAULT_PORT);
+
+const shouldStartServer = !externalBaseUrl && !devServerRunning;
 const requestedPort = process.env.PLAYWRIGHT_PORT
   ? Number(process.env.PLAYWRIGHT_PORT)
   : undefined;
 const allocatedPort = shouldStartServer
   ? requestedPort ?? findAvailablePortSync()
-  : undefined;
-const resolvedBaseUrl = externalBaseUrl ?? `http://127.0.0.1:${allocatedPort ?? 8080}`;
+  : DEFAULT_PORT;
+const resolvedBaseUrl = externalBaseUrl ?? `http://127.0.0.1:${allocatedPort}`;
 // Ensure helper utilities can read the same base URL
 process.env.PLAYWRIGHT_BASE_URL = resolvedBaseUrl;
 if (shouldStartServer) {
   process.env.NEXT_ASSET_PREFIX = resolvedBaseUrl;
 }
-const envAssignments = shouldStartServer
-  ? {
-    PORT: String(allocatedPort),
-    NEXT_ASSET_PREFIX: resolvedBaseUrl,
-  }
-  : undefined;
-
-const envPrefix = shouldStartServer
-  ? process.platform === 'win32'
-    ? `${Object.entries(envAssignments!)
-      .map(([key, value]) => `set ${key}=${value}`)
-      .join('&&')}&&`
-    : Object.entries(envAssignments!)
-      .map(([key, value]) => `${key}=${value}`)
-      .join(' ')
-  : '';
-
 const config = defineConfig({
   testDir: '__tests__',
   testMatch: /.*\.spec\.ts$/, // limit to E2E specs only
@@ -92,10 +99,15 @@ const config = defineConfig({
   },
   webServer: shouldStartServer
     ? {
-      command: `${envPrefix} bun run next dev --hostname 0.0.0.0 --port ${allocatedPort}`.trim(),
+      command: `bun run next dev --hostname 0.0.0.0 --port ${allocatedPort}`,
       url: resolvedBaseUrl,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 120 * 1000,
+      env: {
+        ...process.env,
+        PORT: String(allocatedPort),
+        NEXT_ASSET_PREFIX: resolvedBaseUrl,
+      },
     }
     : undefined,
 });

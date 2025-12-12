@@ -89,6 +89,23 @@ test('UI updates immediately when system_snapshot is received', async ({ page })
         leverage: 100,
         last_heartbeat: new Date().toISOString(),
         connected_at: new Date().toISOString(),
+      },
+      {
+        account_id: 'Slave_1',
+        ea_type: 'Slave',
+        status: 'Online',
+        is_trade_allowed: true,
+        platform: 'MT5',
+        account_number: 789012,
+        broker: 'Test Broker',
+        account_name: 'Slave 1',
+        server: 'Demo',
+        balance: 5000,
+        equity: 5000,
+        currency: 'USD',
+        leverage: 100,
+        last_heartbeat: new Date().toISOString(),
+        connected_at: new Date().toISOString(),
       }
     ],
     trade_groups: [
@@ -101,7 +118,31 @@ test('UI updates immediately when system_snapshot is received', async ({ page })
         updated_at: new Date().toISOString(),
       }
     ],
-    members: []
+    members: [
+      {
+        id: 1,
+        trade_group_id: 'Master_1',
+        slave_account: 'Slave_1',
+        slave_settings: {
+          lot_calculation_mode: 'multiplier',
+          lot_multiplier: 1.0,
+          reverse_trade: false,
+          symbol_mappings: [],
+          filters: {
+            allowed_symbols: null,
+            blocked_symbols: null,
+            allowed_magic_numbers: null,
+            blocked_magic_numbers: null,
+          },
+          config_version: 1,
+        },
+        status: 2, // CONNECTED
+        warning_codes: [],
+        enabled_flag: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    ]
   };
 
   // Send initial snapshot via mock WS
@@ -124,6 +165,10 @@ test('UI updates immediately when system_snapshot is received', async ({ page })
       {
         ...initialSnapshot.connections[0],
         is_trade_allowed: false // AutoTrading OFF
+      },
+      {
+        ...initialSnapshot.connections[1],
+        is_trade_allowed: false
       }
     ],
     trade_groups: [
@@ -133,7 +178,13 @@ test('UI updates immediately when system_snapshot is received', async ({ page })
         master_warning_codes: ['master_auto_trading_disabled']
       }
     ],
-    members: []
+    members: [
+      {
+        ...initialSnapshot.members[0],
+        status: 0, // DISABLED
+        warning_codes: ['slave_auto_trading_disabled']
+      }
+    ]
   };
 
   // Send update snapshot
@@ -150,8 +201,8 @@ test('UI updates immediately when system_snapshot is received', async ({ page })
   await expect(page.locator('[data-testid="account-node"][data-account-id="Master_1"] .text-yellow-600')).toBeVisible();
 
   // Optionally verify text if we know the locale (ja)
-  // "自動売買が無効です" (AutoTrading is disabled)
-  await expect(page.locator('[data-testid="account-node"][data-account-id="Master_1"]')).toContainText('自動売買が無効');
+  // Actual text: "MTの自動売買がOFFです。MTターミナルで有効にしてください。"
+  await expect(page.locator('[data-testid="account-node"][data-account-id="Master_1"]')).toContainText('MTの自動売買がOFFです');
 
   // Verify Master Node status indicator changed (Green -> Yellow/Gray)
   // The handle color class changes
