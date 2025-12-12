@@ -2,13 +2,8 @@
 //
 // Slave EA Simulator - MQL5 SankeyCopierSlave.mq5 完全準拠実装
 //
-// このSimulatorはMQL5 EAの実装を忠実に再現します:
-// - OnInit(): ZMQ接続、トピック購読
-// - OnTimer(): Heartbeat判定、RequestConfig送信、Config受信
-// - グローバル変数: g_initialized, g_last_heartbeat, g_config_requested, etc.
-//
-// 外部からの操作は禁止。読み取り専用の観測のみ許可。
-// - get_status(), wait_for_status(), has_received_config()
+// Refactored to use EaContext via FFI.
+// Now using the Platform Simulator infrastructure.
 
 use anyhow::Result;
 use chrono::Utc;
@@ -17,499 +12,430 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
+use sankey_copier_zmq::ffi::{
+    build_trade_topic, ea_connect, ea_context_free, ea_context_get_position_snapshot,
+    ea_context_get_slave_config, ea_context_mark_config_requested, ea_get_command, ea_init,
+    ea_manager_tick, ea_send_push, ea_send_sync_request, ea_send_unregister, ea_subscribe_config,
+};
+use sankey_copier_zmq::EaContext;
+
 use crate::base::EaSimulatorBase;
+use crate::platform::runner::PlatformRunner;
+use crate::platform::traits::ExpertAdvisor;
+use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
-    EaType, PositionSnapshotMessage, RequestConfigMessage, SlaveConfig, SyncRequestMessage,
-    TradeSignalMessage, UnregisterMessage, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
-    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal, UnregisterMessage,
+    VLogsConfigMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
+// Wrapper for thread-safe passing of EaContext pointer
+struct ContextWrapper(pub *mut EaContext);
+unsafe impl Send for ContextWrapper {}
+unsafe impl Sync for ContextWrapper {}
+
 // =============================================================================
-// Slave EA Simulator
+// Slave EA Core (MQL5 Logic)
 // =============================================================================
 
-/// Slave EA Simulator - MQL5 SankeyCopierSlave.mq5 完全準拠
-///
-/// ## MQL5グローバル変数対応表
-/// | MQL5 | Rust | 説明 |
-/// |------|------|------|
-/// | g_initialized | ontimer_thread.is_some() | 初期化完了 |
-/// | g_last_heartbeat | g_last_heartbeat | 最後のHeartbeat送信時刻 |
-/// | g_config_requested | g_config_requested | Config要求送信済み |
-/// | g_last_trade_allowed | g_last_trade_allowed | 前回のauto-trading状態 |
-/// | g_has_received_config | g_has_received_config | Config受信済み |
-/// | g_configs[] | g_configs | 受信したConfig配列 |
-///
-/// ## ライフサイクル
-/// 1. new() - ZMQ接続 (OnInit相当)
-/// 2. set_trade_allowed(true) - auto-trading ON
-/// 3. start() - OnTimerスレッド開始 (EventSetMillisecondTimer相当)
-/// 4. drop() - クリーンアップ (OnDeinit相当)
+#[derive(Clone)]
+struct SlaveEaCore {
+    // Shared state from SlaveEaSimulator
+    account_id: String,
+    ea_type: EaType,
+    heartbeat_params: crate::types::HeartbeatParams,
+    _shutdown_flag: Arc<AtomicBool>,
+    is_trade_allowed: Arc<AtomicBool>,
+    _master_account: String,
+
+    _g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
+    _g_config_requested: Arc<AtomicBool>,
+    _g_last_trade_allowed: Arc<AtomicBool>,
+    _g_has_received_config: Arc<AtomicBool>,
+    g_configs: Arc<Mutex<Vec<SlaveConfig>>>,
+    last_received_status: Arc<AtomicI32>,
+
+    _g_register_sent: Arc<AtomicBool>,
+    received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
+    received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+
+    _subscribed_masters: Arc<Mutex<Vec<String>>>,
+    pending_subscriptions: Arc<Mutex<Vec<String>>>,
+    context: Arc<Mutex<Option<ContextWrapper>>>,
+
+    push_address: String,
+    config_address: String,
+}
+
+impl ExpertAdvisor for SlaveEaCore {
+    fn on_init(&mut self) -> ENUM_INIT_RETCODE {
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        let acc_id_u16 = to_u16(&self.account_id);
+        let ea_type_u16 = to_u16(self.ea_type.as_str());
+        let platform_u16 = to_u16("MT5");
+        let broker_u16 = to_u16("TestBroker");
+        let acc_name_u16 = to_u16(&self.heartbeat_params.account_name);
+        let server_u16 = to_u16("TestServer");
+        let currency_u16 = to_u16("USD");
+
+        let ctx = unsafe {
+            ea_init(
+                acc_id_u16.as_ptr(),
+                ea_type_u16.as_ptr(),
+                platform_u16.as_ptr(),
+                self.heartbeat_params.account_number,
+                broker_u16.as_ptr(),
+                acc_name_u16.as_ptr(),
+                server_u16.as_ptr(),
+                currency_u16.as_ptr(),
+                self.heartbeat_params.leverage,
+            )
+        };
+
+        if ctx.is_null() {
+            eprintln!("Failed to initialize EA context!");
+            return ENUM_INIT_RETCODE::INIT_FAILED;
+        }
+
+        {
+            let mut guard = self.context.lock().unwrap();
+            *guard = Some(ContextWrapper(ctx));
+        }
+
+        let push_u16 = to_u16(&self.push_address);
+        let sub_u16 = to_u16(&self.config_address);
+
+        unsafe {
+            if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
+                eprintln!("Failed to connect EA context!");
+                return ENUM_INIT_RETCODE::INIT_FAILED;
+            }
+        }
+
+        ENUM_INIT_RETCODE::INIT_SUCCEEDED
+    }
+
+    fn on_deinit(&mut self, _reason: ENUM_DEINIT_REASON) {
+        let mut guard = self.context.lock().unwrap();
+        if let Some(wrapper) = guard.take() {
+            let ctx = wrapper.0;
+            let mut buffer = vec![0u8; 1024];
+            let len = unsafe { ea_send_unregister(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
+            if len > 0 {
+                unsafe {
+                    ea_send_push(ctx, buffer.as_ptr(), len);
+                }
+            }
+            unsafe {
+                ea_context_free(ctx);
+            }
+        }
+    }
+
+    fn on_timer(&mut self) {
+        let guard = self.context.lock().unwrap();
+        let ctx = match guard.as_ref() {
+            Some(w) => w.0,
+            None => return,
+        };
+
+        // Helper for string conversion
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        // Process pending subscriptions
+        {
+            let mut subs = self.pending_subscriptions.lock().unwrap();
+            if !subs.is_empty() {
+                for topic in subs.iter() {
+                    let topic_u16 = to_u16(topic);
+                    unsafe {
+                        ea_subscribe_config(ctx, topic_u16.as_ptr());
+                    }
+                }
+                subs.clear();
+            }
+        }
+
+        let current_trade_allowed = self.is_trade_allowed.load(Ordering::SeqCst);
+
+        // 1. Rust Manager Tick
+        let status = unsafe {
+            ea_manager_tick(
+                ctx,
+                self.heartbeat_params.balance,
+                self.heartbeat_params.equity,
+                0,
+                if current_trade_allowed { 1 } else { 0 },
+            )
+        };
+
+        // 2. Process Commands
+        if status == 1 {
+            let mut cmd = EaCommand::default();
+            while unsafe { ea_get_command(ctx, &mut cmd) } == 1 {
+                let cmd_type =
+                    unsafe { std::mem::transmute::<i32, EaCommandType>(cmd.command_type) };
+                match cmd_type {
+                    EaCommandType::UpdateUi => {
+                        // Config updated.
+                        let cfg_ptr = unsafe { ea_context_get_slave_config(ctx) };
+                        if !cfg_ptr.is_null() {
+                            let cfg = unsafe { &*cfg_ptr };
+                            // Update verification queues
+                            {
+                                let mut configs = self.g_configs.lock().unwrap();
+                                if let Some(existing) = configs
+                                    .iter_mut()
+                                    .find(|c| c.master_account == cfg.master_account)
+                                {
+                                    *existing = cfg.clone();
+                                } else {
+                                    configs.push(cfg.clone());
+                                }
+                            }
+                            self.last_received_status
+                                .store(cfg.status, Ordering::SeqCst);
+                            unsafe { ea_context_mark_config_requested(ctx) };
+                        }
+                    }
+                    EaCommandType::ProcessSnapshot => {
+                        let snap_ptr = unsafe { ea_context_get_position_snapshot(ctx) };
+                        if !snap_ptr.is_null() {
+                            let snap = unsafe { &*snap_ptr };
+                            self.received_position_snapshots
+                                .lock()
+                                .unwrap()
+                                .push(snap.clone());
+                        }
+                    }
+                    EaCommandType::Open | EaCommandType::Close | EaCommandType::Modify => {
+                        // Reconstruct TradeSignal for verification
+                        let sym_bytes = &cmd.symbol;
+                        let end = sym_bytes
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(sym_bytes.len());
+                        let symbol = String::from_utf8_lossy(&sym_bytes[..end]).to_string();
+
+                        let action = match cmd_type {
+                            EaCommandType::Open => TradeAction::Open,
+                            EaCommandType::Close => TradeAction::Close,
+                            EaCommandType::Modify => TradeAction::Modify,
+                            _ => TradeAction::Open,
+                        };
+
+                        let comment_raw = &cmd.comment;
+                        let end_comment = comment_raw
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(comment_raw.len());
+                        let comment_str =
+                            String::from_utf8_lossy(&comment_raw[..end_comment]).to_string();
+                        let comment = if comment_str.is_empty() {
+                            None
+                        } else {
+                            Some(comment_str)
+                        };
+
+                        // New: Source Account from EaCommand
+                        let src_bytes = &cmd.source_account;
+                        let end_src = src_bytes
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(src_bytes.len());
+                        let source_account =
+                            String::from_utf8_lossy(&src_bytes[..end_src]).to_string();
+
+                        let signal = TradeSignal {
+                            action,
+                            ticket: cmd.ticket,
+                            symbol: Some(symbol),
+                            order_type: crate::types::OrderType::from_mql(cmd.order_type),
+                            lots: Some(cmd.volume),
+                            open_price: Some(cmd.price),
+                            stop_loss: if cmd.sl.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.sl)
+                            },
+                            take_profit: if cmd.tp.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.tp)
+                            },
+                            magic_number: Some(cmd.magic),
+                            comment,
+                            timestamp: chrono::DateTime::from_timestamp(cmd.timestamp, 0)
+                                .unwrap_or_else(chrono::Utc::now),
+                            source_account, // Used new field
+                            close_ratio: if cmd.close_ratio.abs() < 1e-6 {
+                                None
+                            } else {
+                                Some(cmd.close_ratio)
+                            },
+                        };
+                        self.received_trade_signals.lock().unwrap().push(signal);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Slave EA Simulator (Facade)
+// =============================================================================
+
 pub struct SlaveEaSimulator {
     base: EaSimulatorBase,
     master_account: String,
 
-    // =========================================================================
-    // MQL5 グローバル変数 (L48-67)
-    // =========================================================================
-    /// MQL5: g_last_heartbeat (datetime → Instant)
+    // --- MQL5 Global Variables ---
     g_last_heartbeat: Arc<Mutex<Option<Instant>>>,
-
-    /// MQL5: g_config_requested
     g_config_requested: Arc<AtomicBool>,
-
-    /// MQL5: g_last_trade_allowed (初期値 false)
     g_last_trade_allowed: Arc<AtomicBool>,
-
-    /// MQL5: g_has_received_config
     g_has_received_config: Arc<AtomicBool>,
-
-    /// MQL5: g_configs[] - 受信したSlaveConfig (最新のもの)
     g_configs: Arc<Mutex<Vec<SlaveConfig>>>,
-
-    /// 最後に受信したステータス (STATUS_NO_CONFIG, DISABLED, ENABLED, CONNECTED)
     last_received_status: Arc<AtomicI32>,
 
-    /// OnTimerスレッドハンドル
-    ontimer_thread: Option<JoinHandle<()>>,
+    // --- State ---
+    g_register_sent: Arc<AtomicBool>,
 
-    /// 購読済みMasterアカウント (trade topic動的購読用)
-    subscribed_masters: Arc<Mutex<Vec<String>>>,
+    // Platform Runner & Timer Thread
+    runner: Option<PlatformRunner>,
+    timer_thread: Option<JoinHandle<()>>,
 
-    /// 受信したTradeSignalキュー (テスト用)
-    received_trade_signals: Arc<Mutex<Vec<TradeSignalMessage>>>,
-
-    /// 受信したPositionSnapshotキュー (テスト用)
-    /// MQL5: OnTimerでconfig_socketから受信し、ProcessPositionSnapshot()で処理
+    // --- Received Data Queues (Verification) ---
+    received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-
-    /// 受信したVLogsConfigキュー (テスト用)
-    /// MQL5: OnTimerでconfig_socketから受信し、ProcessVLogsConfig()で処理
     received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
 
-    /// Register送信済みフラグ
-    /// OnTimer初回でRegister送信後にtrueになる
-    g_register_sent: Arc<AtomicBool>,
+    // --- Subscription Management ---
+    subscribed_masters: Arc<Mutex<Vec<String>>>,
+    pending_subscriptions: Arc<Mutex<Vec<String>>>,
+
+    // --- Context (Managed in OnTimer thread) ---
+    context: Arc<Mutex<Option<ContextWrapper>>>,
+
+    // Connection Params
+    push_address: String,
+    config_address: String,
 }
 
 impl SlaveEaSimulator {
-    /// Create a new Slave EA simulator (OnInit相当)
-    ///
-    /// ZMQ接続を確立し、config topicを購読します。
-    /// OnTimerスレッドはまだ開始されません。start()を呼び出してください。
-    ///
-    /// ## MQL5 Socket Architecture
-    /// - `g_zmq_trade_socket` (SUB): Trade signals from server
-    /// - `g_zmq_config_socket` (SUB): Config/VLogs/PositionSnapshot from server
-    ///   Both connect to the same unified PUB address (port 5556).
     pub fn new(
         push_address: &str,
         config_address: &str,
-        trade_address: &str,
+        _trade_address: &str,
         account_id: &str,
         master_account: &str,
     ) -> Result<Self> {
-        // Slave EA has both config_socket and trade_socket
-        // MQL5: g_zmq_config_socket + g_zmq_trade_socket
-        let base = EaSimulatorBase::new(
-            push_address,
-            config_address,
-            Some(trade_address),
-            account_id,
-            EaType::Slave,
-        )?;
+        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave)?;
 
         Ok(Self {
             base,
             master_account: master_account.to_string(),
             g_last_heartbeat: Arc::new(Mutex::new(None)),
             g_config_requested: Arc::new(AtomicBool::new(false)),
-            g_last_trade_allowed: Arc::new(AtomicBool::new(false)), // MQL5と同じ初期値
+            g_last_trade_allowed: Arc::new(AtomicBool::new(false)),
             g_has_received_config: Arc::new(AtomicBool::new(false)),
             g_configs: Arc::new(Mutex::new(Vec::new())),
             last_received_status: Arc::new(AtomicI32::new(STATUS_NO_CONFIG)),
-            ontimer_thread: None,
+            runner: None,
+            timer_thread: None,
             subscribed_masters: Arc::new(Mutex::new(Vec::new())),
             received_trade_signals: Arc::new(Mutex::new(Vec::new())),
             received_position_snapshots: Arc::new(Mutex::new(Vec::new())),
             received_vlogs_configs: Arc::new(Mutex::new(Vec::new())),
             g_register_sent: Arc::new(AtomicBool::new(false)),
+            pending_subscriptions: Arc::new(Mutex::new(Vec::new())),
+            context: Arc::new(Mutex::new(None)),
+            push_address: push_address.to_string(),
+            config_address: config_address.to_string(),
         })
     }
 
-    /// Start the OnTimer loop (EventSetMillisecondTimer相当)
-    ///
-    /// MQL5: EventSetMillisecondTimer(SignalPollingIntervalMs) at L186
-    /// バックグラウンドスレッドでOnTimerループを開始します。
     pub fn start(&mut self) -> Result<()> {
-        if self.ontimer_thread.is_some() {
-            return Ok(()); // Already started
+        if self.runner.is_some() {
+            return Ok(());
         }
 
-        // Clone Arcs for the thread
-        let push_socket = self.base.push_socket_handle;
-        let config_socket = self.base.config_socket_handle;
-        // MQL5: g_zmq_trade_socket - Slave EA always has trade_socket
-        let trade_socket = self
-            .base
-            .trade_socket_handle()
-            .expect("Slave EA must have trade_socket");
-        let account_id = self.base.account_id().to_string();
-        let _master_account = self.master_account.clone(); // Reserved for future use
-        let shutdown_flag = self.base.shutdown_flag.clone();
-        let is_trade_allowed = self.base.is_trade_allowed_arc();
-        let heartbeat_params = self.base.heartbeat_params.clone();
-        let ea_type = self.base.ea_type;
+        let core = SlaveEaCore {
+            account_id: self.base.account_id().to_string(),
+            ea_type: self.base.ea_type,
+            heartbeat_params: self.base.heartbeat_params.clone(),
+            _shutdown_flag: self.base.shutdown_flag.clone(),
+            is_trade_allowed: self.base.is_trade_allowed_arc(),
+            _master_account: self.master_account.clone(),
+            _g_last_heartbeat: self.g_last_heartbeat.clone(),
+            _g_config_requested: self.g_config_requested.clone(),
+            _g_last_trade_allowed: self.g_last_trade_allowed.clone(),
+            _g_has_received_config: self.g_has_received_config.clone(),
+            g_configs: self.g_configs.clone(),
+            last_received_status: self.last_received_status.clone(),
+            _g_register_sent: self.g_register_sent.clone(),
+            received_trade_signals: self.received_trade_signals.clone(),
+            received_position_snapshots: self.received_position_snapshots.clone(),
+            _received_vlogs_configs: self.received_vlogs_configs.clone(),
+            _subscribed_masters: self.subscribed_masters.clone(),
+            pending_subscriptions: self.pending_subscriptions.clone(),
+            context: self.context.clone(),
+            push_address: self.push_address.clone(),
+            config_address: self.config_address.clone(),
+        };
 
-        let g_last_heartbeat = self.g_last_heartbeat.clone();
-        let g_config_requested = self.g_config_requested.clone();
-        let g_last_trade_allowed = self.g_last_trade_allowed.clone();
-        let g_has_received_config = self.g_has_received_config.clone();
-        let g_configs = self.g_configs.clone();
-        let last_received_status = self.last_received_status.clone();
-        let subscribed_masters = self.subscribed_masters.clone();
-        let received_trade_signals = self.received_trade_signals.clone();
-        let received_position_snapshots = self.received_position_snapshots.clone();
-        let received_vlogs_configs = self.received_vlogs_configs.clone();
-        let g_register_sent = self.g_register_sent.clone();
+        let runner = PlatformRunner::new(core);
+        let sender = runner.get_sender();
 
-        let handle = std::thread::spawn(move || {
-            // Helper to convert to UTF-16
-            let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+        self.runner = Some(runner);
 
-            // --- OnInit logic (mocked) ---
-            // Create inputs for ea_init
-            let acc_id_u16 = to_u16(&account_id);
-            let ea_type_u16 = to_u16(ea_type.as_str());
-            let platform_u16 = to_u16("MT5");
-            let broker_u16 = to_u16("TestBroker");
-            let acc_name_u16 = to_u16(&heartbeat_params.account_name);
-            let server_u16 = to_u16("TestServer");
-            let currency_u16 = to_u16("USD");
+        // Wait for initialization
+        let start = std::time::Instant::now();
+        while start.elapsed().as_secs() < 5 {
+            if self.context.lock().unwrap().is_some() {
+                // Initialized. Start timer thread.
+                let shutdown_flag = self.base.shutdown_flag.clone();
+                let timer_sender = sender.clone();
 
-            // Call ea_init via FFI
-            let ctx = unsafe {
-                sankey_copier_zmq::ffi::ea_init(
-                    acc_id_u16.as_ptr(),
-                    ea_type_u16.as_ptr(),
-                    platform_u16.as_ptr(),
-                    heartbeat_params.account_number,
-                    broker_u16.as_ptr(),
-                    acc_name_u16.as_ptr(),
-                    server_u16.as_ptr(),
-                    currency_u16.as_ptr(),
-                    heartbeat_params.leverage,
-                )
-            };
-
-            if ctx.is_null() {
-                eprintln!("Failed to initialize EA context!");
-                return;
-            }
-
-            // MQL5: OnTimer() loop
-            while !shutdown_flag.load(Ordering::SeqCst) {
-                // Sleep for ONTIMER_INTERVAL_MS (100ms)
-                std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
-
-                if shutdown_flag.load(Ordering::SeqCst) {
-                    break;
-                }
-
-                // =============================================================
-                // MQL5 OnTimer() L234-418 準拠
-                // =============================================================
-
-                // 0. Register送信 (OnTimer初回のみ)
-                if !g_register_sent.load(Ordering::SeqCst) {
-                    // Use FFI ea_send_register
-                    let mut buffer = vec![0u8; 1024];
-                    let len = unsafe {
-                        sankey_copier_zmq::ffi::ea_send_register(
-                            ctx,
-                            buffer.as_mut_ptr(),
-                            buffer.len() as i32,
-                        )
-                    };
-
-                    if len > 0 {
-                        let sent = unsafe {
-                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                push_socket,
-                                buffer.as_ptr(),
-                                len,
-                            ) == 1
-                        };
-                        if sent {
-                            g_register_sent.store(true, Ordering::SeqCst);
+                let handle = std::thread::spawn(move || {
+                    while !shutdown_flag.load(Ordering::SeqCst) {
+                        std::thread::sleep(std::time::Duration::from_millis(ONTIMER_INTERVAL_MS));
+                        if shutdown_flag.load(Ordering::SeqCst) {
+                            break;
                         }
+                        let _ = timer_sender.send(crate::platform::runner::PlatformEvent::Timer);
                     }
-                }
+                });
 
-                // 1. ProcessTradeSignals() (MQL5 L244)
-                // MQL5: zmq_socket_receive(g_zmq_trade_socket, trade_buffer, ...)
-                // Trade signals are received on trade_socket and queued for test access
-                {
-                    let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-                    let trade_bytes = unsafe {
-                        sankey_copier_zmq::ffi::zmq_socket_receive(
-                            trade_socket,
-                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
-                            crate::types::BUFFER_SIZE as i32,
-                        )
-                    };
-
-                    if trade_bytes > 0 {
-                        let bytes = &buffer[..trade_bytes as usize];
-                        if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                            let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                            let payload = &bytes[space_pos + 1..];
-
-                            // Only process trade signals (MQL5: ProcessTradeSignal)
-                            if topic.starts_with("trade/") {
-                                if let Ok(signal) =
-                                    rmp_serde::from_slice::<TradeSignalMessage>(payload)
-                                {
-                                    let mut signals = received_trade_signals.lock().unwrap();
-                                    signals.push(signal);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. Auto-trading状態変化の検出 (MQL5 L246-248)
-                let current_trade_allowed = is_trade_allowed.load(Ordering::SeqCst);
-                let last_trade_allowed = g_last_trade_allowed.load(Ordering::SeqCst);
-                let trade_state_changed = current_trade_allowed != last_trade_allowed;
-
-                // 3. Heartbeat判定 (MQL5 L251-252)
-                let now = Instant::now();
-                let last_hb = *g_last_heartbeat.lock().unwrap();
-                let should_send_heartbeat = match last_hb {
-                    None => true, // 最初のHeartbeat
-                    Some(last) => {
-                        now.duration_since(last).as_secs() >= HEARTBEAT_INTERVAL_SECONDS
-                            || trade_state_changed
-                    }
-                };
-
-                // 4. Heartbeat送信 (MQL5 L254-317)
-                if should_send_heartbeat {
-                    // Use FFI ea_send_heartbeat
-                    let mut buffer = vec![0u8; 1024];
-                    let len = unsafe {
-                        sankey_copier_zmq::ffi::ea_send_heartbeat(
-                            ctx,
-                            heartbeat_params.balance,
-                            heartbeat_params.equity,
-                            0, // open_positions
-                            if current_trade_allowed { 1 } else { 0 },
-                            buffer.as_mut_ptr(),
-                            buffer.len() as i32,
-                        )
-                    };
-
-                    if len > 0 {
-                        let heartbeat_sent = unsafe {
-                            sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                push_socket,
-                                buffer.as_ptr(),
-                                len,
-                            ) == 1
-                        };
-
-                        if heartbeat_sent {
-                            // 更新 g_last_heartbeat (MQL5 L262)
-                            *g_last_heartbeat.lock().unwrap() = Some(Instant::now());
-
-                            // 状態変化時の処理 (MQL5 L265-293)
-                            if trade_state_changed {
-                                g_last_trade_allowed.store(current_trade_allowed, Ordering::SeqCst);
-                            }
-
-                            // Check request config logic via FFI
-                            let should_request = unsafe {
-                                sankey_copier_zmq::ffi::ea_context_should_request_config(
-                                    ctx,
-                                    if current_trade_allowed { 1 } else { 0 },
-                                )
-                            };
-
-                            if should_request == 1 {
-                                let req_msg = RequestConfigMessage {
-                                    message_type: "RequestConfig".to_string(),
-                                    account_id: account_id.clone(),
-                                    ea_type: "Slave".to_string(),
-                                    timestamp: Utc::now().to_rfc3339(),
-                                };
-                                if let Ok(req_bytes) = rmp_serde::to_vec_named(&req_msg) {
-                                    unsafe {
-                                        if sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                                            push_socket,
-                                            req_bytes.as_ptr(),
-                                            req_bytes.len() as i32,
-                                        ) == 1
-                                        {
-                                            g_config_requested.store(true, Ordering::SeqCst);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 5. Config受信 (MQL5 L320-418) - Non-blocking, drain all messages
-                loop {
-                    let mut buffer = vec![0u8; crate::types::BUFFER_SIZE];
-                    let received_bytes = unsafe {
-                        sankey_copier_zmq::ffi::zmq_socket_receive(
-                            config_socket,
-                            buffer.as_mut_ptr() as *mut std::ffi::c_char,
-                            crate::types::BUFFER_SIZE as i32,
-                        )
-                    };
-
-                    if received_bytes <= 0 {
-                        break; // No more messages
-                    }
-
-                    let bytes = &buffer[..received_bytes as usize];
-
-                    // Parse topic + space + payload (MQL5 L326-337)
-                    if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-                        let topic = String::from_utf8_lossy(&bytes[..space_pos]).to_string();
-                        let payload = &bytes[space_pos + 1..];
-
-                        // Check if this is a sync/ topic message (PositionSnapshot)
-                        if topic.starts_with("sync/") {
-                            if let Ok(snapshot) =
-                                rmp_serde::from_slice::<PositionSnapshotMessage>(payload)
-                            {
-                                // MQL5: ProcessPositionSnapshot() - キューに格納
-                                let mut snapshots = received_position_snapshots.lock().unwrap();
-                                snapshots.push(snapshot);
-                            }
-                        } else if topic.starts_with("config/") {
-                            // Try to parse as SlaveConfig (MQL5 L365-377)
-                            if let Ok(config) = rmp_serde::from_slice::<SlaveConfig>(payload) {
-                                // Update g_configs (MQL5: ProcessConfigMessage)
-                                {
-                                    let mut configs = g_configs.lock().unwrap();
-                                    // Replace or add config for this master
-                                    if let Some(existing) = configs
-                                        .iter_mut()
-                                        .find(|c| c.master_account == config.master_account)
-                                    {
-                                        *existing = config.clone();
-                                    } else {
-                                        configs.push(config.clone());
-                                    }
-                                }
-
-                                // Update status
-                                last_received_status.store(config.status, Ordering::SeqCst);
-                                g_has_received_config.store(true, Ordering::SeqCst);
-
-                                // Mark config as requested (FFI logic)
-                                unsafe {
-                                    sankey_copier_zmq::ffi::ea_context_mark_config_requested(ctx);
-                                }
-
-                                // 動的にtrade topicとsync topicを購読 (ProcessConfigMessage内の動作)
-                                let master_acc = &config.master_account;
-                                let mut subscribed = subscribed_masters.lock().unwrap();
-                                if !subscribed.contains(master_acc) {
-                                    // Use FFI build_trade_topic (same as MQL5 EA)
-                                    let master_utf16: Vec<u16> =
-                                        master_acc.encode_utf16().chain(Some(0)).collect();
-                                    let slave_utf16: Vec<u16> =
-                                        account_id.encode_utf16().chain(Some(0)).collect();
-                                    let mut topic_utf16 = vec![0u16; 256];
-                                    unsafe {
-                                        sankey_copier_zmq::ffi::build_trade_topic(
-                                            master_utf16.as_ptr(),
-                                            slave_utf16.as_ptr(),
-                                            topic_utf16.as_mut_ptr(),
-                                            256,
-                                        );
-                                    }
-                                    unsafe {
-                                        // Subscribe on trade_socket (MQL5: g_zmq_trade_socket)
-                                        sankey_copier_zmq::ffi::zmq_socket_subscribe(
-                                            trade_socket,
-                                            topic_utf16.as_ptr(),
-                                        );
-                                    }
-
-                                    // Subscribe to sync/{master}/{slave} topic for PositionSnapshot
-                                    let sync_topic = format!("sync/{}/{}", master_acc, account_id);
-                                    let sync_topic_utf16: Vec<u16> =
-                                        sync_topic.encode_utf16().chain(Some(0)).collect();
-                                    unsafe {
-                                        sankey_copier_zmq::ffi::zmq_socket_subscribe(
-                                            config_socket,
-                                            sync_topic_utf16.as_ptr(),
-                                        );
-                                    }
-
-                                    subscribed.push(master_acc.clone());
-                                }
-                            } else if let Ok(vlogs_config) =
-                                rmp_serde::from_slice::<VLogsConfigMessage>(payload)
-                            {
-                                // MQL5: ProcessVLogsConfig() - キューに格納
-                                let mut configs = received_vlogs_configs.lock().unwrap();
-                                configs.push(vlogs_config);
-                            }
-                        }
-                    }
-                }
+                self.timer_thread = Some(handle);
+                return Ok(());
             }
-            // Clean up calling OnDeinit logic
-            // Send Unregister via FFI
-            let mut buffer = vec![0u8; 1024];
-            let len = unsafe {
-                sankey_copier_zmq::ffi::ea_send_unregister(
-                    ctx,
-                    buffer.as_mut_ptr(),
-                    buffer.len() as i32,
-                )
-            };
-            if len > 0 {
-                unsafe {
-                    sankey_copier_zmq::ffi::zmq_socket_send_binary(
-                        push_socket,
-                        buffer.as_ptr(),
-                        len,
-                    );
-                }
-            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
 
-            // Free context
-            unsafe {
-                sankey_copier_zmq::ffi::ea_context_free(ctx);
-            }
-        });
-
-        self.ontimer_thread = Some(handle);
-        Ok(())
+        Err(anyhow::anyhow!(
+            "Timed out waiting for EA context initialization"
+        ))
     }
 
-    /// Stop the OnTimer thread
     pub fn stop(&mut self) -> Result<()> {
         self.base.shutdown_flag.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.ontimer_thread.take() {
-            handle
-                .join()
-                .map_err(|e| anyhow::anyhow!("Failed to join thread: {:?}", e))?;
+        if let Some(mut runner) = self.runner.take() {
+            runner.stop(ENUM_DEINIT_REASON::REASON_REMOVE);
+        }
+        if let Some(handle) = self.timer_thread.take() {
+            let _ = handle.join();
         }
         Ok(())
     }
 
-    /// Send Unregister message to server
-    /// Used for simulating EA deletion/unregistration
+    // =========================================================================
+    // Helpers & Test Methods
+    // =========================================================================
+
     pub fn send_unregister(&self) -> Result<()> {
         let msg = UnregisterMessage {
             message_type: "Unregister".to_string(),
@@ -518,67 +444,52 @@ impl SlaveEaSimulator {
             ea_type: Some("Slave".to_string()),
         };
         let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.base.send_binary(&bytes)
+        self.send_raw_bytes(&bytes)
     }
 
-    // =========================================================================
-    // Read-only observation methods (外部から呼び出し可能)
-    // =========================================================================
+    fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
+        let guard = self.context.lock().unwrap();
+        if let Some(wrapper) = guard.as_ref() {
+            let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
+            if ret == 1 {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("Failed to send push"))
+            }
+        } else {
+            // Fallback if context not initialized (e.g. tests calling before start usually fail, but for completeness)
+            Err(anyhow::anyhow!("Context not initialized"))
+        }
+    }
 
-    /// Get the last received status from server config
-    ///
-    /// Returns STATUS_NO_CONFIG (-1) if no config has been received yet.
-    /// MQL5: g_configs[].status
     pub fn get_status(&self) -> i32 {
         self.last_received_status.load(Ordering::SeqCst)
     }
 
-    /// Check if at least one config has been received from server
-    ///
-    /// MQL5: g_has_received_config
     pub fn has_received_config(&self) -> bool {
         self.g_has_received_config.load(Ordering::SeqCst)
     }
 
-    /// Get account ID
     pub fn account_id(&self) -> &str {
         self.base.account_id()
     }
 
-    /// Get master account
     pub fn master_account(&self) -> &str {
         &self.master_account
     }
 
-    /// Set is_trade_allowed state (simulates MT4/MT5 auto-trading toggle)
-    ///
-    /// MQL5: TerminalInfoInteger(TERMINAL_TRADE_ALLOWED)
-    /// Changing this value triggers a heartbeat on the next OnTimer cycle.
     pub fn set_trade_allowed(&self, allowed: bool) {
         self.base.set_trade_allowed(allowed);
     }
 
-    /// Get is_trade_allowed state
     pub fn is_trade_allowed(&self) -> bool {
         self.base.is_trade_allowed()
     }
 
-    /// Wait for config with specific status value (test helper)
-    ///
-    /// This polls the internal status at short intervals until the expected
-    /// status is received or timeout occurs.
-    pub fn wait_for_status(
-        &self,
-        expected_status: i32,
-        timeout_ms: i32,
-    ) -> Result<Option<SlaveConfig>> {
+    pub fn wait_for_status(&self, expected: i32, timeout_ms: i32) -> Result<Option<SlaveConfig>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            let current_status = self.last_received_status.load(Ordering::SeqCst);
-            if current_status == expected_status {
-                // Return the latest config
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            if self.last_received_status.load(Ordering::SeqCst) == expected {
                 let configs = self.g_configs.lock().unwrap();
                 return Ok(configs.last().cloned());
             }
@@ -587,12 +498,9 @@ impl SlaveEaSimulator {
         Ok(None)
     }
 
-    /// Wait for any config to be received (test helper)
     pub fn wait_for_config(&self, timeout_ms: i32) -> Result<Option<SlaveConfig>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
+        while start.elapsed().as_millis() < timeout_ms as u128 {
             if self.g_has_received_config.load(Ordering::SeqCst) {
                 let configs = self.g_configs.lock().unwrap();
                 return Ok(configs.last().cloned());
@@ -602,190 +510,167 @@ impl SlaveEaSimulator {
         Ok(None)
     }
 
-    /// Get all received configs (test helper)
     pub fn get_configs(&self) -> Vec<SlaveConfig> {
         self.g_configs.lock().unwrap().clone()
     }
 
-    // =========================================================================
-    // Trade Signal Reception (OnTick相当 - テスト用外部メソッド)
-    // =========================================================================
-
-    /// Try to receive a trade signal with timeout (test helper)
-    ///
-    /// Trade signals are received by the OnTimer thread via ProcessTradeSignals()
-    /// and queued in received_trade_signals. This method reads from that queue.
-    ///
-    /// MQL5: ProcessTradeSignals() receives on g_zmq_trade_socket
-    pub fn try_receive_trade_signal(&self, timeout_ms: i32) -> Result<Option<TradeSignalMessage>> {
+    pub fn try_receive_trade_signal(&self, timeout_ms: i32) -> Result<Option<TradeSignal>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            // Check the queue for signals received by OnTimer thread
-            {
-                let mut signals = self.received_trade_signals.lock().unwrap();
-                if !signals.is_empty() {
-                    return Ok(Some(signals.remove(0)));
-                }
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let mut lock = self.received_trade_signals.lock().unwrap();
+            if !lock.is_empty() {
+                return Ok(Some(lock.remove(0)));
             }
+            drop(lock);
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         Ok(None)
     }
 
-    /// Wait for a specific trade signal action (test helper)
-    pub fn wait_for_trade_action(
+    pub fn try_receive_specific_signal(
         &self,
-        expected_action: &str,
+        expected: TradeAction,
         timeout_ms: i32,
-    ) -> Result<Option<TradeSignalMessage>> {
+    ) -> Result<Option<TradeSignal>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            if let Some(signal) = self.try_receive_trade_signal(100)? {
-                if signal.action == expected_action {
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            // Instead of calling try_receive which consumes, we might peeking?
+            // But simple implementation consumes. If multiple signals arrive, this might skip mismatching ones.
+            // For test simplicity, assume sequential checks.
+            if let Some(signal) = self.try_receive_trade_signal(10)? {
+                if signal.action == expected {
                     return Ok(Some(signal));
                 }
+                // Discard mismatching signal in this simple implementation
             }
         }
         Ok(None)
     }
 
-    /// Get all received trade signals (for debugging/testing)
-    pub fn get_received_trade_signals(&self) -> Vec<TradeSignalMessage> {
+    pub fn wait_for_trade_action(
+        &self,
+        expected: TradeAction,
+        timeout_ms: i32,
+    ) -> Result<Option<TradeSignal>> {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            // Instead of calling try_receive which consumes, we might peeking?
+            // But simple implementation consumes. If multiple signals arrive, this might skip mismatching ones.
+            // For test simplicity, assume sequential checks.
+            if let Some(signal) = self.try_receive_trade_signal(10)? {
+                if signal.action == expected {
+                    return Ok(Some(signal));
+                }
+                // Discard mismatching signal in this simple implementation
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn get_received_trade_signals(&self) -> Vec<TradeSignal> {
         self.received_trade_signals.lock().unwrap().clone()
     }
 
-    // =========================================================================
-    // Position Sync methods (テスト用)
-    // =========================================================================
-
-    /// Send a SyncRequest message to request position sync from master
     pub fn send_sync_request(&self, last_sync_time: Option<String>) -> Result<()> {
-        let msg = SyncRequestMessage {
-            message_type: "SyncRequest".to_string(),
-            slave_account: self.base.account_id().to_string(),
-            master_account: self.master_account.clone(),
-            last_sync_time,
-            timestamp: Utc::now().to_rfc3339(),
+        let guard = self.context.lock().unwrap();
+        let ctx = match guard.as_ref() {
+            Some(w) => w.0,
+            None => return Err(anyhow::anyhow!("Context not initialized")),
         };
 
-        let bytes = rmp_serde::to_vec_named(&msg)?;
-        self.base.send_binary(&bytes)
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+
+        let master_u16 = to_u16(&self.master_account);
+        // Handle optional last_sync_time
+        let last_sync_u16_vec = last_sync_time.as_ref().map(|s| to_u16(s));
+        let last_sync_ptr = match last_sync_u16_vec.as_ref() {
+            Some(v) => v.as_ptr(),
+            None => std::ptr::null(),
+        };
+
+        let ret = unsafe { ea_send_sync_request(ctx, master_u16.as_ptr(), last_sync_ptr) };
+
+        if ret != 1 {
+            return Err(anyhow::anyhow!("Failed to send sync request"));
+        }
+
+        Ok(())
     }
 
-    /// Try to receive a PositionSnapshot message with timeout
-    ///
-    /// PositionSnapshots are received by OnTimer thread on config_socket and
-    /// queued in received_position_snapshots. This method reads from that queue.
-    ///
-    /// MQL5: ProcessPositionSnapshot() receives on g_zmq_config_socket
     pub fn try_receive_position_snapshot(
         &self,
         timeout_ms: i32,
     ) -> Result<Option<PositionSnapshotMessage>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            // Check the queue for snapshots received by OnTimer thread
-            {
-                let mut snapshots = self.received_position_snapshots.lock().unwrap();
-                if !snapshots.is_empty() {
-                    return Ok(Some(snapshots.remove(0)));
-                }
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let mut lock = self.received_position_snapshots.lock().unwrap();
+            if !lock.is_empty() {
+                return Ok(Some(lock.remove(0)));
             }
+            drop(lock);
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         Ok(None)
     }
 
-    // =========================================================================
-    // VLogs Config methods (テスト用)
-    // =========================================================================
-
-    /// Subscribe to global config topic for VLogs configuration
     pub fn subscribe_to_global_config(&self) -> Result<()> {
-        self.base.subscribe_to_global_config()
+        self.pending_subscriptions
+            .lock()
+            .unwrap()
+            .push("config/global".to_string());
+        Ok(())
     }
 
-    /// Try to receive a VLogsConfigMessage from the global config topic
-    ///
-    /// VLogsConfigs are received by OnTimer thread on config_socket and
-    /// queued in received_vlogs_configs. This method reads from that queue.
-    ///
-    /// MQL5: ProcessVLogsConfig() receives on g_zmq_config_socket
     pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
         let start = std::time::Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms as u64);
-
-        while start.elapsed() < timeout_duration {
-            // Check the queue for vlogs configs received by OnTimer thread
-            {
-                let mut configs = self.received_vlogs_configs.lock().unwrap();
-                if !configs.is_empty() {
-                    return Ok(Some(configs.remove(0)));
-                }
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            let mut lock = self.received_vlogs_configs.lock().unwrap();
+            if !lock.is_empty() {
+                return Ok(Some(lock.remove(0)));
             }
+            drop(lock);
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         Ok(None)
     }
 
-    // =========================================================================
-    // Legacy methods for backward compatibility during migration
-    // =========================================================================
-
-    /// Subscribe to sync topic for receiving PositionSnapshot from Master
-    ///
-    /// This subscribes to sync/{master}/{slave} topic on the config socket.
-    /// Can be called early in tests to ensure subscription is active before
-    /// messages are sent (avoids ZMQ "slow joiner" issues).
     pub fn subscribe_to_sync_topic(&self) -> Result<()> {
         let sync_topic = format!("sync/{}/{}", self.master_account, self.base.account_id());
-        self.base.subscribe_to_topic(&sync_topic)
+        self.pending_subscriptions.lock().unwrap().push(sync_topic);
+        Ok(())
     }
 
-    /// Subscribe to trade signals for a specific Master account
-    ///
-    /// Note: In the new implementation, this is done automatically when
-    /// config is received. This method is kept for backward compatibility.
     #[deprecated(note = "Trade topic subscription is now automatic on config reception")]
     pub fn subscribe_to_master(&self, master_account: &str) -> Result<()> {
-        // Use FFI build_trade_topic (same as MQL5 EA)
-        let master_utf16: Vec<u16> = master_account.encode_utf16().chain(Some(0)).collect();
-        let slave_utf16: Vec<u16> = self
-            .base
-            .account_id()
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        let mut topic_buffer = vec![0u16; 256];
-        let topic_len = unsafe {
-            sankey_copier_zmq::ffi::build_trade_topic(
-                master_utf16.as_ptr(),
-                slave_utf16.as_ptr(),
-                topic_buffer.as_mut_ptr(),
+        // Manual subscription helper for backward compatibility
+        // We construct the topic and push to pending
+        let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
+        let master_u16 = to_u16(master_account);
+        let slave_u16 = to_u16(self.account_id());
+        let mut topic_buf = vec![0u16; 256];
+        unsafe {
+            build_trade_topic(
+                master_u16.as_ptr(),
+                slave_u16.as_ptr(),
+                topic_buf.as_mut_ptr(),
                 256,
-            )
-        };
-        if topic_len <= 0 {
-            anyhow::bail!("Failed to build trade topic");
+            );
         }
-        let trade_topic = String::from_utf16_lossy(&topic_buffer[..topic_len as usize]);
-        self.base.subscribe_to_topic(&trade_topic)
+        let trade_topic = String::from_utf16_lossy(&topic_buf)
+            .trim_end_matches('\0')
+            .to_string();
+        self.pending_subscriptions.lock().unwrap().push(trade_topic);
+        Ok(())
     }
 }
 
 impl Drop for SlaveEaSimulator {
     fn drop(&mut self) {
-        // Signal OnTimer thread to stop
         self.base.shutdown_flag.store(true, Ordering::SeqCst);
-
-        // Wait for thread to finish
-        if let Some(handle) = self.ontimer_thread.take() {
+        if let Some(mut runner) = self.runner.take() {
+            runner.stop(ENUM_DEINIT_REASON::REASON_REMOVE);
+        }
+        if let Some(handle) = self.timer_thread.take() {
             let _ = handle.join();
         }
     }

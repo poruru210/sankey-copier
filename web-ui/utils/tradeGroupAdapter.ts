@@ -102,9 +102,9 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
   // Parse symbol_mappings from comma-separated format if provided
   const symbolMappings = request.symbol_mappings
     ? request.symbol_mappings.split(',').map(pair => {
-        const [source, target] = pair.split('=');
-        return { source_symbol: source.trim(), target_symbol: target.trim() };
-      })
+      const [source, target] = pair.split('=');
+      return { source_symbol: source.trim(), target_symbol: target.trim() };
+    })
     : [];
 
   return {
@@ -136,6 +136,7 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
       max_signal_delay_ms: request.max_signal_delay_ms,
       use_pending_order_for_delayed: request.use_pending_order_for_delayed,
     },
+    status: request.status,
   };
 }
 

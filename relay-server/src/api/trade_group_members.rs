@@ -103,6 +103,9 @@ pub async fn add_member(
                         trade_group_id = %trade_group_id,
                         "Successfully created TradeGroup with default settings"
                     );
+
+                    // Send initial config to Master EA so it can display the TradeGroup
+                    send_initial_config_to_master(&state, &trade_group_id).await;
                 }
                 Err(e) => {
                     tracing::error!(
@@ -707,6 +710,42 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
             status = slave_status,
             error = %e,
             "Failed to persist Slave runtime status"
+        );
+    }
+}
+
+/// Send initial config to Master EA via ZMQ when TradeGroup is newly created
+/// This allows the Master EA to display the TradeGroup even with default settings
+async fn send_initial_config_to_master(state: &AppState, master_account: &str) {
+    use crate::models::MasterSettings;
+
+    // Get Master connection info (may not exist yet if Master EA is not connected)
+    let _master_conn = state.connection_manager.get_master(master_account).await;
+
+    // Use default settings (enabled=false) for newly created TradeGroup
+    let settings = MasterSettings::default();
+
+    let config = MasterConfigMessage {
+        account_id: master_account.to_string(),
+        status: 0, // DISABLED - Master is created but not yet enabled
+        symbol_prefix: settings.symbol_prefix.clone(),
+        symbol_suffix: settings.symbol_suffix.clone(),
+        config_version: settings.config_version,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        warning_codes: Vec::new(),
+    };
+
+    if let Err(e) = state.config_sender.send(&config).await {
+        tracing::error!(
+            master_account = %master_account,
+            error = %e,
+            "Failed to send initial MasterConfigMessage via ZMQ"
+        );
+    } else {
+        tracing::info!(
+            master_account = %master_account,
+            status = 0,
+            "Successfully sent initial MasterConfigMessage via ZMQ (TradeGroup created)"
         );
     }
 }

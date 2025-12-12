@@ -7,8 +7,8 @@
 // on Slave config distribution which returns typed SlaveConfigMessage.
 
 use e2e_tests::helpers::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, SyncMode};
+use e2e_tests::SyncMode;
+use e2e_tests::TestSandbox;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings, SlaveSettings};
 use tokio::time::{sleep, Duration};
@@ -20,7 +20,8 @@ use tokio::time::{sleep, Duration};
 /// Test Slave EA config distribution flow
 #[tokio::test]
 async fn test_slave_config_distribution() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -54,14 +55,9 @@ async fn test_slave_config_distribution() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -106,7 +102,8 @@ async fn test_slave_config_distribution() {
 /// Test one Master with multiple Slaves (1:N relationship)
 #[tokio::test]
 async fn test_multiple_slaves_same_master() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -145,14 +142,9 @@ async fn test_multiple_slaves_same_master() {
     // Create 3 Slave EA simulators
     let mut slave_simulators = Vec::new();
     for slave_account in &slave_accounts {
-        let simulator = SlaveEaSimulator::new(
-            &server.zmq_pull_address(),
-            &server.zmq_pub_address(),
-            &server.zmq_pub_address(),
-            slave_account,
-            master_account,
-        )
-        .expect("Failed to create Slave EA simulator");
+        let simulator = sandbox
+            .create_slave(slave_account, master_account)
+            .expect("Failed to create Slave EA simulator");
         slave_simulators.push(simulator);
     }
 
@@ -212,7 +204,8 @@ async fn test_multiple_slaves_same_master() {
 /// Test that new member is created with DISABLED status
 #[tokio::test]
 async fn test_new_member_initial_status_disabled() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -246,14 +239,9 @@ async fn test_new_member_initial_status_disabled() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -286,7 +274,8 @@ async fn test_new_member_initial_status_disabled() {
 /// 3. CONNECTED: All conditions met (Slave enabled + online + Master CONNECTED)
 #[tokio::test]
 async fn test_status_transition_to_connected() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -320,21 +309,13 @@ async fn test_status_transition_to_connected() {
     .expect("Failed to add member");
 
     // Create both Master and Slave EA simulators
-    let mut master_ea = e2e_tests::MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create Master EA simulator");
+    let mut master_ea = sandbox
+        .create_master(master_account)
+        .expect("Failed to create Master EA simulator");
 
-    let mut slave_ea = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut slave_ea = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -412,7 +393,8 @@ async fn test_status_transition_to_connected() {
 /// Test sync policy fields with SyncMode::Skip
 #[tokio::test]
 async fn test_sync_policy_skip_mode() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -441,14 +423,9 @@ async fn test_sync_policy_skip_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -476,7 +453,8 @@ async fn test_sync_policy_skip_mode() {
 /// Test sync policy fields with SyncMode::LimitOrder
 #[tokio::test]
 async fn test_sync_policy_limit_order_mode() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -506,14 +484,9 @@ async fn test_sync_policy_limit_order_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -550,7 +523,8 @@ async fn test_sync_policy_limit_order_mode() {
 /// Test sync policy fields with SyncMode::MarketOrder
 #[tokio::test]
 async fn test_sync_policy_market_order_mode() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -582,14 +556,9 @@ async fn test_sync_policy_market_order_mode() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -648,7 +617,8 @@ async fn test_sync_policy_market_order_mode() {
 /// Test trade execution settings distribution
 #[tokio::test]
 async fn test_trade_execution_settings() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -675,14 +645,9 @@ async fn test_trade_execution_settings() {
         .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -719,7 +684,8 @@ async fn test_trade_execution_settings() {
 /// Focus on Slave config distribution since Master config uses raw bytes
 #[tokio::test]
 async fn test_multiple_masters_multiple_slaves() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -794,34 +760,19 @@ async fn test_multiple_masters_multiple_slaves() {
     .expect("Failed to add slave3 to master2");
 
     // Create Slave EA simulators
-    let mut slave1_sim = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave1,
-        master1,
-    )
-    .expect("Failed to create Slave1 simulator");
+    let mut slave1_sim = sandbox
+        .create_slave(slave1, master1)
+        .expect("Failed to create Slave1 simulator");
     slave1_sim.set_trade_allowed(true);
 
-    let mut slave2_sim = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave2,
-        master1,
-    )
-    .expect("Failed to create Slave2 simulator");
+    let mut slave2_sim = sandbox
+        .create_slave(slave2, master1)
+        .expect("Failed to create Slave2 simulator");
     slave2_sim.set_trade_allowed(true);
 
-    let mut slave3_sim = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave3,
-        master2,
-    )
-    .expect("Failed to create Slave3 simulator");
+    let mut slave3_sim = sandbox
+        .create_slave(slave3, master2)
+        .expect("Failed to create Slave3 simulator");
     slave3_sim.set_trade_allowed(true);
 
     // Allow ZMQ connections to establish
@@ -893,9 +844,8 @@ async fn test_multiple_masters_multiple_slaves() {
 /// Test Master EA config distribution flow
 #[tokio::test]
 async fn test_master_config_distribution() {
-    use e2e_tests::MasterEaSimulator;
-
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -920,12 +870,9 @@ async fn test_master_config_distribution() {
         .expect("Failed to update master settings");
 
     // Create Master EA simulator
-    let mut simulator = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create Master EA simulator");
+    let mut simulator = sandbox
+        .create_master(master_account)
+        .expect("Failed to create Master EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -974,19 +921,14 @@ async fn test_master_config_distribution() {
 /// Test Master EA config distribution with non-existent account
 #[tokio::test]
 async fn test_master_config_not_found() {
-    use e2e_tests::MasterEaSimulator;
-
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
 
     let master_account = "NONEXISTENT_MASTER_001";
 
     // Create Master EA simulator (no DB setup - account doesn't exist)
-    let mut simulator = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create Master EA simulator");
+    let mut simulator = sandbox
+        .create_master(master_account)
+        .expect("Failed to create Master EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -1022,7 +964,8 @@ async fn test_master_config_not_found() {
 /// Test that toggling member status OFF sends disabled config to Slave EA
 #[tokio::test]
 async fn test_toggle_member_status_off_sends_disabled_config() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -1060,12 +1003,9 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
         .expect("Failed to enable member (flag)");
 
     // Create Master EA simulator and start it
-    let mut master_sim = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create Master EA simulator");
+    let mut master_sim = sandbox
+        .create_master(master_account)
+        .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
 
@@ -1073,14 +1013,9 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
     sleep(Duration::from_millis(500)).await;
 
     // Create and start Slave EA simulator
-    let mut slave_sim = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut slave_sim = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
     slave_sim.set_trade_allowed(true);
     slave_sim.start().expect("Failed to start slave EA");
 
@@ -1149,7 +1084,8 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
 /// Test that deleting a member sends disabled config to Slave EA
 #[tokio::test]
 async fn test_delete_member_sends_disabled_config() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -1174,14 +1110,9 @@ async fn test_delete_member_sends_disabled_config() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -1234,7 +1165,8 @@ async fn test_delete_member_sends_disabled_config() {
 /// Ensure Slave receives its OWN prefix, not the Master's prefix.
 #[tokio::test]
 async fn test_slave_config_prefix_distribution() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -1275,14 +1207,9 @@ async fn test_slave_config_prefix_distribution() {
     .expect("Failed to add member");
 
     // Create Slave EA simulator
-    let mut simulator = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create Slave EA simulator");
+    let mut simulator = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
     sleep(Duration::from_millis(500)).await;
@@ -1320,9 +1247,8 @@ async fn test_slave_config_prefix_distribution() {
 /// Test allow_new_orders is correctly derived from member status
 #[tokio::test]
 async fn test_allow_new_orders_follows_status() {
-    use e2e_tests::MasterEaSimulator;
-
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -1370,12 +1296,9 @@ async fn test_allow_new_orders_follows_status() {
     // Keep intent=false (default)
 
     // Create and start Master EA simulator
-    let mut master_sim = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create Master EA simulator");
+    let mut master_sim = sandbox
+        .create_master(master_account)
+        .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
 
@@ -1383,23 +1306,13 @@ async fn test_allow_new_orders_follows_status() {
     sleep(Duration::from_millis(300)).await;
 
     // Create and start Slave EA simulators
-    let mut sim_enabled = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_enabled,
-        master_account,
-    )
-    .expect("Failed to create enabled slave simulator");
+    let mut sim_enabled = sandbox
+        .create_slave(slave_enabled, master_account)
+        .expect("Failed to create enabled slave simulator");
 
-    let mut sim_disabled = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_disabled,
-        master_account,
-    )
-    .expect("Failed to create disabled slave simulator");
+    let mut sim_disabled = sandbox
+        .create_slave(slave_disabled, master_account)
+        .expect("Failed to create disabled slave simulator");
 
     // Start enabled slave and wait for CONNECTED status
     sim_enabled.set_trade_allowed(true);

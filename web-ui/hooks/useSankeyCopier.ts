@@ -7,6 +7,8 @@ import type {
   CreateSettingsRequest,
   TradeGroup,
   TradeGroupMember,
+  WarningCode,
+  SystemStateSnapshot,
 } from '@/types';
 import { selectedSiteAtom, apiClientAtom } from '@/lib/atoms/site';
 import { settingsAtom } from '@/lib/atoms/settings';
@@ -79,6 +81,7 @@ export function useSankeyCopier() {
 
       // Convert to legacy CopySettings format
       const copySettings = convertMembersToCopySettings(fetchedTradeGroups, membersMap);
+      console.log('[DEBUG] fetchSettings completed, settings count:', copySettings.length);
       setSettings(copySettings);
       setError(null);
     } catch (err) {
@@ -111,6 +114,13 @@ export function useSankeyCopier() {
     let ws: WebSocket | null = null;
     let isCleanup = false;
 
+    // Debounced fetchSettings for WebSocket messages
+    // Multiple member_status_changed messages may arrive in quick succession
+    // Use short delay (100ms) with trailing to batch rapid messages while staying responsive
+    const debouncedFetchSettings = debounce(() => {
+      fetchSettings();
+    }, 100, { trailing: true });
+
     try {
       ws = new WebSocket(wsUrl);
     } catch (err) {
@@ -126,14 +136,59 @@ export function useSankeyCopier() {
 
     ws.onmessage = (event) => {
       if (isCleanup) return;
-      const message = event.data;
+      const message = event.data as string;
+
+      // Handle system_snapshot (Full State Replace)
+      if (message.startsWith('system_snapshot:')) {
+        try {
+          const jsonPart = message.slice('system_snapshot:'.length);
+          const snapshot = JSON.parse(jsonPart) as SystemStateSnapshot;
+
+          // 1. Update Connections
+          setConnections(snapshot.connections);
+
+          // 2. Update TradeGroups (Masters)
+          setTradeGroups(snapshot.trade_groups);
+
+          // 3. Update Settings (Members)
+          // Convert flat members list to Map for adapter
+          const membersMap = new Map<string, TradeGroupMember[]>();
+
+          snapshot.members.forEach(member => {
+            const existing = membersMap.get(member.trade_group_id) || [];
+            existing.push(member);
+            membersMap.set(member.trade_group_id, existing);
+          });
+
+          // Convert to CopySettings format
+          const copySettings = convertMembersToCopySettings(snapshot.trade_groups, membersMap);
+          setSettings(copySettings);
+
+        } catch (err) {
+          console.debug('Failed to parse system snapshot', err);
+        }
+        return;
+      }
+
+      // Legacy support for older server versions or partial updates (optional, keeping for robustness)
+      // Handle connections snapshot from server (sent every 3 seconds when WS is connected)
+      if (message.startsWith('connections_snapshot:')) {
+        try {
+          const jsonPart = message.slice('connections_snapshot:'.length);
+          const snapshot = JSON.parse(jsonPart) as EaConnection[];
+          setConnections(snapshot);
+        } catch {
+          console.debug('Failed to parse connections snapshot');
+        }
+        return;
+      }
+
       console.log('WS message:', message);
       setWsMessages((prev) => [message, ...prev].slice(0, 20));
 
-      // Refresh data when changes are detected
-      // Note: With new API, we refresh all settings instead of parsing individual messages
-      if (message.startsWith('trade_') || message.startsWith('member_') || message.startsWith('settings_')) {
-        fetchSettings();
+      // Only refresh for member deletion (need full refresh to remove from list)
+      if (message.startsWith('member_deleted:')) {
+        debouncedFetchSettings();
       }
     };
 
@@ -151,6 +206,7 @@ export function useSankeyCopier() {
 
     return () => {
       isCleanup = true;
+      debouncedFetchSettings.cancel(); // Cancel pending debounced calls
       if (ws) {
         // Remove event handlers to prevent error messages during cleanup
         ws.onerror = null;
@@ -165,15 +221,14 @@ export function useSankeyCopier() {
       }
     };
 
-  }, [selectedSite?.siteUrl, fetchSettings]);
+  }, [selectedSite?.siteUrl, fetchSettings, setConnections, setSettings]);
 
-  // Initial load and periodic connection refresh
+  // Initial load only (no polling - WebSocket provides real-time updates)
   useEffect(() => {
     if (apiClient) {
       fetchSettings();
-      fetchConnections();
-      const interval = setInterval(fetchConnections, 5000);
-      return () => clearInterval(interval);
+      fetchConnections(); // Initial load
+      // No polling needed - server sends connections_snapshot via WebSocket
     }
   }, [apiClient, fetchSettings, fetchConnections]);
 
@@ -207,9 +262,9 @@ export function useSankeyCopier() {
       prev.map(s =>
         s.id === id
           ? {
-              ...s,
-              enabled_flag: nextEnabled,
-            }
+            ...s,
+            enabled_flag: nextEnabled,
+          }
           : s
       )
     );

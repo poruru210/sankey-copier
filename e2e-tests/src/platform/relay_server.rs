@@ -185,19 +185,44 @@ impl RelayServerProcess {
 
         // Spawn thread to read and log stderr
         let stderr = child.stderr.take();
-        let shutdown_flag_clone = shutdown_flag.clone();
-        let working_dir_for_log = working_dir.clone();
+        let shutdown_flag_clone_err = shutdown_flag.clone();
+        let working_dir_for_log_err = working_dir.clone();
         if let Some(stderr) = stderr {
             std::thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines() {
-                    if shutdown_flag_clone.load(Ordering::Relaxed) {
+                    if shutdown_flag_clone_err.load(Ordering::Relaxed) {
                         break;
                     }
                     if let Ok(line) = line {
                         eprintln!(
                             "[relay-server@{}] {}",
-                            working_dir_for_log
+                            working_dir_for_log_err
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy(),
+                            line
+                        );
+                    }
+                }
+            });
+        }
+
+        // Spawn thread to read and log stdout
+        let stdout = child.stdout.take();
+        let shutdown_flag_clone_out = shutdown_flag.clone();
+        let working_dir_for_log_out = working_dir.clone();
+        if let Some(stdout) = stdout {
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines() {
+                    if shutdown_flag_clone_out.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if let Ok(line) = line {
+                        eprintln!(
+                            "[relay-server@{}] {}",
+                            working_dir_for_log_out
                                 .file_name()
                                 .unwrap_or_default()
                                 .to_string_lossy(),

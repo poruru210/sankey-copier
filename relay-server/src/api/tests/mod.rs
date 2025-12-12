@@ -5,13 +5,14 @@
 
 mod runtime_metrics_tests;
 mod trade_group_members_tests;
+mod websocket_tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
-    api::AppState,
+    api::{AppState, SnapshotBroadcaster},
     config::{Config, VictoriaLogsConfig},
     connection_manager::ConnectionManager,
     db::Database,
@@ -68,6 +69,10 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         generated_at: None,
     });
 
+    // Create snapshot broadcaster for testing
+    let snapshot_broadcaster =
+        SnapshotBroadcaster::new(tx.clone(), connection_manager.clone(), db.clone());
+
     AppState {
         db,
         tx,
@@ -80,5 +85,6 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
         resolved_ports,
         vlogs_controller,
         runtime_status_metrics: Arc::new(RuntimeStatusMetrics::default()),
+        snapshot_broadcaster,
     }
 }

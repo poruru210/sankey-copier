@@ -117,6 +117,55 @@ impl OrderType {
     pub fn is_pending(&self) -> bool {
         !self.is_market()
     }
+
+    /// Reverse the order type (Buy -> Sell, BuyLimit -> SellLimit, etc.)
+    pub fn reverse(&self) -> Self {
+        match self {
+            OrderType::Buy => OrderType::Sell,
+            OrderType::Sell => OrderType::Buy,
+            OrderType::BuyLimit => OrderType::SellLimit,
+            OrderType::SellLimit => OrderType::BuyLimit,
+            OrderType::BuyStop => OrderType::SellStop,
+            OrderType::SellStop => OrderType::BuyStop,
+        }
+    }
+}
+
+impl std::str::FromStr for OrderType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Buy" => Ok(OrderType::Buy),
+            "Sell" => Ok(OrderType::Sell),
+            "BuyLimit" => Ok(OrderType::BuyLimit),
+            "SellLimit" => Ok(OrderType::SellLimit),
+            "BuyStop" => Ok(OrderType::BuyStop),
+            "SellStop" => Ok(OrderType::SellStop),
+            _ => Err(()),
+        }
+    }
+}
+
+impl OrderType {
+    /// Convert from string representation (opt)
+    pub fn try_parse(s: &str) -> Option<Self> {
+        use std::str::FromStr;
+        Self::from_str(s).ok()
+    }
+}
+
+impl From<OrderType> for i32 {
+    fn from(ot: OrderType) -> Self {
+        match ot {
+            OrderType::Buy => 0,
+            OrderType::Sell => 1,
+            OrderType::BuyLimit => 2,
+            OrderType::SellLimit => 3,
+            OrderType::BuyStop => 4,
+            OrderType::SellStop => 5,
+        }
+    }
 }
 
 // =============================================================================
@@ -215,5 +264,15 @@ mod tests {
         assert!(!OrderType::BuyLimit.is_market());
         assert!(OrderType::BuyLimit.is_pending());
         assert!(OrderType::SellStop.is_pending());
+    }
+
+    #[test]
+    fn test_order_type_reverse() {
+        assert_eq!(OrderType::Buy.reverse(), OrderType::Sell);
+        assert_eq!(OrderType::Sell.reverse(), OrderType::Buy);
+        assert_eq!(OrderType::BuyLimit.reverse(), OrderType::SellLimit);
+        assert_eq!(OrderType::SellLimit.reverse(), OrderType::BuyLimit);
+        assert_eq!(OrderType::BuyStop.reverse(), OrderType::SellStop);
+        assert_eq!(OrderType::SellStop.reverse(), OrderType::BuyStop);
     }
 }

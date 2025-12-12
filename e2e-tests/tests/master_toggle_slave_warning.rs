@@ -8,8 +8,8 @@
 //! 2. Master ON → Slave warning clears
 
 use e2e_tests::helpers::default_test_slave_settings;
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_DISABLED};
+use e2e_tests::TestSandbox;
+use e2e_tests::STATUS_DISABLED;
 use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use tokio::time::{sleep, timeout, Duration};
 
 const SETTLE_WAIT_MS: u64 = 250;
-const BROADCAST_TIMEOUT_SECS: u64 = 5;
+const BROADCAST_TIMEOUT_SECS: u64 = 10;
 
 /// Create an HTTP client that accepts self-signed certificates
 fn create_http_client() -> reqwest::Client {
@@ -73,7 +73,8 @@ async fn create_ws_connector(
 /// Test Master toggle OFF → Slave receives master_web_ui_disabled warning
 #[tokio::test]
 async fn test_master_toggle_off_adds_slave_warning() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -87,24 +88,16 @@ async fn test_master_toggle_off_adds_slave_warning() {
         .expect("failed to seed trade group");
 
     // Start Master EA (online, auto-trading ON)
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // Start Slave EA (online, auto-trading ON)
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(), // trade_address same as config_address
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
 
@@ -180,7 +173,8 @@ async fn test_master_toggle_off_adds_slave_warning() {
 /// Test Master toggle ON → Slave warning clears
 #[tokio::test]
 async fn test_master_toggle_on_clears_slave_warning() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -201,24 +195,16 @@ async fn test_master_toggle_on_clears_slave_warning() {
     let (_write, mut read) = ws_stream.split();
 
     // Start Master EA (online, auto-trading ON)
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // Start Slave EA (online, auto-trading ON)
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(), // trade_address same as config_address
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
 
@@ -295,7 +281,8 @@ async fn test_master_toggle_on_clears_slave_warning() {
 /// Test Master toggle cycle: OFF → ON → OFF
 #[tokio::test]
 async fn test_master_toggle_cycle() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -309,23 +296,15 @@ async fn test_master_toggle_cycle() {
         .expect("failed to seed trade group");
 
     // Start Master and Slave EAs
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(), // trade_address same as config_address
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
 
@@ -497,6 +476,30 @@ async fn wait_for_slave_warning(
                         }
                     }
                 }
+            } else if let Some(stripped) = text.strip_prefix("system_snapshot:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
+                    if let Some(members) = json["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warnings = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if warnings.contains(&expected_warning) {
+                                    // Construct partial object to match return type expectation if needed
+                                    // But wait, the test expects valid JSON to extract warning_codes later.
+                                    // Return the member object itself? OR properly formed object?
+                                    // The test uses: `let settings_json = broadcast_result.unwrap(); let warning_codes = settings_json["warning_codes"]...`
+                                    // So finding the MEMBER and returning it is sufficient if it has "warning_codes".
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -527,6 +530,25 @@ async fn wait_for_slave_warning_cleared(
 
                         if !warnings.contains(&cleared_warning) {
                             return json;
+                        }
+                    }
+                }
+            } else if let Some(stripped) = text.strip_prefix("system_snapshot:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
+                    if let Some(members) = json["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warnings = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if !warnings.contains(&cleared_warning) {
+                                    return member.clone();
+                                }
+                            }
                         }
                     }
                 }

@@ -230,7 +230,7 @@ function ConnectionsViewReactFlowInner({
   );
 
   // Convert account data to React Flow nodes and edges
-  const { nodes: initialNodes, edges: initialEdges } = useFlowData({
+  const { nodes: initialNodes, edges: initialEdges, pendingAccountIds } = useFlowData({
     sourceAccounts: visibleSourceAccounts,
     receiverAccounts: visibleReceiverAccounts,
     settings,
@@ -332,7 +332,7 @@ function ConnectionsViewReactFlowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedSourceIds, expandedReceiverIds, warningStateHash]);
 
-  // Effect 3: Update node data without changing positions (for hover, settings, connection status)
+  // Effect 3: Update node data without changing positions (for hover, settings, connection status, pending state)
   useEffect(() => {
     setNodes((currentNodes) =>
       currentNodes.map((node) => {
@@ -344,7 +344,7 @@ function ConnectionsViewReactFlowInner({
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoveredSourceId, hoveredReceiverId, settings]);
+  }, [hoveredSourceId, hoveredReceiverId, settings, pendingAccountIds.size]);
 
   // Effect 4: Update edges when settings change
   useEffect(() => {

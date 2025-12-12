@@ -8,7 +8,7 @@
 mod error;
 mod mt_installations;
 mod trade_group_members;
-mod trade_groups;
+pub mod trade_groups;
 
 // New submodules for modular structure
 mod connections;
@@ -37,6 +37,8 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
 
+pub use websocket::SnapshotBroadcaster;
+
 use crate::{
     config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
     port_resolver::ResolvedPorts, runtime_status_updater::RuntimeStatusMetrics,
@@ -64,6 +66,8 @@ pub struct AppState {
     pub vlogs_controller: Option<VLogsController>,
     /// Shared runtime status metrics (Heartbeat, API, ZMQ handlers)
     pub runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+    /// On-demand snapshot broadcaster for WebSocket clients
+    pub snapshot_broadcaster: SnapshotBroadcaster,
 }
 
 pub fn create_router(state: AppState) -> Router {

@@ -1,6 +1,7 @@
 mod connection;
 mod global_settings;
 mod mt_installation;
+mod snapshot;
 pub mod status_engine;
 mod trade_group;
 mod trade_group_member;
@@ -8,16 +9,16 @@ mod trade_group_member;
 pub use connection::*;
 pub use global_settings::*;
 pub use mt_installation::*;
+pub use snapshot::*;
 pub use trade_group::*;
 pub use trade_group_member::*;
 
 // Re-export shared types from DLL
 pub use sankey_copier_zmq::{
-    OrderType, SymbolMapping, TradeAction, TradeFilters, WarningCode, STATUS_CONNECTED,
-    STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
+    OrderType, SymbolMapping, TradeAction, TradeFilters, TradeSignal, WarningCode,
+    STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
 };
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Slave configuration with associated Master account information.
@@ -34,37 +35,6 @@ pub struct SlaveConfigWithMaster {
     #[serde(default)]
     pub warning_codes: Vec<WarningCode>,
     pub slave_settings: SlaveSettings,
-}
-
-/// Trade signal message structure
-/// Note: Some fields are optional because Close/Modify actions may not include all data.
-/// The mt-bridge serializer sends None for fields not applicable to the action type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeSignal {
-    pub action: TradeAction,
-    pub ticket: i64,
-    #[serde(default)]
-    pub symbol: Option<String>,
-    #[serde(default)]
-    pub order_type: Option<OrderType>,
-    #[serde(default)]
-    pub lots: Option<f64>,
-    #[serde(default)]
-    pub open_price: Option<f64>,
-    #[serde(default)]
-    pub stop_loss: Option<f64>,
-    #[serde(default)]
-    pub take_profit: Option<f64>,
-    #[serde(default)]
-    pub magic_number: Option<i32>,
-    #[serde(default)]
-    pub comment: Option<String>,
-    pub timestamp: DateTime<Utc>,
-    pub source_account: String,
-    /// Close ratio for partial close (0.0-1.0)
-    /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
-    #[serde(default)]
-    pub close_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

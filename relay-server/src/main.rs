@@ -442,6 +442,11 @@ async fn main() -> Result<()> {
     tracing::info!("Creating API state...");
     let allowed_origins = config.allowed_origins();
     let cors_disabled = config.cors.disable;
+
+    // Create on-demand snapshot broadcaster for WebSocket clients
+    let snapshot_broadcaster =
+        api::SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone(), db.clone());
+
     let app_state = AppState {
         db: db.clone(),
         tx: broadcast_tx,
@@ -454,6 +459,7 @@ async fn main() -> Result<()> {
         resolved_ports: Arc::new(resolved_ports),
         vlogs_controller,
         runtime_status_metrics,
+        snapshot_broadcaster,
     };
     if cors_disabled {
         tracing::warn!("CORS is DISABLED in config - all origins will be allowed!");

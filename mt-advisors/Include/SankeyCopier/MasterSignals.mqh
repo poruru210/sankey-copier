@@ -19,35 +19,11 @@
 //| Send open position signal message (Master)                       |
 //| Called when Master EA opens a new position to notify Slaves      |
 //+------------------------------------------------------------------+
-bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
+bool SendOpenSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, string symbol,
                     string order_type, double lots, double price, double sl, double tp,
                     long magic, string comment, string account_id)
 {
-   // Serialize open signal message using MessagePack
-   // close_ratio = 0.0 for Open signals (not a partial close)
-   int len = serialize_trade_signal("Open", (long)ticket, symbol, order_type,
-                                            lots, price, sl, tp, magic, comment,
-                                            FormatTimestampISO8601(TimeGMT()), account_id, 0.0);
-
-   if(len <= 0)
-   {
-      LogError(CAT_SYNC, "Failed to serialize open signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      LogError(CAT_SYNC, "Failed to copy open signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
+   return ea_context.SendOpenSignal((long)ticket, symbol, order_type, lots, price, sl, tp, magic, comment);
 }
 
 //+------------------------------------------------------------------+
@@ -55,65 +31,18 @@ bool SendOpenSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, string symbol,
 //| Called when Master EA closes a position to notify Slaves         |
 //| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
-bool SendCloseSignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double close_ratio, string account_id)
+bool SendCloseSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double close_ratio, string account_id)
 {
-   // For close signals, we send a trade signal with action="Close"
-   // close_ratio indicates what portion was closed (0 = full close for backward compat)
-   int len = serialize_trade_signal("Close", (long)ticket, "", "", 0.0, 0.0, 0.0, 0.0,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id, close_ratio);
-
-   if(len <= 0)
-   {
-      LogError(CAT_SYNC, "Failed to serialize close signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      LogError(CAT_SYNC, "Failed to copy close signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
+   return ea_context.SendCloseSignal((long)ticket, close_ratio);
 }
 
 //+------------------------------------------------------------------+
 //| Send modify signal message (Master)                             |
 //| Called when Master EA modifies SL/TP to notify Slaves            |
 //+------------------------------------------------------------------+
-bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, double tp, string account_id)
+bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double sl, double tp, string account_id)
 {
-   // For modify signals, we send a trade signal with action="Modify"
-   // Only ticket, stop_loss, take_profit, timestamp, and source_account are needed
-   // close_ratio = 0.0 for Modify signals (not a close operation)
-   int len = serialize_trade_signal("Modify", (long)ticket, "", "", 0.0, 0.0, sl, tp,
-                                            0, "", FormatTimestampISO8601(TimeGMT()), account_id, 0.0);
-
-   if(len <= 0)
-   {
-      LogError(CAT_SYNC, "Failed to serialize modify signal message");
-      return false;
-   }
-
-   // Copy serialized data to buffer
-   uchar buffer[];
-   ArrayResize(buffer, len);
-   int copied = copy_serialized_buffer(buffer, len);
-
-   if(copied != len)
-   {
-      LogError(CAT_SYNC, "Failed to copy modify signal message buffer");
-      return false;
-   }
-
-   // Send binary MessagePack data
-   return (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
+   return ea_context.SendModifySignal((long)ticket, sl, tp);
 }
 
 //+------------------------------------------------------------------+
@@ -121,7 +50,7 @@ bool SendModifySignal(HANDLE_TYPE zmq_socket, TICKET_TYPE ticket, double sl, dou
 //| Called when Master receives SyncRequest from Slave               |
 //| Collects all current positions and sends as PositionSnapshot      |
 //+------------------------------------------------------------------+
-bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symbol_prefix, string symbol_suffix)
+bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
 {
    // Create snapshot builder
    HANDLE_TYPE builder = create_position_snapshot_builder(account_id);
@@ -135,7 +64,9 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
 
    #ifdef IS_MT5
       // MT5: Iterate through all positions
-      for(int i = 0; i < PositionsTotal(); i++)
+      int total = PositionsTotal();
+      
+      for(int i = 0; i < total; i++)
       {
          ulong ticket = PositionGetTicket(i);
          if(ticket > 0 && PositionSelectByTicket(ticket))
@@ -143,7 +74,6 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
             string raw_symbol = PositionGetString(POSITION_SYMBOL);
 
             // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
-            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             long type = PositionGetInteger(POSITION_TYPE);
@@ -159,8 +89,10 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
 
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
-            if(result == 1)
+            
+            if(result == 1) {
                position_count++;
+            }
          }
       }
    #else
@@ -178,7 +110,6 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
             string raw_symbol = OrderSymbol();
 
             // Master sends ALL positions - prefix/suffix is only used for symbol name cleaning
-            // Clean symbol (remove prefix/suffix if present)
             string symbol = GetCleanSymbol(raw_symbol, symbol_prefix, symbol_suffix);
 
             double lots = OrderLots();
@@ -193,8 +124,9 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
 
             int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
                                                                   lots, price, sl, tp, magic, open_time_str);
-            if(result == 1)
+            if(result == 1) {
                position_count++;
+            }
          }
       }
    #endif
@@ -216,8 +148,8 @@ bool SendPositionSnapshot(HANDLE_TYPE zmq_socket, string account_id, string symb
    // Resize to actual length
    ArrayResize(buffer, len);
 
-   // Send binary MessagePack data
-   bool success = (zmq_socket_send_binary(zmq_socket, buffer, len) == 1);
+   // Send via EaContext
+   bool success = ea_context.SendPush(buffer, len);
 
    if(success)
       LogInfo(CAT_SYNC, StringFormat("Snapshot sent: %d positions (%d bytes)", position_count, len));

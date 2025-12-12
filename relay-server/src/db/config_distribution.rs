@@ -63,20 +63,6 @@ impl Database {
         Ok(configs)
     }
 
-    /// Update all enabled members for a master to CONNECTED (2) when master comes online
-    pub async fn update_master_statuses_connected(&self, master_account: &str) -> Result<usize> {
-        let result = sqlx::query(
-            "UPDATE trade_group_members
-             SET status = 2, updated_at = CURRENT_TIMESTAMP
-             WHERE trade_group_id = ? AND enabled_flag = 1",
-        )
-        .bind(master_account)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() as usize)
-    }
-
     /// Update all connected members for a master to ENABLED (1) when master goes offline
     pub async fn update_master_statuses_enabled(&self, master_account: &str) -> Result<usize> {
         // Debug: count how many connected (status=2) rows exist for this master

@@ -13,9 +13,9 @@
 use anyhow::Result;
 use chrono::Utc;
 use sankey_copier_zmq::ffi::{
-    build_config_topic, get_global_config_topic, zmq_context_create, zmq_context_destroy,
-    zmq_socket_connect, zmq_socket_create, zmq_socket_destroy, zmq_socket_receive,
-    zmq_socket_send_binary, zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
+    build_config_topic, zmq_context_create, zmq_context_destroy, zmq_socket_connect,
+    zmq_socket_create, zmq_socket_destroy, zmq_socket_receive, zmq_socket_send_binary,
+    zmq_socket_subscribe, ZMQ_PUSH, ZMQ_SUB,
 };
 use sankey_copier_zmq::HeartbeatMessage;
 use std::ffi::c_char;
@@ -193,6 +193,25 @@ impl EaSimulatorBase {
         })
     }
 
+    pub fn new_without_zmq(account_id: &str, ea_type: EaType) -> Result<Self> {
+        let heartbeat_params = match ea_type {
+            EaType::Master => HeartbeatParams::master_default(),
+            EaType::Slave => HeartbeatParams::slave_default(),
+        };
+
+        Ok(Self {
+            context_handle: -1,
+            push_socket_handle: -1,
+            config_socket_handle: -1,
+            trade_socket_handle: None,
+            account_id: account_id.to_string(),
+            ea_type,
+            is_trade_allowed: Arc::new(AtomicBool::new(false)),
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
+            heartbeat_params,
+        })
+    }
+
     /// Get account ID
     pub fn account_id(&self) -> &str {
         &self.account_id
@@ -255,54 +274,6 @@ impl EaSimulatorBase {
                 != 1
             {
                 anyhow::bail!("Failed to send heartbeat");
-            }
-        }
-        Ok(())
-    }
-
-    /// Send binary data on PUSH socket
-    pub(crate) fn send_binary(&self, data: &[u8]) -> Result<()> {
-        unsafe {
-            if zmq_socket_send_binary(self.push_socket_handle, data.as_ptr(), data.len() as i32)
-                != 1
-            {
-                anyhow::bail!("Failed to send binary data");
-            }
-        }
-        Ok(())
-    }
-
-    /// Subscribe to an additional topic on the config socket
-    ///
-    /// Used for config-related topics (config/{account}, config/global).
-    /// For trade topics, use subscribe_to_trade_topic() instead.
-    pub(crate) fn subscribe_to_topic(&self, topic: &str) -> Result<()> {
-        let topic_utf16: Vec<u16> = topic.encode_utf16().chain(Some(0)).collect();
-        unsafe {
-            if zmq_socket_subscribe(self.config_socket_handle, topic_utf16.as_ptr()) != 1 {
-                anyhow::bail!("Failed to subscribe to topic: {}", topic);
-            }
-        }
-        Ok(())
-    }
-
-    /// Get trade socket handle (for passing to OnTimer thread)
-    pub(crate) fn trade_socket_handle(&self) -> Option<i32> {
-        self.trade_socket_handle
-    }
-
-    /// Subscribe to global config topic ("config/global") for VLogs settings
-    pub(crate) fn subscribe_to_global_config(&self) -> Result<()> {
-        let mut topic_buffer = vec![0u16; TOPIC_BUFFER_SIZE as usize];
-        let topic_len =
-            unsafe { get_global_config_topic(topic_buffer.as_mut_ptr(), TOPIC_BUFFER_SIZE) };
-        if topic_len <= 0 {
-            anyhow::bail!("Failed to get global config topic");
-        }
-
-        unsafe {
-            if zmq_socket_subscribe(self.config_socket_handle, topic_buffer.as_ptr()) != 1 {
-                anyhow::bail!("Failed to subscribe to global config topic");
             }
         }
         Ok(())
@@ -373,12 +344,19 @@ impl Drop for EaSimulatorBase {
         self.shutdown_flag.store(true, Ordering::SeqCst);
 
         // Clean up ZMQ resources
-        // MQL5: CleanupZmqMultiSocket(g_zmq_trade_socket, g_zmq_config_socket, g_zmq_context, ...)
         if let Some(ts) = self.trade_socket_handle {
-            zmq_socket_destroy(ts);
+            if ts >= 0 {
+                zmq_socket_destroy(ts);
+            }
         }
-        zmq_socket_destroy(self.config_socket_handle);
-        zmq_socket_destroy(self.push_socket_handle);
-        zmq_context_destroy(self.context_handle);
+        if self.config_socket_handle >= 0 {
+            zmq_socket_destroy(self.config_socket_handle);
+        }
+        if self.push_socket_handle >= 0 {
+            zmq_socket_destroy(self.push_socket_handle);
+        }
+        if self.context_handle >= 0 {
+            zmq_context_destroy(self.context_handle);
+        }
     }
 }

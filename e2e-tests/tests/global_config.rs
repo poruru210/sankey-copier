@@ -6,7 +6,7 @@
 //! Note: VLogs config tests require proper setup in the relay server config.
 //! The tests focus on API behavior and broadcast functionality.
 
-use e2e_tests::relay_server_process::RelayServerProcess;
+use e2e_tests::TestSandbox;
 use tokio::time::{sleep, Duration};
 
 // =============================================================================
@@ -16,7 +16,8 @@ use tokio::time::{sleep, Duration};
 /// Test VLogs config GET API returns config
 #[tokio::test]
 async fn test_vlogs_config_get_api() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
@@ -56,7 +57,8 @@ async fn test_vlogs_config_get_api() {
 /// Test VLogs config toggle via PUT API
 #[tokio::test]
 async fn test_vlogs_config_toggle() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
@@ -108,7 +110,8 @@ async fn test_vlogs_config_toggle() {
 /// Test VLogs config validation errors
 #[tokio::test]
 async fn test_vlogs_config_validation_errors() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
@@ -165,20 +168,15 @@ async fn test_vlogs_config_validation_errors() {
 /// When a Master EA connects and sends heartbeat, it should receive the current VLogs config
 #[tokio::test]
 async fn test_master_receives_vlogs_on_registration() {
-    use e2e_tests::MasterEaSimulator;
-
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
 
     // Create master EA
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        "VLOGS_MASTER_001",
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master("VLOGS_MASTER_001")
+        .expect("Failed to create master");
 
     // Subscribe to global config topic (where VLogs is broadcast)
     master
@@ -216,22 +214,15 @@ async fn test_master_receives_vlogs_on_registration() {
 /// Test: Slave EA receives VLogs config on registration
 #[tokio::test]
 async fn test_slave_receives_vlogs_on_registration() {
-    use e2e_tests::SlaveEaSimulator;
-
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
 
     // Create slave EA
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        "VLOGS_SLAVE_001",
-        "VLOGS_MASTER_001",
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave("VLOGS_SLAVE_001", "VLOGS_MASTER_001")
+        .expect("Failed to create slave");
 
     // Subscribe to global config topic
     slave
@@ -264,30 +255,21 @@ async fn test_slave_receives_vlogs_on_registration() {
 /// When VLogs settings are changed via API, all connected EAs should receive the update
 #[tokio::test]
 async fn test_vlogs_broadcast_on_api_update() {
-    use e2e_tests::{MasterEaSimulator, SlaveEaSimulator};
-
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     // Allow server to initialize
     sleep(Duration::from_millis(500)).await;
 
     // Create master EA
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        "VLOGS_MASTER_002",
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master("VLOGS_MASTER_002")
+        .expect("Failed to create master");
 
     // Create slave EA
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        "VLOGS_SLAVE_002",
-        "VLOGS_MASTER_002",
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave("VLOGS_SLAVE_002", "VLOGS_MASTER_002")
+        .expect("Failed to create slave");
 
     // Subscribe both to global config topic
     master

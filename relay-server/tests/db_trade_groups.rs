@@ -470,58 +470,6 @@ async fn test_get_settings_for_slave_includes_disabled() {
 }
 
 #[tokio::test]
-async fn test_update_master_statuses_connected() {
-    let db = create_test_db().await;
-
-    db.create_trade_group("MASTER_001").await.unwrap();
-
-    // Add members with different statuses
-    db.add_member("MASTER_001", "SLAVE_001", SlaveSettings::default(), 0)
-        .await
-        .unwrap();
-    db.add_member("MASTER_001", "SLAVE_002", SlaveSettings::default(), 0)
-        .await
-        .unwrap();
-    db.add_member("MASTER_001", "SLAVE_003", SlaveSettings::default(), 0)
-        .await
-        .unwrap();
-
-    // Set statuses: DISABLED, ENABLED, ENABLED
-    set_member_status(&db, "MASTER_001", "SLAVE_001", 0).await;
-    set_member_status(&db, "MASTER_001", "SLAVE_002", 1).await;
-    set_member_status(&db, "MASTER_001", "SLAVE_003", 1).await;
-
-    // Update to CONNECTED
-    let count = db
-        .update_master_statuses_connected("MASTER_001")
-        .await
-        .unwrap();
-
-    // Should update 2 members (ENABLED → CONNECTED)
-    assert_eq!(count, 2);
-
-    let member1 = db
-        .get_member("MASTER_001", "SLAVE_001")
-        .await
-        .unwrap()
-        .unwrap();
-    let member2 = db
-        .get_member("MASTER_001", "SLAVE_002")
-        .await
-        .unwrap()
-        .unwrap();
-    let member3 = db
-        .get_member("MASTER_001", "SLAVE_003")
-        .await
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(member1.status, 0); // Still DISABLED
-    assert_eq!(member2.status, 2); // Now CONNECTED
-    assert_eq!(member3.status, 2); // Now CONNECTED
-}
-
-#[tokio::test]
 async fn test_update_master_statuses_disconnected() {
     let db = create_test_db().await;
 

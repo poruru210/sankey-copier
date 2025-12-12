@@ -11,8 +11,8 @@
 
 //--- Include common headers
 #include "../Include/SankeyCopier/Common.mqh"
-#include "../Include/SankeyCopier/Zmq.mqh"
-#include "../Include/SankeyCopier/Messages.mqh"
+// ZMQ.mqh removed
+#include "../Include/SankeyCopier/MasterSignals.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
@@ -51,9 +51,7 @@ struct OrderInfo
 
 //--- Global variables
 string      AccountID;                  // Auto-generated from broker + account number
-HANDLE_TYPE g_zmq_context = -1;
-HANDLE_TYPE g_zmq_socket = -1;
-HANDLE_TYPE g_zmq_config_socket = -1;   // Socket for receiving config/sync requests
+// ZMQ globals removed - managed by EaContext
 OrderInfo   g_tracked_orders[];
 bool        g_initialized = false;
 datetime    g_last_heartbeat = 0;
@@ -113,49 +111,32 @@ int OnInit()
 
    Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
 
-   // Initialize ZMQ context
-   g_zmq_context = InitializeZmqContext();
-   if(g_zmq_context < 0)
-      return INIT_FAILED;
-
-   // Initialize EA Context (Stateful FFI)
-   if(!g_ea_context.Initialize(AccountID, "Master", "MT4", GetAccountNumber(), 
-                               GetBrokerName(), GetAccountName(), GetServerName(), 
-                               GetAccountCurrency(), GetAccountLeverage()))
+   // Initialize EaContext (handles ZMQ internally)
+   if(!g_ea_context.Initialize(AccountID, EA_TYPE_MASTER, "MT4", GetAccountNumber(), 
+                               AccountInfoString(ACCOUNT_COMPANY), AccountInfoString(ACCOUNT_NAME),
+                               AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
+                               AccountInfoInteger(ACCOUNT_LEVERAGE)))
    {
-      Print("[ERROR] Failed to initialize EA Context");
+      Print("Failed to initialize EaContext");
       return INIT_FAILED;
    }
-
-
-   // Create and connect PUSH socket
-   g_zmq_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_PUSH, g_RelayAddress, "Master PUSH");
-   if(g_zmq_socket < 0)
+   
+   // Connect to Relay Server
+   if(!g_ea_context.Connect(g_RelayAddress, g_ConfigAddress))
    {
-      CleanupZmqContext(g_zmq_context);
-      return INIT_FAILED;
-   }
-
-   // Create and connect config socket (SUB to receive SyncRequest)
-   g_zmq_config_socket = CreateAndConnectZmqSocket(g_zmq_context, ZMQ_SUB, g_ConfigAddress, "Master Config SUB");
-   if(g_zmq_config_socket < 0)
-   {
-      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
-      CleanupZmqContext(g_zmq_context);
+      Print("Failed to connect to Relay Server");
       return INIT_FAILED;
    }
 
    // Subscribe to messages for this account ID
-   if(!SubscribeToTopic(g_zmq_config_socket, g_config_topic))
+   if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-      CleanupZmqSocket(g_zmq_config_socket, "Master Config SUB");
-      CleanupZmqSocket(g_zmq_socket, "Master PUSH");
-      CleanupZmqContext(g_zmq_context);
+      Print("Failed to subscribe to config topic");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
-   if(!SubscribeToTopic(g_zmq_config_socket, g_vlogs_topic))
+   if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
    {
       Print("WARNING: Failed to subscribe to vlogs_config topic");
    }
@@ -168,7 +149,7 @@ int OnInit()
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
       Print("Generated sync topic prefix: ", g_sync_topic);
       
-      if(!SubscribeToTopic(g_zmq_config_socket, g_sync_topic))
+      if(!g_ea_context.SubscribeConfig(g_sync_topic))
       {
          Print("WARNING: Failed to subscribe to sync topic");
       }
@@ -222,7 +203,7 @@ void OnDeinit(const int reason)
    // Send unregister message
    if(g_ea_context.IsInitialized())
    {
-      g_ea_context.SendUnregister(g_zmq_socket);
+      g_ea_context.SendUnregister();
    }
 
    // Kill timer
@@ -232,8 +213,10 @@ void OnDeinit(const int reason)
    if(ShowConfigPanel)
       g_config_panel.Delete();
 
-   // Cleanup ZMQ resources
-   CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
+   // Cleanup EaContext (handles ZMQ context destruction)
+   // No explicit cleanup needed for EaContextWrapper as destructor handles it
+   // But we can call Reset if needed
+   g_ea_context.Reset();
 
    // Cleanup EA Context handled by wrapper destructor
    // ea_context_free is called by ~EaContextWrapper
@@ -247,131 +230,74 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   if(!g_initialized)
-      return;
+   if(!g_initialized) return;
 
-   // Check for auto-trading state change (IsTradeAllowed)
+   // 1. Run ManagerTick (Handles ZMQ Polling, Heartbeats internally)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
-   bool trade_state_changed = (current_trade_allowed != g_last_trade_allowed);
+   
+   // Track trade state change for UI update
+   static bool last_trade_allowed = false;
+   bool trade_state_changed = (current_trade_allowed != last_trade_allowed);
+   if(trade_state_changed) last_trade_allowed = current_trade_allowed;
 
-   // Send heartbeat every HEARTBEAT_INTERVAL_SECONDS OR on trade state change
-   // Use TimeLocal() instead of TimeCurrent() to ensure heartbeat works even when market is closed
-   datetime now = TimeLocal();
-   bool should_send_heartbeat = (now - g_last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS) || trade_state_changed;
+   int pending_commands = g_ea_context.ManagerTick(
+       GetAccountBalance(), 
+       GetAccountEquity(), 
+       GetOpenPositionsCount(), 
+       current_trade_allowed
+   );
 
-   // Send Register Message (Once)
-   if(!g_register_sent && g_initialized)
+   // 2. Process pending commands
+   EaCommand cmd;
+   int processed_count = 0;
+   
+   while(pending_commands > 0 || processed_count < 100)
    {
-      if(g_ea_context.SendRegister(g_zmq_socket))
-      {
-         g_register_sent = true;
-         Print("Register message sent for ", AccountID);
-      }
+       if(!g_ea_context.GetCommand(cmd)) break;
+       processed_count++;
+
+       switch(cmd.command_type)
+       {
+           case CMD_SEND_SNAPSHOT:
+           {
+               // Process SyncRequest using handle
+               HANDLE_TYPE sync_handle = g_ea_context.GetSyncRequest();
+               if(sync_handle != 0)
+               {
+                   ProcessSyncRequest(sync_handle);
+               }
+               break;
+           }
+
+           case CMD_UPDATE_UI:
+           {
+               // MasterConfig update
+               HANDLE_TYPE config_handle = g_ea_context.GetMasterConfig();
+               if(config_handle != 0)
+               {
+                   ProcessMasterConfigMessage(config_handle);
+               }
+               break;
+           }
+       }
+       
+       pending_commands--;
    }
-
-   if(should_send_heartbeat)
-   {
-      // Use efficient FFI heartbeat
-      bool heartbeat_sent = g_ea_context.SendHeartbeat(g_zmq_socket, GetAccountBalance(), GetAccountEquity(), 
-                                                       GetOpenPositionsCount(), current_trade_allowed);
-      if(heartbeat_sent)
-      {
-         g_last_heartbeat = TimeLocal();
-
-         // If trade state changed, log it and update tracking variable
-         if(trade_state_changed)
-         {
-            Print("[INFO] Auto-trading state changed: ", g_last_trade_allowed, " -> ", current_trade_allowed);
-            g_last_trade_allowed = current_trade_allowed;
-         }
-
-         // Request configuration logic using Rust EaContext
-         if(g_ea_context.ShouldRequestConfig(current_trade_allowed))
-         {
-            Print("[INFO] Requesting configuration (via EaContext)...");
-            if(SendRequestConfigMessage(g_zmq_context, g_RelayAddress, AccountID, "Master"))
-            {
-               g_ea_context.MarkConfigRequested();
-               Print("[INFO] Configuration request sent successfully");
-            }
-            else
-            {
-               Print("[ERROR] Failed to send configuration request, will retry on next heartbeat");
-            }
-         }
-      }
-   }
-
-   // Check for SyncRequest messages
-   uchar config_buffer[];
-   ArrayResize(config_buffer, MESSAGE_BUFFER_SIZE);
-   int config_bytes = zmq_socket_receive(g_zmq_config_socket, config_buffer, MESSAGE_BUFFER_SIZE);
-
-   if(config_bytes > 0)
-   {
-      // Find the space separator between topic and MessagePack payload
-      int space_pos = -1;
-      for(int i = 0; i < config_bytes; i++)
-      {
-         if(config_buffer[i] == SPACE_CHAR)
-         {
-            space_pos = i;
-            break;
-         }
-      }
-
-      if(space_pos > 0)
-      {
-         // Extract topic
-         string topic = CharArrayToString(config_buffer, 0, space_pos);
-
-         // Extract MessagePack payload
-         int payload_start = space_pos + 1;
-         int payload_len = config_bytes - payload_start;
-         uchar msgpack_payload[];
-         ArrayResize(msgpack_payload, payload_len);
-         ArrayCopy(msgpack_payload, config_buffer, 0, payload_start, payload_len);
-
-         // Check if this is a sync/ topic message (SyncRequest from Slave)
-         if(StringFind(topic, "sync/") == 0)
-         {
-            ProcessSyncRequest(msgpack_payload, payload_len);
-         }
-         // Check for VLogs config message (global broadcast)
-         else if(topic == g_vlogs_topic)
-         {
-            HANDLE_TYPE vlogs_handle = parse_vlogs_config(msgpack_payload, payload_len);
-            if(vlogs_handle != 0 && vlogs_handle != -1)
-            {
-               VLogsApplyConfig(vlogs_handle, "master", AccountID);
-               vlogs_config_free(vlogs_handle);
-            }
-         }
-         // Parse as MasterConfig (config/{account_id} topic)
-         else if(topic == g_config_topic)
-         {
-            ProcessMasterConfigMessage(msgpack_payload, payload_len);
-
-            // Mark config as requested in EaContext so we don't spam requests
-            g_ea_context.MarkConfigRequested();
-         }
-      }
-   }
-
-   // Flush VictoriaLogs periodically
+   
+   // Flush VLogs
    VLogsFlushIfNeeded();
+   
+   // Do NOT free handle - it belongs to EaContext
 }
 
 //+------------------------------------------------------------------+
-//| Process Master configuration message (MessagePack)               |
+//| Process Master configuration message (from Handle)                |
 //+------------------------------------------------------------------+
-void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
+void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
 {
-   // Parse MessagePack once and get a handle to the Master config structure
-   HANDLE_TYPE config_handle = parse_master_config(msgpack_data, data_len);
    if(config_handle == 0 || config_handle == -1)
    {
-      Print("ERROR: Failed to parse MessagePack Master config");
+      Print("ERROR: Invalid Master config handle");
       return;
    }
 
@@ -386,7 +312,6 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    if(config_account_id == "")
    {
       Print("ERROR: Invalid config message received - missing account_id");
-      master_config_free(config_handle);
       return;
    }
 
@@ -394,7 +319,6 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
    if(config_account_id != AccountID)
    {
       Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
-      master_config_free(config_handle);
       return;
    }
 
@@ -429,21 +353,18 @@ void ProcessMasterConfigMessage(uchar &msgpack_data[], int data_len)
 
       ChartRedraw();
    }
-
-   // Free the config handle
-   master_config_free(config_handle);
+   
+   // Do NOT free handle - it belongs to EaContext
 }
 
 //+------------------------------------------------------------------+
-//| Process SyncRequest message (from Slave EA)                       |
+//| Process SyncRequest message (from Handle)                         |
 //+------------------------------------------------------------------+
-void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
+void ProcessSyncRequest(HANDLE_TYPE handle)
 {
-   // Try to parse as SyncRequest
-   HANDLE_TYPE handle = parse_sync_request(msgpack_data, data_len);
    if(handle == 0 || handle == -1)
    {
-      // Not a SyncRequest - ignore silently
+      Print("ERROR: Invalid SyncRequest handle");
       return;
    }
 
@@ -454,7 +375,6 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
    if(slave_account == "" || master_account == "")
    {
       Print("Invalid SyncRequest received - missing fields");
-      sync_request_free(handle);
       return;
    }
 
@@ -462,15 +382,11 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
    if(master_account != AccountID)
    {
       Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      sync_request_free(handle);
       return;
    }
 
-   // Free the handle before sending response
-   sync_request_free(handle);
-
    // Send position snapshot
-   if(SendPositionSnapshot(g_zmq_socket, AccountID, g_symbol_prefix, g_symbol_suffix))
+   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
    {
       Print("[SYNC] Position snapshot sent to slave: ", slave_account);
    }
@@ -478,6 +394,8 @@ void ProcessSyncRequest(uchar &msgpack_data[], int data_len)
    {
       Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
    }
+   
+   // Do NOT free handle - it belongs to EaContext
 }
 
 //+------------------------------------------------------------------+
@@ -603,7 +521,7 @@ void CheckForPartialCloses()
             Print("[ORDER] Partial close: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (ratio: ", DoubleToString(close_ratio * 100, 1), "%)");
 
             // Send partial close signal
-            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, close_ratio, AccountID);
+            SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, close_ratio, AccountID);
 
             // Update tracked volume (order still exists)
             g_tracked_orders[i].lots = current_lots;
@@ -640,7 +558,7 @@ void CheckForClosedOrders()
          // Order was closed (full close)
          if(OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
          {
-            SendCloseSignal(g_zmq_socket, (TICKET_TYPE)ticket, 0.0, AccountID);
+            SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, 0.0, AccountID);
             RemoveTrackedOrder(ticket);
             Print("[ORDER] Closed: #", ticket);
          }
@@ -667,7 +585,7 @@ void SendOpenSignalFromOrder(int ticket)
    string raw_symbol = OrderSymbol();
    string symbol = GetCleanSymbol(raw_symbol, g_symbol_prefix, g_symbol_suffix);
    
-   SendOpenSignal(g_zmq_socket, (TICKET_TYPE)ticket, symbol,
+   SendOpenSignal(g_ea_context, (TICKET_TYPE)ticket, symbol,
                   order_type, OrderLots(), OrderOpenPrice(), OrderStopLoss(),
                   OrderTakeProfit(), OrderMagicNumber(), OrderComment(), AccountID);
 }
@@ -677,7 +595,7 @@ void SendOpenSignalFromOrder(int ticket)
 //+------------------------------------------------------------------+
 void SendOrderModifySignal(int ticket, double sl, double tp)
 {
-   SendModifySignal(g_zmq_socket, (TICKET_TYPE)ticket, sl, tp, AccountID);
+   SendModifySignal(g_ea_context, (TICKET_TYPE)ticket, sl, tp, AccountID);
 }
 
 //+------------------------------------------------------------------+

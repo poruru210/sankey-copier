@@ -21,9 +21,9 @@ pub struct TradeFilters {
     #[serde(default)]
     pub blocked_symbols: Option<Vec<String>>,
     #[serde(default)]
-    pub allowed_magic_numbers: Option<Vec<i32>>,
+    pub allowed_magic_numbers: Option<Vec<i64>>,
     #[serde(default)]
-    pub blocked_magic_numbers: Option<Vec<i32>>,
+    pub blocked_magic_numbers: Option<Vec<i64>>,
 }
 
 /// Lot calculation mode
@@ -257,14 +257,15 @@ pub struct HeartbeatMessage {
 
 /// Trade signal message structure
 /// Represents a trade action (Open, Close, Modify) to be copied
+/// This is the shared type used across mt-bridge, relay-server, and e2e-tests
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeSignalMessage {
-    pub action: String, // "Open", "Close", "Modify"
+pub struct TradeSignal {
+    pub action: crate::constants::TradeAction,
     pub ticket: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order_type: Option<String>,
+    pub order_type: Option<crate::constants::OrderType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lots: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -277,7 +278,7 @@ pub struct TradeSignalMessage {
     pub magic_number: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
-    pub timestamp: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
     pub source_account: String,
     /// Close ratio for partial close (0.0-1.0)
     /// None or 1.0 = full close, 0.0 < ratio < 1.0 = partial close
@@ -353,4 +354,57 @@ pub struct VLogsConfigMessage {
     pub log_level: String,
     /// Timestamp when this config was sent (ISO 8601)
     pub timestamp: String,
+}
+
+impl Default for SlaveConfigMessage {
+    fn default() -> Self {
+        Self {
+            account_id: String::new(),
+            master_account: String::new(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            trade_group_id: String::new(),
+            status: 0,
+            lot_calculation_mode: LotCalculationMode::default(),
+            lot_multiplier: None,
+            reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_mappings: Vec::new(),
+            filters: TradeFilters::default(),
+            config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: None,
+            sync_mode: SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: default_max_retries(),
+            max_signal_delay_ms: default_max_signal_delay_ms(),
+            use_pending_order_for_delayed: false,
+            allow_new_orders: default_allow_new_orders(),
+            warning_codes: Vec::new(),
+        }
+    }
+}
+
+impl Default for TradeSignal {
+    fn default() -> Self {
+        Self {
+            action: crate::constants::TradeAction::Open,
+            ticket: 0,
+            symbol: None,
+            order_type: None,
+            lots: None,
+            open_price: None,
+            stop_loss: None,
+            take_profit: None,
+            magic_number: None,
+            comment: None,
+            timestamp: chrono::Utc::now(),
+            source_account: String::new(),
+            close_ratio: None,
+        }
+    }
 }

@@ -172,12 +172,8 @@ export function useAccountData({
         const isEnabled = isManuallyDisabled ? false : intentEnabled;
         const isExpanded = expandedReceiverIds.includes(setting.slave_account);
 
-        // Active state calculation will be done after all masters are processed
-        // For now, set to false - will be updated in the next section
-        const isActive = false;
+        const isActive = false; // Will be updated below
 
-        // Check for MT auto-trading disabled warning using Status Engine warning_codes
-        // This syncs with settings updates rather than waiting for heartbeat
         const slaveWarningCodes = setting.warning_codes ?? [];
         const hasAutoTradingWarning = slaveWarningCodes.includes('slave_auto_trading_disabled');
         const hasWarning = hasAutoTradingWarning && isOnline;
@@ -189,7 +185,7 @@ export function useAccountData({
           platform: connection?.platform,
           isOnline,
           isEnabled,
-          isActive, // Will be updated below based on connected masters
+          isActive,
           hasError: false,
           hasWarning,
           errorMsg: hasWarning ? content.autoTradingDisabled : '',
@@ -197,6 +193,26 @@ export function useAccountData({
           slaveIntentEnabled: intentEnabled,
           runtimeStatus: runtimeStatusValue,
         });
+      } else {
+        // Update existing receiver: Aggregate statuses and warnings
+        const existing = receiverMap.get(setting.slave_account)!;
+        const currentIntentEnabled = setting.enabled_flag ?? (setting.status !== 0);
+
+        // Merge Intent Enabled (OR logic): If ANY connection is enabled, the slave is enabled
+        if (currentIntentEnabled) {
+          existing.slaveIntentEnabled = true;
+          // Re-evaluate isEnabled based on manually disabled list
+          const isManuallyDisabled = disabledReceiverIds.includes(setting.slave_account);
+          existing.isEnabled = isManuallyDisabled ? false : true;
+        }
+
+        // Merge Warnings (OR logic)
+        const slaveWarningCodes = setting.warning_codes ?? [];
+        const hasAutoTradingWarning = slaveWarningCodes.includes('slave_auto_trading_disabled');
+        if (hasAutoTradingWarning && existing.isOnline) {
+          existing.hasWarning = true;
+          existing.errorMsg = content.autoTradingDisabled;
+        }
       }
     });
 
@@ -207,7 +223,9 @@ export function useAccountData({
     // Update receiver active state based on connected masters
     newReceiverAccounts.forEach((receiver) => {
       const statuses = receiverRuntimeStatuses.get(receiver.id) ?? [];
-      let runtimeStatus = statuses.length > 0 ? Math.min(...statuses) : 0;
+      // Use Math.max to prioritize Connected (2) > Standby (1) > Disabled (0)
+      // This ensures Slave appears Active if at least one link is working
+      let runtimeStatus = statuses.length > 0 ? Math.max(...statuses) : 0;
 
       // UI Display Override: Status Engine keeps status as CONNECTED (2) when Slave
       // has auto-trading OFF (to allow Close/Modify signals), but Web UI should show "Manual OFF".
@@ -223,9 +241,6 @@ export function useAccountData({
 
       receiver.runtimeStatus = runtimeStatus;
       receiver.isActive = receiver.isOnline && receiver.isEnabled && runtimeStatus === 2;
-
-      // Warning state already set from warning_codes during initial map creation
-      // No need to recompute based on is_trade_allowed
     });
 
     return { sourceAccounts: newSourceAccounts, receiverAccounts: newReceiverAccounts };

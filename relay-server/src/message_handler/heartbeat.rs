@@ -11,7 +11,7 @@ use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
-    EaConnection, HeartbeatMessage, SlaveConfigWithMaster, VLogsGlobalSettings, STATUS_CONNECTED,
+    EaConnection, HeartbeatMessage, VLogsGlobalSettings,
 };
 use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
 
@@ -19,8 +19,6 @@ impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)
     pub(super) async fn handle_heartbeat(&self, msg: HeartbeatMessage) {
         let account_id = msg.account_id.clone();
-        let balance = msg.balance;
-        let equity = msg.equity;
         let ea_type = msg.ea_type.clone();
         let new_is_trade_allowed = msg.is_trade_allowed;
         let runtime_updater = self.runtime_status_updater();
@@ -125,7 +123,7 @@ impl MessageHandler {
                 master_bundle.status_result
             );
 
-            // Send config if changed
+            // Send config if changed and notify Slaves
             if master_changed {
                 let config = master_bundle.config;
 
@@ -138,11 +136,12 @@ impl MessageHandler {
                         master_status
                     );
                 }
-            }
 
-            // Notify Slaves when Master status changes (N:N connection support)
-            // Triggered only if Master status/warnings changed (which includes new registration and coming online)
-            if master_changed {
+                // Flag for batched WebSocket broadcast (will be triggered once after all processing)
+                let mut should_broadcast = true;
+
+                // Notify Slaves when Master status changes (N:N connection support)
+                // Triggered only if Master status/warnings changed (which includes new registration and coming online)
                 tracing::info!(
                     master = %account_id,
                     "Master heartbeat: status/warnings changed, re-evaluating connected Slaves"
@@ -222,26 +221,8 @@ impl MessageHandler {
                                     );
                                 }
 
-                                // 2. Send WebSocket update to UI
-                                let payload = SlaveConfigWithMaster {
-                                    master_account: account_id.clone(),
-                                    slave_account: slave_account.clone(),
-                                    status: new_slave_result.status,
-                                    enabled_flag: member.enabled_flag,
-                                    warning_codes: new_slave_result.warning_codes.clone(),
-                                    slave_settings: member.slave_settings.clone(),
-                                };
-
-                                if let Ok(json) = serde_json::to_string(&payload) {
-                                    let _ = self
-                                        .broadcast_tx
-                                        .send(format!("settings_updated:{}", json));
-                                    tracing::info!(
-                                        slave = %slave_account,
-                                        master = %account_id,
-                                        "Broadcast settings update (cascaded from Master change)"
-                                    );
-                                }
+                                // 2. Flag for batched WebSocket broadcast
+                                should_broadcast = true;
 
                                 super::log_slave_runtime_trace(
                                     "master_heartbeat",
@@ -278,85 +259,24 @@ impl MessageHandler {
                         tracing::error!("Failed to get members for Master {}: {}", account_id, e);
                     }
                 }
-            }
-
-            // Safety net: Bulk update DB status for all enabled slaves when Master is CONNECTED
-            // This handles:
-            // 1. Offline slaves not processed by per-connection loop
-            // 2. Edge cases where per-connection evaluation is skipped (no new_registration, no trade_allowed_changed)
-            // Always use cached warning_codes (no expensive rebuild needed for bulk update)
-            if master_status == STATUS_CONNECTED {
-                match self.db.update_master_statuses_connected(&account_id).await {
-                    Ok(count) if count > 0 => {
-                        tracing::info!(
-                            "Master {} connected: updated {} settings to CONNECTED (bulk update)",
-                            account_id,
-                            count
-                        );
-                        // Re-evaluate and broadcast all affected Slaves
-                        // Use RuntimeStatusUpdater to get fresh warning_codes after bulk update
-                        if let Ok(members) = self.db.get_members(&account_id).await {
-                            let runtime_updater = self.runtime_status_updater();
-                            for member in members {
-                                let slave_bundle = runtime_updater
-                                    .build_slave_bundle(SlaveRuntimeTarget {
-                                        master_account: account_id.as_str(),
-                                        trade_group_id: account_id.as_str(),
-                                        slave_account: &member.slave_account,
-                                        enabled_flag: member.enabled_flag,
-                                        slave_settings: &member.slave_settings,
-                                    })
-                                    .await;
-
-                                let payload = SlaveConfigWithMaster {
-                                    master_account: account_id.clone(),
-                                    slave_account: member.slave_account.clone(),
-                                    status: slave_bundle.status_result.status,
-                                    enabled_flag: member.enabled_flag,
-                                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
-                                    slave_settings: member.slave_settings.clone(),
-                                };
-
-                                // 1. Send ZMQ update to Slave EA (Safety net)
-                                if let Err(e) = self.publisher.send(&slave_bundle.config).await {
-                                    tracing::error!(
-                                        "Failed to send config update to Slave {} (bulk): {}",
-                                        member.slave_account,
-                                        e
-                                    );
-                                }
-
-                                // 2. Send WebSocket update to UI
-                                if let Ok(json) = serde_json::to_string(&payload) {
-                                    let _ = self
-                                        .broadcast_tx
-                                        .send(format!("settings_updated:{}", json));
-                                }
-                            }
-                        }
-                    }
-                    Ok(_) => {
-                        // No settings updated (no enabled settings for this master)
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to update master statuses for {}: {}",
-                            account_id,
-                            e
-                        );
+                // Batched WebSocket broadcast: trigger once after all slaves processed
+                if should_broadcast {
+                    if let Some(broadcaster) = &self.snapshot_broadcaster {
+                        let broadcaster = broadcaster.clone();
+                        tokio::spawn(async move {
+                            broadcaster.broadcast_now().await;
+                        });
                     }
                 }
-            }
+            } // end of if master_changed
         } else {
             self.update_slave_runtime_on_heartbeat(&account_id, &runtime_updater, &old_conn)
                 .await;
         }
 
-        // Notify WebSocket clients of heartbeat
-        let _ = self.broadcast_tx.send(format!(
-            "ea_heartbeat:{}:{:.2}:{:.2}",
-            account_id, balance, equity
-        ));
+        // Note: Individual heartbeat broadcasts are no longer sent here.
+        // The SnapshotBroadcaster sends periodic connections_snapshot messages
+        // to WebSocket clients when they are connected.
     }
 
     async fn update_slave_runtime_on_heartbeat(
@@ -476,24 +396,11 @@ impl MessageHandler {
             // WebSocket broadcast if Status OR Warning Codes changed
             // This covers AutoTrading toggles, Offline/Online changes, etc.
             if slave_bundle.status_result.has_changed(&old_status_result) {
-                let payload = SlaveConfigWithMaster {
-                    master_account: settings.master_account.clone(),
-                    slave_account: settings.slave_account.clone(),
-                    status: evaluated_status,
-                    enabled_flag: settings.enabled_flag,
-                    warning_codes: slave_bundle.status_result.warning_codes.clone(),
-                    slave_settings: settings.slave_settings.clone(),
-                };
-
-                if let Ok(json) = serde_json::to_string(&payload) {
-                    let _ = self.broadcast_tx.send(format!("settings_updated:{}", json));
-                    tracing::debug!(
-                        "Broadcast settings for Slave {} (master {}): status {} -> {}",
-                        settings.slave_account,
-                        settings.master_account,
-                        previous_status,
-                        evaluated_status
-                    );
+                if let Some(broadcaster) = &self.snapshot_broadcaster {
+                    let broadcaster = broadcaster.clone();
+                    tokio::spawn(async move {
+                        broadcaster.broadcast_now().await;
+                    });
                 }
             }
         }

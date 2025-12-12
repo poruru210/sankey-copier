@@ -9,8 +9,8 @@
 //! 3. Full Sync Cycle - Complete sync flow testing
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator};
+use e2e_tests::MasterEaSimulator;
+use e2e_tests::TestSandbox;
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
 
@@ -21,7 +21,8 @@ use tokio::time::{sleep, Duration};
 /// Test: Master sends PositionSnapshot → Single Slave receives it
 #[tokio::test]
 async fn test_position_snapshot_single_slave() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -37,21 +38,13 @@ async fn test_position_snapshot_single_slave() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
 
     // Subscribe master to sync requests
     master
@@ -66,7 +59,7 @@ async fn test_position_snapshot_single_slave() {
 
     // Wait for slave to receive config (which triggers sync/ topic subscription)
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 
@@ -105,7 +98,8 @@ async fn test_position_snapshot_single_slave() {
 /// Test: Master sends PositionSnapshot → Multiple Slaves receive it
 #[tokio::test]
 async fn test_position_snapshot_multiple_slaves() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -121,30 +115,17 @@ async fn test_position_snapshot_multiple_slaves() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave1 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_accounts[0],
-        master_account,
-    )
-    .expect("Failed to create slave1");
+    let mut slave1 = sandbox
+        .create_slave(slave_accounts[0], master_account)
+        .expect("Failed to create slave1");
 
-    let mut slave2 = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_accounts[1],
-        master_account,
-    )
-    .expect("Failed to create slave2");
+    let mut slave2 = sandbox
+        .create_slave(slave_accounts[1], master_account)
+        .expect("Failed to create slave2");
 
     // Start EAs with auto-trading enabled
     master.set_trade_allowed(true);
@@ -156,11 +137,11 @@ async fn test_position_snapshot_multiple_slaves() {
 
     // Wait for slaves to receive config (which triggers sync/ topic subscription)
     slave1
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave1 should receive CONNECTED status");
     slave2
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave2 should receive CONNECTED status");
 
@@ -209,7 +190,8 @@ async fn test_position_snapshot_multiple_slaves() {
 /// Test: Empty PositionSnapshot (Master has no positions)
 #[tokio::test]
 async fn test_position_snapshot_empty() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -225,21 +207,13 @@ async fn test_position_snapshot_empty() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
 
     // Subscribe to sync topic early (before start) to avoid slow joiner issues
     slave
@@ -254,7 +228,7 @@ async fn test_position_snapshot_empty() {
 
     // Wait for slave to receive config
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 
@@ -287,7 +261,8 @@ async fn test_position_snapshot_empty() {
 /// Test: Slave sends SyncRequest → Master receives it
 #[tokio::test]
 async fn test_sync_request_to_master() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -303,21 +278,13 @@ async fn test_sync_request_to_master() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
 
     // Master subscribes to sync requests
     master
@@ -332,7 +299,7 @@ async fn test_sync_request_to_master() {
 
     // Wait for master to receive config (to ensure it's properly registered)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
 
@@ -360,7 +327,8 @@ async fn test_sync_request_to_master() {
 /// Test: SyncRequest with last_sync_time
 #[tokio::test]
 async fn test_sync_request_with_last_sync_time() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -376,21 +344,13 @@ async fn test_sync_request_with_last_sync_time() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
 
     // Master subscribes to sync requests
     master
@@ -405,7 +365,7 @@ async fn test_sync_request_with_last_sync_time() {
 
     // Wait for master to receive config (to ensure it's properly registered)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
 
@@ -433,7 +393,8 @@ async fn test_sync_request_with_last_sync_time() {
 /// Test: SyncRequest from non-member slave should be rejected
 #[tokio::test]
 async fn test_sync_request_non_member_rejected() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -450,22 +411,14 @@ async fn test_sync_request_non_member_rejected() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
     // Create non-member slave (not registered in trade group)
-    let mut non_member = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        non_member_slave,
-        master_account,
-    )
-    .expect("Failed to create non-member slave");
+    let mut non_member = sandbox
+        .create_slave(non_member_slave, master_account)
+        .expect("Failed to create non-member slave");
 
     // Master subscribes to sync requests
     master
@@ -505,7 +458,8 @@ async fn test_sync_request_non_member_rejected() {
 /// Test: Full sync cycle - Slave requests → Master responds with snapshot
 #[tokio::test]
 async fn test_full_sync_cycle() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -521,21 +475,13 @@ async fn test_full_sync_cycle() {
     .expect("Failed to setup scenario");
 
     // Create simulators
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
 
     // Setup subscriptions
     master
@@ -550,11 +496,11 @@ async fn test_full_sync_cycle() {
 
     // Wait for both to receive config (ensures master is registered and slave has sync/ subscription)
     master
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Master should receive CONNECTED status");
     slave
-        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 3000)
+        .wait_for_status(sankey_copier_zmq::STATUS_CONNECTED, 10000)
         .expect("Failed to wait for status")
         .expect("Slave should receive CONNECTED status");
 

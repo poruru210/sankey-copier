@@ -47,30 +47,45 @@
 #define STATUS_CONNECTED 2        // Slave is enabled, Master connected
 #define STATUS_NO_CONFIG -1 // No configuration received yet
 
+//--- EA Type Constants
+#define EA_TYPE_MASTER "Master"
+#define EA_TYPE_SLAVE  "Slave"
+
+//--- Command types matching Rust
+#define CMD_NONE 0
+#define CMD_OPEN 1
+#define CMD_CLOSE 2
+#define CMD_MODIFY 3
+#define CMD_DELETE 4
+#define CMD_UPDATE_UI 5
+#define CMD_SEND_SNAPSHOT 6
+#define CMD_PROCESS_SNAPSHOT 7
+
+//--- EaCommand structure with MQL4/pack=1 compatibility padding
+struct EaCommand {
+   int command_type;
+   int _pad1;        // Rust alignment matches MQL4 pack(1) manually
+
+   long ticket;
+   uchar symbol[32]; // Fixed size string buffer
+
+   int order_type;
+   int _pad2;        // Rust alignment matches MQL4 pack(1) manually
+
+   double volume;
+   double price;
+   double sl;
+   double tp;
+   long magic;
+   double close_ratio;
+   long timestamp;
+   uchar comment[64];
+   uchar source_account[64];
+};
+
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
-   HANDLE_TYPE zmq_context_create();
-   void        zmq_context_destroy(HANDLE_TYPE context);
-   HANDLE_TYPE zmq_socket_create(HANDLE_TYPE context, int socket_type);
-   void        zmq_socket_destroy(HANDLE_TYPE socket);
-   int         zmq_socket_bind(HANDLE_TYPE socket, string address);
-   int         zmq_socket_connect(HANDLE_TYPE socket, string address);
-   int         zmq_socket_send(HANDLE_TYPE socket, string message);
-   int         zmq_socket_send_binary(HANDLE_TYPE socket, uchar &data[], int len);
-   int         zmq_socket_receive(HANDLE_TYPE socket, uchar &buffer[], int buffer_size);
-   int         zmq_socket_subscribe_all(HANDLE_TYPE socket);
-   int         zmq_socket_subscribe(HANDLE_TYPE socket, string topic);
-
-   // MessagePack serialization functions
-   int    serialize_request_config(string message_type, string account_id, string timestamp, string ea_type);
-
-   int    serialize_trade_signal(string action, long ticket, string symbol, string order_type,
-                                 double lots, double open_price, double stop_loss, double take_profit,
-                                 long magic_number, string comment, string timestamp, string source_account,
-                                 double close_ratio);
-   // Note: get_serialized_buffer() uses pointer syntax not supported in MQL4/MQL5
-   // Use copy_serialized_buffer() instead
-   int    copy_serialized_buffer(uchar &dest[], int max_len);
+   // Raw ZMQ functions removed - using EaContext high-level API
 
    // Slave config message parsing
    HANDLE_TYPE parse_slave_config(uchar &data[], int data_len);
@@ -152,6 +167,16 @@
    HANDLE_TYPE ea_init(string account_id, string ea_type, string platform, long account_number, 
                        string broker, string account_name, string server, string currency, long leverage);
    void        ea_context_free(HANDLE_TYPE context);
+
+   // Main Loop & Command Retrieval
+   int         ea_manager_tick(HANDLE_TYPE context, double balance, double equity, int open_positions, int is_trade_allowed);
+   int         ea_get_command(HANDLE_TYPE context, EaCommand &command);
+   
+   // Accessors
+   HANDLE_TYPE ea_context_get_master_config(HANDLE_TYPE context);
+   HANDLE_TYPE ea_context_get_slave_config(HANDLE_TYPE context);
+   HANDLE_TYPE ea_context_get_position_snapshot(HANDLE_TYPE context);
+   HANDLE_TYPE ea_context_get_sync_request(HANDLE_TYPE context);
    
    int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len);
    int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
@@ -161,6 +186,24 @@
    int         ea_context_should_request_config(HANDLE_TYPE context, int current_trade_allowed);
    void        ea_context_mark_config_requested(HANDLE_TYPE context);
    void        ea_context_reset(HANDLE_TYPE context);
+   
+   // FFI Integration (Phase 2) - High-Level Functions
+   int         ea_connect(HANDLE_TYPE context, string push_addr, string sub_addr);
+   int         ea_send_push(HANDLE_TYPE context, uchar &data[], int len);
+   
+   // High-Level Receive (for EaContext abstraction)
+   int         ea_receive_config(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
+   int         ea_receive_trade(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
+   // High-Level Trade Signals (Master)
+   int         ea_send_open_signal(HANDLE_TYPE context, long ticket, string symbol, string order_type, 
+                                   double lots, double price, double sl, double tp, long magic, string comment, uchar &output[], int output_len);
+   int         ea_send_close_signal(HANDLE_TYPE context, long ticket, double close_ratio, uchar &output[], int output_len);
+   int         ea_send_modify_signal(HANDLE_TYPE context, long ticket, double sl, double tp, uchar &output[], int output_len);
+
+   // High-Level Sync/Config (Master/Slave)
+   int         ea_send_request_config(HANDLE_TYPE context, uchar &output[], int output_len);
+   int         ea_send_sync_request(HANDLE_TYPE context, string master_account, uchar &output[], int output_len);
+   int         ea_subscribe_config(HANDLE_TYPE context, string topic);
 
 #import
 
@@ -201,10 +244,79 @@ public:
       return false;
    }
 
+   bool Connect(string push_addr, string sub_addr)
+   {
+      if(!m_initialized) return false;
+      return ea_connect(m_context, push_addr, sub_addr) == 1;
+   }
+
+   int ManagerTick(double balance, double equity, int open_positions, bool is_trade_allowed)
+   {
+      if(!m_initialized) return 0;
+      return ea_manager_tick(m_context, balance, equity, open_positions, (int)is_trade_allowed);
+   }
+
+   bool GetCommand(EaCommand &command)
+   {
+      if(!m_initialized) return false;
+      return ea_get_command(m_context, command) == 1;
+   }
+   
+   // Accessors for Cached Configs
+   HANDLE_TYPE GetMasterConfig()
+   {
+      if(!m_initialized) return 0;
+      return ea_context_get_master_config(m_context);
+   }
+
+   HANDLE_TYPE GetSlaveConfig()
+   {
+      if(!m_initialized) return 0;
+      return ea_context_get_slave_config(m_context);
+   }
+
+   HANDLE_TYPE GetSyncRequest()
+   {
+      if(!m_initialized) return 0;
+      return ea_context_get_sync_request(m_context);
+   }
+
+   HANDLE_TYPE GetPositionSnapshot()
+   {
+      if(!m_initialized) return 0;
+      return ea_context_get_position_snapshot(m_context);
+   }
+   
+   // High-level receive methods
+   int ReceiveConfig(uchar &buffer[], int buffer_size)
+   {
+      if(!m_initialized) return 0;
+      return ea_receive_config(m_context, buffer, buffer_size);
+   }
+   
+   int ReceiveTrade(uchar &buffer[], int buffer_size)
+   {
+      if(!m_initialized) return 0;
+      return ea_receive_trade(m_context, buffer, buffer_size);
+   }
+   
+   bool SubscribeConfig(string topic)
+   {
+      if(!m_initialized) return false;
+      return ea_subscribe_config(m_context, topic) == 1;
+   }
+
    bool IsInitialized() const { return m_initialized; }
    HANDLE_TYPE GetHandle() const { return m_context; }
+   
+   // Send raw data via context (abstracted PUSH)
+   bool SendPush(uchar &data[], int len)
+   {
+      if(!m_initialized) return false;
+      return ea_send_push(m_context, data, len) == 1;
+   }
 
-   bool SendRegister(HANDLE_TYPE socket_push)
+   bool SendRegister()
    {
       if(!m_initialized) return false;
       
@@ -213,28 +325,12 @@ public:
       
       if(len > 0)
       {
-         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+         return ea_send_push(m_context, buffer, len) == 1;
       }
       return false;
    }
-   
-   bool SendRegister(HANDLE_TYPE zmq_context, string address)
-   {
-      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-      if(socket < 0) return false;
-      
-      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
-      {
-         zmq_socket_destroy(socket);
-         return false;
-      }
-      
-      bool res = SendRegister(socket);
-      zmq_socket_destroy(socket);
-      return res;
-   }
 
-   bool SendHeartbeat(HANDLE_TYPE socket_push, double balance, double equity, int open_positions, bool is_trade_allowed)
+   bool SendHeartbeat(double balance, double equity, int open_positions, bool is_trade_allowed)
    {
       if(!m_initialized) return false;
       
@@ -243,28 +339,12 @@ public:
       
       if(len > 0)
       {
-         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+         return ea_send_push(m_context, buffer, len) == 1;
       }
       return false;
    }
-   
-   bool SendHeartbeat(HANDLE_TYPE zmq_context, string address, double balance, double equity, int open_positions, bool is_trade_allowed)
-   {
-      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-      if(socket < 0) return false;
-      
-      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
-      {
-         zmq_socket_destroy(socket);
-         return false;
-      }
-      
-      bool res = SendHeartbeat(socket, balance, equity, open_positions, is_trade_allowed);
-      zmq_socket_destroy(socket);
-      return res;
-   }
 
-   bool SendUnregister(HANDLE_TYPE socket_push)
+   bool SendUnregister()
    {
       if(!m_initialized) return false;
       
@@ -273,25 +353,9 @@ public:
       
       if(len > 0)
       {
-         return zmq_socket_send_binary(socket_push, buffer, len) > 0;
+         return ea_send_push(m_context, buffer, len) == 1;
       }
       return false;
-   }
-   
-   bool SendUnregister(HANDLE_TYPE zmq_context, string address)
-   {
-      HANDLE_TYPE socket = zmq_socket_create(zmq_context, ZMQ_PUSH);
-      if(socket < 0) return false;
-      
-      if(zmq_socket_connect(socket, address) == 0)  // 0 = failure, 1 = success
-      {
-         zmq_socket_destroy(socket);
-         return false;
-      }
-      
-      bool res = SendUnregister(socket);
-      zmq_socket_destroy(socket);
-      return res;
    }
    
    bool ShouldRequestConfig(bool current_trade_allowed)
@@ -308,6 +372,55 @@ public:
    void Reset()
    {
        if(m_initialized) ea_context_reset(m_context);
+   }
+
+   // --- High-Level Trade Signals (Master) ---
+
+   bool SendOpenSignal(long ticket, string symbol, string order_type, double lots, double price, double sl, double tp, long magic, string comment)
+   {
+      if(!m_initialized) return false;
+      uchar buffer[1024];
+      int len = ea_send_open_signal(m_context, ticket, symbol, order_type, lots, price, sl, tp, magic, comment, buffer, 1024);
+      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
+      return false;
+   }
+
+   bool SendCloseSignal(long ticket, double close_ratio)
+   {
+      if(!m_initialized) return false;
+      uchar buffer[1024];
+      int len = ea_send_close_signal(m_context, ticket, close_ratio, buffer, 1024);
+      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
+      return false;
+   }
+   
+   bool SendModifySignal(long ticket, double sl, double tp)
+   {
+      if(!m_initialized) return false;
+      uchar buffer[1024];
+      int len = ea_send_modify_signal(m_context, ticket, sl, tp, buffer, 1024);
+      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
+      return false;
+   }
+
+   // --- High-Level Sync/Config ---
+
+   bool SendRequestConfig()
+   {
+      if(!m_initialized) return false;
+      uchar buffer[1024];
+      int len = ea_send_request_config(m_context, buffer, 1024);
+      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
+      return false;
+   }
+
+   bool SendSyncRequest(string master_account)
+   {
+      if(!m_initialized) return false;
+      uchar buffer[1024];
+      int len = ea_send_sync_request(m_context, master_account, buffer, 1024);
+      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
+      return false;
    }
 };
 

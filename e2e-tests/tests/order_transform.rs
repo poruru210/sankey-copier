@@ -6,8 +6,8 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, SymbolMapping};
+use e2e_tests::SymbolMapping;
+use e2e_tests::TestSandbox;
 use sankey_copier_relay_server::db::Database;
 use tokio::time::{sleep, Duration};
 
@@ -19,7 +19,8 @@ use tokio::time::{sleep, Duration};
 /// Master sends "pro.EURUSD.m" -> Slave receives "fx.EURUSD"
 #[tokio::test]
 async fn test_symbol_prefix_suffix_transformation() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -38,21 +39,13 @@ async fn test_symbol_prefix_suffix_transformation() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -64,7 +57,7 @@ async fn test_symbol_prefix_suffix_transformation() {
     let signal = master.create_open_signal(
         12345,
         "pro.EURUSD.m", // Master's symbol with prefix/suffix
-        "Buy",
+        e2e_tests::types::OrderType::Buy,
         0.1,
         1.0850,
         None,
@@ -103,7 +96,8 @@ async fn test_symbol_prefix_suffix_transformation() {
 /// - Orders WITHOUT matching prefix/suffix: passed through as-is
 #[tokio::test]
 async fn test_master_sends_all_symbols_no_filtering() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -122,21 +116,13 @@ async fn test_master_sends_all_symbols_no_filtering() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -148,7 +134,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     let signal1 = master.create_open_signal(
         10001,
         "PRO.EURUSD.m", // Symbol with prefix/suffix
-        "Buy",
+        e2e_tests::types::OrderType::Buy,
         0.1,
         1.0850,
         None,
@@ -175,8 +161,14 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 2: Symbol WITHOUT prefix but with suffix
     let signal2 = master.create_open_signal(
-        10002, "USDJPY.m", // Only suffix matches, no prefix
-        "Sell", 0.2, 150.0, None, None, 0,
+        10002,
+        "USDJPY.m", // Only suffix matches, no prefix
+        e2e_tests::types::OrderType::Sell,
+        0.2,
+        150.0,
+        None,
+        None,
+        0,
     );
     master
         .send_trade_signal(&signal2)
@@ -198,8 +190,14 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 3: Symbol with NO prefix/suffix match - should be passed through as-is
     let signal3 = master.create_open_signal(
-        10003, "GBPUSD", // No prefix/suffix at all
-        "Buy", 0.15, 1.2500, None, None, 0,
+        10003,
+        "GBPUSD", // No prefix/suffix at all
+        e2e_tests::types::OrderType::Buy,
+        0.15,
+        1.2500,
+        None,
+        None,
+        0,
     );
     master
         .send_trade_signal(&signal3)
@@ -222,8 +220,14 @@ async fn test_master_sends_all_symbols_no_filtering() {
 
     // Test 4: Different broker symbol format - should be passed through
     let signal4 = master.create_open_signal(
-        10004, "XAUUSD#", // Different format (e.g., hashtag suffix)
-        "Buy", 0.5, 2000.0, None, None, 0,
+        10004,
+        "XAUUSD#", // Different format (e.g., hashtag suffix)
+        e2e_tests::types::OrderType::Buy,
+        0.5,
+        2000.0,
+        None,
+        None,
+        0,
     );
     master
         .send_trade_signal(&signal4)
@@ -261,7 +265,8 @@ async fn test_master_sends_all_symbols_no_filtering() {
 /// Test symbol mapping (XAUUSD -> GOLD)
 #[tokio::test]
 async fn test_symbol_mapping() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -287,21 +292,13 @@ async fn test_symbol_mapping() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -310,7 +307,16 @@ async fn test_symbol_mapping() {
     sleep(Duration::from_millis(2000)).await;
 
     // Send XAUUSD signal
-    let signal = master.create_open_signal(12345, "XAUUSD", "Buy", 0.1, 2000.0, None, None, 0);
+    let signal = master.create_open_signal(
+        12345,
+        "XAUUSD",
+        e2e_tests::types::OrderType::Buy,
+        0.1,
+        2000.0,
+        None,
+        None,
+        0,
+    );
     master
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
@@ -338,7 +344,8 @@ async fn test_symbol_mapping() {
 /// Test reverse trade mode passthrough - order type passed unchanged (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_buy_to_sell() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -355,21 +362,13 @@ async fn test_reverse_trade_buy_to_sell() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -377,8 +376,17 @@ async fn test_reverse_trade_buy_to_sell() {
     slave.start().expect("Failed to start slave");
     sleep(Duration::from_millis(2000)).await;
 
-    // Send Buy signal - passed through unchanged (Slave EA handles reversal)
-    let signal = master.create_open_signal(12345, "EURUSD", "Buy", 0.1, 1.0850, None, None, 0);
+    // Send Buy signal - should be reversed to Sell by mt-bridge
+    let signal = master.create_open_signal(
+        12345,
+        "EURUSD",
+        e2e_tests::types::OrderType::Buy,
+        0.1,
+        1.0850,
+        None,
+        None,
+        0,
+    );
     master
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
@@ -391,9 +399,9 @@ async fn test_reverse_trade_buy_to_sell() {
     let sig = received.unwrap();
 
     assert_eq!(
-        sig.order_type.as_deref(),
-        Some("Buy"),
-        "Order type should be passed through unchanged (Slave EA handles reversal)"
+        sig.order_type,
+        Some(e2e_tests::types::OrderType::Sell),
+        "Order type should be reversed to Sell by mt-bridge"
     );
 
     println!("✅ test_reverse_trade_buy_to_sell passed");
@@ -402,7 +410,8 @@ async fn test_reverse_trade_buy_to_sell() {
 /// Test reverse trade mode passthrough with pending orders (Slave EA handles reversal)
 #[tokio::test]
 async fn test_reverse_trade_pending_orders() {
-    let server = RelayServerProcess::start().expect("Failed to start relay-server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
 
     let db = Database::new(&server.db_url())
         .await
@@ -420,21 +429,13 @@ async fn test_reverse_trade_pending_orders() {
     .await
     .expect("Failed to setup test scenario");
 
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -442,8 +443,17 @@ async fn test_reverse_trade_pending_orders() {
     slave.start().expect("Failed to start slave");
     sleep(Duration::from_millis(2000)).await;
 
-    // Send BuyLimit - passed through unchanged (Slave EA handles reversal)
-    let signal = master.create_open_signal(12345, "EURUSD", "BuyLimit", 0.1, 1.0800, None, None, 0);
+    // Send BuyLimit - should be reversed to SellLimit by mt-bridge
+    let signal = master.create_open_signal(
+        12345,
+        "EURUSD",
+        e2e_tests::types::OrderType::BuyLimit,
+        0.1,
+        1.0800,
+        None,
+        None,
+        0,
+    );
     master
         .send_trade_signal(&signal)
         .expect("Failed to send signal");
@@ -456,9 +466,9 @@ async fn test_reverse_trade_pending_orders() {
     let sig = received.unwrap();
 
     assert_eq!(
-        sig.order_type.as_deref(),
-        Some("BuyLimit"),
-        "Order type should be passed through unchanged (Slave EA handles reversal)"
+        sig.order_type,
+        Some(e2e_tests::types::OrderType::SellLimit),
+        "Order type should be reversed to SellLimit by mt-bridge"
     );
 
     println!("✅ test_reverse_trade_pending_orders passed");

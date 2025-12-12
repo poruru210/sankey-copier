@@ -13,14 +13,15 @@
 
 #include "Common.mqh"
 #include "SlaveTypes.mqh"
-#include "Messages.mqh"
+// Note: Messages.mqh removed - using Common.mqh for declarations
 #include "Logging.mqh"
+
+// SendSyncRequestMessage_Local removed - using EaContextWrapper
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Check if trade should be processed based on filters              |
+//| NOTE: Main trade logic is now in Rust (mt-bridge).               |
+//| This function is kept for legacy support or local checks if needed|
 //+------------------------------------------------------------------+
 bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 {
@@ -103,25 +104,14 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 }
 
 //+------------------------------------------------------------------+
-//| Process configuration message (MessagePack)                      |
-//| Extended version with sync request support                       |
+//| Process configuration message from handle (Stateful FFI)         |
 //+------------------------------------------------------------------+
-void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
-                          CopyConfig &configs[],
-                          HANDLE_TYPE zmq_trade_socket,
-                          HANDLE_TYPE zmq_context = -1,
-                          string server_address = "",
-                          string slave_account = "")
+void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
+                                    CopyConfig &configs[],
+                                    EaContextWrapper &context, 
+                                    string slave_account)
 {
-   LogInfo(CAT_CONFIG, "Processing configuration message");
-
-   // Parse MessagePack once and get a handle to the Slave config structure
-   HANDLE_TYPE config_handle = parse_slave_config(msgpack_data, data_len);
-   if(config_handle == 0)
-   {
-      LogError(CAT_CONFIG, "Failed to parse MessagePack Slave config");
-      return;
-   }
+   if(config_handle == 0) return;
 
    // Extract fields from the parsed config using the handle
    string new_master = slave_config_get_string(config_handle, "master_account");
@@ -131,7 +121,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    if(new_master == "")
    {
       LogError(CAT_CONFIG, "Invalid config message received - missing master_account");
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
@@ -146,7 +136,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
    else
    {
       LogError(CAT_CONFIG, "Failed to build trade topic via FFI");
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
@@ -223,8 +213,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          LogDebug(CAT_CONFIG, StringFormat("Removal requested but config not found for %s", new_master));
       }
 
-      // Free the config handle before returning
-      slave_config_free(config_handle);
+      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
    else
@@ -243,7 +232,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          configs[index].master_account = new_master;
 
          // Subscribe to new trade topic
-         if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
+         if(!context.SubscribeConfig(new_trade_topic))
          {
             LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
          }
@@ -258,7 +247,7 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
          if(configs[index].trade_group_id != new_trade_topic)
          {
             // Topic changed, subscribe to new one
-            if(zmq_socket_subscribe(zmq_trade_socket, new_trade_topic) == 0)
+            if(!context.SubscribeConfig(new_trade_topic))
             {
                 LogError(CAT_CONFIG, StringFormat("Failed to subscribe to trade topic: %s", new_trade_topic));
             }
@@ -340,32 +329,29 @@ void ProcessConfigMessage(uchar &msgpack_data[], int data_len,
       // 2. Status is CONNECTED (Master is online)
       // 3. sync_mode is not SKIP (user wants to sync existing positions)
       // 4. ZMQ context is valid (caller provided sync parameters)
-      if(is_new_config &&
-         new_status == STATUS_CONNECTED &&
-         new_sync_mode != SYNC_MODE_SKIP &&
-         zmq_context >= 0 &&
-         server_address != "" &&
-         slave_account != "")
-      {
-         LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
-               (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
+       if(is_new_config &&
+          new_status == STATUS_CONNECTED &&
+          new_sync_mode != SYNC_MODE_SKIP &&
+          context.IsInitialized())
+       {
+          LogInfo(CAT_SYNC, StringFormat("Triggering position sync request. Mode: %s",
+                (new_sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
 
-         if(SendSyncRequestMessage(zmq_context, server_address, slave_account, new_master))
-         {
-            LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
-         }
-         else
-         {
-            LogError(CAT_SYNC, StringFormat("Failed to send SyncRequest to master: %s", new_master));
-         }
-      }
+          if(context.SendSyncRequest(new_master))
+          {
+             LogInfo(CAT_SYNC, StringFormat("SyncRequest sent to master: %s", new_master));
+          }
+          else
+          {
+             LogError(CAT_SYNC, StringFormat("Failed to send SyncRequest to master: %s", new_master));
+          }
+       }
    }
-
-   // Free the config handle
-   slave_config_free(config_handle);
 
    LogInfo(CAT_CONFIG, "Configuration updated");
 }
+
+// ProcessConfigMessage (Legacy wrapper) removed
 
 //+------------------------------------------------------------------+
 //| Normalize lot size based on symbol properties                    |
@@ -541,6 +527,8 @@ bool IsLotWithinFilter(double lots, double lot_min, double lot_max)
 
 //+------------------------------------------------------------------+
 //| Transform lot size based on calculation mode                     |
+//| Note: This logic is partially duplicated in mt-bridge.           |
+//| Kept here for PositionSnapshot Sync which bypasses EaContext.    |
 //+------------------------------------------------------------------+
 double TransformLotSize(double lots, CopyConfig &config, string symbol)
 {
@@ -586,6 +574,7 @@ double TransformLotSize(double lots, double multiplier, string symbol)
 //+------------------------------------------------------------------+
 //| Reverse order type if enabled                                    |
 //| Uses PascalCase format matching relay-server's OrderType enum    |
+//| Note: Logic also present in mt-bridge.                           |
 //+------------------------------------------------------------------+
 string ReverseOrderType(string type, bool reverse)
 {

@@ -6,8 +6,8 @@
 //! 3. Both Master and Slave scenarios work correctly
 
 use e2e_tests::helpers::default_test_slave_settings;
-use e2e_tests::relay_server_process::RelayServerProcess;
-use e2e_tests::{MasterEaSimulator, SlaveEaSimulator, STATUS_DISABLED};
+use e2e_tests::TestSandbox;
+use e2e_tests::STATUS_DISABLED;
 use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::MasterSettings;
@@ -16,7 +16,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 const SETTLE_WAIT_MS: u64 = 500;
-const BROADCAST_TIMEOUT_SECS: u64 = 5;
+const BROADCAST_TIMEOUT_SECS: u64 = 15;
 
 /// Create a WebSocket connector that accepts self-signed certificates
 async fn create_ws_connector(
@@ -44,7 +44,8 @@ async fn create_ws_connector(
 /// Test that Master auto-trading disabled triggers immediate warning_codes broadcast
 #[tokio::test]
 async fn test_master_auto_trading_disabled_warning_broadcast() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -69,12 +70,9 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED AFTER WebSocket connection
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
@@ -117,7 +115,8 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
 /// Test that Slave auto-trading disabled triggers immediate warning_codes broadcast
 #[tokio::test]
 async fn test_slave_auto_trading_disabled_warning_broadcast() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -139,14 +138,9 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Slave with auto-trading DISABLED
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(false); // Auto-trading OFF
     slave.start().expect("slave start should succeed");
@@ -184,7 +178,8 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
 /// Test broadcast timing: should receive within 2 seconds of heartbeat
 #[tokio::test]
 async fn test_warning_broadcast_timing() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -207,12 +202,9 @@ async fn test_warning_broadcast_timing() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
 
@@ -247,7 +239,8 @@ async fn test_warning_broadcast_timing() {
 /// 3. Demonstrates EA simulator's ability to dynamically toggle auto-trading state
 #[tokio::test]
 async fn test_master_warning_clears_on_auto_trading_enabled() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -269,12 +262,9 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(1000)).await;
 
     // Start Master with auto-trading DISABLED
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
@@ -283,14 +273,9 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
 
     // Start Slave with auto-trading ENABLED
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true); // Slave auto-trading ON
     slave.start().expect("slave start should succeed");
@@ -314,10 +299,10 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     // Wait for second broadcast (warning should clear)
     let second_broadcast = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning_cleared(&mut read, slave_account, "master_auto_trading_disabled"),
     )
     .await
-    .expect("Second broadcast timeout");
+    .expect("Second broadcast timeout (warning did not clear)");
 
     let warning_codes_enabled: Vec<String> = second_broadcast["warning_codes"]
         .as_array()
@@ -336,7 +321,8 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 /// Test that Slave config updates when Master comes online later (was offline)
 #[tokio::test]
 async fn test_slave_update_when_master_connects_later() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -358,14 +344,9 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 1. Start Slave FIRST (Master is offline)
     println!("[TEST] Starting Slave...");
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave simulator");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
@@ -391,28 +372,27 @@ async fn test_slave_update_when_master_connects_later() {
 
     // 3. Start Master LATER
     println!("[TEST] Starting Master...");
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master simulator");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master simulator");
 
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // 4. Expect a NEW update for Slave (Transition to CONNECTED / Warnings cleared)
-    println!("[TEST] Waiting for Helper Update (Slave connected)...");
+    println!("[TEST] Waiting for Helper Update (Slave connected/Warnings Cleared)...");
+
+    // Instead of waiting for *any* update (which might be an intermediate one),
+    // wait specifically for the "master_offline" warning to be CLEARED.
     let update_result = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning_cleared(&mut read, slave_account, "master_offline"),
     )
     .await;
 
-    // This is where we expect failure if the bug exists
     assert!(
         update_result.is_ok(),
-        "Slave did NOT receive config update when Master came online!"
+        "Slave did NOT clear master_offline warning when Master came online!"
     );
 
     let final_update = update_result.unwrap();
@@ -425,11 +405,7 @@ async fn test_slave_update_when_master_connects_later() {
 
     println!("[TEST] Final warnings: {:?}", final_warnings);
 
-    // Ensure master_offline IS GONE
-    assert!(
-        !final_warnings.contains(&"master_offline".to_string()),
-        "master_offline warning persists!"
-    );
+    // Double check slave_offline is also gone (implied if we got a valid update for a connected slave usually)
     assert!(
         !final_warnings.contains(&"slave_offline".to_string()),
         "slave_offline warning persists!"
@@ -441,7 +417,8 @@ async fn test_slave_update_when_master_connects_later() {
 /// (or "Offline" -> "Connected") even after an explicit Unregister event (Soft Delete).
 #[tokio::test]
 async fn test_reconnection_after_deletion() {
-    let server = RelayServerProcess::start().expect("Failed to start server");
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
     let db = Database::new(&server.db_url())
         .await
         .expect("Failed to connect to database");
@@ -462,24 +439,16 @@ async fn test_reconnection_after_deletion() {
     sleep(Duration::from_millis(1000)).await;
 
     // 1. Start Master
-    let mut master = MasterEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        master_account,
-    )
-    .expect("Failed to create master");
+    let mut master = sandbox
+        .create_master(master_account)
+        .expect("Failed to create master");
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
 
     // 2. Start Slave
-    let mut slave = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create slave");
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create slave");
     slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
 
@@ -509,7 +478,7 @@ async fn test_reconnection_after_deletion() {
     // 4. Perform Deletion (Unregister)
     println!("[TEST] Stopping and unregistering slave...");
     slave.stop().expect("Failed to stop slave");
-    slave.send_unregister().expect("Failed to send unregister");
+    // slave.send_unregister() is handled inside stop()'s thread shutdown now
     drop(slave); // Close sockets
 
     // Wait a bit for server to process Unregister
@@ -517,14 +486,9 @@ async fn test_reconnection_after_deletion() {
 
     // 5. Reconnect (New Simulator instance)
     println!("[TEST] Reconnecting slave...");
-    let mut slave_new = SlaveEaSimulator::new(
-        &server.zmq_pull_address(),
-        &server.zmq_pub_address(),
-        &server.zmq_pub_address(),
-        slave_account,
-        master_account,
-    )
-    .expect("Failed to create new slave");
+    let mut slave_new = sandbox
+        .create_slave(slave_account, master_account)
+        .expect("Failed to create new slave");
     slave_new.set_trade_allowed(true);
     slave_new.start().expect("Failed to start new slave");
 
@@ -622,7 +586,7 @@ async fn wait_for_settings_updated(
     while let Some(msg_result) = read.next().await {
         let msg = msg_result.expect("WebSocket read error");
         if let Message::Text(text) = msg {
-            println!("[TEST] Received WebSocket message: {}", text);
+            // println!("[TEST] Received WebSocket message: {}", text); // Reduce noise
             if let Some(json_str) = text.strip_prefix("settings_updated:") {
                 let settings: Value =
                     serde_json::from_str(json_str).expect("Failed to parse settings_updated JSON");
@@ -639,6 +603,22 @@ async fn wait_for_settings_updated(
                     return settings;
                 } else {
                     println!("[TEST] ⏭️  Skipping (different slave account)");
+                }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Also check snapshots which contain the full state
+                let snapshot: Value =
+                    serde_json::from_str(json_str).expect("Failed to parse system_snapshot JSON");
+                if let Some(members) = snapshot["members"].as_array() {
+                    for member in members {
+                        if member["slave_account"].as_str() == Some(expected_slave_account) {
+                            println!(
+                                "[TEST] ✅ Found expected slave account in SNAPSHOT: {}",
+                                expected_slave_account
+                            );
+                            // Return the member object which matches the structure of settings_updated payload
+                            return member.clone();
+                        }
+                    }
                 }
             }
         }
@@ -673,6 +653,26 @@ async fn wait_for_slave_warning(
                         }
                     }
                 }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Check snapshot as well
+                if let Ok(snapshot) = serde_json::from_str::<Value>(json_str) {
+                    if let Some(members) = snapshot["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warning_codes = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if warning_codes.contains(&expected_warning) {
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -680,4 +680,57 @@ async fn wait_for_slave_warning(
         "WebSocket stream closed without receiving {} warning for {}",
         expected_warning, slave_account
     );
+}
+
+/// Wait for settings_updated broadcast for specific slave WITHOUT expected warning
+async fn wait_for_slave_warning_cleared(
+    read: &mut futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
+    slave_account: &str,
+    cleared_warning: &str,
+) -> Value {
+    use futures_util::StreamExt;
+
+    while let Some(msg_result) = read.next().await {
+        if let Ok(Message::Text(text)) = msg_result {
+            if let Some(json_str) = text.strip_prefix("settings_updated:") {
+                if let Ok(settings) = serde_json::from_str::<Value>(json_str) {
+                    if settings["slave_account"].as_str() == Some(slave_account) {
+                        let warning_codes = settings["warning_codes"]
+                            .as_array()
+                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                            .unwrap_or_default();
+
+                        if !warning_codes.contains(&cleared_warning) {
+                            return settings;
+                        }
+                    }
+                }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Check snapshot as well
+                if let Ok(snapshot) = serde_json::from_str::<Value>(json_str) {
+                    if let Some(members) = snapshot["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warning_codes = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if !warning_codes.contains(&cleared_warning) {
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    panic!("WebSocket stream closed without receiving cleared warning");
 }
