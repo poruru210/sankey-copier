@@ -348,8 +348,8 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
    ulong master_ticket = (ulong)cmd.ticket;
    // Symbol is fixed size uchar array
    string symbol = CharArrayToString(cmd.symbol);
-   // Source account is in comment (mapped in Rust)
-   string source_account = CharArrayToString(cmd.comment);
+   // Source account is in source_account field (mapped in Rust)
+   string source_account = CharArrayToString(cmd.source_account);
    
    // OrderType from Rust (enum i32) -> String
    string order_type_str = GetOrderTypeString(cmd.order_type);

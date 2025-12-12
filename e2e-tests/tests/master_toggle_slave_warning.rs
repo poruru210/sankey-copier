@@ -476,6 +476,30 @@ async fn wait_for_slave_warning(
                         }
                     }
                 }
+            } else if let Some(stripped) = text.strip_prefix("system_snapshot:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
+                    if let Some(members) = json["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warnings = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if warnings.contains(&expected_warning) {
+                                    // Construct partial object to match return type expectation if needed
+                                    // But wait, the test expects valid JSON to extract warning_codes later.
+                                    // Return the member object itself? OR properly formed object?
+                                    // The test uses: `let settings_json = broadcast_result.unwrap(); let warning_codes = settings_json["warning_codes"]...`
+                                    // So finding the MEMBER and returning it is sufficient if it has "warning_codes".
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -506,6 +530,25 @@ async fn wait_for_slave_warning_cleared(
 
                         if !warnings.contains(&cleared_warning) {
                             return json;
+                        }
+                    }
+                }
+            } else if let Some(stripped) = text.strip_prefix("system_snapshot:") {
+                if let Ok(json) = serde_json::from_str::<Value>(stripped) {
+                    if let Some(members) = json["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warnings = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if !warnings.contains(&cleared_warning) {
+                                    return member.clone();
+                                }
+                            }
                         }
                     }
                 }
