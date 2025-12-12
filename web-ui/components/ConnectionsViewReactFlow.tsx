@@ -407,6 +407,33 @@ function ConnectionsViewReactFlowInner({
     }
   }, [nodes.length, reactFlowInstance]);
 
+  // Handle window resize to re-center the view
+  useEffect(() => {
+    if (!reactFlowInstance) return;
+
+    let resizeTimer: NodeJS.Timeout;
+
+    const handleResize = () => {
+      // Clear previous timer
+      clearTimeout(resizeTimer);
+      // Set new timer
+      resizeTimer = setTimeout(() => {
+        reactFlowInstance.fitView({
+          padding: 0.2,
+          duration: 800,
+          maxZoom: 1,
+        });
+      }, 300);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimer);
+    };
+  }, [reactFlowInstance]);
+
   return (
     <div className="relative flex flex-col h-full">
       {/* Action Bar with Filter */}
