@@ -9,8 +9,22 @@
 #>
 
 param (
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Deploy
 )
+
+# Auto-elevation for Deploy
+if ($Deploy) {
+    $currentPrincipal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+    if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Host "Elevating privileges for deployment..." -ForegroundColor Magenta
+        $argsList = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        if ($Clean) { $argsList += " -Clean" }
+        $argsList += " -Deploy"
+        Start-Process PowerShell.exe -ArgumentList $argsList -Verb RunAs -WorkingDirectory $PWD.Path
+        exit
+    }
+}
 
 $ErrorActionPreference = "Stop"
 
@@ -20,8 +34,12 @@ $MetaEditor5 = "C:\Program Files\XMTrading MT5\MetaEditor64.exe"
 $MetaEditor4 = "C:\Program Files (x86)\XMTrading MT4\metaeditor.exe"
 $DistDir     = Join-Path $ProjectRoot "dist"
 $MqlInclude  = Join-Path $ProjectRoot "mt-advisors\Include"
+$InstallDir  = "C:\Program Files\SANKEY Copier"
 
 Write-Host "=== SANKEY Copier Local Build Script ===" -ForegroundColor Cyan
+if ($Deploy) {
+    Write-Host "    Mode: Build & Deploy" -ForegroundColor Magenta
+}
 Write-Host ""
 
 # Early Clean of dist
@@ -169,6 +187,81 @@ Copy-IfFound "$ProjectRoot\mt-advisors\MT4\SankeyCopierSlave.ex4"  (Join-Path $D
 
 Write-Host "      Artifacts collected in: $DistDir" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "=== Build Complete ===" -ForegroundColor Cyan
+
+# --- Optional Step: Deploy ---
+if ($Deploy) {
+    Write-Host "[-] Deploying to '$InstallDir'..." -ForegroundColor Magenta
+
+    if (-not (Test-Path $InstallDir)) {
+        Write-Host "    Creating installation directory..."
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+    }
+
+    $NssmExe = Join-Path $InstallDir "nssm.exe"
+    if (-not (Test-Path $NssmExe)) {
+        Write-Warning "    nssm.exe not found at '$NssmExe'. Service control may fail."
+    }
+
+    # 1. Stop Service
+    Write-Host "    Stopping service 'SankeyCopierServer'..." -ForegroundColor Gray
+    try {
+        $nssmStopOutput = & $NssmExe stop SankeyCopierServer 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "    nssm stop warning/error:`n$nssmStopOutput"
+        }
+    } catch {
+        Write-Warning "    Failed to execute nssm stop: $_"
+    }
+
+    # 2. Kill Tray Process
+    Write-Host "    Terminating 'sankey-copier-tray' process..." -ForegroundColor Gray
+    Get-Process -Name "sankey-copier-tray" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    # Wait a moment for locks to release
+    Start-Sleep -Seconds 1
+
+    # 3. Copy Files
+    Write-Host "    Copying files..." -ForegroundColor Gray
+    try {
+        Copy-Item -Path "$DistDir\*" -Destination $InstallDir -Recurse -Force
+        Write-Host "    Files copied successfully." -ForegroundColor Green
+    } catch {
+        Write-Error "    Failed to copy files: $_"
+        throw
+    }
+
+    # 4. Restart Service
+    Write-Host "    Starting service 'SankeyCopierServer'..." -ForegroundColor Gray
+    try {
+        # Capture output to show if valid, but allow it through if error
+        $nssmOutput = & $NssmExe start SankeyCopierServer 2>&1
+        if ($LASTEXITCODE -ne 0) { 
+            Write-Warning "    nssm start failed with output:`n$nssmOutput"
+        } else {
+            Write-Host "    Service started." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "    Failed to execute nssm: $_"
+    }
+
+    # 5. Start Tray App
+    $TrayPath = Join-Path $InstallDir "sankey-copier-tray.exe"
+    if (Test-Path $TrayPath) {
+        Write-Host "    Starting Tray App..." -ForegroundColor Gray
+        Start-Process $TrayPath
+        Write-Host "    Tray App started." -ForegroundColor Green
+    } else {
+        Write-Warning "    Tray app not found at '$TrayPath'."
+    }
+}
+
 Write-Host ""
-Read-Host "Press Enter to close"
+Write-Host "=== Build $(if ($Deploy) { '& Deploy ' })Complete ===" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Closing in 5 seconds..." -ForegroundColor Gray
+for ($i = 5; $i -gt 0; $i--) {
+    Write-Host -NoNewline "$i... "
+    Start-Sleep -Seconds 1
+}
+Write-Host "Bye!"
+exit
