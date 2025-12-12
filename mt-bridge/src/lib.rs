@@ -6,6 +6,8 @@ pub mod ffi;
 pub mod ffi_helpers;
 pub mod logger;
 pub mod msgpack;
+pub mod sync;
+pub mod ticket_mapper;
 pub mod traits;
 pub mod types;
 pub mod victoria_logs;

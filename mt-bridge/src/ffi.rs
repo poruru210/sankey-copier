@@ -669,187 +669,7 @@ pub unsafe extern "C" fn ea_subscribe_config(context: *mut EaContext, topic: *co
 // PositionSnapshot FFI Functions
 // ===========================================================================
 
-/// Parse MessagePack data as PositionSnapshotMessage and return an opaque handle
-///
-/// # Safety
-/// This function is unsafe because it dereferences raw pointers.
-/// The returned handle must be freed with `position_snapshot_free()`.
-#[no_mangle]
-pub unsafe extern "C" fn parse_position_snapshot(
-    data: *const u8,
-    data_len: i32,
-) -> *mut PositionSnapshotMessage {
-    parse_msgpack(data, data_len)
-}
-
-/// Free a PositionSnapshotMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer created by parse_position_snapshot or null
-/// - handle must not be used after calling this function
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_free(handle: *mut PositionSnapshotMessage) {
-    free_handle(handle)
-}
-
-/// Get a string field from PositionSnapshotMessage handle
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_string(
-    handle: *const PositionSnapshotMessage,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || field_name.is_null() {
-        return std::ptr::null();
-    }
-
-    let snapshot = &*handle;
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return std::ptr::null(),
-    };
-
-    let value = match field.as_str() {
-        "message_type" => &snapshot.message_type,
-        "source_account" => &snapshot.source_account,
-        "timestamp" => &snapshot.timestamp,
-        _ => return std::ptr::null(),
-    };
-
-    string_to_utf16_buffer(value)
-}
-
-/// Get the number of positions in a PositionSnapshotMessage
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_positions_count(
-    handle: *const PositionSnapshotMessage,
-) -> i32 {
-    if handle.is_null() {
-        return 0;
-    }
-    let snapshot = &*handle;
-    snapshot.positions.len() as i32
-}
-
-/// Get a string field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_string(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> *const u16 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return std::ptr::null();
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return std::ptr::null();
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return std::ptr::null(),
-    };
-
-    // For optional string fields, use static empty string
-    static EMPTY_STRING: LazyLock<String> = LazyLock::new(String::new);
-
-    let value = match field.as_str() {
-        "symbol" => &pos.symbol,
-        "order_type" => &pos.order_type,
-        "open_time" => &pos.open_time,
-        "comment" => pos.comment.as_ref().unwrap_or(&EMPTY_STRING),
-        _ => return std::ptr::null(),
-    };
-
-    string_to_utf16_buffer(value)
-}
-
-/// Get a double field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_double(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> f64 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return 0.0;
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return 0.0;
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0.0,
-    };
-
-    match field.as_str() {
-        "lots" => pos.lots,
-        "open_price" => pos.open_price,
-        "stop_loss" => pos.stop_loss.unwrap_or(0.0),
-        "take_profit" => pos.take_profit.unwrap_or(0.0),
-        _ => 0.0,
-    }
-}
-
-/// Get an integer field from a position at the specified index
-///
-/// # Safety
-/// - handle must be a valid pointer to PositionSnapshotMessage
-/// - index must be within bounds (0 <= index < count)
-/// - field_name must be a valid null-terminated UTF-16 string pointer
-#[no_mangle]
-pub unsafe extern "C" fn position_snapshot_get_position_int(
-    handle: *const PositionSnapshotMessage,
-    index: i32,
-    field_name: *const u16,
-) -> i64 {
-    if handle.is_null() || index < 0 || field_name.is_null() {
-        return 0;
-    }
-
-    let snapshot = &*handle;
-    let idx = index as usize;
-    if idx >= snapshot.positions.len() {
-        return 0;
-    }
-
-    let pos = &snapshot.positions[idx];
-    let field = match utf16_to_string(field_name) {
-        Some(s) => s,
-        None => return 0,
-    };
-
-    match field.as_str() {
-        "ticket" => pos.ticket,
-        "magic_number" => pos.magic_number.unwrap_or(0),
-        _ => 0,
-    }
-}
+// Reader functions removed - logic moved to Rust (ea_process_snapshot)
 
 // ===========================================================================
 // SyncRequest FFI Functions
@@ -2565,6 +2385,228 @@ pub unsafe extern "C" fn ea_send_modify_signal(
         }
     }
 }
+
+// ===========================================================================
+// Ticket Mapping FFI Functions (Phase 4)
+// ===========================================================================
+
+/// Add a ticket mapping (Master -> Slave)
+/// Used for recovery during initialization
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_add_mapping(
+    context: *mut EaContext,
+    master_ticket: i64,
+    slave_ticket: i64,
+    is_pending: i32,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    if is_pending != 0 {
+        ctx.add_pending_mapping(master_ticket, slave_ticket);
+    } else {
+        ctx.add_ticket_mapping(master_ticket, slave_ticket);
+    }
+    1
+}
+
+/// Report trade result to update mappings
+/// Called from OnTradeTransaction
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_report_trade(
+    context: *mut EaContext,
+    master_ticket: i64,
+    slave_ticket: i64,
+    success: i32,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    if success != 0 {
+        // If successful trade, add mapping
+        // We assume this is a market order fill.
+        // If it was a pending order placement, it should be handled differently?
+        // Current implementation in MQL differentiates via where it's called.
+        // But `ea_report_trade` implies final success?
+        // If `slave_ticket` is a pending order ticket, we should map it as pending?
+        // But here we might not know if it is pending or market just from tickets.
+        // However, `OnTradeTransaction` in MQL handles PENDING_FILL which moves Pending -> Active.
+
+        // Wait, MQL `OnTradeTransaction` logic:
+        // `RemovePendingTicketMapping`
+        // `AddTicketMapping`
+
+        // So MQL knows context. We should probably have `ea_report_pending_fill`?
+        // Or just `ea_add_mapping` is enough?
+        // `ea_report_trade` seems redundant if we expose `ea_add_mapping`.
+        // BUT `ea_report_trade` might do more logic (logging, retry management).
+        // For now, let's expose specific actions for clarity.
+
+        ctx.add_ticket_mapping(master_ticket, slave_ticket);
+    } else {
+        // Failed trade? Maybe remove mapping if it existed tentatively?
+        // Usually we map only on success.
+    }
+    1
+}
+
+/// Report pending order fill (Pending -> Active)
+/// Called from OnTradeTransaction
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_report_pending_fill(
+    context: *mut EaContext,
+    master_ticket: i64,
+    slave_ticket: i64,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.remove_pending_mapping(master_ticket);
+    ctx.add_ticket_mapping(master_ticket, slave_ticket);
+    1
+}
+
+/// Get master ticket from pending ticket (Reverse lookup)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_master_ticket_from_pending(
+    context: *mut EaContext,
+    pending_ticket: i64,
+) -> i64 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.get_master_ticket_from_pending(pending_ticket)
+}
+
+/// Get pending ticket from master ticket
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_pending_ticket(
+    context: *mut EaContext,
+    master_ticket: i64,
+) -> i64 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.get_pending_ticket(master_ticket)
+}
+
+/// Remove active mapping (Master -> Slave)
+/// Called when position is closed
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_remove_mapping(
+    context: *mut EaContext,
+    master_ticket: i64,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.remove_ticket_mapping(master_ticket);
+    1
+}
+
+/// Remove pending mapping (Master -> Slave)
+/// Called when pending order is cancelled
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_remove_pending_mapping(
+    context: *mut EaContext,
+    master_ticket: i64,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.remove_pending_mapping(master_ticket);
+    1
+}
+
+/// Get slave ticket from master ticket
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_get_slave_ticket(context: *mut EaContext, master_ticket: i64) -> i64 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    ctx.get_slave_ticket(master_ticket)
+}
+
+/// Process internal PositionSnapshot and generate commands
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+#[no_mangle]
+pub unsafe extern "C" fn ea_process_snapshot(context: *mut EaContext) -> i32 {
+    let ctx = match context.as_mut() {
+        Some(c) => c,
+        None => return 0,
+    };
+
+    // We need to access:
+    // 1. last_position_snapshot
+    // 2. config (corresponding to source_account)
+    // 3. ticket_mapper
+    // 4. current_equity
+
+    if let Some(snapshot) = &ctx.last_position_snapshot {
+        if let Some(config) = ctx.slave_configs.get(&snapshot.source_account) {
+            let mut mapper = match ctx.ticket_mapper.lock() {
+                Ok(m) => m,
+                Err(_) => return 0,
+            };
+
+            let commands =
+                crate::sync::process_snapshot(snapshot, config, &mut mapper, ctx.current_equity);
+
+            drop(mapper); // Release lock before enqueue
+
+            let count = commands.len() as i32;
+            for cmd in commands {
+                ctx.enqueue_command(cmd);
+            }
+            return count;
+        }
+    }
+
+    0
+}
+
 // ===========================================================================
 // New High-Level FFI Functions (Phase 3)
 // ===========================================================================
