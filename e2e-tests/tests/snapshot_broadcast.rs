@@ -5,7 +5,6 @@ use futures_util::StreamExt;
 use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::models::{SlaveSettings, SystemStateSnapshot, WarningCode};
 use std::time::Duration;
-use tokio_tungstenite::connect_async;
 
 #[tokio::test]
 async fn test_system_snapshot_broadcast() -> Result<()> {
@@ -77,8 +76,7 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
                 if let Some(Ok(msg)) = msg {
                     if msg.is_text() {
                         let text = msg.to_text()?;
-                        if text.starts_with("system_snapshot:") {
-                            let json_part = &text["system_snapshot:".len()..];
+                        if let Some(json_part) = text.strip_prefix("system_snapshot:") {
                             match serde_json::from_str::<SystemStateSnapshot>(json_part) {
                                 Ok(snapshot) => {
                                     if let Some(tg) = snapshot.trade_groups.iter().find(|tg| tg.id == master_account) {
@@ -124,20 +122,16 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
                 if let Some(Ok(msg)) = msg {
                     if msg.is_text() {
                         let text = msg.to_text()?;
-                        if text.starts_with("system_snapshot:") {
-                            let json_part = &text["system_snapshot:".len()..];
-                            match serde_json::from_str::<SystemStateSnapshot>(json_part) {
-                                Ok(snapshot) => {
-                                    if let Some(tg) = snapshot.trade_groups.iter().find(|tg| tg.id == master_account) {
-                                        // Check for specific warning
-                                        if tg.master_warning_codes.contains(&WarningCode::MasterAutoTradingDisabled) {
-                                            println!("Verified: Snapshot contains MasterAutoTradingDisabled warning");
-                                            update_received = true;
-                                            break;
-                                        }
+                        if let Some(json_part) = text.strip_prefix("system_snapshot:") {
+                            if let Ok(snapshot) = serde_json::from_str::<SystemStateSnapshot>(json_part) {
+                                if let Some(tg) = snapshot.trade_groups.iter().find(|tg| tg.id == master_account) {
+                                    // Check for specific warning
+                                    if tg.master_warning_codes.contains(&WarningCode::MasterAutoTradingDisabled) {
+                                        println!("Verified: Snapshot contains MasterAutoTradingDisabled warning");
+                                        update_received = true;
+                                        break;
                                     }
-                                },
-                                Err(_) => {}
+                                }
                             }
                         }
                     }

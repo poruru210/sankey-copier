@@ -299,10 +299,10 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
     // Wait for second broadcast (warning should clear)
     let second_broadcast = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning_cleared(&mut read, slave_account, "master_auto_trading_disabled"),
     )
     .await
-    .expect("Second broadcast timeout");
+    .expect("Second broadcast timeout (warning did not clear)");
 
     let warning_codes_enabled: Vec<String> = second_broadcast["warning_codes"]
         .as_array()
@@ -588,7 +588,7 @@ async fn wait_for_settings_updated(
     while let Some(msg_result) = read.next().await {
         let msg = msg_result.expect("WebSocket read error");
         if let Message::Text(text) = msg {
-            println!("[TEST] Received WebSocket message: {}", text);
+            // println!("[TEST] Received WebSocket message: {}", text); // Reduce noise
             if let Some(json_str) = text.strip_prefix("settings_updated:") {
                 let settings: Value =
                     serde_json::from_str(json_str).expect("Failed to parse settings_updated JSON");
@@ -605,6 +605,22 @@ async fn wait_for_settings_updated(
                     return settings;
                 } else {
                     println!("[TEST] ⏭️  Skipping (different slave account)");
+                }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Also check snapshots which contain the full state
+                let snapshot: Value =
+                    serde_json::from_str(json_str).expect("Failed to parse system_snapshot JSON");
+                if let Some(members) = snapshot["members"].as_array() {
+                    for member in members {
+                        if member["slave_account"].as_str() == Some(expected_slave_account) {
+                            println!(
+                                "[TEST] ✅ Found expected slave account in SNAPSHOT: {}",
+                                expected_slave_account
+                            );
+                            // Return the member object which matches the structure of settings_updated payload
+                            return member.clone();
+                        }
+                    }
                 }
             }
         }
@@ -639,6 +655,26 @@ async fn wait_for_slave_warning(
                         }
                     }
                 }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Check snapshot as well
+                if let Ok(snapshot) = serde_json::from_str::<Value>(json_str) {
+                    if let Some(members) = snapshot["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warning_codes = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if warning_codes.contains(&expected_warning) {
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -646,4 +682,57 @@ async fn wait_for_slave_warning(
         "WebSocket stream closed without receiving {} warning for {}",
         expected_warning, slave_account
     );
+}
+
+/// Wait for settings_updated broadcast for specific slave WITHOUT expected warning
+async fn wait_for_slave_warning_cleared(
+    read: &mut futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
+    slave_account: &str,
+    cleared_warning: &str,
+) -> Value {
+    use futures_util::StreamExt;
+
+    while let Some(msg_result) = read.next().await {
+        if let Ok(Message::Text(text)) = msg_result {
+            if let Some(json_str) = text.strip_prefix("settings_updated:") {
+                if let Ok(settings) = serde_json::from_str::<Value>(json_str) {
+                    if settings["slave_account"].as_str() == Some(slave_account) {
+                        let warning_codes = settings["warning_codes"]
+                            .as_array()
+                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                            .unwrap_or_default();
+
+                        if !warning_codes.contains(&cleared_warning) {
+                            return settings;
+                        }
+                    }
+                }
+            } else if let Some(json_str) = text.strip_prefix("system_snapshot:") {
+                // Check snapshot as well
+                if let Ok(snapshot) = serde_json::from_str::<Value>(json_str) {
+                    if let Some(members) = snapshot["members"].as_array() {
+                        for member in members {
+                            if member["slave_account"].as_str() == Some(slave_account) {
+                                let warning_codes = member["warning_codes"]
+                                    .as_array()
+                                    .map(|arr| {
+                                        arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+
+                                if !warning_codes.contains(&cleared_warning) {
+                                    return member.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    panic!("WebSocket stream closed without receiving cleared warning");
 }
