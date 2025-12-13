@@ -3,7 +3,6 @@
 // Why: MQL uses UTF-16 strings, so we need bidirectional conversion utilities
 //      Also provides generic helpers to reduce FFI boilerplate code
 
-use serde::de::DeserializeOwned;
 use std::sync::{LazyLock, Mutex};
 
 // Static buffers for returning UTF-16 strings to MQL5 (supports up to 4 concurrent strings)
@@ -120,85 +119,6 @@ pub fn is_char_boundary(s: &str, index: usize) -> bool {
     }
 }
 
-
-// =============================================================================
-// Generic FFI Helpers
-// =============================================================================
-
-/// Generic MessagePack parser for FFI
-/// Reduces boilerplate in parse_* functions by providing type-safe deserialization
-///
-/// # Safety
-/// - data must be a valid pointer to a buffer of at least data_len bytes
-/// - Caller must free the returned pointer with the appropriate *_free() function
-///
-/// # Returns
-/// - Valid pointer to heap-allocated T on success
-/// - Null pointer on failure (null input, invalid length, or parse error)
-pub(crate) unsafe fn parse_msgpack<T: DeserializeOwned>(data: *const u8, data_len: i32) -> *mut T {
-    if data.is_null() || data_len <= 0 {
-        return std::ptr::null_mut();
-    }
-
-    let slice = std::slice::from_raw_parts(data, data_len as usize);
-    match rmp_serde::from_slice::<T>(slice) {
-        Ok(msg) => Box::into_raw(Box::new(msg)),
-        Err(_) => std::ptr::null_mut(),
-    }
-}
-
-/// Generic handle free function
-/// Reduces boilerplate in *_free() functions by providing type-safe cleanup
-///
-/// # Safety
-/// - handle must be a valid pointer created by parse_msgpack or null
-/// - handle must not be used after calling this function
-pub(crate) unsafe fn free_handle<T>(handle: *mut T) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
-}
-
-/// Generic helper to serialize a message to MessagePack buffer for FFI
-/// Returns the number of bytes written, or 0 on error/buffer too small
-///
-/// # Safety
-/// - output must be a valid buffer of at least output_len bytes
-pub(crate) unsafe fn serialize_to_buffer<T: serde::Serialize>(
-    msg: &T,
-    output: *mut u8,
-    output_len: i32,
-) -> i32 {
-    if output.is_null() || output_len <= 0 {
-        return 0;
-    }
-
-    // Serialize to vector first
-    let serialized = match rmp_serde::to_vec_named(msg) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Serialization failed: {}", e);
-            return 0;
-        }
-    };
-
-    // Check buffer size
-    if serialized.len() > output_len as usize {
-        eprintln!(
-            "Buffer too small: required {}, provided {}",
-            serialized.len(),
-            output_len
-        );
-        return 0;
-    }
-
-    // Copy to output buffer
-    let output_slice = std::slice::from_raw_parts_mut(output, output_len as usize);
-    output_slice[..serialized.len()].copy_from_slice(&serialized);
-
-    serialized.len() as i32
-}
-
 // =============================================================================
 // Tests for helper functions
 // =============================================================================
@@ -206,14 +126,6 @@ pub(crate) unsafe fn serialize_to_buffer<T: serde::Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    struct TestMessage {
-        id: i32,
-        name: String,
-        value: Option<f64>,
-    }
 
     #[test]
     fn test_copy_string_to_fixed_array() {
@@ -238,36 +150,5 @@ mod tests {
         let s = std::str::from_utf8(&arr3[..3]).unwrap();
         assert_eq!(s, "こ");
         assert_eq!(arr3[3], 0);
-    }
-
-    #[test]
-    fn test_parse_msgpack_valid_data() {
-        let msg = TestMessage {
-            id: 42,
-            name: "test".to_string(),
-            value: Some(3.15),
-        };
-        let serialized = rmp_serde::to_vec_named(&msg).expect("Failed to serialize");
-
-        unsafe {
-            let handle: *mut TestMessage =
-                parse_msgpack(serialized.as_ptr(), serialized.len() as i32);
-            assert!(!handle.is_null(), "Should return valid handle");
-
-            let parsed = &*handle;
-            assert_eq!(parsed.id, 42);
-            assert_eq!(parsed.name, "test");
-            assert_eq!(parsed.value, Some(3.15));
-
-            free_handle(handle);
-        }
-    }
-
-    #[test]
-    fn test_parse_msgpack_null_data() {
-        unsafe {
-            let handle: *mut TestMessage = parse_msgpack(std::ptr::null(), 10);
-            assert!(handle.is_null(), "Should return null for null input");
-        }
     }
 }

@@ -180,9 +180,9 @@ impl ExpertAdvisor for MasterEaCore {
                         // Slave requested sync.
                         // Use safe wrapper to get full SyncRequestMessage
                         if let Some(req) = wrapper.get_sync_request() {
-                             // Correct timestamp to be now for new request if needed, or keep original?
-                             // Here we just clone/store it as received
-                             self.received_sync_requests.lock().unwrap().push(req);
+                            // Correct timestamp to be now for new request if needed, or keep original?
+                            // Here we just clone/store it as received
+                            self.received_sync_requests.lock().unwrap().push(req);
                         }
                     }
                     EaCommandType::UpdateUi => {

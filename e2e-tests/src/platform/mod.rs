@@ -10,10 +10,10 @@
 // 2. Test Environment (Sandbox):
 //    Relay Serverのプロセス管理と、Master/Slave EAの隔離実行環境を提供します。
 
+pub mod ea_context_wrapper;
 pub mod runner;
 pub mod traits;
-pub mod types;
-pub mod ea_context_wrapper; // Added Wrapper
+pub mod types; // Added Wrapper
 
 // Test Environment Modules
 pub mod relay_server;

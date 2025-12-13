@@ -5,17 +5,17 @@
 // This wrapper simulates the MQL/C++ client wrapper.
 // It uses the new structure-based FFI accessors.
 
-use std::sync::{Arc, Mutex};
 use sankey_copier_zmq::ea_context::{EaCommand, EaContext};
 use sankey_copier_zmq::ffi::*;
 use sankey_copier_zmq::ffi_types::{
-    CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest,
-    MAX_ACCOUNT_ID_LEN, MAX_SYMBOL_LEN, MAX_COMMENT_LEN,
+    CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest, MAX_ACCOUNT_ID_LEN,
+    MAX_COMMENT_LEN, MAX_SYMBOL_LEN,
 };
 use sankey_copier_zmq::{
-    SlaveConfigMessage, MasterConfigMessage, PositionInfo, SyncRequestMessage,
-    SymbolMapping, LotCalculationMode, SyncMode,
+    LotCalculationMode, MasterConfigMessage, PositionInfo, SlaveConfigMessage, SymbolMapping,
+    SyncMode, SyncRequestMessage,
 };
+use std::sync::{Arc, Mutex};
 
 // Thread-safe wrapper for the raw pointer
 // In MQL this would be a class holding the pointer
@@ -60,8 +60,11 @@ impl EaContextWrapper {
                 let count = ea_context_get_symbol_mappings_count(self.ctx);
                 if count > 0 {
                     let mut mappings = vec![CSymbolMapping::default(); count as usize];
-                    if ea_context_get_symbol_mappings(self.ctx, mappings.as_mut_ptr(), count) == count {
-                        config.symbol_mappings = mappings.iter().map(convert_symbol_mapping).collect();
+                    if ea_context_get_symbol_mappings(self.ctx, mappings.as_mut_ptr(), count)
+                        == count
+                    {
+                        config.symbol_mappings =
+                            mappings.iter().map(convert_symbol_mapping).collect();
                     }
                 }
 
@@ -77,7 +80,9 @@ impl EaContextWrapper {
             let count = ea_context_get_position_snapshot_count(self.ctx);
             if count > 0 {
                 let mut c_positions = vec![CPositionInfo::default(); count as usize];
-                if ea_context_get_position_snapshot(self.ctx, c_positions.as_mut_ptr(), count) == count {
+                if ea_context_get_position_snapshot(self.ctx, c_positions.as_mut_ptr(), count)
+                    == count
+                {
                     c_positions.iter().map(convert_position_info).collect()
                 } else {
                     Vec::new()
@@ -91,7 +96,12 @@ impl EaContextWrapper {
     pub fn get_position_snapshot_source_account(&self) -> String {
         unsafe {
             let mut buffer = [0u8; MAX_ACCOUNT_ID_LEN];
-            if ea_context_get_position_snapshot_source_account(self.ctx, buffer.as_mut_ptr(), MAX_ACCOUNT_ID_LEN as i32) == 1 {
+            if ea_context_get_position_snapshot_source_account(
+                self.ctx,
+                buffer.as_mut_ptr(),
+                MAX_ACCOUNT_ID_LEN as i32,
+            ) == 1
+            {
                 bytes_to_string(&buffer)
             } else {
                 String::new()
@@ -197,9 +207,21 @@ fn convert_position_info(c: &CPositionInfo) -> PositionInfo {
         open_time: chrono::DateTime::from_timestamp(c.open_time, 0)
             .unwrap_or_default()
             .to_rfc3339(),
-        stop_loss: if c.stop_loss > 0.0 { Some(c.stop_loss) } else { None },
-        take_profit: if c.take_profit > 0.0 { Some(c.take_profit) } else { None },
-        magic_number: if c.magic_number != 0 { Some(c.magic_number) } else { None },
+        stop_loss: if c.stop_loss > 0.0 {
+            Some(c.stop_loss)
+        } else {
+            None
+        },
+        take_profit: if c.take_profit > 0.0 {
+            Some(c.take_profit)
+        } else {
+            None
+        },
+        magic_number: if c.magic_number != 0 {
+            Some(c.magic_number)
+        } else {
+            None
+        },
         comment: Some(bytes_to_string(&c.comment)).filter(|s| !s.is_empty()),
     }
 }

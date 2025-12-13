@@ -195,14 +195,15 @@ impl ExpertAdvisor for SlaveEaCore {
                         // Always process snapshot command, even if empty positions
                         let snap = PositionSnapshotMessage {
                             message_type: "PositionSnapshot".to_string(),
-                            source_account: if source.is_empty() { "Unknown".to_string() } else { source },
+                            source_account: if source.is_empty() {
+                                "Unknown".to_string()
+                            } else {
+                                source
+                            },
                             positions: snapshots,
                             timestamp: Utc::now().to_rfc3339(),
                         };
-                        self.received_position_snapshots
-                            .lock()
-                            .unwrap()
-                            .push(snap);
+                        self.received_position_snapshots.lock().unwrap().push(snap);
                     }
                     EaCommandType::Open | EaCommandType::Close | EaCommandType::Modify => {
                         // Reconstruct TradeSignal for verification

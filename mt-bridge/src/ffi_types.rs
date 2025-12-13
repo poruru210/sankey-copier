@@ -5,8 +5,6 @@
 // These structs are designed to be safe for passing across the FFI boundary.
 // Strings are represented as fixed-size byte arrays (UTF-8, null-terminated).
 
-use crate::types::{LotCalculationMode, SyncMode};
-
 // Constants for string lengths
 pub const MAX_ACCOUNT_ID_LEN: usize = 64;
 pub const MAX_SYMBOL_LEN: usize = 32;
