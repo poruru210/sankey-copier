@@ -11,12 +11,12 @@
 #ifndef SANKEY_COPIER_TRADE_MQH
 #define SANKEY_COPIER_TRADE_MQH
 
-#include "Common.mqh"
+#include "SlaveContext.mqh"
 #include "SlaveTypes.mqh"
-// Note: Messages.mqh removed - using Common.mqh for declarations
+// Note: Messages.mqh removed - using SlaveContext for declarations
 #include "Logging.mqh"
 
-// SendSyncRequestMessage_Local removed - using EaContextWrapper
+// SendSyncRequestMessage_Local removed - using SlaveContextWrapper
 
 //+------------------------------------------------------------------+
 //| Check if trade should be processed based on filters              |
@@ -108,7 +108,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 //+------------------------------------------------------------------+
 void ProcessSlaveConfig(SSlaveConfig &config,
                         CopyConfig &configs[],
-                        EaContextWrapper &context,
+                        SlaveContextWrapper &context,
                         string slave_account)
 {
    // Extract fields from the struct

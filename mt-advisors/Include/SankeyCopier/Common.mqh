@@ -240,76 +240,12 @@ public:
       return ea_get_command(m_context, command) == 1;
    }
    
-   // Accessors for Cached Configs (Updated to use structs)
-   bool GetMasterConfig(SMasterConfig &config)
-   {
-      if(!m_initialized) return false;
-      return ea_context_get_master_config(m_context, config) == 1;
-   }
-
-   bool GetSlaveConfig(SSlaveConfig &config)
-   {
-      if(!m_initialized) return false;
-      return ea_context_get_slave_config(m_context, config) == 1;
-   }
-
-   bool GetSyncRequest(SSyncRequest &request)
-   {
-      if(!m_initialized) return false;
-      return ea_context_get_sync_request(m_context, request) == 1;
-   }
-
-   // Position Snapshot Accessors
-   int GetPositionSnapshotCount()
-   {
-      if(!m_initialized) return 0;
-      return ea_context_get_position_snapshot_count(m_context);
-   }
-
-   bool GetPositionSnapshot(SPositionInfo &positions[])
-   {
-      if(!m_initialized) return false;
-      int count = ea_context_get_position_snapshot_count(m_context);
-      if (count <= 0) return false;
-
-      ArrayResize(positions, count);
-      return ea_context_get_position_snapshot(m_context, positions, count) > 0;
-   }
-
-   string GetPositionSnapshotSourceAccount()
-   {
-       if(!m_initialized) return "";
-       uchar buffer[64];
-       if (ea_context_get_position_snapshot_source_account(m_context, buffer, 64) == 1) {
-           return CharArrayToString(buffer);
-       }
-       return "";
-   }
-
-   // Slave Config Array Accessors
-   int GetSymbolMappingsCount()
-   {
-      if(!m_initialized) return 0;
-      return ea_context_get_symbol_mappings_count(m_context);
-   }
-
-   bool GetSymbolMappings(SSymbolMapping &mappings[])
-   {
-      if(!m_initialized) return false;
-      int count = ea_context_get_symbol_mappings_count(m_context);
-      if (count <= 0) return false;
-
-      ArrayResize(mappings, count);
-      return ea_context_get_symbol_mappings(m_context, mappings, count) > 0;
-   }
-   
    // High-level receive methods
    int ReceiveConfig(uchar &buffer[], int buffer_size)
    {
       if(!m_initialized) return 0;
       return ea_receive_config(m_context, buffer, buffer_size);
    }
-   // Note: ReceiveTrade method removed - using ea_get_command()
    
    bool SubscribeConfig(string topic)
    {
@@ -385,61 +321,9 @@ public:
        if(m_initialized) ea_context_reset(m_context);
    }
 
-   // --- High-Level Trade Signals (Master) ---
-
-   bool SendOpenSignal(long ticket, string symbol, string order_type, double lots, double price, double sl, double tp, long magic, string comment)
-   {
-      if(!m_initialized) return false;
-      uchar buffer[1024];
-      int len = ea_send_open_signal(m_context, ticket, symbol, order_type, lots, price, sl, tp, magic, comment, buffer, 1024);
-      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
-      return false;
-   }
-
-   bool SendCloseSignal(long ticket, double close_ratio)
-   {
-      if(!m_initialized) return false;
-      uchar buffer[1024];
-      int len = ea_send_close_signal(m_context, ticket, close_ratio, buffer, 1024);
-      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
-      return false;
-   }
-   
-   bool SendModifySignal(long ticket, double sl, double tp)
-   {
-      if(!m_initialized) return false;
-      uchar buffer[1024];
-      int len = ea_send_modify_signal(m_context, ticket, sl, tp, buffer, 1024);
-      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
-      return false;
-   }
-
-   // --- High-Level Sync/Config ---
-
-   bool SendRequestConfig()
-   {
-      if(!m_initialized) return false;
-      uchar buffer[1024];
-      int len = ea_send_request_config(m_context, buffer, 1024);
-      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
-      return false;
-   }
-
-   bool SendSyncRequest(string master_account)
-   {
-      if(!m_initialized) return false;
-      uchar buffer[1024];
-      int len = ea_send_sync_request(m_context, master_account, buffer, 1024);
-      if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
-      return false;
-   }
-
-   bool SendPositionSnapshot(SPositionInfo &positions[])
-   {
-      if(!m_initialized) return false;
-      int count = ArraySize(positions);
-      return ea_send_position_snapshot(m_context, positions, count) == 1;
-   }
+   // NOTE: Master/Slave specific methods moved to:
+   // - MasterContext.mqh: GetMasterConfig, GetSyncRequest, SendOpenSignal, SendCloseSignal, SendModifySignal, SendPositionSnapshot
+   // - SlaveContext.mqh: GetSlaveConfig, GetPositionSnapshot, GetSymbolMappings, SendSyncRequest, SendRequestConfig
 };
 
 //--- Common structures

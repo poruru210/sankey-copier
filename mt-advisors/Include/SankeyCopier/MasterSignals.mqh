@@ -12,14 +12,14 @@
 #ifndef SANKEY_COPIER_MASTER_SIGNALS_MQH
 #define SANKEY_COPIER_MASTER_SIGNALS_MQH
 
-#include "Common.mqh"
+#include "MasterContext.mqh"
 #include "Logging.mqh"
 
 //+------------------------------------------------------------------+
 //| Send open position signal message (Master)                       |
 //| Called when Master EA opens a new position to notify Slaves      |
 //+------------------------------------------------------------------+
-bool SendOpenSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, string symbol,
+bool SendOpenSignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, string symbol,
                     string order_type, double lots, double price, double sl, double tp,
                     long magic, string comment, string account_id)
 {
@@ -31,7 +31,7 @@ bool SendOpenSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, string sym
 //| Called when Master EA closes a position to notify Slaves         |
 //| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
-bool SendCloseSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double close_ratio, string account_id)
+bool SendCloseSignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, double close_ratio, string account_id)
 {
    return ea_context.SendCloseSignal((long)ticket, close_ratio);
 }
@@ -40,7 +40,7 @@ bool SendCloseSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double cl
 //| Send modify signal message (Master)                             |
 //| Called when Master EA modifies SL/TP to notify Slaves            |
 //+------------------------------------------------------------------+
-bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double sl, double tp, string account_id)
+bool SendModifySignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, double sl, double tp, string account_id)
 {
    return ea_context.SendModifySignal((long)ticket, sl, tp);
 }
@@ -50,7 +50,7 @@ bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double s
 //| Called when Master receives SyncRequest from Slave               |
 //| Collects all current positions and sends as PositionSnapshot      |
 //+------------------------------------------------------------------+
-bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
+bool SendPositionSnapshot(MasterContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
 {
    SPositionInfo positions[];
    int count = 0;

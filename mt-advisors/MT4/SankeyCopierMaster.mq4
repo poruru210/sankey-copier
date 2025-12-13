@@ -10,7 +10,7 @@
 #property strict
 
 //--- Include common headers
-#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
@@ -58,7 +58,7 @@ datetime    g_last_heartbeat = 0;
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 bool        g_config_requested = false;   // Track if config request has been sent
 bool        g_register_sent = false;    // Track if register message has been sent
-EaContextWrapper g_ea_context;        // Rust EA Context wrapper
+MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
 
 
 //--- Configuration panel

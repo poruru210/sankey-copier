@@ -13,7 +13,7 @@
 bool g_received_via_timer = false; // Track if signal was received via OnTimer (for latency tracing)
 
 //--- Include common headers
-#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/SlaveContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/Mapping.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
@@ -51,7 +51,7 @@ datetime    g_last_heartbeat = 0;
 bool        g_config_requested = false;   // Track if config request has been sent
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 bool        g_register_sent = false;    // Track if register message has been sent
-EaContextWrapper g_ea_context;        // Rust EA Context wrapper
+SlaveContextWrapper g_ea_context;        // Rust EA Context wrapper
 
 
 //--- Extended configuration variables (from ConfigMessage)

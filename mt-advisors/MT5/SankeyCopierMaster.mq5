@@ -9,7 +9,7 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
 #include "../Include/SankeyCopier/Trade.mqh"
@@ -66,7 +66,7 @@ string        g_config_topic = "";        // Config topic (generated via FFI)
 string        g_vlogs_topic = "";         // VLogs topic (generated via FFI)
 string        g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 bool          g_register_sent = false;    // Track if register message has been sent
-EaContextWrapper g_ea_context;        // Rust EA Context wrapper
+MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
 
 
 //--- Configuration panel
