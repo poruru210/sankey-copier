@@ -830,8 +830,10 @@ pub unsafe extern "C" fn ea_send_position_snapshot(
         let slice = std::slice::from_raw_parts(positions, count as usize);
 
         // Convert all positions first (Conversion Layer)
-        let rust_positions: Vec<crate::types::PositionInfo> =
-            slice.iter().map(|c_pos| convert_c_position_to_rust(c_pos)).collect();
+        let rust_positions: Vec<crate::types::PositionInfo> = slice
+            .iter()
+            .map(|c_pos| convert_c_position_to_rust(c_pos))
+            .collect();
 
         match ctx.send_position_snapshot(rust_positions) {
             Ok(_) => 1,
@@ -841,7 +843,6 @@ pub unsafe extern "C" fn ea_send_position_snapshot(
 
     result.unwrap_or(0)
 }
-
 
 /// Get the last received Master Config as a C-compatible struct
 ///
