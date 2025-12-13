@@ -12,7 +12,7 @@
 #ifndef SANKEY_COPIER_SLAVE_TRADE_MQH
 #define SANKEY_COPIER_SLAVE_TRADE_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 #include "Mapping.mqh"
 #include "Logging.mqh"
 
@@ -97,7 +97,7 @@ bool EnsureSymbolActive(string symbol)
    return true;
 }
 
-// Note: NormalizeLotSize is provided by Trade.mqh
+// Note: NormalizeLotSize is provided by SlaveConfig.mqh
 
 // =============================================================================
 // Trade Execution Functions - MT5 Implementation

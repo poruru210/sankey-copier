@@ -13,7 +13,7 @@
 #ifndef SANKEY_COPIER_LOGGING_MQH
 #define SANKEY_COPIER_LOGGING_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 
 //--- Log levels (matches VictoriaLogs convention)
 #define LOG_DEBUG "DEBUG"

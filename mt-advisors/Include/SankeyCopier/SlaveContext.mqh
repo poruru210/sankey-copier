@@ -9,7 +9,7 @@
 #ifndef SLAVE_CONTEXT_MQH
 #define SLAVE_CONTEXT_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 
 //+------------------------------------------------------------------+
 //| SlaveContextWrapper: Slave EA specific extensions                |

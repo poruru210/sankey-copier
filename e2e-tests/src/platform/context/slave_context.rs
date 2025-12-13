@@ -1,64 +1,39 @@
-// e2e-tests/src/platform/ea_context_wrapper.rs
-//
-// Safe Rust Wrapper for EA Context FFI
-//
-// This wrapper simulates the MQL/C++ client wrapper.
-// It uses the new structure-based FFI accessors.
-
+// e2e-tests/src/platform/context/slave.rs
+use super::common::{bytes_to_string, EaContextWrapper};
 use sankey_copier_zmq::ea_context::EaContext;
 use sankey_copier_zmq::ffi::*;
-use sankey_copier_zmq::ffi_types::{
-    CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest, MAX_ACCOUNT_ID_LEN,
-};
+use sankey_copier_zmq::ffi::{SPositionInfo, SSlaveConfig, SSymbolMapping, MAX_ACCOUNT_ID_LEN};
 use sankey_copier_zmq::{
-    LotCalculationMode, MasterConfigMessage, PositionInfo, SlaveConfigMessage, SymbolMapping,
-    SyncMode, SyncRequestMessage,
+    LotCalculationMode, PositionInfo, SlaveConfigMessage, SymbolMapping, SyncMode,
 };
+use std::ops::Deref;
 
-// Thread-safe wrapper for the raw pointer
-// In MQL this would be a class holding the pointer
-pub struct EaContextWrapper {
-    ctx: *mut EaContext,
+pub struct SlaveContextWrapper {
+    base: EaContextWrapper,
 }
 
-unsafe impl Send for EaContextWrapper {}
-unsafe impl Sync for EaContextWrapper {}
-
-impl EaContextWrapper {
+impl SlaveContextWrapper {
     pub fn new(ctx: *mut EaContext) -> Self {
-        Self { ctx }
-    }
-
-    pub fn raw(&self) -> *mut EaContext {
-        self.ctx
+        Self {
+            base: EaContextWrapper::new(ctx),
+        }
     }
 
     pub fn free(self) {
-        unsafe { ea_context_free(self.ctx) };
-    }
-
-    pub fn get_master_config(&self) -> Option<MasterConfigMessage> {
-        unsafe {
-            let mut c_config = CMasterConfig::default();
-            if ea_context_get_master_config(self.ctx, &mut c_config) == 1 {
-                Some(convert_master_config(&c_config))
-            } else {
-                None
-            }
-        }
+        self.base.free();
     }
 
     pub fn get_slave_config(&self) -> Option<SlaveConfigMessage> {
         unsafe {
-            let mut c_config = CSlaveConfig::default();
-            if ea_context_get_slave_config(self.ctx, &mut c_config) == 1 {
+            let mut c_config = SSlaveConfig::default();
+            if ea_context_get_slave_config(self.base.raw(), &mut c_config) == 1 {
                 let mut config = convert_slave_config(&c_config);
 
                 // Fetch Symbol Mappings
-                let count = ea_context_get_symbol_mappings_count(self.ctx);
+                let count = ea_context_get_symbol_mappings_count(self.base.raw());
                 if count > 0 {
-                    let mut mappings = vec![CSymbolMapping::default(); count as usize];
-                    if ea_context_get_symbol_mappings(self.ctx, mappings.as_mut_ptr(), count)
+                    let mut mappings = vec![SSymbolMapping::default(); count as usize];
+                    if ea_context_get_symbol_mappings(self.base.raw(), mappings.as_mut_ptr(), count)
                         == count
                     {
                         config.symbol_mappings =
@@ -75,11 +50,14 @@ impl EaContextWrapper {
 
     pub fn get_position_snapshot(&self) -> Vec<PositionInfo> {
         unsafe {
-            let count = ea_context_get_position_snapshot_count(self.ctx);
+            let count = ea_context_get_position_snapshot_count(self.base.raw());
             if count > 0 {
-                let mut c_positions = vec![CPositionInfo::default(); count as usize];
-                if ea_context_get_position_snapshot(self.ctx, c_positions.as_mut_ptr(), count)
-                    == count
+                let mut c_positions = vec![SPositionInfo::default(); count as usize];
+                if ea_context_get_position_snapshot(
+                    self.base.raw(),
+                    c_positions.as_mut_ptr(),
+                    count,
+                ) == count
                 {
                     c_positions.iter().map(convert_position_info).collect()
                 } else {
@@ -95,7 +73,7 @@ impl EaContextWrapper {
         unsafe {
             let mut buffer = [0u8; MAX_ACCOUNT_ID_LEN];
             if ea_context_get_position_snapshot_source_account(
-                self.ctx,
+                self.base.raw(),
                 buffer.as_mut_ptr(),
                 MAX_ACCOUNT_ID_LEN as i32,
             ) == 1
@@ -106,39 +84,17 @@ impl EaContextWrapper {
             }
         }
     }
+}
 
-    pub fn get_sync_request(&self) -> Option<SyncRequestMessage> {
-        unsafe {
-            let mut c_req = CSyncRequest::default();
-            if ea_context_get_sync_request(self.ctx, &mut c_req) == 1 {
-                Some(convert_sync_request(&c_req))
-            } else {
-                None
-            }
-        }
+impl Deref for SlaveContextWrapper {
+    type Target = EaContextWrapper;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
     }
 }
 
-// --- Conversion Helpers ---
-
-fn bytes_to_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|&x| x == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).to_string()
-}
-
-fn convert_master_config(c: &CMasterConfig) -> MasterConfigMessage {
-    MasterConfigMessage {
-        account_id: bytes_to_string(&c.account_id),
-        status: c.status,
-        symbol_prefix: Some(bytes_to_string(&c.symbol_prefix)).filter(|s| !s.is_empty()),
-        symbol_suffix: Some(bytes_to_string(&c.symbol_suffix)).filter(|s| !s.is_empty()),
-        config_version: c.config_version,
-        timestamp: String::new(), // Not exposed in C struct currently
-        warning_codes: Vec::new(),
-    }
-}
-
-fn convert_slave_config(c: &CSlaveConfig) -> SlaveConfigMessage {
+fn convert_slave_config(c: &SSlaveConfig) -> SlaveConfigMessage {
     SlaveConfigMessage {
         account_id: bytes_to_string(&c.account_id),
         master_account: bytes_to_string(&c.master_account),
@@ -152,8 +108,8 @@ fn convert_slave_config(c: &CSlaveConfig) -> SlaveConfigMessage {
         reverse_trade: c.reverse_trade != 0,
         symbol_prefix: Some(bytes_to_string(&c.symbol_prefix)).filter(|s| !s.is_empty()),
         symbol_suffix: Some(bytes_to_string(&c.symbol_suffix)).filter(|s| !s.is_empty()),
-        symbol_mappings: Vec::new(), // Populated separately
-        filters: Default::default(), // Not exposed yet in flat struct (complex lists)
+        symbol_mappings: Vec::new(),
+        filters: Default::default(),
         config_version: c.config_version,
         source_lot_min: Some(c.source_lot_min),
         source_lot_max: Some(c.source_lot_max),
@@ -167,6 +123,7 @@ fn convert_slave_config(c: &CSlaveConfig) -> SlaveConfigMessage {
         market_sync_max_pips: Some(c.market_sync_max_pips),
         max_slippage: Some(c.max_slippage),
         copy_pending_orders: c.copy_pending_orders != 0,
+        // Trade Execution settings
         max_retries: c.max_retries,
         max_signal_delay_ms: c.max_signal_delay_ms,
         use_pending_order_for_delayed: c.use_pending_order_for_delayed != 0,
@@ -176,16 +133,14 @@ fn convert_slave_config(c: &CSlaveConfig) -> SlaveConfigMessage {
     }
 }
 
-fn convert_symbol_mapping(c: &CSymbolMapping) -> SymbolMapping {
+fn convert_symbol_mapping(c: &SSymbolMapping) -> SymbolMapping {
     SymbolMapping {
         source_symbol: bytes_to_string(&c.source),
         target_symbol: bytes_to_string(&c.target),
     }
 }
 
-fn convert_position_info(c: &CPositionInfo) -> PositionInfo {
-    // Map int order_type back to string (reverse of FFI logic)
-    // OrderType::Buy = 0, Sell = 1, etc.
+fn convert_position_info(c: &SPositionInfo) -> PositionInfo {
     let ot_str = match c.order_type {
         0 => "Buy",
         1 => "Sell",
@@ -221,15 +176,5 @@ fn convert_position_info(c: &CPositionInfo) -> PositionInfo {
             None
         },
         comment: Some(bytes_to_string(&c.comment)).filter(|s| !s.is_empty()),
-    }
-}
-
-fn convert_sync_request(c: &CSyncRequest) -> SyncRequestMessage {
-    SyncRequestMessage {
-        message_type: "SyncRequest".to_string(),
-        slave_account: bytes_to_string(&c.slave_account),
-        master_account: bytes_to_string(&c.master_account),
-        last_sync_time: Some(bytes_to_string(&c.last_sync_time)).filter(|s| !s.is_empty()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
     }
 }

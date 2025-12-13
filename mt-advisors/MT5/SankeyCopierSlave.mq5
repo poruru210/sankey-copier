@@ -19,7 +19,7 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 #include "../Include/SankeyCopier/Mapping.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 //--- Include common headers (Messages.mqh removed - using high-level FFI)
-#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/SlaveTrade.mqh"
 // MessageParsing.mqh removed
 #include "../Include/SankeyCopier/Logging.mqh"

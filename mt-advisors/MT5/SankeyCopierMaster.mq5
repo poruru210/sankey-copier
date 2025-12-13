@@ -12,7 +12,7 @@
 #include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
-#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
 

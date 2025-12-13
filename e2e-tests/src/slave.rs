@@ -16,7 +16,7 @@ use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 
 use crate::base::EaSimulatorBase;
-use crate::platform::ea_context_wrapper::EaContextWrapper;
+use crate::platform::context::SlaveContextWrapper;
 use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
@@ -53,7 +53,7 @@ struct SlaveEaCore {
 
     _subscribed_masters: Arc<Mutex<Vec<String>>>,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
-    context: Arc<Mutex<Option<EaContextWrapper>>>,
+    context: Arc<Mutex<Option<SlaveContextWrapper>>>,
 
     push_address: String,
     config_address: String,
@@ -92,7 +92,7 @@ impl ExpertAdvisor for SlaveEaCore {
 
         {
             let mut guard = self.context.lock().unwrap();
-            *guard = Some(EaContextWrapper::new(ctx_ptr));
+            *guard = Some(SlaveContextWrapper::new(ctx_ptr));
         }
 
         let push_u16 = to_u16(&self.push_address);
@@ -312,7 +312,7 @@ pub struct SlaveEaSimulator {
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
 
     // --- Context (Managed in OnTimer thread) ---
-    context: Arc<Mutex<Option<EaContextWrapper>>>,
+    context: Arc<Mutex<Option<SlaveContextWrapper>>>,
 
     // Connection Params
     push_address: String,

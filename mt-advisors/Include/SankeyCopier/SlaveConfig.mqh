@@ -1,15 +1,14 @@
 //+------------------------------------------------------------------+
-//|                                      SankeyCopierTrade.mqh        |
+//|                                     SankeyCopierSlaveConfig.mqh  |
 //|                        Copyright 2025, SANKEY Copier Project      |
-//|                     Trade filtering and transformation            |
+//|                     Slave EA configuration processing            |
 //+------------------------------------------------------------------+
-// Purpose: Slave EA trade processing functions (filtering, transformation, config)
-// Note: This file contains Slave-specific functionality
-//       Consider renaming to SlaveTrade.mqh in future refactoring
+// Purpose: Slave EA configuration processing, filtering, and transformation
+// Note: Renamed from Trade.mqh for clarity - this file is Slave-specific
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
-#ifndef SANKEY_COPIER_TRADE_MQH
-#define SANKEY_COPIER_TRADE_MQH
+#ifndef SANKEY_COPIER_SLAVE_CONFIG_MQH
+#define SANKEY_COPIER_SLAVE_CONFIG_MQH
 
 #include "SlaveContext.mqh"
 #include "SlaveTypes.mqh"
@@ -18,90 +17,7 @@
 
 // SendSyncRequestMessage_Local removed - using SlaveContextWrapper
 
-//+------------------------------------------------------------------+
-//| Check if trade should be processed based on filters              |
-//| NOTE: Main trade logic is now in Rust (mt-bridge).               |
-//| This function is kept for legacy support or local checks if needed|
-//+------------------------------------------------------------------+
-bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
-{
-   // Check if the server explicitly allows new trades (runtime_status + auto-trade)
-   if(!config.allow_new_orders)
-   {
-      LogDebug(CAT_TRADE, StringFormat("Trade filtering: allow_new_orders=%d runtime_status=%d",
-            config.allow_new_orders ? 1 : 0, config.status));
-      return false;
-   }
-
-   // Check allowed symbols filter
-   if(ArraySize(config.filters.allowed_symbols) > 0)
-   {
-      bool symbol_found = false;
-      for(int i = 0; i < ArraySize(config.filters.allowed_symbols); i++)
-      {
-         if(config.filters.allowed_symbols[i] == symbol)
-         {
-            symbol_found = true;
-            break;
-         }
-      }
-
-      if(!symbol_found)
-      {
-         LogDebug(CAT_TRADE, StringFormat("Trade filtering: Symbol %s not in allowed list", symbol));
-         return false;
-      }
-   }
-
-   // Check blocked symbols filter
-   if(ArraySize(config.filters.blocked_symbols) > 0)
-   {
-      for(int i = 0; i < ArraySize(config.filters.blocked_symbols); i++)
-      {
-         if(config.filters.blocked_symbols[i] == symbol)
-         {
-            LogDebug(CAT_TRADE, StringFormat("Trade filtering: Symbol %s is blocked", symbol));
-            return false;
-         }
-      }
-   }
-
-   // Check allowed magic numbers filter
-   if(ArraySize(config.filters.allowed_magic_numbers) > 0)
-   {
-      bool magic_found = false;
-      for(int i = 0; i < ArraySize(config.filters.allowed_magic_numbers); i++)
-      {
-         if(config.filters.allowed_magic_numbers[i] == magic_number)
-         {
-            magic_found = true;
-            break;
-         }
-      }
-
-      if(!magic_found)
-      {
-         LogDebug(CAT_TRADE, StringFormat("Trade filtering: Magic number %d not in allowed list", magic_number));
-         return false;
-      }
-   }
-
-   // Check blocked magic numbers filter
-   if(ArraySize(config.filters.blocked_magic_numbers) > 0)
-   {
-      for(int i = 0; i < ArraySize(config.filters.blocked_magic_numbers); i++)
-      {
-         if(config.filters.blocked_magic_numbers[i] == magic_number)
-         {
-            LogDebug(CAT_TRADE, StringFormat("Trade filtering: Magic number %d is blocked", magic_number));
-            return false;
-         }
-      }
-   }
-
-   // All checks passed
-   return true;
-}
+// Note: ShouldProcessTrade removed - trade filtering is now handled by Rust (mt-bridge)
 
 //+------------------------------------------------------------------+
 //| Process configuration message from struct (Stateful FFI)         |
@@ -449,71 +365,8 @@ string GetLocalSymbol(string symbol, string prefix, string suffix)
    return local;
 }
 
-//+------------------------------------------------------------------+
-//| Parse symbol mapping string (Format: "Source=Target,Src2=Tgt2")  |
-//+------------------------------------------------------------------+
-void ParseSymbolMappingString(string mapping_str, SymbolMapping &mappings[])
-{
-   ArrayResize(mappings, 0);
-   
-   if(mapping_str == "") return;
-   
-   string pairs[];
-   int pair_count = StringSplit(mapping_str, ',', pairs);
-   
-   for(int i = 0; i < pair_count; i++)
-   {
-      string pair = pairs[i];
-      StringTrimLeft(pair);
-      StringTrimRight(pair);
-      
-      if(pair == "") continue;
-      
-      string parts[];
-      int part_count = StringSplit(pair, '=', parts);
-      
-      if(part_count == 2)
-      {
-         string source = parts[0];
-         string target = parts[1];
-         
-         StringTrimLeft(source);
-         StringTrimRight(source);
-         StringTrimLeft(target);
-         StringTrimRight(target);
-         
-         if(source != "" && target != "")
-         {
-            int size = ArraySize(mappings);
-            ArrayResize(mappings, size + 1);
-            mappings[size].source_symbol = source;
-            mappings[size].target_symbol = target;
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Check if lot size is within filter range                         |
-//+------------------------------------------------------------------+
-bool IsLotWithinFilter(double lots, double lot_min, double lot_max)
-{
-   // If min filter is set and lots is below it, reject
-   if(lot_min > 0 && lots < lot_min)
-   {
-      LogDebug(CAT_TRADE, StringFormat("Lot filter: %.2f is below minimum %.2f", lots, lot_min));
-      return false;
-   }
-
-   // If max filter is set and lots is above it, reject
-   if(lot_max > 0 && lots > lot_max)
-   {
-      LogDebug(CAT_TRADE, StringFormat("Lot filter: %.2f is above maximum %.2f", lots, lot_max));
-      return false;
-   }
-
-   return true;
-}
+// Note: ParseSymbolMappingString removed - symbol mappings now retrieved via FFI
+// Note: IsLotWithinFilter removed - lot filtering is now handled by Rust (mt-bridge)
 
 //+------------------------------------------------------------------+
 //| Transform lot size based on calculation mode                     |
@@ -580,4 +433,4 @@ string ReverseOrderType(string type, bool reverse)
    return type;
 }
 
-#endif // SANKEY_COPIER_TRADE_MQH
+#endif // SANKEY_COPIER_SLAVE_CONFIG_MQH

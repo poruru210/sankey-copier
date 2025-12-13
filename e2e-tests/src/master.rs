@@ -19,7 +19,7 @@ use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
-use crate::platform::ea_context_wrapper::EaContextWrapper;
+use crate::platform::context::MasterContextWrapper;
 use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
@@ -54,7 +54,7 @@ struct MasterEaCore {
     received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
     _g_register_sent: Arc<AtomicBool>,
-    context: Arc<Mutex<Option<EaContextWrapper>>>,
+    context: Arc<Mutex<Option<MasterContextWrapper>>>,
     push_address: String,
     config_address: String,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
@@ -93,7 +93,7 @@ impl ExpertAdvisor for MasterEaCore {
 
         {
             let mut guard = self.context.lock().unwrap();
-            *guard = Some(EaContextWrapper::new(ctx_ptr));
+            *guard = Some(MasterContextWrapper::new(ctx_ptr));
         }
 
         let push_u16 = to_u16(&self.push_address);
@@ -235,7 +235,7 @@ pub struct MasterEaSimulator {
     timer_thread: Option<JoinHandle<()>>,
 
     // --- Context (Managed in OnTimer thread, accessible via FFI wrapper) ---
-    context: Arc<Mutex<Option<EaContextWrapper>>>,
+    context: Arc<Mutex<Option<MasterContextWrapper>>>,
 
     // Connection Params (Passed to Init/Connect)
     push_address: String,

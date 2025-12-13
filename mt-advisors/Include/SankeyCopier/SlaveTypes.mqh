@@ -12,7 +12,7 @@
 #ifndef SANKEY_COPIER_SLAVE_TYPES_MQH
 #define SANKEY_COPIER_SLAVE_TYPES_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 
 // =============================================================================
 // Lot Calculation Mode Constants

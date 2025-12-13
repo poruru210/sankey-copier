@@ -9,7 +9,7 @@
 #ifndef MASTER_CONTEXT_MQH
 #define MASTER_CONTEXT_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 
 //+------------------------------------------------------------------+
 //| MasterContextWrapper: Master EA specific extensions              |

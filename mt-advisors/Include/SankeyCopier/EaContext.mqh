@@ -1,12 +1,13 @@
 //+------------------------------------------------------------------+
-//|                                        SankeyCopierCommon.mqh    |
-//|                        Copyright 2025, SANKEY Copier Project      |
-//|                     Common definitions and utilities              |
+//|                                      SankeyCopierEaContext.mqh   |
+//|                        Copyright 2025, SANKEY Copier Project     |
+//|                     EaContextWrapper and common definitions      |
 //+------------------------------------------------------------------+
+// Renamed from Common.mqh for clarity - contains EaContextWrapper base class
 #property copyright "Copyright 2025, SANKEY Copier Project"
 
-#ifndef SANKEY_COPIER_COMMON_MQH
-#define SANKEY_COPIER_COMMON_MQH
+#ifndef SANKEY_COPIER_EA_CONTEXT_MQH
+#define SANKEY_COPIER_EA_CONTEXT_MQH
 
 //--- Platform detection and type aliases
 #ifdef __MQL5__
@@ -86,104 +87,9 @@ struct EaCommand {
 //--- C-Compatible Structs for FFI (separated into FFITypes.mqh)
 #include "FFITypes.mqh"
 
-//--- Import Rust ZeroMQ DLL
-#import "sankey_copier_zmq.dll"
-   // Raw ZMQ functions removed - using EaContext high-level API
+//--- DLL Imports (separated into FFIImports.mqh)
+#include "FFIImports.mqh"
 
-   // Slave config symbol mappings array access (kept if needed, or use struct access)
-   int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
-   // Mappings are now embedded in SSlaveConfig or retrieved via separate call if array is dynamic?
-   // ffi.rs logic suggests we can retrieve mappings separately.
-
-   // Actually, SSlaveConfig struct in FFI does NOT contain dynamic array of mappings directly.
-   // It contains fixed fields. Mappings are separate.
-   // Wait, ffi_types.rs says SSlaveConfig does NOT have mappings array directly embedded?
-   // Let's check ffi_types.rs again.
-   // SSlaveConfig struct in ffi_types.rs DOES NOT have `symbol_mappings: Vec`.
-   // It has scalar fields.
-   // Mappings are retrieved via `ea_context_get_symbol_mappings`.
-   // So we keep the helper functions for array data.
-
-   // Slave config symbol mappings array access
-   // int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle); // Replaced by ea_context_get_symbol_mappings_count
-   // string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
-   // string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
-
-   // Allowed magic numbers are also separate.
-
-   // Note: Trade signal functions removed - using EaCommand struct via ea_get_command()
-
-   // VictoriaLogs direct HTTP logging functions
-   int         vlogs_configure(string endpoint, string source);
-   int         vlogs_add_entry(string level, string category, string message, string context_json);
-   int         vlogs_flush();
-   int         vlogs_disable();
-   int         vlogs_buffer_size();
-
-   // VictoriaLogs config accessors (auto-applied in EaContext)
-   // Note: parse_vlogs_config, vlogs_config_free removed
-   int         vlogs_config_get_bool(HANDLE_TYPE handle, string field_name);
-   string      vlogs_config_get_string(HANDLE_TYPE handle, string field_name);
-   int         vlogs_config_get_int(HANDLE_TYPE handle, string field_name);
-
-   // Topic generation functions
-   int         build_config_topic(string account_id, ushort &output[], int output_len);
-   int         build_trade_topic(string master_id, string slave_id, ushort &output[], int output_len);
-   int         get_global_config_topic(ushort &output[], int output_len);
-   int         build_sync_topic_ffi(ushort &master_id[], ushort &slave_id[], ushort &output[], int output_len);
-   int         get_sync_topic_prefix(string account_id, ushort &output[], int output_len);
-
-   // EA State Management (Stateful FFI)
-   HANDLE_TYPE ea_init(string account_id, string ea_type, string platform, long account_number, 
-                       string broker, string account_name, string server, string currency, long leverage);
-   void        ea_context_free(HANDLE_TYPE context);
-
-   // Main Loop & Command Retrieval
-   int         ea_manager_tick(HANDLE_TYPE context, double balance, double equity, int open_positions, int is_trade_allowed);
-   int         ea_get_command(HANDLE_TYPE context, EaCommand &command);
-   
-   // New Struct-Based Accessors
-   int         ea_context_get_master_config(HANDLE_TYPE context, SMasterConfig &config);
-   int         ea_context_get_slave_config(HANDLE_TYPE context, SSlaveConfig &config);
-   int         ea_context_get_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int max_count);
-   int         ea_context_get_position_snapshot_count(HANDLE_TYPE context);
-   int         ea_context_get_position_snapshot_source_account(HANDLE_TYPE context, uchar &buffer[], int len);
-   int         ea_context_get_sync_request(HANDLE_TYPE context, SSyncRequest &request);
-   
-   // Array Accessors for Slave Config
-   int         ea_context_get_symbol_mappings_count(HANDLE_TYPE context);
-   int         ea_context_get_symbol_mappings(HANDLE_TYPE context, SSymbolMapping &mappings[], int max_count);
-
-   int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len);
-   int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
-                                 int is_trade_allowed, uchar &output[], int output_len);
-   int         ea_send_unregister(HANDLE_TYPE context, uchar &output[], int output_len);
-   
-   int         ea_context_should_request_config(HANDLE_TYPE context, int current_trade_allowed);
-   void        ea_context_mark_config_requested(HANDLE_TYPE context);
-   void        ea_context_reset(HANDLE_TYPE context);
-   
-   // FFI Integration (Phase 2) - High-Level Functions
-   int         ea_connect(HANDLE_TYPE context, string push_addr, string sub_addr);
-   int         ea_send_push(HANDLE_TYPE context, uchar &data[], int len);
-   
-   int         ea_receive_config(HANDLE_TYPE context, uchar &buffer[], int buffer_size);
-   // Note: ea_receive_trade removed - using ea_get_command()
-   // High-Level Trade Signals (Master)
-   int         ea_send_open_signal(HANDLE_TYPE context, long ticket, string symbol, string order_type, 
-                                   double lots, double price, double sl, double tp, long magic, string comment, uchar &output[], int output_len);
-   int         ea_send_close_signal(HANDLE_TYPE context, long ticket, double close_ratio, uchar &output[], int output_len);
-   int         ea_send_modify_signal(HANDLE_TYPE context, long ticket, double sl, double tp, uchar &output[], int output_len);
-
-   // High-Level Sync/Config (Master/Slave)
-   int         ea_send_request_config(HANDLE_TYPE context, uchar &output[], int output_len);
-   int         ea_send_sync_request(HANDLE_TYPE context, string master_account, uchar &output[], int output_len);
-   int         ea_subscribe_config(HANDLE_TYPE context, string topic);
-
-   // High-Level Position Snapshot (Master)
-   int         ea_send_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int count);
-
-#import
 
 //+------------------------------------------------------------------+
 //| EaContextWrapper: Manages Rust-side EaContext lifetime           |
@@ -238,13 +144,6 @@ public:
    {
       if(!m_initialized) return false;
       return ea_get_command(m_context, command) == 1;
-   }
-   
-   // High-level receive methods
-   int ReceiveConfig(uchar &buffer[], int buffer_size)
-   {
-      if(!m_initialized) return 0;
-      return ea_receive_config(m_context, buffer, buffer_size);
    }
    
    bool SubscribeConfig(string topic)
@@ -583,4 +482,4 @@ ENUM_ORDER_TYPE GetOrderTypeEnum(string type_str)
    return (ENUM_ORDER_TYPE)-1;
 }
 
-#endif // SANKEY_COPIER_COMMON_MQH
+#endif // SANKEY_COPIER_EA_CONTEXT_MQH
