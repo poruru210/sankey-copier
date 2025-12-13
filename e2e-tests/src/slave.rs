@@ -14,7 +14,6 @@ use std::time::Instant;
 
 use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::*; // Use all FFI functions available
-use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
 use crate::platform::ea_context_wrapper::EaContextWrapper;

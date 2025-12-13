@@ -119,6 +119,36 @@ pub fn is_char_boundary(s: &str, index: usize) -> bool {
     }
 }
 
+/// Serialize a value to a MessagePack buffer
+/// Returns the number of bytes written, or -1 on error
+///
+/// # Safety
+/// - `output` must be a valid, writable pointer to a buffer with at least `output_len` bytes
+/// - The buffer must remain valid for the duration of this call
+pub unsafe fn serialize_to_buffer<T: serde::Serialize>(
+    value: &T,
+    output: *mut u8,
+    output_len: i32,
+) -> i32 {
+    if output.is_null() || output_len <= 0 {
+        return -1;
+    }
+
+    let serialized = match rmp_serde::to_vec_named(value) {
+        Ok(s) => s,
+        Err(_) => return -1,
+    };
+
+    if serialized.len() > output_len as usize {
+        return -1;
+    }
+
+    let output_slice = unsafe { std::slice::from_raw_parts_mut(output, output_len as usize) };
+    output_slice[..serialized.len()].copy_from_slice(&serialized);
+
+    serialized.len() as i32
+}
+
 // =============================================================================
 // Tests for helper functions
 // =============================================================================

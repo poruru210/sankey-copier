@@ -41,7 +41,7 @@ pub struct CSlaveConfig {
     pub max_retries: i32,
     pub max_signal_delay_ms: i32,
     pub use_pending_order_for_delayed: i32, // bool
-    pub allow_new_orders: i32, // bool
+    pub allow_new_orders: i32,              // bool
 }
 
 #[repr(C)]

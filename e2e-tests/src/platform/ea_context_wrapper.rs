@@ -5,17 +5,15 @@
 // This wrapper simulates the MQL/C++ client wrapper.
 // It uses the new structure-based FFI accessors.
 
-use sankey_copier_zmq::ea_context::{EaCommand, EaContext};
+use sankey_copier_zmq::ea_context::EaContext;
 use sankey_copier_zmq::ffi::*;
 use sankey_copier_zmq::ffi_types::{
     CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest, MAX_ACCOUNT_ID_LEN,
-    MAX_COMMENT_LEN, MAX_SYMBOL_LEN,
 };
 use sankey_copier_zmq::{
     LotCalculationMode, MasterConfigMessage, PositionInfo, SlaveConfigMessage, SymbolMapping,
     SyncMode, SyncRequestMessage,
 };
-use std::sync::{Arc, Mutex};
 
 // Thread-safe wrapper for the raw pointer
 // In MQL this would be a class holding the pointer

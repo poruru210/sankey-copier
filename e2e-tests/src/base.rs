@@ -6,7 +6,6 @@
 // This struct now mainly holds shared state and configuration.
 
 use anyhow::Result;
-use chrono::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

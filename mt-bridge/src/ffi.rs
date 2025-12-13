@@ -4,16 +4,9 @@
 
 use crate::constants::{self, TOPIC_GLOBAL_CONFIG};
 use crate::ea_context::{EaCommand, EaContext};
-use crate::ffi_helpers::{
-    copy_string_to_fixed_array, utf16_to_string,
-};
-use crate::ffi_types::{
-    CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest,
-};
-use crate::types::{
-    MasterConfigMessage, PositionInfo, PositionSnapshotMessage,
-    SlaveConfigMessage, SyncRequestMessage, VLogsConfigMessage,
-};
+use crate::ffi_helpers::{copy_string_to_fixed_array, utf16_to_string};
+use crate::ffi_types::{CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest};
+use crate::types::{LotCalculationMode, SyncMode};
 use chrono::DateTime;
 
 // ===========================================================================
@@ -339,7 +332,7 @@ pub unsafe extern "C" fn ea_send_register(
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+        unsafe { crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len) }
     }));
 
     result.unwrap_or(-1)
@@ -388,7 +381,7 @@ pub unsafe extern "C" fn ea_send_heartbeat(
             symbol_map: None,
         };
 
-        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+        unsafe { crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len) }
     }));
 
     result.unwrap_or(-1)
@@ -418,7 +411,7 @@ pub unsafe extern "C" fn ea_send_unregister(
             ea_type: Some(ctx.ea_type.clone()),
         };
 
-        crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len)
+        unsafe { crate::ffi_helpers::serialize_to_buffer(&msg, output, output_len) }
     }));
 
     result.unwrap_or(-1)
@@ -833,7 +826,11 @@ pub unsafe extern "C" fn ea_context_get_slave_config(
 
         dest.max_retries = src.max_retries;
         dest.max_signal_delay_ms = src.max_signal_delay_ms;
-        dest.use_pending_order_for_delayed = if src.use_pending_order_for_delayed { 1 } else { 0 };
+        dest.use_pending_order_for_delayed = if src.use_pending_order_for_delayed {
+            1
+        } else {
+            0
+        };
         dest.allow_new_orders = if src.allow_new_orders { 1 } else { 0 };
 
         1
@@ -960,10 +957,7 @@ pub unsafe extern "C" fn ea_context_get_position_snapshot(
             slice[i].take_profit = src.take_profit.unwrap_or(0.0);
             slice[i].magic_number = src.magic_number.unwrap_or(0);
 
-            copy_string_to_fixed_array(
-                src.comment.as_deref().unwrap_or(""),
-                &mut slice[i].comment,
-            );
+            copy_string_to_fixed_array(src.comment.as_deref().unwrap_or(""), &mut slice[i].comment);
         }
         count as i32
     } else {

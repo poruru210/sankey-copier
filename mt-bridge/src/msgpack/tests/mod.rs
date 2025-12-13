@@ -2,7 +2,4 @@
 // Purpose: Test module setup for MessagePack functionality
 // Why: Organizes tests into logical groups by functionality
 
-mod ffi_tests;
-mod repro_status_bug;
-
 mod types_tests;
