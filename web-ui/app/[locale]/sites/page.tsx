@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useAtom } from 'jotai';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { useServerLogContext } from '@/lib/contexts/sidebar-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

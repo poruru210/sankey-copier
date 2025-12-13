@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

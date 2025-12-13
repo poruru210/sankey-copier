@@ -10,7 +10,7 @@ import { ChevronDown, Settings } from 'lucide-react';
 import { useIntlayer } from 'next-intlayer';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import type { AccountInfo } from '@/types';
 import {
   Tooltip,

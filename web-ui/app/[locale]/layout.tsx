@@ -5,8 +5,8 @@
 import type { Metadata } from 'next';
 import { IntlayerClientProvider } from 'next-intlayer';
 import { Inter } from 'next/font/google';
-import { ThemeProvider } from '@/components/ThemeProvider';
-import { LayoutWrapper } from '@/components/LayoutWrapper';
+import { ThemeProvider } from '@/components/layout/ThemeProvider';
+import { LayoutWrapper } from '@/components/layout/LayoutWrapper';
 import { Toaster } from '@/components/ui/toaster';
 import '../globals.css';
 

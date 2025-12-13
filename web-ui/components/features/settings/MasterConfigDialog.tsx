@@ -29,7 +29,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import type { MasterConfig, EaConnection } from '@/types';
 import { useMasterConfig } from '@/hooks/useMasterConfig';
 

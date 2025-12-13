@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useOptimistic, useTransition } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';

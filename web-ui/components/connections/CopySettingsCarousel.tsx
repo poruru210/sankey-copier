@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw, ArrowLeftRight } from 'lucide-react';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import type { CopySettings } from '@/types';
 
 interface CopySettingsCarouselProps {

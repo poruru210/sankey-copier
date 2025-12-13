@@ -11,12 +11,12 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
 import { DrawerInfoCard } from '@/components/ui/drawer-section';
-import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
+import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/features/settings/SlaveSettingsForm';
 import type { TradeGroupMember, SlaveSettings } from '@/types';
 
 interface SlaveSettingsDrawerProps {

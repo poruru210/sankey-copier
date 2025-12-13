@@ -12,7 +12,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import { AlertCircle, CheckCircle, Loader2, ChevronRight } from 'lucide-react';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
@@ -24,7 +24,7 @@ import {
   DrawerFormField,
 } from '@/components/ui/drawer-section';
 import { Caption } from '@/components/ui/typography';
-import { SlaveSettingsDrawer } from '@/components/SlaveSettingsDrawer';
+import { SlaveSettingsDrawer } from '@/components/features/settings/SlaveSettingsDrawer';
 import type { TradeGroup, MasterSettings, EaConnection, TradeGroupMember } from '@/types';
 
 interface MasterSettingsDrawerProps {
