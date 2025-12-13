@@ -106,7 +106,7 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 //+------------------------------------------------------------------+
 //| Process configuration message from struct (Stateful FFI)         |
 //+------------------------------------------------------------------+
-void ProcessSlaveConfig(CSlaveConfig &config,
+void ProcessSlaveConfig(SSlaveConfig &config,
                         CopyConfig &configs[],
                         EaContextWrapper &context,
                         string slave_account)
@@ -280,7 +280,7 @@ void ProcessSlaveConfig(CSlaveConfig &config,
       configs[index].symbol_suffix = CharArrayToString(config.symbol_suffix);
 
       // Parse symbol mappings (Separately via Accessor)
-      CSymbolMapping mapping_arr[];
+      SSymbolMapping mapping_arr[];
       if(context.GetSymbolMappings(mapping_arr))
       {
           int mapping_count = ArraySize(mapping_arr);

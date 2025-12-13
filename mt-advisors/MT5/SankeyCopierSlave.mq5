@@ -266,7 +266,7 @@ void OnTimer()
            }
            case CMD_PROCESS_SNAPSHOT:
            {
-               CPositionInfo positions[];
+               SPositionInfo positions[];
                if(g_ea_context.GetPositionSnapshot(positions))
                {
                    ProcessPositionSnapshot(positions);
@@ -276,7 +276,7 @@ void OnTimer()
 
            case CMD_UPDATE_UI:
            {
-               CSlaveConfig config;
+               SSlaveConfig config;
                if(g_ea_context.GetSlaveConfig(config))
                {
                    // Process config struct
@@ -493,7 +493,7 @@ void SubscribeToSyncTopic()
 //| Process position snapshot for sync (MT5)                          |
 //| Called when Slave receives PositionSnapshot from Master           |
 //+------------------------------------------------------------------+
-void ProcessPositionSnapshot(CPositionInfo &positions[])
+void ProcessPositionSnapshot(SPositionInfo &positions[])
 {
    Print("=== Processing Position Snapshot ===");
 

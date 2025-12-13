@@ -83,71 +83,8 @@ struct EaCommand {
    uchar source_account[64];
 };
 
-//--- C-Compatible Structs for FFI (matching mt-bridge/src/ffi_types.rs)
-// Note: Alignment matches C default (Rust #[repr(C)])
-// MQL strings mapped to uchar arrays for correct memory layout
-
-struct CSlaveConfig {
-    uchar account_id[64];
-    uchar master_account[64];
-    uchar trade_group_id[64];
-
-    int status;
-    int lot_calculation_mode;
-    double lot_multiplier;
-    int reverse_trade; // bool as int
-
-    uchar symbol_prefix[32];
-    uchar symbol_suffix[32];
-
-    uint config_version;
-    double source_lot_min;
-    double source_lot_max;
-    double master_equity;
-
-    int sync_mode;
-    int limit_order_expiry_min;
-    double market_sync_max_pips;
-    int max_slippage;
-    int copy_pending_orders; // bool as int
-
-    int max_retries;
-    int max_signal_delay_ms;
-    int use_pending_order_for_delayed; // bool as int
-    int allow_new_orders;              // bool as int
-};
-
-struct CMasterConfig {
-    uchar account_id[64];
-    int status;
-    uchar symbol_prefix[32];
-    uchar symbol_suffix[32];
-    uint config_version;
-};
-
-struct CSymbolMapping {
-    uchar source[32];
-    uchar target[32];
-};
-
-struct CPositionInfo {
-    long ticket;
-    uchar symbol[32];
-    int order_type;
-    double lots;
-    double open_price;
-    long open_time; // i64 in Rust -> long in MQL (8 bytes)
-    double stop_loss;
-    double take_profit;
-    long magic_number;
-    uchar comment[64];
-};
-
-struct CSyncRequest {
-    uchar slave_account[64];
-    uchar master_account[64];
-    uchar last_sync_time[64];
-};
+//--- C-Compatible Structs for FFI (separated into FFITypes.mqh)
+#include "FFITypes.mqh"
 
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
@@ -155,14 +92,14 @@ struct CSyncRequest {
 
    // Slave config symbol mappings array access (kept if needed, or use struct access)
    int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
-   // Mappings are now embedded in CSlaveConfig or retrieved via separate call if array is dynamic?
+   // Mappings are now embedded in SSlaveConfig or retrieved via separate call if array is dynamic?
    // ffi.rs logic suggests we can retrieve mappings separately.
 
-   // Actually, CSlaveConfig struct in FFI does NOT contain dynamic array of mappings directly.
+   // Actually, SSlaveConfig struct in FFI does NOT contain dynamic array of mappings directly.
    // It contains fixed fields. Mappings are separate.
-   // Wait, ffi_types.rs says CSlaveConfig does NOT have mappings array directly embedded?
+   // Wait, ffi_types.rs says SSlaveConfig does NOT have mappings array directly embedded?
    // Let's check ffi_types.rs again.
-   // CSlaveConfig struct in ffi_types.rs DOES NOT have `symbol_mappings: Vec`.
+   // SSlaveConfig struct in ffi_types.rs DOES NOT have `symbol_mappings: Vec`.
    // It has scalar fields.
    // Mappings are retrieved via `ea_context_get_symbol_mappings`.
    // So we keep the helper functions for array data.
@@ -206,16 +143,16 @@ struct CSyncRequest {
    int         ea_get_command(HANDLE_TYPE context, EaCommand &command);
    
    // New Struct-Based Accessors
-   int         ea_context_get_master_config(HANDLE_TYPE context, CMasterConfig &config);
-   int         ea_context_get_slave_config(HANDLE_TYPE context, CSlaveConfig &config);
-   int         ea_context_get_position_snapshot(HANDLE_TYPE context, CPositionInfo &positions[], int max_count);
+   int         ea_context_get_master_config(HANDLE_TYPE context, SMasterConfig &config);
+   int         ea_context_get_slave_config(HANDLE_TYPE context, SSlaveConfig &config);
+   int         ea_context_get_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int max_count);
    int         ea_context_get_position_snapshot_count(HANDLE_TYPE context);
    int         ea_context_get_position_snapshot_source_account(HANDLE_TYPE context, uchar &buffer[], int len);
-   int         ea_context_get_sync_request(HANDLE_TYPE context, CSyncRequest &request);
+   int         ea_context_get_sync_request(HANDLE_TYPE context, SSyncRequest &request);
    
    // Array Accessors for Slave Config
    int         ea_context_get_symbol_mappings_count(HANDLE_TYPE context);
-   int         ea_context_get_symbol_mappings(HANDLE_TYPE context, CSymbolMapping &mappings[], int max_count);
+   int         ea_context_get_symbol_mappings(HANDLE_TYPE context, SSymbolMapping &mappings[], int max_count);
 
    int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len);
    int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
@@ -244,7 +181,7 @@ struct CSyncRequest {
    int         ea_subscribe_config(HANDLE_TYPE context, string topic);
 
    // High-Level Position Snapshot (Master)
-   int         ea_send_position_snapshot(HANDLE_TYPE context, CPositionInfo &positions[], int count);
+   int         ea_send_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int count);
 
 #import
 
@@ -304,19 +241,19 @@ public:
    }
    
    // Accessors for Cached Configs (Updated to use structs)
-   bool GetMasterConfig(CMasterConfig &config)
+   bool GetMasterConfig(SMasterConfig &config)
    {
       if(!m_initialized) return false;
       return ea_context_get_master_config(m_context, config) == 1;
    }
 
-   bool GetSlaveConfig(CSlaveConfig &config)
+   bool GetSlaveConfig(SSlaveConfig &config)
    {
       if(!m_initialized) return false;
       return ea_context_get_slave_config(m_context, config) == 1;
    }
 
-   bool GetSyncRequest(CSyncRequest &request)
+   bool GetSyncRequest(SSyncRequest &request)
    {
       if(!m_initialized) return false;
       return ea_context_get_sync_request(m_context, request) == 1;
@@ -329,7 +266,7 @@ public:
       return ea_context_get_position_snapshot_count(m_context);
    }
 
-   bool GetPositionSnapshot(CPositionInfo &positions[])
+   bool GetPositionSnapshot(SPositionInfo &positions[])
    {
       if(!m_initialized) return false;
       int count = ea_context_get_position_snapshot_count(m_context);
@@ -356,7 +293,7 @@ public:
       return ea_context_get_symbol_mappings_count(m_context);
    }
 
-   bool GetSymbolMappings(CSymbolMapping &mappings[])
+   bool GetSymbolMappings(SSymbolMapping &mappings[])
    {
       if(!m_initialized) return false;
       int count = ea_context_get_symbol_mappings_count(m_context);
@@ -497,7 +434,7 @@ public:
       return false;
    }
 
-   bool SendPositionSnapshot(CPositionInfo &positions[])
+   bool SendPositionSnapshot(SPositionInfo &positions[])
    {
       if(!m_initialized) return false;
       int count = ArraySize(positions);

@@ -5,7 +5,7 @@
 use crate::constants::{self, TOPIC_GLOBAL_CONFIG};
 use crate::ea_context::{EaCommand, EaContext};
 use crate::ffi_helpers::{copy_string_to_fixed_array, utf16_to_string};
-use crate::ffi_types::{CMasterConfig, CPositionInfo, CSlaveConfig, CSymbolMapping, CSyncRequest};
+use crate::ffi_types::{SMasterConfig, SPositionInfo, SSlaveConfig, SSymbolMapping, SSyncRequest};
 use crate::types::{LotCalculationMode, SyncMode};
 use chrono::DateTime;
 
@@ -740,21 +740,21 @@ unsafe fn c_byte_array_to_string(ptr: *const u8, max_len: usize) -> String {
     String::from_utf8_lossy(&slice[..len]).into_owned()
 }
 
-/// Convert packed C struct to Rust struct safely
-unsafe fn convert_c_position_to_rust(c_pos: &CPositionInfo) -> crate::types::PositionInfo {
-    // Use read_unaligned and addr_of! to safely read from packed struct
-    let ticket = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.ticket));
-    let lots = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.lots));
-    let open_price = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_price));
-    let open_time = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_time));
-    let stop_loss = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.stop_loss));
-    let take_profit = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.take_profit));
-    let magic_number = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.magic_number));
-    let order_type = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.order_type));
+/// Convert C struct to Rust struct
+/// SAFETY: Direct field access is safe because SPositionInfo uses repr(C) with natural alignment
+unsafe fn convert_c_position_to_rust(c_pos: &SPositionInfo) -> crate::types::PositionInfo {
+    // Direct field access - safe with natural alignment (repr(C))
+    let ticket = c_pos.ticket;
+    let lots = c_pos.lots;
+    let open_price = c_pos.open_price;
+    let open_time = c_pos.open_time;
+    let stop_loss = c_pos.stop_loss;
+    let take_profit = c_pos.take_profit;
+    let magic_number = c_pos.magic_number;
+    let order_type = c_pos.order_type;
 
-    // String conversion using raw pointers from addr_of!
-    let symbol = c_byte_array_to_string(std::ptr::addr_of!(c_pos.symbol) as *const u8, 32);
-    let comment_str = c_byte_array_to_string(std::ptr::addr_of!(c_pos.comment) as *const u8, 64);
+    let symbol = c_byte_array_to_string(c_pos.symbol.as_ptr(), 32);
+    let comment_str = c_byte_array_to_string(c_pos.comment.as_ptr(), 64);
 
     let order_type_str = match order_type {
         0 => "Buy",
@@ -810,16 +810,16 @@ unsafe fn convert_c_position_to_rust(c_pos: &CPositionInfo) -> crate::types::Pos
 ///
 /// # Safety
 /// - context: Valid EaContext pointer
-/// - positions: Pointer to array of CPositionInfo
+/// - positions: Pointer to array of SPositionInfo
 /// - count: Number of positions in the array
 #[no_mangle]
 pub unsafe extern "C" fn ea_send_position_snapshot(
     context: *mut EaContext,
-    positions: *const CPositionInfo,
+    positions: *const SPositionInfo,
     count: i32,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if context.is_null() || (count > 0 && positions.is_null()) {
+        if context.is_null() || count < 0 || (count > 0 && positions.is_null()) {
             return 0;
         }
         if count == 0 {
@@ -848,11 +848,11 @@ pub unsafe extern "C" fn ea_send_position_snapshot(
 ///
 /// # Safety
 /// - context: Valid EaContext pointer
-/// - config: Pointer to allocated CMasterConfig struct
+/// - config: Pointer to allocated SMasterConfig struct
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_master_config(
     context: *const EaContext,
-    config: *mut CMasterConfig,
+    config: *mut SMasterConfig,
 ) -> i32 {
     let ctx = match context.as_ref() {
         Some(c) => c,
@@ -885,11 +885,11 @@ pub unsafe extern "C" fn ea_context_get_master_config(
 ///
 /// # Safety
 /// - context: Valid EaContext pointer
-/// - config: Pointer to allocated CSlaveConfig struct
+/// - config: Pointer to allocated SSlaveConfig struct
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_slave_config(
     context: *const EaContext,
-    config: *mut CSlaveConfig,
+    config: *mut SSlaveConfig,
 ) -> i32 {
     let ctx = match context.as_ref() {
         Some(c) => c,
@@ -972,12 +972,12 @@ pub unsafe extern "C" fn ea_context_get_symbol_mappings_count(context: *const Ea
 /// Get symbol mappings from the last slave config
 ///
 /// # Safety
-/// - mappings: Pointer to array of CSymbolMapping
+/// - mappings: Pointer to array of SSymbolMapping
 /// - max_count: Maximum number of mappings to copy
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_symbol_mappings(
     context: *const EaContext,
-    mappings: *mut CSymbolMapping,
+    mappings: *mut SSymbolMapping,
     max_count: i32,
 ) -> i32 {
     let ctx = match context.as_ref() {
@@ -1022,12 +1022,12 @@ pub unsafe extern "C" fn ea_context_get_position_snapshot_count(context: *const 
 /// Get positions from the last position snapshot
 ///
 /// # Safety
-/// - positions: Pointer to array of CPositionInfo
+/// - positions: Pointer to array of SPositionInfo
 /// - max_count: Maximum number of positions to copy
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_position_snapshot(
     context: *const EaContext,
-    positions: *mut CPositionInfo,
+    positions: *mut SPositionInfo,
     max_count: i32,
 ) -> i32 {
     let ctx = match context.as_ref() {
@@ -1127,11 +1127,11 @@ pub unsafe extern "C" fn ea_context_get_position_snapshot_source_account(
 ///
 /// # Safety
 /// - context: Valid EaContext pointer
-/// - request: Pointer to allocated CSyncRequest struct
+/// - request: Pointer to allocated SSyncRequest struct
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_sync_request(
     context: *const EaContext,
-    request: *mut CSyncRequest,
+    request: *mut SSyncRequest,
 ) -> i32 {
     let ctx = match context.as_ref() {
         Some(c) => c,

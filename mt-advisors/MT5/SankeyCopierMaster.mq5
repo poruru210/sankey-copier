@@ -281,7 +281,7 @@ void OnTimer()
            case CMD_UPDATE_UI:
            {
                // Config updated (Master or Global VLogs) via ManagerTick parsing
-               CMasterConfig config;
+               SMasterConfig config;
                if(g_ea_context.GetMasterConfig(config))
                {
                    ProcessMasterConfigMessage(config);
@@ -293,7 +293,7 @@ void OnTimer()
            case CMD_SEND_SNAPSHOT: // SyncRequest Received
            {
                // Retrieve cached SyncRequest struct
-               CSyncRequest request;
+               SSyncRequest request;
                
                if(g_ea_context.GetSyncRequest(request))
                {
@@ -343,43 +343,6 @@ void OnTimer()
 
    // 3. Flush VLogs
    VLogsFlushIfNeeded();
-}
-
-//+------------------------------------------------------------------+
-//| Process SyncRequest message (from Slave EA)                       |
-//+------------------------------------------------------------------+
-void ProcessSyncRequest(HANDLE_TYPE handle)
-{
-   // Get the fields
-   string slave_account = sync_request_get_string(handle, "slave_account");
-   string master_account = sync_request_get_string(handle, "master_account");
-
-   if(slave_account == "" || master_account == "")
-   {
-      Print("Invalid SyncRequest received - missing fields");
-      // Note: No need to free handle - managed by EaContext
-      return;
-   }
-
-   if(master_account != AccountID)
-   {
-      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      // Note: No need to free handle - managed by EaContext
-      return;
-   }
-
-   // Note: No need to free handle - managed by EaContext
-
-   // Send position snapshot
-   // Note: SendPositionSnapshot helper now takes g_ea_context
-   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
-   {
-      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
-   }
-   else
-   {
-      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -897,7 +860,7 @@ void SendOrderCloseSignal(ulong ticket)
 //+------------------------------------------------------------------+
 //| Process Master configuration message (struct)                    |
 //+------------------------------------------------------------------+
-void ProcessMasterConfigMessage(CMasterConfig &config)
+void ProcessMasterConfigMessage(SMasterConfig &config)
 {
    Print("=== Processing Master Configuration Message ===");
 

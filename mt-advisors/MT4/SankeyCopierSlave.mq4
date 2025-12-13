@@ -258,20 +258,20 @@ void OnTimer()
 
            case CMD_PROCESS_SNAPSHOT:
            {
-               HANDLE_TYPE snapshot_handle = g_ea_context.GetPositionSnapshot();
-               if(snapshot_handle != 0)
-               {
-                   ProcessPositionSnapshot(snapshot_handle);
-               }
+               SPositionInfo positions[];
+                if(g_ea_context.GetPositionSnapshot(positions))
+                {
+                    ProcessPositionSnapshot(positions);
+                }
                break;
            }
 
            case CMD_UPDATE_UI:
            {
-               HANDLE_TYPE config_handle = g_ea_context.GetSlaveConfig();
-               if(config_handle != 0)
-               {
-                   ProcessConfigMessageFromHandle(config_handle, g_configs, g_ea_context, AccountID);
+               SSlaveConfig config;
+                if(g_ea_context.GetSlaveConfig(config))
+                {
+                    ProcessSlaveConfig(config, g_configs, g_ea_context, AccountID);
                    g_has_received_config = true;
                    
                    // Subscribe to sync/{master}/{slave} topic after receiving config
@@ -469,18 +469,11 @@ void SubscribeToSyncTopic()
 //| Process position snapshot for sync (MT4)                          |
 //| Called when Slave receives PositionSnapshot from Master           |
 //+------------------------------------------------------------------+
-void ProcessPositionSnapshot(HANDLE_TYPE handle)
+void ProcessPositionSnapshot(SPositionInfo &positions[])
 {
    Print("=== Processing Position Snapshot ===");
 
-   if(handle == 0 || handle == -1)
-   {
-      Print("ERROR: Invalid PositionSnapshot handle");
-      return;
-   }
-
-   // Get source account (master)
-   string source_account = position_snapshot_get_string(handle, "source_account");
+   string source_account = g_ea_context.GetPositionSnapshotSourceAccount();
    if(source_account == "")
    {
       Print("ERROR: PositionSnapshot has empty source_account");
@@ -489,7 +482,6 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
 
    Print("PositionSnapshot from master: ", source_account);
 
-   // Find matching config for this master
    int config_index = -1;
    for(int i = 0; i < ArraySize(g_configs); i++)
    {
@@ -506,7 +498,6 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
       return;
    }
 
-   // Check sync_mode - should not be SKIP
    int sync_mode = g_configs[config_index].sync_mode;
    if(sync_mode == SYNC_MODE_SKIP)
    {
@@ -514,41 +505,30 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
       return;
    }
 
-   // Get sync parameters from config
    int limit_order_expiry = g_configs[config_index].limit_order_expiry_min;
    double market_sync_max_pips = g_configs[config_index].market_sync_max_pips;
-   int trade_slippage = (g_configs[config_index].max_slippage > 0)
-                        ? g_configs[config_index].max_slippage
-                        : DEFAULT_SLIPPAGE;
+   int trade_slippage = (g_configs[config_index].max_slippage > 0) ? g_configs[config_index].max_slippage : DEFAULT_SLIPPAGE;
 
-   Print("Sync mode: ", (sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
-
-   // Get position count
-   int position_count = position_snapshot_get_positions_count(handle);
+   int position_count = ArraySize(positions);
    Print("Positions to sync: ", position_count);
 
    int synced_count = 0;
    int skipped_count = 0;
 
-   // Process each position
    for(int i = 0; i < position_count; i++)
    {
-      // Extract position data
-      long master_ticket_long = position_snapshot_get_position_int(handle, i, "ticket");
-      int master_ticket = (int)master_ticket_long;
-      string symbol = position_snapshot_get_position_string(handle, i, "symbol");
-      string order_type_str = position_snapshot_get_position_string(handle, i, "order_type");
-      double lots = position_snapshot_get_position_double(handle, i, "lots");
-      double open_price = position_snapshot_get_position_double(handle, i, "open_price");
-      double sl = position_snapshot_get_position_double(handle, i, "stop_loss");
-      double tp = position_snapshot_get_position_double(handle, i, "take_profit");
-      long magic_long = position_snapshot_get_position_int(handle, i, "magic_number");
-      int magic_number = (int)magic_long;
+      int master_ticket = (int)positions[i].ticket;
+      string symbol = CharArrayToString(positions[i].symbol);
+      int order_type_int = positions[i].order_type;
+      string order_type_str = GetOrderTypeString(order_type_int);
+      double lots = positions[i].lots;
+      double open_price = positions[i].open_price;
+      double sl = positions[i].stop_loss;
+      double tp = positions[i].take_profit;
+      int magic_number = (int)positions[i].magic_number;
 
-      Print("Position ", i + 1, "/", position_count, ": #", master_ticket,
-            " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price);
+      Print("Position ", i + 1, "/", position_count, ": #", master_ticket, " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price);
 
-      // Check if we already have this position mapped
       if(GetSlaveTicketFromMapping(g_order_map, master_ticket) > 0)
       {
          Print("  -> Already mapped, skipping");
@@ -556,32 +536,18 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
          continue;
       }
 
-      // Symbol is already transformed by Relay Server (mapping + prefix/suffix applied)
-      string transformed_symbol = symbol;
-
-      // Transform lot size
-      double transformed_lots = TransformLotSize(lots, g_configs[config_index], transformed_symbol);
-
-      // Reverse order type if configured
+      double transformed_lots = TransformLotSize(lots, g_configs[config_index], symbol);
       string transformed_order_type = ReverseOrderType(order_type_str, g_configs[config_index].reverse_trade);
 
-      // Execute sync based on mode
       if(sync_mode == SYNC_MODE_LIMIT_ORDER)
       {
-         SyncWithLimitOrder(g_pending_order_map, master_ticket, transformed_symbol,
-                            transformed_order_type, transformed_lots, open_price, sl, tp,
-                            source_account, magic_number, limit_order_expiry);
+         SyncWithLimitOrder(g_pending_order_map, master_ticket, symbol, transformed_order_type, transformed_lots, open_price, sl, tp, source_account, magic_number, limit_order_expiry);
          synced_count++;
       }
       else if(sync_mode == SYNC_MODE_MARKET_ORDER)
       {
-         if(SyncWithMarketOrder(g_order_map, master_ticket, transformed_symbol,
-                                transformed_order_type, transformed_lots, open_price, sl, tp,
-                                source_account, magic_number, trade_slippage,
-                                market_sync_max_pips, DEFAULT_SLIPPAGE))
-         {
+         if(SyncWithMarketOrder(g_order_map, master_ticket, symbol, transformed_order_type, transformed_lots, open_price, sl, tp, source_account, magic_number, trade_slippage, market_sync_max_pips, DEFAULT_SLIPPAGE))
             synced_count++;
-         }
          else
          {
             Print("  -> Price deviation too large, skipped");
@@ -591,7 +557,6 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
    }
 
    Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
-   // Do NOT free handle - it belongs to EaContext
 }
 
 // Trade functions are now provided by SlaveTrade.mqh

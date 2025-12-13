@@ -260,23 +260,31 @@ void OnTimer()
        {
            case CMD_SEND_SNAPSHOT:
            {
-               // Process SyncRequest using handle
-               HANDLE_TYPE sync_handle = g_ea_context.GetSyncRequest();
-               if(sync_handle != 0)
-               {
-                   ProcessSyncRequest(sync_handle);
-               }
+               // Retrieve cached SyncRequest struct
+                SSyncRequest request;
+                if(g_ea_context.GetSyncRequest(request))
+                {
+                    string req_master = CharArrayToString(request.master_account);
+                    string req_slave = CharArrayToString(request.slave_account);
+                    if(req_master == AccountID)
+                    {
+                        if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
+                            Print("[SYNC] Position snapshot sent to slave: ", req_slave);
+                        else
+                            Print("[ERROR] Failed to send snapshot");
+                    }
+                }
                break;
            }
 
            case CMD_UPDATE_UI:
            {
                // MasterConfig update
-               HANDLE_TYPE config_handle = g_ea_context.GetMasterConfig();
-               if(config_handle != 0)
-               {
-                   ProcessMasterConfigMessage(config_handle);
-               }
+                SMasterConfig config;
+                if(g_ea_context.GetMasterConfig(config))
+                {
+                    ProcessMasterConfigMessage(config);
+                }
                break;
            }
        }
@@ -293,20 +301,14 @@ void OnTimer()
 //+------------------------------------------------------------------+
 //| Process Master configuration message (from Handle)                |
 //+------------------------------------------------------------------+
-void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
+void ProcessMasterConfigMessage(SMasterConfig &config)
 {
-   if(config_handle == 0 || config_handle == -1)
-   {
-      Print("ERROR: Invalid Master config handle");
-      return;
-   }
-
-   // Extract fields from the parsed config using the handle
-   string config_account_id = master_config_get_string(config_handle, "account_id");
-   string prefix = master_config_get_string(config_handle, "symbol_prefix");
-   string suffix = master_config_get_string(config_handle, "symbol_suffix");
-   int version = master_config_get_int(config_handle, "config_version");
-   int status = master_config_get_int(config_handle, "status");
+   // Extract fields from the struct
+   string config_account_id = CharArrayToString(config.account_id);
+   string prefix = CharArrayToString(config.symbol_prefix);
+   string suffix = CharArrayToString(config.symbol_suffix);
+   int version = (int)config.config_version;
+   int status = config.status;
    g_server_status = status;
 
    if(config_account_id == "")
@@ -357,46 +359,7 @@ void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
    // Do NOT free handle - it belongs to EaContext
 }
 
-//+------------------------------------------------------------------+
-//| Process SyncRequest message (from Handle)                         |
-//+------------------------------------------------------------------+
-void ProcessSyncRequest(HANDLE_TYPE handle)
-{
-   if(handle == 0 || handle == -1)
-   {
-      Print("ERROR: Invalid SyncRequest handle");
-      return;
-   }
-
-   // Get the fields
-   string slave_account = sync_request_get_string(handle, "slave_account");
-   string master_account = sync_request_get_string(handle, "master_account");
-
-   if(slave_account == "" || master_account == "")
-   {
-      Print("Invalid SyncRequest received - missing fields");
-      return;
-   }
-
-   // Check if this request is for us
-   if(master_account != AccountID)
-   {
-      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      return;
-   }
-
-   // Send position snapshot
-   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
-   {
-      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
-   }
-   else
-   {
-      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
-   }
-   
-   // Do NOT free handle - it belongs to EaContext
-}
+// ProcessSyncRequest removed - now inline in OnTimer using SSyncRequest struct
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                              |

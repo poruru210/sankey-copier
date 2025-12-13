@@ -52,7 +52,7 @@ bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double s
 //+------------------------------------------------------------------+
 bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
 {
-   CPositionInfo positions[];
+   SPositionInfo positions[];
    int count = 0;
 
    #ifdef IS_MT5
