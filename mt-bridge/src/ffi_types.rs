@@ -12,7 +12,7 @@ pub const MAX_COMMENT_LEN: usize = 64;
 pub const MAX_BROKER_LEN: usize = 64;
 pub const MAX_SERVER_LEN: usize = 64;
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CSlaveConfig {
     pub account_id: [u8; MAX_ACCOUNT_ID_LEN],
@@ -44,7 +44,7 @@ pub struct CSlaveConfig {
     pub allow_new_orders: i32,              // bool
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CMasterConfig {
     pub account_id: [u8; MAX_ACCOUNT_ID_LEN],
@@ -55,14 +55,14 @@ pub struct CMasterConfig {
     // Timestamp usually not critical for logic, but can add if needed
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CSymbolMapping {
     pub source: [u8; MAX_SYMBOL_LEN],
     pub target: [u8; MAX_SYMBOL_LEN],
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CPositionInfo {
     pub ticket: i64,
@@ -77,7 +77,7 @@ pub struct CPositionInfo {
     pub comment: [u8; MAX_COMMENT_LEN],
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CSyncRequest {
     pub slave_account: [u8; MAX_ACCOUNT_ID_LEN],

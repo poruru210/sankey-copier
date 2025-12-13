@@ -731,6 +731,119 @@ pub unsafe extern "C" fn ea_get_command(context: *mut EaContext, command: *mut E
 // New Structure-Based Accessors (Replacing old fine-grained getters)
 // ===========================================================================
 
+/// Helper to convert raw C byte array (null-terminated or fixed size) to String
+/// Used for MQL char arrays (single-byte encoding)
+unsafe fn c_byte_array_to_string(ptr: *const u8, max_len: usize) -> String {
+    let slice = std::slice::from_raw_parts(ptr, max_len);
+    // Find null terminator
+    let len = slice.iter().position(|&c| c == 0).unwrap_or(max_len);
+    String::from_utf8_lossy(&slice[..len]).into_owned()
+}
+
+/// Convert packed C struct to Rust struct safely
+unsafe fn convert_c_position_to_rust(c_pos: &CPositionInfo) -> crate::types::PositionInfo {
+    // Use read_unaligned and addr_of! to safely read from packed struct
+    let ticket = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.ticket));
+    let lots = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.lots));
+    let open_price = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_price));
+    let open_time = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_time));
+    let stop_loss = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.stop_loss));
+    let take_profit = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.take_profit));
+    let magic_number = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.magic_number));
+    let order_type = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.order_type));
+
+    // String conversion using raw pointers from addr_of!
+    let symbol = c_byte_array_to_string(std::ptr::addr_of!(c_pos.symbol) as *const u8, 32);
+    let comment_str = c_byte_array_to_string(std::ptr::addr_of!(c_pos.comment) as *const u8, 64);
+
+    let order_type_str = match order_type {
+        0 => "Buy",
+        1 => "Sell",
+        2 => "BuyLimit",
+        3 => "SellLimit",
+        4 => "BuyStop",
+        5 => "SellStop",
+        _ => "Unknown",
+    }
+    .to_string();
+
+    let open_time_str = if open_time > 0 {
+        match chrono::DateTime::from_timestamp(open_time, 0) {
+            Some(dt) => dt.to_rfc3339(),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+
+    crate::types::PositionInfo {
+        ticket,
+        symbol,
+        order_type: order_type_str,
+        lots,
+        open_price,
+        open_time: open_time_str,
+        stop_loss: if stop_loss.abs() < 1e-6 {
+            None
+        } else {
+            Some(stop_loss)
+        },
+        take_profit: if take_profit.abs() < 1e-6 {
+            None
+        } else {
+            Some(take_profit)
+        },
+        magic_number: if magic_number != 0 {
+            Some(magic_number)
+        } else {
+            None
+        },
+        comment: if comment_str.is_empty() {
+            None
+        } else {
+            Some(comment_str)
+        },
+    }
+}
+
+/// Send a Position Snapshot (Master -> Slave)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - positions: Pointer to array of CPositionInfo
+/// - count: Number of positions in the array
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_position_snapshot(
+    context: *mut EaContext,
+    positions: *const CPositionInfo,
+    count: i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() || (count > 0 && positions.is_null()) {
+            return 0;
+        }
+        if count == 0 {
+            return 1; // Success, empty snapshot
+        }
+
+        let ctx = &mut *context;
+        let slice = std::slice::from_raw_parts(positions, count as usize);
+
+        // Convert all positions first (Conversion Layer)
+        let rust_positions: Vec<crate::types::PositionInfo> = slice
+            .iter()
+            .map(|c_pos| convert_c_position_to_rust(c_pos))
+            .collect();
+
+        match ctx.send_position_snapshot(rust_positions) {
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
+    }));
+
+    result.unwrap_or(0)
+}
+
 /// Get the last received Master Config as a C-compatible struct
 ///
 /// # Safety

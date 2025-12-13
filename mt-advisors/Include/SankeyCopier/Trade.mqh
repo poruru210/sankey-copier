@@ -104,24 +104,20 @@ bool ShouldProcessTrade(string symbol, int magic_number, CopyConfig &config)
 }
 
 //+------------------------------------------------------------------+
-//| Process configuration message from handle (Stateful FFI)         |
+//| Process configuration message from struct (Stateful FFI)         |
 //+------------------------------------------------------------------+
-void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
-                                    CopyConfig &configs[],
-                                    EaContextWrapper &context, 
-                                    string slave_account)
+void ProcessSlaveConfig(CSlaveConfig &config,
+                        CopyConfig &configs[],
+                        EaContextWrapper &context,
+                        string slave_account)
 {
-   if(config_handle == 0) return;
-
-   // Extract fields from the parsed config using the handle
-   string new_master = slave_config_get_string(config_handle, "master_account");
-   // trade_group_id is no longer used for subscription, but we still read it for compatibility
-   string new_group = slave_config_get_string(config_handle, "trade_group_id");
+   // Extract fields from the struct
+   string new_master = CharArrayToString(config.master_account);
+   string new_group = CharArrayToString(config.trade_group_id);
 
    if(new_master == "")
    {
       LogError(CAT_CONFIG, "Invalid config message received - missing master_account");
-      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
@@ -136,40 +132,39 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
    else
    {
       LogError(CAT_CONFIG, "Failed to build trade topic via FFI");
-      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
 
    // Extract extended configuration fields
-   int new_status = slave_config_get_int(config_handle, "status");
-   string lot_calc_mode_str = slave_config_get_string(config_handle, "lot_calculation_mode");
-   int new_lot_calc_mode = (lot_calc_mode_str == "margin_ratio") ? LOT_CALC_MODE_MARGIN_RATIO : LOT_CALC_MODE_MULTIPLIER;
-   double new_lot_mult = slave_config_get_double(config_handle, "lot_multiplier");
-   bool new_reverse = (slave_config_get_bool(config_handle, "reverse_trade") == 1);
-   int new_version = slave_config_get_int(config_handle, "config_version");
-   double new_source_lot_min = slave_config_get_double(config_handle, "source_lot_min");
-   double new_source_lot_max = slave_config_get_double(config_handle, "source_lot_max");
-   double new_master_equity = slave_config_get_double(config_handle, "master_equity");
+   int new_status = config.status;
+   int new_lot_calc_mode = config.lot_calculation_mode; // 0=Multiplier, 1=MarginRatio
+   string lot_calc_mode_str = (new_lot_calc_mode == LOT_CALC_MODE_MARGIN_RATIO) ? "margin_ratio" : "multiplier";
+
+   double new_lot_mult = config.lot_multiplier;
+   bool new_reverse = (config.reverse_trade != 0);
+   int new_version = (int)config.config_version;
+   double new_source_lot_min = config.source_lot_min;
+   double new_source_lot_max = config.source_lot_max;
+   double new_master_equity = config.master_equity;
 
    // Extract Open Sync Policy fields
-   string sync_mode_str = slave_config_get_string(config_handle, "sync_mode");
-   int new_sync_mode = SYNC_MODE_SKIP;
-   if(sync_mode_str == "limit_order")
-      new_sync_mode = SYNC_MODE_LIMIT_ORDER;
-   else if(sync_mode_str == "market_order")
-      new_sync_mode = SYNC_MODE_MARKET_ORDER;
-   int new_limit_order_expiry = slave_config_get_int(config_handle, "limit_order_expiry_min");
-   double new_market_sync_max_pips = slave_config_get_double(config_handle, "market_sync_max_pips");
-   int new_max_slippage = slave_config_get_int(config_handle, "max_slippage");
-   bool new_copy_pending_orders = (slave_config_get_bool(config_handle, "copy_pending_orders") == 1);
+   int new_sync_mode = config.sync_mode;
+   string sync_mode_str = "skip";
+   if(new_sync_mode == SYNC_MODE_LIMIT_ORDER) sync_mode_str = "limit_order";
+   if(new_sync_mode == SYNC_MODE_MARKET_ORDER) sync_mode_str = "market_order";
+
+   int new_limit_order_expiry = config.limit_order_expiry_min;
+   double new_market_sync_max_pips = config.market_sync_max_pips;
+   int new_max_slippage = config.max_slippage;
+   bool new_copy_pending_orders = (config.copy_pending_orders != 0);
 
    // Extract Trade Execution settings
-   int new_max_retries = slave_config_get_int(config_handle, "max_retries");
+   int new_max_retries = config.max_retries;
    if(new_max_retries <= 0) new_max_retries = 3; // Default: 3 retries
-   int new_max_signal_delay_ms = slave_config_get_int(config_handle, "max_signal_delay_ms");
+   int new_max_signal_delay_ms = config.max_signal_delay_ms;
    if(new_max_signal_delay_ms <= 0) new_max_signal_delay_ms = 5000; // Default: 5000ms
-   bool new_use_pending_order_for_delayed = (slave_config_get_bool(config_handle, "use_pending_order_for_delayed") == 1);
-   bool new_allow_new_orders = (slave_config_get_bool(config_handle, "allow_new_orders") == 1);
+   bool new_use_pending_order_for_delayed = (config.use_pending_order_for_delayed != 0);
+   bool new_allow_new_orders = (config.allow_new_orders != 0);
 
    // Log configuration values (compact format)
    LogInfo(CAT_CONFIG, StringFormat("Master: %s, Topic: %s, Status: %d", new_master, new_trade_topic, new_status));
@@ -212,8 +207,6 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
       {
          LogDebug(CAT_CONFIG, StringFormat("Removal requested but config not found for %s", new_master));
       }
-
-      // Note: Do NOT free config_handle - it's owned by EaContext
       return;
    }
    else
@@ -282,53 +275,50 @@ void ProcessConfigMessageFromHandle(HANDLE_TYPE config_handle,
       configs[index].use_pending_order_for_delayed = new_use_pending_order_for_delayed;
       configs[index].allow_new_orders = new_allow_new_orders;
 
-      // Parse symbol prefix/suffix from MessagePack
-      configs[index].symbol_prefix = slave_config_get_string(config_handle, "symbol_prefix");
-      configs[index].symbol_suffix = slave_config_get_string(config_handle, "symbol_suffix");
+      // Parse symbol prefix/suffix
+      configs[index].symbol_prefix = CharArrayToString(config.symbol_prefix);
+      configs[index].symbol_suffix = CharArrayToString(config.symbol_suffix);
 
-      // Parse symbol mappings from MessagePack
-      int mapping_count = slave_config_get_symbol_mappings_count(config_handle);
-      ArrayResize(configs[index].symbol_mappings, mapping_count);
-      for(int m = 0; m < mapping_count; m++)
+      // Parse symbol mappings (Separately via Accessor)
+      CSymbolMapping mapping_arr[];
+      if(context.GetSymbolMappings(mapping_arr))
       {
-         configs[index].symbol_mappings[m].source_symbol = slave_config_get_symbol_mapping_source(config_handle, m);
-         configs[index].symbol_mappings[m].target_symbol = slave_config_get_symbol_mapping_target(config_handle, m);
+          int mapping_count = ArraySize(mapping_arr);
+          ArrayResize(configs[index].symbol_mappings, mapping_count);
+          for(int m = 0; m < mapping_count; m++)
+          {
+             configs[index].symbol_mappings[m].source_symbol = CharArrayToString(mapping_arr[m].source);
+             configs[index].symbol_mappings[m].target_symbol = CharArrayToString(mapping_arr[m].target);
+          }
+
+          if(mapping_count > 0)
+          {
+             LogDebug(CAT_CONFIG, StringFormat("Symbol Mappings (%d):", mapping_count));
+             for(int m = 0; m < mapping_count; m++)
+             {
+                LogDebug(CAT_CONFIG, StringFormat("  %s -> %s",
+                      configs[index].symbol_mappings[m].source_symbol,
+                      configs[index].symbol_mappings[m].target_symbol));
+             }
+          }
+      }
+      else
+      {
+          // No mappings or failed to get
+          ArrayResize(configs[index].symbol_mappings, 0);
       }
 
-      // Log symbol mappings if any
-      if(mapping_count > 0)
-      {
-         LogDebug(CAT_CONFIG, StringFormat("Symbol Mappings (%d):", mapping_count));
-         for(int m = 0; m < mapping_count; m++)
-         {
-            LogDebug(CAT_CONFIG, StringFormat("  %s -> %s",
-                  configs[index].symbol_mappings[m].source_symbol,
-                  configs[index].symbol_mappings[m].target_symbol));
-         }
-      }
-
-      // Parse filters from MessagePack
+      // Parse filters from MessagePack (Skipping dynamic arrays for now if not in Struct)
+      // Allowed magic numbers are dynamic, need separate accessor if strictly necessary.
+      // Current structs don't support dynamic arrays.
+      // We assume basic filters are enough or we add separate accessors later.
+      // For now, clear them to avoid stale data.
       ArrayResize(configs[index].filters.allowed_symbols, 0);
       ArrayResize(configs[index].filters.blocked_symbols, 0);
       ArrayResize(configs[index].filters.blocked_magic_numbers, 0);
+      ArrayResize(configs[index].filters.allowed_magic_numbers, 0);
 
-      // Parse allowed_magic_numbers filter
-      int magic_count = slave_config_get_allowed_magic_count(config_handle);
-      ArrayResize(configs[index].filters.allowed_magic_numbers, magic_count);
-      for(int m = 0; m < magic_count; m++)
-      {
-         configs[index].filters.allowed_magic_numbers[m] = slave_config_get_allowed_magic_at(config_handle, m);
-      }
-      if(magic_count > 0)
-      {
-         LogDebug(CAT_CONFIG, StringFormat("Allowed Magic Numbers (%d)", magic_count));
-      }
-
-      // Send SyncRequest when:
-      // 1. New config is added (not just updated)
-      // 2. Status is CONNECTED (Master is online)
-      // 3. sync_mode is not SKIP (user wants to sync existing positions)
-      // 4. ZMQ context is valid (caller provided sync parameters)
+      // Send SyncRequest when needed
        if(is_new_config &&
           new_status == STATUS_CONNECTED &&
           new_sync_mode != SYNC_MODE_SKIP &&

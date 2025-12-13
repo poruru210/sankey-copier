@@ -83,52 +83,98 @@ struct EaCommand {
    uchar source_account[64];
 };
 
+//--- C-Compatible Structs for FFI (matching mt-bridge/src/ffi_types.rs)
+// Note: Alignment matches C default (Rust #[repr(C)])
+// MQL strings mapped to uchar arrays for correct memory layout
+
+struct CSlaveConfig {
+    uchar account_id[64];
+    uchar master_account[64];
+    uchar trade_group_id[64];
+
+    int status;
+    int lot_calculation_mode;
+    double lot_multiplier;
+    int reverse_trade; // bool as int
+
+    uchar symbol_prefix[32];
+    uchar symbol_suffix[32];
+
+    uint config_version;
+    double source_lot_min;
+    double source_lot_max;
+    double master_equity;
+
+    int sync_mode;
+    int limit_order_expiry_min;
+    double market_sync_max_pips;
+    int max_slippage;
+    int copy_pending_orders; // bool as int
+
+    int max_retries;
+    int max_signal_delay_ms;
+    int use_pending_order_for_delayed; // bool as int
+    int allow_new_orders;              // bool as int
+};
+
+struct CMasterConfig {
+    uchar account_id[64];
+    int status;
+    uchar symbol_prefix[32];
+    uchar symbol_suffix[32];
+    uint config_version;
+};
+
+struct CSymbolMapping {
+    uchar source[32];
+    uchar target[32];
+};
+
+struct CPositionInfo {
+    long ticket;
+    uchar symbol[32];
+    int order_type;
+    double lots;
+    double open_price;
+    long open_time; // i64 in Rust -> long in MQL (8 bytes)
+    double stop_loss;
+    double take_profit;
+    long magic_number;
+    uchar comment[64];
+};
+
+struct CSyncRequest {
+    uchar slave_account[64];
+    uchar master_account[64];
+    uchar last_sync_time[64];
+};
+
 //--- Import Rust ZeroMQ DLL
 #import "sankey_copier_zmq.dll"
    // Raw ZMQ functions removed - using EaContext high-level API
 
-   // Slave config message accessors (handles obtained via ea_context_get_slave_config)
-   // Note: parse_slave_config, slave_config_free removed
-   string      slave_config_get_string(HANDLE_TYPE handle, string field_name);
-   double      slave_config_get_double(HANDLE_TYPE handle, string field_name);
-   int         slave_config_get_bool(HANDLE_TYPE handle, string field_name);
-   int         slave_config_get_int(HANDLE_TYPE handle, string field_name);
+   // Slave config symbol mappings array access (kept if needed, or use struct access)
+   int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
+   // Mappings are now embedded in CSlaveConfig or retrieved via separate call if array is dynamic?
+   // ffi.rs logic suggests we can retrieve mappings separately.
+
+   // Actually, CSlaveConfig struct in FFI does NOT contain dynamic array of mappings directly.
+   // It contains fixed fields. Mappings are separate.
+   // Wait, ffi_types.rs says CSlaveConfig does NOT have mappings array directly embedded?
+   // Let's check ffi_types.rs again.
+   // CSlaveConfig struct in ffi_types.rs DOES NOT have `symbol_mappings: Vec`.
+   // It has scalar fields.
+   // Mappings are retrieved via `ea_context_get_symbol_mappings`.
+   // So we keep the helper functions for array data.
 
    // Slave config symbol mappings array access
-   int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle);
-   string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
-   string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
+   // int         slave_config_get_symbol_mappings_count(HANDLE_TYPE handle); // Replaced by ea_context_get_symbol_mappings_count
+   // string      slave_config_get_symbol_mapping_source(HANDLE_TYPE handle, int index);
+   // string      slave_config_get_symbol_mapping_target(HANDLE_TYPE handle, int index);
 
-   // Slave config allowed magic numbers filter access
-   int         slave_config_get_allowed_magic_count(HANDLE_TYPE handle);
-   int         slave_config_get_allowed_magic_at(HANDLE_TYPE handle, int index);
-
-   // Master config message accessors (handles obtained via ea_context_get_master_config)
-   // Note: parse_master_config, master_config_free removed
-   string      master_config_get_string(HANDLE_TYPE handle, string field_name);
-   int         master_config_get_int(HANDLE_TYPE handle, string field_name);
+   // Allowed magic numbers are also separate.
 
    // Note: Trade signal functions removed - using EaCommand struct via ea_get_command()
-
-   // Position snapshot accessors (handles obtained via ea_context_get_position_snapshot)
-   // Note: parse_position_snapshot, position_snapshot_free removed
-   string      position_snapshot_get_string(HANDLE_TYPE handle, string field_name);
-   int         position_snapshot_get_positions_count(HANDLE_TYPE handle);
-   string      position_snapshot_get_position_string(HANDLE_TYPE handle, int index, string field_name);
-   double      position_snapshot_get_position_double(HANDLE_TYPE handle, int index, string field_name);
-   long        position_snapshot_get_position_int(HANDLE_TYPE handle, int index, string field_name);
-
-   // SyncRequest accessors (handles obtained via ea_context_get_sync_request)
-   // Note: create_sync_request, parse_sync_request, sync_request_free removed
-   string      sync_request_get_string(HANDLE_TYPE handle, string field_name);
-
-   // Position snapshot builder (Master sends to Slave)
-   HANDLE_TYPE create_position_snapshot_builder(string source_account);
-   int         position_snapshot_builder_add_position(HANDLE_TYPE handle, long ticket, string symbol, string order_type,
-                                                       double lots, double open_price, double stop_loss, double take_profit,
-                                                       long magic_number, string open_time);
-   int         position_snapshot_builder_serialize(HANDLE_TYPE handle, uchar &output[], int output_len);
-   void        position_snapshot_builder_free(HANDLE_TYPE handle);
 
    // VictoriaLogs direct HTTP logging functions
    int         vlogs_configure(string endpoint, string source);
@@ -159,12 +205,18 @@ struct EaCommand {
    int         ea_manager_tick(HANDLE_TYPE context, double balance, double equity, int open_positions, int is_trade_allowed);
    int         ea_get_command(HANDLE_TYPE context, EaCommand &command);
    
-   // Accessors
-   HANDLE_TYPE ea_context_get_master_config(HANDLE_TYPE context);
-   HANDLE_TYPE ea_context_get_slave_config(HANDLE_TYPE context);
-   HANDLE_TYPE ea_context_get_position_snapshot(HANDLE_TYPE context);
-   HANDLE_TYPE ea_context_get_sync_request(HANDLE_TYPE context);
+   // New Struct-Based Accessors
+   int         ea_context_get_master_config(HANDLE_TYPE context, CMasterConfig &config);
+   int         ea_context_get_slave_config(HANDLE_TYPE context, CSlaveConfig &config);
+   int         ea_context_get_position_snapshot(HANDLE_TYPE context, CPositionInfo &positions[], int max_count);
+   int         ea_context_get_position_snapshot_count(HANDLE_TYPE context);
+   int         ea_context_get_position_snapshot_source_account(HANDLE_TYPE context, uchar &buffer[], int len);
+   int         ea_context_get_sync_request(HANDLE_TYPE context, CSyncRequest &request);
    
+   // Array Accessors for Slave Config
+   int         ea_context_get_symbol_mappings_count(HANDLE_TYPE context);
+   int         ea_context_get_symbol_mappings(HANDLE_TYPE context, CSymbolMapping &mappings[], int max_count);
+
    int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len);
    int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
                                  int is_trade_allowed, uchar &output[], int output_len);
@@ -190,6 +242,9 @@ struct EaCommand {
    int         ea_send_request_config(HANDLE_TYPE context, uchar &output[], int output_len);
    int         ea_send_sync_request(HANDLE_TYPE context, string master_account, uchar &output[], int output_len);
    int         ea_subscribe_config(HANDLE_TYPE context, string topic);
+
+   // High-Level Position Snapshot (Master)
+   int         ea_send_position_snapshot(HANDLE_TYPE context, CPositionInfo &positions[], int count);
 
 #import
 
@@ -248,29 +303,67 @@ public:
       return ea_get_command(m_context, command) == 1;
    }
    
-   // Accessors for Cached Configs
-   HANDLE_TYPE GetMasterConfig()
+   // Accessors for Cached Configs (Updated to use structs)
+   bool GetMasterConfig(CMasterConfig &config)
    {
-      if(!m_initialized) return 0;
-      return ea_context_get_master_config(m_context);
+      if(!m_initialized) return false;
+      return ea_context_get_master_config(m_context, config) == 1;
    }
 
-   HANDLE_TYPE GetSlaveConfig()
+   bool GetSlaveConfig(CSlaveConfig &config)
    {
-      if(!m_initialized) return 0;
-      return ea_context_get_slave_config(m_context);
+      if(!m_initialized) return false;
+      return ea_context_get_slave_config(m_context, config) == 1;
    }
 
-   HANDLE_TYPE GetSyncRequest()
+   bool GetSyncRequest(CSyncRequest &request)
    {
-      if(!m_initialized) return 0;
-      return ea_context_get_sync_request(m_context);
+      if(!m_initialized) return false;
+      return ea_context_get_sync_request(m_context, request) == 1;
    }
 
-   HANDLE_TYPE GetPositionSnapshot()
+   // Position Snapshot Accessors
+   int GetPositionSnapshotCount()
    {
       if(!m_initialized) return 0;
-      return ea_context_get_position_snapshot(m_context);
+      return ea_context_get_position_snapshot_count(m_context);
+   }
+
+   bool GetPositionSnapshot(CPositionInfo &positions[])
+   {
+      if(!m_initialized) return false;
+      int count = ea_context_get_position_snapshot_count(m_context);
+      if (count <= 0) return false;
+
+      ArrayResize(positions, count);
+      return ea_context_get_position_snapshot(m_context, positions, count) > 0;
+   }
+
+   string GetPositionSnapshotSourceAccount()
+   {
+       if(!m_initialized) return "";
+       uchar buffer[64];
+       if (ea_context_get_position_snapshot_source_account(m_context, buffer, 64) == 1) {
+           return CharArrayToString(buffer);
+       }
+       return "";
+   }
+
+   // Slave Config Array Accessors
+   int GetSymbolMappingsCount()
+   {
+      if(!m_initialized) return 0;
+      return ea_context_get_symbol_mappings_count(m_context);
+   }
+
+   bool GetSymbolMappings(CSymbolMapping &mappings[])
+   {
+      if(!m_initialized) return false;
+      int count = ea_context_get_symbol_mappings_count(m_context);
+      if (count <= 0) return false;
+
+      ArrayResize(mappings, count);
+      return ea_context_get_symbol_mappings(m_context, mappings, count) > 0;
    }
    
    // High-level receive methods
@@ -402,6 +495,13 @@ public:
       int len = ea_send_sync_request(m_context, master_account, buffer, 1024);
       if(len > 0) return ea_send_push(m_context, buffer, len) == 1;
       return false;
+   }
+
+   bool SendPositionSnapshot(CPositionInfo &positions[])
+   {
+      if(!m_initialized) return false;
+      int count = ArraySize(positions);
+      return ea_send_position_snapshot(m_context, positions, count) == 1;
    }
 };
 
