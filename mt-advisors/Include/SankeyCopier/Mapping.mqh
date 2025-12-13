@@ -13,7 +13,7 @@
 #ifndef SANKEY_COPIER_MAPPING_MQH
 #define SANKEY_COPIER_MAPPING_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 #include "Logging.mqh"
 
 // Platform detection

@@ -661,6 +661,22 @@ impl EaContext {
         Ok(())
     }
 
+    pub fn send_position_snapshot(
+        &mut self,
+        positions: Vec<crate::types::PositionInfo>,
+    ) -> Result<(), BridgeError> {
+        let msg = crate::types::PositionSnapshotMessage {
+            message_type: "PositionSnapshot".to_string(),
+            source_account: self.account_id.clone(),
+            positions,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let data = rmp_serde::encode::to_vec_named(&msg)?;
+        self.strategy.send_push(&data)?;
+        Ok(())
+    }
+
     // --- Socket Accessors for FFI (Raw Pointers) ---
     pub fn get_config_socket_ptr(&mut self) -> Result<*mut std::ffi::c_void, BridgeError> {
         self.strategy.get_config_socket_ptr()

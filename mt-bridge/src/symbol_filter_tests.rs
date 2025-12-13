@@ -1,4 +1,4 @@
-use crate::msgpack::{
+use crate::types::{
     HeartbeatMessage, LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters,
 };
 

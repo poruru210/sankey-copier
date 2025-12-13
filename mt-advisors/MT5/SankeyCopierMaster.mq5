@@ -9,10 +9,10 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
-#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
 
@@ -66,7 +66,7 @@ string        g_config_topic = "";        // Config topic (generated via FFI)
 string        g_vlogs_topic = "";         // VLogs topic (generated via FFI)
 string        g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 bool          g_register_sent = false;    // Track if register message has been sent
-EaContextWrapper g_ea_context;        // Rust EA Context wrapper
+MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
 
 
 //--- Configuration panel
@@ -281,16 +281,10 @@ void OnTimer()
            case CMD_UPDATE_UI:
            {
                // Config updated (Master or Global VLogs) via ManagerTick parsing
-               // Rust parsed it and set cached config, we just need to update UI if needed.
-               // We can get cached config if we need specific fields for UI.
-               HANDLE_TYPE config_handle = g_ea_context.GetMasterConfig();
-               if(config_handle != 0 && config_handle != -1) // -1 or 0? Wrapper returns 0 on fail.
+               SMasterConfig config;
+               if(g_ea_context.GetMasterConfig(config))
                {
-                   ProcessMasterConfigMessage(config_handle);
-                   // Note: We don't free cached config handle from GetMasterConfig? 
-                   // No, GetMasterConfig returns pointer to internal cached struct, NOT a new object?
-                   // Wait, FFI `ea_context_get_master_config` returns `*const MasterConfigMessage`.
-                   // `master_config_get_string` takes this pointer. We do NOT free it.
+                   ProcessMasterConfigMessage(config);
                }
                
                // Also check global VLogs? (Maybe stored separately or we just assume updated)
@@ -298,13 +292,13 @@ void OnTimer()
            }
            case CMD_SEND_SNAPSHOT: // SyncRequest Received
            {
-               // Retrieve cached SyncRequest handle (Managed by Rust, DO NOT FREE)
-               HANDLE_TYPE req_handle = g_ea_context.GetSyncRequest();
+               // Retrieve cached SyncRequest struct
+               SSyncRequest request;
                
-               if(req_handle != 0)
+               if(g_ea_context.GetSyncRequest(request))
                {
-                   string req_master = sync_request_get_string(req_handle, "master_account");
-                   string req_slave = sync_request_get_string(req_handle, "slave_account");
+                   string req_master = CharArrayToString(request.master_account);
+                   string req_slave = CharArrayToString(request.slave_account);
 
                    // Validate Master Account
                    if(req_master == AccountID)
@@ -326,9 +320,9 @@ void OnTimer()
                }
                else
                {
-                    // Fallback: Use comment if handle is null (should not happen if Rust logic works)
+                    // Fallback: Use comment if struct retrieval fails (should not happen if Rust logic works)
                     string slave_account = CharArrayToString(cmd.comment);
-                    Print("[WARNING] GetSyncRequest returned 0, using comment for slave account: ", slave_account);
+                    Print("[WARNING] GetSyncRequest failed, using comment for slave account: ", slave_account);
                     
                     if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                     {
@@ -349,43 +343,6 @@ void OnTimer()
 
    // 3. Flush VLogs
    VLogsFlushIfNeeded();
-}
-
-//+------------------------------------------------------------------+
-//| Process SyncRequest message (from Slave EA)                       |
-//+------------------------------------------------------------------+
-void ProcessSyncRequest(HANDLE_TYPE handle)
-{
-   // Get the fields
-   string slave_account = sync_request_get_string(handle, "slave_account");
-   string master_account = sync_request_get_string(handle, "master_account");
-
-   if(slave_account == "" || master_account == "")
-   {
-      Print("Invalid SyncRequest received - missing fields");
-      // Note: No need to free handle - managed by EaContext
-      return;
-   }
-
-   if(master_account != AccountID)
-   {
-      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      // Note: No need to free handle - managed by EaContext
-      return;
-   }
-
-   // Note: No need to free handle - managed by EaContext
-
-   // Send position snapshot
-   // Note: SendPositionSnapshot helper now takes g_ea_context
-   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
-   {
-      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
-   }
-   else
-   {
-      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -901,23 +858,22 @@ void SendOrderCloseSignal(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Process Master configuration message (handle)                    |
+//| Process Master configuration message (struct)                    |
 //+------------------------------------------------------------------+
-void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
+void ProcessMasterConfigMessage(SMasterConfig &config)
 {
    Print("=== Processing Master Configuration Message ===");
 
-   // Extract fields from the parsed config using the handle
-   string config_account_id = master_config_get_string(config_handle, "account_id");
-   int status = master_config_get_int(config_handle, "status");
-   string prefix = master_config_get_string(config_handle, "symbol_prefix");
-   string suffix = master_config_get_string(config_handle, "symbol_suffix");
-   int version = master_config_get_int(config_handle, "config_version");
+   // Extract fields from the struct
+   string config_account_id = CharArrayToString(config.account_id);
+   int status = config.status;
+   string prefix = CharArrayToString(config.symbol_prefix);
+   string suffix = CharArrayToString(config.symbol_suffix);
+   int version = (int)config.config_version;
 
    if(config_account_id == "")
    {
       Print("ERROR: Invalid config message received - missing account_id");
-      // Note: No need to free handle - managed by EaContext
       return;
    }
 
@@ -959,10 +915,6 @@ void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
       g_config_panel.UpdateStatusRow(g_server_status);
       ChartRedraw();
    }
-
-   // Free the config handle (Ownership transferred to this function)
-   // CRITICAL FIX: Do NOT free the handle if it retrieved via GetMasterConfig() (EaContext managed)
-   // master_config_free(config_handle);
 
    Print("=== Master Configuration Updated ===");
 }

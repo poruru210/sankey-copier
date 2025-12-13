@@ -408,3 +408,11 @@ impl Default for TradeSignal {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GlobalConfigMessage {
+    // Add fields as needed
+}

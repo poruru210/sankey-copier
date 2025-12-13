@@ -11,7 +11,7 @@
 #ifndef SANKEY_COPIER_GRIDPANEL_MQH
 #define SANKEY_COPIER_GRIDPANEL_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 #include "SlaveTypes.mqh"
 
 #property strict

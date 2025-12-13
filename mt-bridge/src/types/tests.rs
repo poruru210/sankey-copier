@@ -3,7 +3,7 @@
 // Why: Ensures all message types correctly roundtrip through MessagePack format
 
 use crate::constants::{OrderType, TradeAction};
-use crate::msgpack::*;
+use crate::types::*;
 use chrono::Utc;
 
 #[test]
