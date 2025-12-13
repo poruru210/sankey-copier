@@ -134,7 +134,6 @@ struct CPositionInfo {
     long ticket;
     uchar symbol[32];
     int order_type;
-    int _pad;       // Explicit padding to align 'double lots' to 8 bytes (matches Rust #[repr(C)])
     double lots;
     double open_price;
     long open_time; // i64 in Rust -> long in MQL (8 bytes)
