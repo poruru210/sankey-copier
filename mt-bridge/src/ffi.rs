@@ -740,6 +740,72 @@ unsafe fn c_byte_array_to_string(ptr: *const u8, max_len: usize) -> String {
     String::from_utf8_lossy(&slice[..len]).into_owned()
 }
 
+/// Convert packed C struct to Rust struct safely
+unsafe fn convert_c_position_to_rust(c_pos: &CPositionInfo) -> crate::types::PositionInfo {
+    // Use read_unaligned and addr_of! to safely read from packed struct
+    let ticket = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.ticket));
+    let lots = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.lots));
+    let open_price = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_price));
+    let open_time = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.open_time));
+    let stop_loss = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.stop_loss));
+    let take_profit = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.take_profit));
+    let magic_number = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.magic_number));
+    let order_type = std::ptr::read_unaligned(std::ptr::addr_of!(c_pos.order_type));
+
+    // String conversion using raw pointers from addr_of!
+    let symbol = c_byte_array_to_string(std::ptr::addr_of!(c_pos.symbol) as *const u8, 32);
+    let comment_str = c_byte_array_to_string(std::ptr::addr_of!(c_pos.comment) as *const u8, 64);
+
+    let order_type_str = match order_type {
+        0 => "Buy",
+        1 => "Sell",
+        2 => "BuyLimit",
+        3 => "SellLimit",
+        4 => "BuyStop",
+        5 => "SellStop",
+        _ => "Unknown",
+    }
+    .to_string();
+
+    let open_time_str = if open_time > 0 {
+        match chrono::DateTime::from_timestamp(open_time, 0) {
+            Some(dt) => dt.to_rfc3339(),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+
+    crate::types::PositionInfo {
+        ticket,
+        symbol,
+        order_type: order_type_str,
+        lots,
+        open_price,
+        open_time: open_time_str,
+        stop_loss: if stop_loss.abs() < 1e-6 {
+            None
+        } else {
+            Some(stop_loss)
+        },
+        take_profit: if take_profit.abs() < 1e-6 {
+            None
+        } else {
+            Some(take_profit)
+        },
+        magic_number: if magic_number != 0 {
+            Some(magic_number)
+        } else {
+            None
+        },
+        comment: if comment_str.is_empty() {
+            None
+        } else {
+            Some(comment_str)
+        },
+    }
+}
+
 /// Send a Position Snapshot (Master -> Slave)
 ///
 /// # Safety
@@ -763,65 +829,9 @@ pub unsafe extern "C" fn ea_send_position_snapshot(
         let ctx = &mut *context;
         let slice = std::slice::from_raw_parts(positions, count as usize);
 
-        let mut rust_positions = Vec::with_capacity(count as usize);
-
-        for c_pos in slice {
-            // [FIX] Use Byte conversion, not UTF-16, matching MQL StringToCharArray
-            let symbol = c_byte_array_to_string(c_pos.symbol.as_ptr(), 32);
-
-            // Order Type conversion (i32 -> String)
-            let order_type_str = match c_pos.order_type {
-                0 => "Buy",
-                1 => "Sell",
-                2 => "BuyLimit",
-                3 => "SellLimit",
-                4 => "BuyStop",
-                5 => "SellStop",
-                _ => "Unknown",
-            }
-            .to_string();
-
-            let comment = c_byte_array_to_string(c_pos.comment.as_ptr(), 64);
-
-            // Convert i64 timestamp to ISO8601 String
-            let open_time_str = if c_pos.open_time > 0 {
-                match chrono::DateTime::from_timestamp(c_pos.open_time, 0) {
-                    Some(dt) => dt.to_rfc3339(),
-                    None => String::new(),
-                }
-            } else {
-                String::new()
-            };
-
-            rust_positions.push(crate::types::PositionInfo {
-                ticket: c_pos.ticket,
-                symbol,
-                order_type: order_type_str,
-                lots: c_pos.lots,
-                open_price: c_pos.open_price,
-                open_time: open_time_str,
-                stop_loss: if c_pos.stop_loss.abs() < 1e-6 {
-                    None
-                } else {
-                    Some(c_pos.stop_loss)
-                },
-                take_profit: if c_pos.take_profit.abs() < 1e-6 {
-                    None
-                } else {
-                    Some(c_pos.take_profit)
-                },
-                magic_number: if c_pos.magic_number != 0 {
-                    Some(c_pos.magic_number)
-                } else {
-                    None
-                },
-                comment: if comment.is_empty() {
-                    None
-                } else {
-                    Some(comment)
-                },
-            });
-        }
+        // Convert all positions first (Conversion Layer)
+        let rust_positions: Vec<crate::types::PositionInfo> =
+            slice.iter().map(|c_pos| convert_c_position_to_rust(c_pos)).collect();
 
         match ctx.send_position_snapshot(rust_positions) {
             Ok(_) => 1,
