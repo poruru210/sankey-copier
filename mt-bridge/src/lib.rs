@@ -3,6 +3,7 @@ pub mod constants;
 pub mod ea_context;
 pub mod errors;
 pub mod ffi;
+pub mod ffi_types;
 pub mod ffi_helpers;
 pub mod logger;
 pub mod msgpack;

@@ -13,6 +13,7 @@
 pub mod runner;
 pub mod traits;
 pub mod types;
+pub mod ea_context_wrapper; // Added Wrapper
 
 // Test Environment Modules
 pub mod relay_server;

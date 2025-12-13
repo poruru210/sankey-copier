@@ -3,7 +3,7 @@
 // Master EA Simulator - MQL5 SankeyCopierMaster.mq5 完全準拠実装
 //
 // Refactored to use EaContext via FFI, demonstrating strict encapsulation and Strategy Pattern.
-// Now using the Platform Simulator infrastructure.
+// Now using the Platform Simulator infrastructure and EaContextWrapper.
 
 #![allow(unused_imports)]
 
@@ -15,15 +15,11 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
-use sankey_copier_zmq::ffi::{
-    ea_connect, ea_context_free, ea_context_get_master_config, ea_context_get_sync_request,
-    ea_context_mark_config_requested, ea_get_command, ea_init, ea_manager_tick,
-    ea_send_close_signal, ea_send_modify_signal, ea_send_open_signal, ea_send_push,
-    ea_send_unregister, ea_subscribe_config, sync_request_get_string,
-};
+use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 use sankey_copier_zmq::EaContext;
 
 use crate::base::EaSimulatorBase;
+use crate::platform::ea_context_wrapper::EaContextWrapper;
 use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
@@ -32,11 +28,6 @@ use crate::types::{
     SyncRequestMessage, TradeAction, TradeSignal, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
     ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
-
-// Wrapper for thread-safe passing of EaContext pointer (which is !Send !Sync by default)
-struct ContextWrapper(pub *mut EaContext);
-unsafe impl Send for ContextWrapper {}
-unsafe impl Sync for ContextWrapper {}
 
 // =============================================================================
 // Master EA Core (MQL5 Logic)
@@ -63,7 +54,7 @@ struct MasterEaCore {
     received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
     _g_register_sent: Arc<AtomicBool>,
-    context: Arc<Mutex<Option<ContextWrapper>>>,
+    context: Arc<Mutex<Option<EaContextWrapper>>>,
     push_address: String,
     config_address: String,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
@@ -81,7 +72,7 @@ impl ExpertAdvisor for MasterEaCore {
         let server_u16 = to_u16("TestServer");
         let currency_u16 = to_u16("USD");
 
-        let ctx = unsafe {
+        let ctx_ptr = unsafe {
             ea_init(
                 acc_id_u16.as_ptr(),
                 ea_type_u16.as_ptr(),
@@ -95,21 +86,21 @@ impl ExpertAdvisor for MasterEaCore {
             )
         };
 
-        if ctx.is_null() {
+        if ctx_ptr.is_null() {
             eprintln!("Failed to initialize EA context!");
             return ENUM_INIT_RETCODE::INIT_FAILED;
         }
 
         {
             let mut guard = self.context.lock().unwrap();
-            *guard = Some(ContextWrapper(ctx));
+            *guard = Some(EaContextWrapper::new(ctx_ptr));
         }
 
         let push_u16 = to_u16(&self.push_address);
         let sub_u16 = to_u16(&self.config_address);
 
         unsafe {
-            if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
+            if ea_connect(ctx_ptr, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
                 eprintln!("Failed to connect EA context!");
                 return ENUM_INIT_RETCODE::INIT_FAILED;
             }
@@ -121,7 +112,7 @@ impl ExpertAdvisor for MasterEaCore {
     fn on_deinit(&mut self, _reason: ENUM_DEINIT_REASON) {
         let mut guard = self.context.lock().unwrap();
         if let Some(wrapper) = guard.take() {
-            let ctx = wrapper.0;
+            let ctx = wrapper.raw();
             let mut buffer = vec![0u8; 1024];
             let len = unsafe {
                 sankey_copier_zmq::ffi::ea_send_unregister(
@@ -135,19 +126,19 @@ impl ExpertAdvisor for MasterEaCore {
                     ea_send_push(ctx, buffer.as_ptr(), len);
                 }
             }
-            unsafe {
-                ea_context_free(ctx);
-            }
+            wrapper.free(); // Safely calls ea_context_free
         }
     }
 
     fn on_timer(&mut self) {
         // Retrieve context
         let guard = self.context.lock().unwrap();
-        let ctx = match guard.as_ref() {
-            Some(w) => w.0,
+        let wrapper = match guard.as_ref() {
+            Some(w) => w,
             None => return,
         };
+        let ctx = wrapper.raw();
+
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
         // Process pending subscriptions (One-off or manual subscriptions still valid)
@@ -187,53 +178,16 @@ impl ExpertAdvisor for MasterEaCore {
                 match cmd_type {
                     EaCommandType::SendSnapshot => {
                         // Slave requested sync.
-                        // Use FFI accessor to get the full SyncRequestMessage
-                        let req_ptr = unsafe { ea_context_get_sync_request(ctx) };
-                        if !req_ptr.is_null() {
-                            let to_u16 =
-                                |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
-
-                            // Helper to get string field
-                            let get_str = |field: &str| -> String {
-                                let f_u16 = to_u16(field);
-                                let val_ptr =
-                                    unsafe { sync_request_get_string(req_ptr, f_u16.as_ptr()) };
-                                if val_ptr.is_null() {
-                                    return String::new();
-                                }
-                                let mut len = 0;
-                                unsafe {
-                                    while *val_ptr.add(len) != 0 {
-                                        len += 1;
-                                    }
-                                    let slice = std::slice::from_raw_parts(val_ptr, len);
-                                    String::from_utf16_lossy(slice)
-                                }
-                            };
-
-                            let slave_account = get_str("slave_account");
-                            let last_sync_time_str = get_str("last_sync_time");
-                            let last_sync_time = if last_sync_time_str.is_empty() {
-                                None
-                            } else {
-                                Some(last_sync_time_str)
-                            };
-
-                            let req = SyncRequestMessage {
-                                message_type: "SyncRequest".to_string(),
-                                slave_account,
-                                master_account: self.account_id.clone(),
-                                last_sync_time,
-                                timestamp: Utc::now().to_rfc3339(),
-                            };
-                            self.received_sync_requests.lock().unwrap().push(req);
+                        // Use safe wrapper to get full SyncRequestMessage
+                        if let Some(req) = wrapper.get_sync_request() {
+                             // Correct timestamp to be now for new request if needed, or keep original?
+                             // Here we just clone/store it as received
+                             self.received_sync_requests.lock().unwrap().push(req);
                         }
                     }
                     EaCommandType::UpdateUi => {
-                        // Config updated. Retrieve it.
-                        let cfg_ptr = unsafe { ea_context_get_master_config(ctx) };
-                        if !cfg_ptr.is_null() {
-                            let cfg = unsafe { &*cfg_ptr };
+                        // Config updated. Retrieve it via safe wrapper.
+                        if let Some(cfg) = wrapper.get_master_config() {
                             // Update internal state
                             self.g_server_status.store(cfg.status, Ordering::SeqCst);
                             if let Some(prefix) = &cfg.symbol_prefix {
@@ -243,7 +197,7 @@ impl ExpertAdvisor for MasterEaCore {
                                 *self.g_symbol_suffix.lock().unwrap() = suffix.clone();
                             }
                             // Push to received queue for verification
-                            *self.received_config.lock().unwrap() = Some(cfg.clone());
+                            *self.received_config.lock().unwrap() = Some(cfg);
                         }
                     }
                     _ => {}
@@ -281,7 +235,7 @@ pub struct MasterEaSimulator {
     timer_thread: Option<JoinHandle<()>>,
 
     // --- Context (Managed in OnTimer thread, accessible via FFI wrapper) ---
-    context: Arc<Mutex<Option<ContextWrapper>>>,
+    context: Arc<Mutex<Option<EaContextWrapper>>>,
 
     // Connection Params (Passed to Init/Connect)
     push_address: String,
@@ -432,10 +386,11 @@ impl MasterEaSimulator {
 
     pub fn send_trade_signal(&self, signal: &TradeSignal) -> Result<()> {
         let guard = self.context.lock().unwrap();
-        let ctx = match guard.as_ref() {
-            Some(w) => w.0,
+        let wrapper = match guard.as_ref() {
+            Some(w) => w,
             None => return Err(anyhow::anyhow!("Context not initialized")),
         };
+        let ctx = wrapper.raw();
 
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
@@ -514,7 +469,7 @@ impl MasterEaSimulator {
     fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
         let guard = self.context.lock().unwrap();
         if let Some(wrapper) = guard.as_ref() {
-            let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
+            let ret = unsafe { ea_send_push(wrapper.raw(), data.as_ptr(), data.len() as i32) };
             if ret == 1 {
                 Ok(())
             } else {
