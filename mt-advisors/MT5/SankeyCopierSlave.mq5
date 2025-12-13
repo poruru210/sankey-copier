@@ -266,21 +266,21 @@ void OnTimer()
            }
            case CMD_PROCESS_SNAPSHOT:
            {
-               HANDLE_TYPE snapshot_handle = g_ea_context.GetPositionSnapshot();
-               if(snapshot_handle != 0)
+               CPositionInfo positions[];
+               if(g_ea_context.GetPositionSnapshot(positions))
                {
-                   ProcessPositionSnapshot(snapshot_handle);
+                   ProcessPositionSnapshot(positions);
                }
                break;
            }
 
            case CMD_UPDATE_UI:
            {
-               HANDLE_TYPE config_handle = g_ea_context.GetSlaveConfig();
-               if(config_handle != 0)
+               CSlaveConfig config;
+               if(g_ea_context.GetSlaveConfig(config))
                {
-                   // Process config handle
-                   ProcessConfigMessageFromHandle(config_handle, g_configs, g_ea_context, AccountID);
+                   // Process config struct
+                   ProcessSlaveConfig(config, g_configs, g_ea_context, AccountID);
                    g_has_received_config = true;
                    
                    // Subscribe to sync/{master}/{slave} topic after receiving config
@@ -493,18 +493,12 @@ void SubscribeToSyncTopic()
 //| Process position snapshot for sync (MT5)                          |
 //| Called when Slave receives PositionSnapshot from Master           |
 //+------------------------------------------------------------------+
-void ProcessPositionSnapshot(HANDLE_TYPE handle)
+void ProcessPositionSnapshot(CPositionInfo &positions[])
 {
    Print("=== Processing Position Snapshot ===");
 
-   if(handle == 0 || handle == -1)
-   {
-      Print("ERROR: Invalid PositionSnapshot handle");
-      return;
-   }
-
    // Get source account (master)
-   string source_account = position_snapshot_get_string(handle, "source_account");
+   string source_account = g_ea_context.GetPositionSnapshotSourceAccount();
    if(source_account == "")
    {
       Print("ERROR: PositionSnapshot has empty source_account");
@@ -552,7 +546,7 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
       Print("Market sync max pips: ", market_sync_max_pips);
 
    // Get position count
-   int position_count = position_snapshot_get_positions_count(handle);
+   int position_count = ArraySize(positions);
    Print("Positions to sync: ", position_count);
 
    int synced_count = 0;
@@ -562,14 +556,32 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
    for(int i = 0; i < position_count; i++)
    {
       // Extract position data
-      long master_ticket = position_snapshot_get_position_int(handle, i, "ticket");
-      string symbol = position_snapshot_get_position_string(handle, i, "symbol");
-      string order_type_str = position_snapshot_get_position_string(handle, i, "order_type");
-      double lots = position_snapshot_get_position_double(handle, i, "lots");
-      double open_price = position_snapshot_get_position_double(handle, i, "open_price");
-      double sl = position_snapshot_get_position_double(handle, i, "stop_loss");
-      double tp = position_snapshot_get_position_double(handle, i, "take_profit");
-      long magic_long = position_snapshot_get_position_int(handle, i, "magic_number");
+      long master_ticket = positions[i].ticket;
+      string symbol = CharArrayToString(positions[i].symbol);
+
+      // Order type: Rust sends string logic for PositionSnapshot?
+      // Wait, ea_context_get_position_snapshot converts internal Rust strings to MQL strings if we used the old API.
+      // But now we pass a struct.
+      // In FFI logic I added earlier for `ea_send_position_snapshot` (Master -> Rust), I converted int to String.
+      // Now Slave <- Rust (ea_context_get_position_snapshot), we need to check how FFI implements it.
+      // ffi.rs `ea_context_get_position_snapshot` maps logic.
+      // Let's re-verify `ea_context_get_position_snapshot` in `ffi.rs`.
+      // It populates `CPositionInfo`.
+      // The `CPositionInfo` in Rust `ffi.rs` sets `order_type: i32` by parsing the string stored in Rust `PositionInfo`.
+      // So `CPositionInfo.order_type` is `i32` (Enum value).
+      // We need to convert this int back to String "Buy"/"Sell" for `TransformLotSize` / `SyncWithLimitOrder`?
+      // Or update `SyncWithLimitOrder` to take int?
+      // Currently `SyncWithLimitOrder` takes `string type_str`.
+      // So we convert int -> string here.
+
+      int order_type_int = positions[i].order_type;
+      string order_type_str = GetOrderTypeString(order_type_int); // Common.mqh function
+
+      double lots = positions[i].lots;
+      double open_price = positions[i].open_price;
+      double sl = positions[i].stop_loss;
+      double tp = positions[i].take_profit;
+      long magic_long = positions[i].magic_number;
       int magic_number = (int)magic_long;
 
       Print("Position ", i + 1, "/", position_count, ": #", master_ticket,
@@ -627,7 +639,6 @@ void ProcessPositionSnapshot(HANDLE_TYPE handle)
    }
 
    Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
-   // Do NOT free handle - it belongs to EaContext
 }
 
 // Trade functions are now provided by SlaveTrade.mqh

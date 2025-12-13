@@ -731,6 +731,108 @@ pub unsafe extern "C" fn ea_get_command(context: *mut EaContext, command: *mut E
 // New Structure-Based Accessors (Replacing old fine-grained getters)
 // ===========================================================================
 
+/// Helper to convert raw C byte array (null-terminated or fixed size) to String
+/// Used for MQL char arrays (single-byte encoding)
+unsafe fn c_byte_array_to_string(ptr: *const u8, max_len: usize) -> String {
+    let slice = std::slice::from_raw_parts(ptr, max_len);
+    // Find null terminator
+    let len = slice.iter().position(|&c| c == 0).unwrap_or(max_len);
+    String::from_utf8_lossy(&slice[..len]).into_owned()
+}
+
+/// Send a Position Snapshot (Master -> Slave)
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - positions: Pointer to array of CPositionInfo
+/// - count: Number of positions in the array
+#[no_mangle]
+pub unsafe extern "C" fn ea_send_position_snapshot(
+    context: *mut EaContext,
+    positions: *const CPositionInfo,
+    count: i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if context.is_null() || (count > 0 && positions.is_null()) {
+            return 0;
+        }
+        if count == 0 {
+            return 1; // Success, empty snapshot
+        }
+
+        let ctx = &mut *context;
+        let slice = std::slice::from_raw_parts(positions, count as usize);
+
+        let mut rust_positions = Vec::with_capacity(count as usize);
+
+        for c_pos in slice {
+            // [FIX] Use Byte conversion, not UTF-16, matching MQL StringToCharArray
+            let symbol = c_byte_array_to_string(c_pos.symbol.as_ptr(), 32);
+
+            // Order Type conversion (i32 -> String)
+            let order_type_str = match c_pos.order_type {
+                0 => "Buy",
+                1 => "Sell",
+                2 => "BuyLimit",
+                3 => "SellLimit",
+                4 => "BuyStop",
+                5 => "SellStop",
+                _ => "Unknown",
+            }
+            .to_string();
+
+            let comment = c_byte_array_to_string(c_pos.comment.as_ptr(), 64);
+
+            // Convert i64 timestamp to ISO8601 String
+            let open_time_str = if c_pos.open_time > 0 {
+                match chrono::DateTime::from_timestamp(c_pos.open_time, 0) {
+                    Some(dt) => dt.to_rfc3339(),
+                    None => String::new(),
+                }
+            } else {
+                String::new()
+            };
+
+            rust_positions.push(crate::types::PositionInfo {
+                ticket: c_pos.ticket,
+                symbol,
+                order_type: order_type_str,
+                lots: c_pos.lots,
+                open_price: c_pos.open_price,
+                open_time: open_time_str,
+                stop_loss: if c_pos.stop_loss.abs() < 1e-6 {
+                    None
+                } else {
+                    Some(c_pos.stop_loss)
+                },
+                take_profit: if c_pos.take_profit.abs() < 1e-6 {
+                    None
+                } else {
+                    Some(c_pos.take_profit)
+                },
+                magic_number: if c_pos.magic_number != 0 {
+                    Some(c_pos.magic_number)
+                } else {
+                    None
+                },
+                comment: if comment.is_empty() {
+                    None
+                } else {
+                    Some(comment)
+                },
+            });
+        }
+
+        match ctx.send_position_snapshot(rust_positions) {
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
+    }));
+
+    result.unwrap_or(0)
+}
+
+
 /// Get the last received Master Config as a C-compatible struct
 ///
 /// # Safety
