@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectItemCustom,
 } from '@/components/ui/select';
-import { BrokerIcon } from '@/components/BrokerIcon';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import type { EaConnection } from '@/types';
 
 interface SimpleAccountSelectorProps {

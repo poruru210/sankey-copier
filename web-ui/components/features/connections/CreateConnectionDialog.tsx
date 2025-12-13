@@ -7,14 +7,14 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SimpleAccountSelector } from '@/components/SimpleAccountSelector';
+import { SimpleAccountSelector } from '@/components/features/connections/SimpleAccountSelector';
 import { useSettingsValidation } from '@/hooks/useSettingsValidation';
 import type { CreateSettingsRequest, EaConnection, CopySettings, TradeGroup, TradeGroupMember, LotCalculationMode, SyncMode } from '@/types';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 
 import { apiClientAtom } from '@/lib/atoms/site';
-import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
+import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/features/settings/SlaveSettingsForm';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
 import {
   Stepper,

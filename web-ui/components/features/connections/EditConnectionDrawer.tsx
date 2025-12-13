@@ -20,8 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { BrokerIcon } from '@/components/BrokerIcon';
-import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/SlaveSettingsForm';
+import { BrokerIcon } from '@/components/ui/BrokerIcon';
+import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/features/settings/SlaveSettingsForm';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
 import { DrawerInfoCard } from '@/components/ui/drawer-section';
 import type { CopySettings } from '@/types';
