@@ -131,7 +131,9 @@ pub unsafe extern "C" fn ea_context_get_slave_config(
     context: *const EaContext,
     config: *mut SSlaveConfig,
 ) -> i32 {
-    let ctx = match context.as_ref() {
+    // Mutable access required to pop from queue
+    // SAFETY: Single-threaded MQL access assumed.
+    let ctx = match (context as *mut EaContext).as_mut() {
         Some(c) => c,
         None => return 0,
     };
@@ -139,7 +141,13 @@ pub unsafe extern "C" fn ea_context_get_slave_config(
         return 0;
     }
 
-    if let Some(src) = &ctx.last_slave_config {
+    // Pop next pending config into current slot
+    if let Some(next_config) = ctx.pending_slave_configs.pop_front() {
+        ctx.current_slave_config = Some(next_config);
+    }
+
+    // Read from current slot
+    if let Some(src) = &ctx.current_slave_config {
         let dest = &mut *config;
         copy_string_to_fixed_array(&src.account_id, &mut dest.account_id);
         copy_string_to_fixed_array(&src.master_account, &mut dest.master_account);
@@ -202,7 +210,7 @@ pub unsafe extern "C" fn ea_context_get_symbol_mappings_count(context: *const Ea
         Some(c) => c,
         None => return 0,
     };
-    if let Some(cfg) = &ctx.last_slave_config {
+    if let Some(cfg) = &ctx.current_slave_config {
         cfg.symbol_mappings.len() as i32
     } else {
         0
@@ -228,7 +236,7 @@ pub unsafe extern "C" fn ea_context_get_symbol_mappings(
         return 0;
     }
 
-    if let Some(cfg) = &ctx.last_slave_config {
+    if let Some(cfg) = &ctx.current_slave_config {
         let count = cfg.symbol_mappings.len().min(max_count as usize);
         let slice = std::slice::from_raw_parts_mut(mappings, count);
 

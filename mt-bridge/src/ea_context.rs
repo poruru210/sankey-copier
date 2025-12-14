@@ -111,7 +111,8 @@ pub struct EaContext {
     // --- Cached Config ---
     pub last_master_config: Option<crate::types::MasterConfigMessage>,
     pub slave_configs: HashMap<String, SlaveConfigMessage>, // Key: Master Account ID
-    pub last_slave_config: Option<crate::types::SlaveConfigMessage>, // For UI update command (latest received)
+    pub pending_slave_configs: VecDeque<SlaveConfigMessage>, // For UI update command (FIFO queue)
+    pub current_slave_config: Option<SlaveConfigMessage>, // Currently being processed by MQL (popped from queue)
 
     pub last_global_config: Option<crate::types::GlobalConfigMessage>,
 
@@ -163,7 +164,8 @@ impl EaContext {
             current_open_positions: 0,
             last_master_config: None,
             slave_configs: HashMap::new(),
-            last_slave_config: None,
+            pending_slave_configs: VecDeque::new(),
+            current_slave_config: None,
             last_global_config: None,
             last_position_snapshot: None,
             last_sync_request: None,
@@ -381,8 +383,8 @@ impl EaContext {
                         .insert(master_acc.clone(), config.clone());
                 }
 
-                // For UI Update, we set this one as the "last received" one so UI can update this specific entry
-                self.last_slave_config = Some(config);
+                // For UI Update, we push to pending queue so UI knows to update
+                self.pending_slave_configs.push_back(config);
             }
         }
 
@@ -1007,9 +1009,10 @@ mod tests {
         let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
 
         assert_eq!(pending, 1, "Should have pending command (UpdateUi)");
-        assert!(ctx.last_slave_config.is_some());
+        // Check pending queue instead of last_slave_config
+        assert!(ctx.pending_slave_configs.back().is_some());
         assert_eq!(
-            ctx.last_slave_config.as_ref().unwrap().master_account,
+            ctx.pending_slave_configs.back().unwrap().master_account,
             "master1"
         );
 
