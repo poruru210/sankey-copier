@@ -80,11 +80,11 @@ CGridPanel     g_config_panel;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== SankeyCopier Master EA (MT4) Starting ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT4) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
-   Print("Auto-generated AccountID: ", AccountID);
+   LogInfo(CAT_SYSTEM, "Auto-generated AccountID: " + AccountID);
 
    // Generate topics using FFI
    ushort topic_buffer[256];
@@ -98,7 +98,7 @@ int OnInit()
    }
    else
    {
-      Print("ERROR: Failed to build config topic");
+      LogError(CAT_SYSTEM, "Failed to build config topic");
       return INIT_FAILED;
    }
 
@@ -109,18 +109,18 @@ int OnInit()
    }
    else
    {
-      Print("ERROR: Failed to build global config topic");
+      LogError(CAT_SYSTEM, "Failed to build global config topic");
       return INIT_FAILED;
    }
 
-   Print("Generated topics: Config=", g_config_topic, ", VLogs=", g_vlogs_topic);
+   LogInfo(CAT_CONFIG, "Generated topics: Config=" + g_config_topic + ", VLogs=" + g_vlogs_topic);
 
    // Resolve addresses from sankey_copier.ini config file
    // 2-port architecture: PUSH (EA->Server) and SUB (Server->EA, unified)
    g_RelayAddress = GetPushAddress();
    g_ConfigAddress = GetConfigSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
+   LogInfo(CAT_CONFIG, "Resolved addresses: PUSH=" + g_RelayAddress + ", SUB=" + g_ConfigAddress + " (unified)");
 
    // Initialize EaContext (handles ZMQ internally)
    if(!g_ea_context.Initialize(AccountID, EA_TYPE_MASTER, "MT4", GetAccountNumber(), 
@@ -128,28 +128,28 @@ int OnInit()
                                AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
                                AccountInfoInteger(ACCOUNT_LEVERAGE)))
    {
-      Print("Failed to initialize EaContext");
+      LogError(CAT_SYSTEM, "Failed to initialize EaContext");
       return INIT_FAILED;
    }
    
    // Connect to Relay Server
    if(!g_ea_context.Connect(g_RelayAddress, g_ConfigAddress))
    {
-      Print("Failed to connect to Relay Server");
+      LogError(CAT_SYSTEM, "Failed to connect to Relay Server");
       return INIT_FAILED;
    }
 
    // Subscribe to messages for this account ID
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-      Print("Failed to subscribe to config topic");
+      LogError(CAT_SYSTEM, "Failed to subscribe to config topic");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
    if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
    {
-      Print("WARNING: Failed to subscribe to vlogs_config topic");
+      LogWarn(CAT_SYSTEM, "Failed to subscribe to vlogs_config topic");
    }
 
    // Subscribe to sync/{account_id}/ topic for SyncRequest messages from slaves
@@ -158,16 +158,16 @@ int OnInit()
    if(sync_len > 0)
    {
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
-      Print("Generated sync topic prefix: ", g_sync_topic);
+      LogInfo(CAT_SYSTEM, "Generated sync topic prefix: " + g_sync_topic);
       
       if(!g_ea_context.SubscribeConfig(g_sync_topic))
       {
-         Print("WARNING: Failed to subscribe to sync topic");
+         LogWarn(CAT_SYSTEM, "Failed to subscribe to sync topic");
       }
    }
    else
    {
-      Print("WARNING: Failed to generate sync topic prefix");
+      LogWarn(CAT_SYSTEM, "Failed to generate sync topic prefix");
    }
 
    // Scan existing orders
@@ -177,7 +177,7 @@ int OnInit()
    // MT4 lacks OnTradeTransaction, so high-frequency polling via Timer is essential
    int scan_ms = MathMax(100, MathMin(5000, ScanInterval));
    EventSetMillisecondTimer(scan_ms);
-   Print("Timer started: ", scan_ms, "ms interval");
+   LogInfo(CAT_SYSTEM, StringFormat("Timer started: %d ms interval", scan_ms));
 
    // Initialize configuration panel
    if(ShowConfigPanel)
@@ -195,7 +195,7 @@ int OnInit()
    }
 
    g_initialized = true;
-   Print("=== SankeyCopier Master EA (MT4) Initialized ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT4) Initialized ===");
 
    // VictoriaLogs is configured via server-pushed vlogs_config message
    // (no local endpoint parameter needed)
@@ -209,7 +209,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   Print("=== SankeyCopier Master EA (MT4) Stopping ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT4) Stopping ===");
 
    // Flush VictoriaLogs before shutdown
    VLogsFlush();
@@ -236,7 +236,7 @@ void OnDeinit(const int reason)
    // ea_context_free is called by ~EaContextWrapper
 
 
-   Print("=== SankeyCopier Master EA (MT4) Stopped ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT4) Stopped ===");
 }
 
 //+------------------------------------------------------------------+
@@ -283,9 +283,9 @@ void OnTimer()
                     if(req_master == AccountID)
                     {
                         if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
-                            Print("[SYNC] Position snapshot sent to slave: ", req_slave);
+                            LogInfo(CAT_SYNC, "Position snapshot sent to slave: " + req_slave, BuildSyncContext(AccountID, req_slave));
                         else
-                            Print("[ERROR] Failed to send snapshot");
+                            LogError(CAT_SYNC, "Failed to send snapshot to " + req_slave);
                     }
                 }
                break;
@@ -332,25 +332,24 @@ void ProcessMasterConfigMessage(SMasterConfig &config)
 
    if(config_account_id == "")
    {
-      Print("ERROR: Invalid config message received - missing account_id");
+      LogError(CAT_CONFIG, "Invalid config message received - missing account_id");
       return;
    }
 
    // Verify this config is for us
    if(config_account_id != AccountID)
    {
-      Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
+      LogWarn(CAT_CONFIG, "Received config for different account: " + config_account_id + " (expected: " + AccountID + ")");
       return;
    }
 
    // Log configuration update
-   Print("[CONFIG] Received: prefix=", (prefix == "" ? "(none)" : prefix),
-         " suffix=", (suffix == "" ? "(none)" : suffix), " version=", version);
+   LogInfo(CAT_CONFIG, "Received: prefix=" + (prefix == "" ? "(none)" : prefix) + " suffix=" + (suffix == "" ? "(none)" : suffix) + " version=" + IntegerToString(version));
 
    // Update global configuration variables
    if(g_server_status == STATUS_NO_CONFIG)
    {
-      Print("Status is NO_CONFIG -> Resetting configuration");
+      LogInfo(CAT_CONFIG, "Status is NO_CONFIG -> Resetting configuration");
       g_server_status = STATUS_NO_CONFIG;
       g_symbol_prefix = "";
       g_symbol_suffix = "";
@@ -421,11 +420,11 @@ void ScanExistingOrders()
          int ticket = OrderTicket();
          AddTrackedOrder(ticket);
          SendOpenSignalFromOrder(ticket);  // Send Open signal for existing orders
-         Print("[ORDER] Tracking existing: #", ticket, " ", OrderSymbol(), " ", GetOrderTypeString(OrderType()), " ", OrderLots(), " lots");
+         LogTrade("Tracking existing", ticket, OrderSymbol(), StringFormat("%s %.2f lots", GetOrderTypeString(OrderType()), OrderLots()));
       }
    }
 
-   Print("Found ", ArraySize(g_tracked_orders), " existing orders");
+   LogInfo(CAT_SYSTEM, "Found " + IntegerToString(ArraySize(g_tracked_orders)) + " existing orders");
 }
 
 //+------------------------------------------------------------------+
@@ -446,7 +445,7 @@ void CheckForNewOrders()
             string symbol = OrderSymbol();
             AddTrackedOrder(ticket);
             SendOpenSignalFromOrder(ticket);
-            Print("[ORDER] New: #", ticket, " ", symbol, " ", GetOrderTypeString(OrderType()), " ", OrderLots(), " lots @ ", OrderOpenPrice());
+            LogTrade("New Order", ticket, symbol, StringFormat("%s %.2f lots @ %.5f", GetOrderTypeString(OrderType()), OrderLots(), OrderOpenPrice()));
          }
       }
    }
@@ -470,7 +469,7 @@ void CheckForModifiedOrders()
          {
             // Send modify signal
             SendOrderModifySignal(ticket, current_sl, current_tp);
-            Print("[ORDER] Modified: #", ticket, " SL=", current_sl, " TP=", current_tp);
+            LogTrade("Modify Order", ticket, OrderSymbol(), StringFormat("SL: %.5f TP: %.5f", current_sl, current_tp));
 
             // Update tracked values
             g_tracked_orders[i].sl = current_sl;
@@ -499,7 +498,7 @@ void CheckForPartialCloses()
             // Calculate close_ratio: portion that was closed
             double close_ratio = (tracked_lots - current_lots) / tracked_lots;
 
-            Print("[ORDER] Partial close: #", ticket, " ", tracked_lots, " -> ", current_lots, " lots (ratio: ", DoubleToString(close_ratio * 100, 1), "%)");
+            LogTrade("Partial Close", ticket, OrderSymbol(), StringFormat("%.2f -> %.2f lots (ratio: %.1f%%)", tracked_lots, current_lots, close_ratio * 100));
 
             // Send partial close signal
             SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, close_ratio, AccountID);
@@ -541,7 +540,7 @@ void CheckForClosedOrders()
          {
             SendCloseSignal(g_ea_context, (TICKET_TYPE)ticket, 0.0, AccountID);
             RemoveTrackedOrder(ticket);
-            Print("[ORDER] Closed: #", ticket);
+            LogTrade("Closed Order", ticket, "", "");
          }
       }
    }
@@ -557,7 +556,7 @@ void SendOpenSignalFromOrder(int ticket)
       // Try history
       if(!OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY))
       {
-         Print("ERROR: Cannot select order #", ticket);
+         LogError(CAT_SYSTEM, "Cannot select order #" + IntegerToString(ticket));
          return;
       }
    }

@@ -77,11 +77,11 @@ CGridPanel     g_config_panel;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== SankeyCopier Master EA (MT5) Starting ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
-   Print("Auto-generated AccountID: ", AccountID);
+   LogInfo(CAT_SYSTEM, "Auto-generated AccountID: " + AccountID);
 
    // Symbol prefix/suffix are now managed via Web-UI MasterSettings
    // They will be set when config is received from relay-server
@@ -92,12 +92,11 @@ int OnInit()
    // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
    if(!LoadConfig())
    {
-      Print("WARNING: Failed to load config file, using default ports");
+      LogWarn(CAT_CONFIG, "Failed to load config file, using default ports");
    }
    else
    {
-      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(), " (unified)");
+      LogInfo(CAT_CONFIG, "Config loaded: ReceiverPort=" + IntegerToString(GetReceiverPort()) + ", PublisherPort=" + IntegerToString(GetPublisherPort()) + " (unified)");
    }
 
    // Resolve addresses from sankey_copier.ini config file
@@ -105,7 +104,7 @@ int OnInit()
    g_RelayAddress = GetPushAddress();
    g_ConfigAddress = GetConfigSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
+   LogInfo(CAT_CONFIG, "Resolved addresses: PUSH=" + g_RelayAddress + ", SUB=" + g_ConfigAddress + " (unified)");
 
    // Initialize topics using FFI
    ushort topic_buffer[256];
@@ -113,23 +112,23 @@ int OnInit()
    if(len > 0) 
    {
       g_config_topic = ShortArrayToString(topic_buffer);
-      Print("Generated config topic: ", g_config_topic);
+      LogInfo(CAT_CONFIG, "Generated config topic: " + g_config_topic);
    }
    else 
    {
       g_config_topic = AccountID; // Fallback
-      Print("WARNING: Failed to generate config topic, using AccountID fallback: ", g_config_topic);
+      LogWarn(CAT_CONFIG, "Failed to generate config topic, using AccountID fallback: " + g_config_topic);
    }
 
    len = get_global_config_topic(topic_buffer, 256);
    if(len > 0) 
    {
       g_vlogs_topic = ShortArrayToString(topic_buffer);
-      Print("Generated vlogs topic: ", g_vlogs_topic);
+      LogInfo(CAT_SYSTEM, "Generated vlogs topic: " + g_vlogs_topic);
    }
    else 
    {
-      Print("CRITICAL: Failed to generate vlogs topic from mt-bridge");
+      LogError(CAT_SYSTEM, "Failed to generate vlogs topic from mt-bridge");
       return INIT_FAILED;
    }
 
@@ -138,7 +137,7 @@ int OnInit()
                                GetBrokerName(), GetAccountName(), GetServerName(), 
                                GetAccountCurrency(), GetAccountLeverage()))
    {
-      Print("[ERROR] Failed to initialize EA Context");
+      LogError(CAT_SYSTEM, "Failed to initialize EA Context");
       return INIT_FAILED;
    }
    
@@ -146,7 +145,7 @@ int OnInit()
    // This creates and manages the sockets internally within the Rust context
    if(!g_ea_context.Connect(g_RelayAddress, g_ConfigAddress))
    {
-       Print("[ERROR] Failed to connect via EA Context");
+       LogError(CAT_SYSTEM, "Failed to connect via EA Context");
        // Note: Depending on FFI implementation, Connect might return success even if immediate connection fails,
        // but if it returns false here, it's a critical setup error.
        return INIT_FAILED;
@@ -155,14 +154,14 @@ int OnInit()
    // Subscribe to config messages for this account ID
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-      Print("[ERROR] Failed to subscribe to config topic");
+      LogError(CAT_SYSTEM, "Failed to subscribe to config topic");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
    if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
    {
-      Print("WARNING: Failed to subscribe to vlogs_config topic");
+      LogWarn(CAT_SYSTEM, "Failed to subscribe to vlogs_config topic");
    }
 
    // Subscribe to sync/{account_id}/ topic for SyncRequest messages from slaves
@@ -171,18 +170,18 @@ int OnInit()
    if(sync_len > 0)
    {
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
-      Print("Generated sync topic prefix: ", g_sync_topic);
+      LogInfo(CAT_SYSTEM, "Generated sync topic prefix: " + g_sync_topic);
       
       // Note: sync_topic is a PREFIX filter in Rust/ZMQ, subscribing to it receives all subtopics?
       // ZMQ usually matches prefix. So subscribing to "sync/{account_id}/" should work.
       if(!g_ea_context.SubscribeConfig(g_sync_topic))
       {
-         Print("WARNING: Failed to subscribe to sync topic");
+         LogWarn(CAT_SYSTEM, "Failed to subscribe to sync topic");
       }
    }
    else
    {
-      Print("WARNING: Failed to generate sync topic prefix");
+      LogWarn(CAT_SYSTEM, "Failed to generate sync topic prefix");
    }
 
    // Scan existing positions and orders
@@ -196,7 +195,7 @@ int OnInit()
    // and allows for faster polling than 1 second if needed.
    int scan_ms = MathMax(100, MathMin(5000, ScanInterval));
    EventSetMillisecondTimer(scan_ms);
-   Print(StringFormat("Timer started: %d ms interval", scan_ms));
+   LogInfo(CAT_SYSTEM, StringFormat("Timer started: %d ms interval", scan_ms));
 
    // Initialize configuration panel
    if(ShowConfigPanel)
@@ -211,7 +210,7 @@ int OnInit()
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
    }
 
-   Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Initialized ===");
 
    // VictoriaLogs is configured via server-pushed vlogs_config message
    // (no local endpoint parameter needed)
@@ -248,7 +247,7 @@ void OnDeinit(const int reason)
    // Managed by EaContextWrapper destructor
    // CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
 
-   Print("=== SankeyCopier Master EA (MT5) Stopped ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Stopped ===");
 }
 
 //+------------------------------------------------------------------+
@@ -307,27 +306,27 @@ void OnTimer()
                         // Send the snapshot
                         if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                         {
-                             Print("[SYNC] Position snapshot sent to slave: ", req_slave);
+                             LogInfo(CAT_SYNC, "Position snapshot sent to slave: " + req_slave, BuildSyncContext(AccountID, req_slave));
                         }
                         else
                         {
-                             Print("[ERROR] Failed to send position snapshot to slave: ", req_slave);
+                             LogError(CAT_SYNC, "Failed to send position snapshot to slave: " + req_slave);
                         }
                    }
                    else
                    {
-                        Print(StringFormat("[ERROR] SyncRequest Master Mismatch. Req: '%s', Self: '%s'", req_master, AccountID));
+                        LogError(CAT_SYNC, StringFormat("SyncRequest Master Mismatch. Req: '%s', Self: '%s'", req_master, AccountID));
                    }
                }
                else
                {
                     // Fallback: Use comment if struct retrieval fails (should not happen if Rust logic works)
                     string slave_account = CharArrayToString(cmd.comment);
-                    Print("[WARNING] GetSyncRequest failed, using comment for slave account: ", slave_account);
+                    LogWarn(CAT_SYNC, "GetSyncRequest failed, using comment for slave account: " + slave_account);
                     
                     if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                     {
-                         Print("[SYNC] Position snapshot sent to slave: ", slave_account);
+                         LogInfo(CAT_SYNC, "Position snapshot sent to slave: " + slave_account, BuildSyncContext(AccountID, slave_account));
                     }
                }
                break;
@@ -404,7 +403,7 @@ void PerformTradeScan()
                      current_sl != g_tracked_orders[j].sl ||
                      current_tp != g_tracked_orders[j].tp)
                   {
-                     Print(StringFormat("[ORDER MODIFY DETECTED] Ticket: %d", ticket));
+                     LogTrade("Modify Order", ticket, OrderGetString(ORDER_SYMBOL), "");
                      SendOrderModifySignal(ticket);
                      g_tracked_orders[j].price = current_price;
                      g_tracked_orders[j].sl = current_sl;
@@ -419,7 +418,7 @@ void PerformTradeScan()
                string symbol = OrderGetString(ORDER_SYMBOL);
                SendOrderOpenSignal(ticket);
                AddTrackedOrder(ticket);
-               Print("[ORDER] New: #", ticket, " ", symbol);
+               LogTrade("New Order", ticket, symbol, GetOrderTypeString(type));
             }
          }
       }
@@ -456,7 +455,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          string symbol = PositionGetString(POSITION_SYMBOL);
          SendPositionOpenSignal(trans.position);
          AddTrackedPosition(trans.position);
-         Print("[POSITION] New: #", trans.position, " ", symbol);
+         LogTrade("New Position", trans.position, symbol, "");
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
@@ -500,8 +499,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
             if(MathAbs(current_sl - g_tracked_positions[index].sl) > Point() || 
                MathAbs(current_tp - g_tracked_positions[index].tp) > Point())
             {
-               Print(StringFormat("[MODIFY EVENT] Ticket: %d, SL: %.5f -> %.5f, TP: %.5f -> %.5f", 
-                                  trans.position, g_tracked_positions[index].sl, current_sl, g_tracked_positions[index].tp, current_tp));
+               LogTrade("Modify Position", trans.position, PositionGetString(POSITION_SYMBOL), StringFormat("SL: %.5f -> %.5f, TP: %.5f -> %.5f", g_tracked_positions[index].sl, current_sl, g_tracked_positions[index].tp, current_tp));
 
                SendPositionModifySignal(trans.position, current_sl, current_tp);
                

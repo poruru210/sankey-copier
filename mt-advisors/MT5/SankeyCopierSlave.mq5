@@ -74,11 +74,11 @@ int            g_last_config_count = -1;         // Debug: track config count ch
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== SankeyCopier Slave EA (MT5) Starting ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Slave EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
-   Print("Auto-generated AccountID: ", AccountID);
+   LogInfo(CAT_SYSTEM, "Auto-generated AccountID: " + AccountID);
 
    // Symbol transformation is now handled by Relay Server
    // Slave EA receives pre-transformed symbols
@@ -87,12 +87,11 @@ int OnInit()
    // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
    if(!LoadConfig())
    {
-      Print("WARNING: Failed to load config file, using default ports");
+      LogWarn(CAT_CONFIG, "Failed to load config file, using default ports");
    }
    else
    {
-      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(), " (unified)");
+      LogInfo(CAT_CONFIG, "Config loaded: ReceiverPort=" + IntegerToString(GetReceiverPort()) + ", PublisherPort=" + IntegerToString(GetPublisherPort()) + " (unified)");
    }
 
    // Resolve addresses from sankey_copier.ini config file
@@ -100,7 +99,7 @@ int OnInit()
    g_RelayAddress = GetPushAddress();
    g_SubAddress = GetTradeSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_SubAddress, " (unified)");
+   LogInfo(CAT_CONFIG, "Resolved addresses: PUSH=" + g_RelayAddress + ", SUB=" + g_SubAddress + " (unified)");
 
    // Initialize topics using FFI
    ushort topic_buffer[256];
@@ -108,23 +107,23 @@ int OnInit()
    if(len > 0) 
    {
       g_config_topic = ShortArrayToString(topic_buffer);
-      Print("Generated config topic: ", g_config_topic);
+      LogInfo(CAT_CONFIG, "Generated config topic: " + g_config_topic);
    }
    else 
    {
       g_config_topic = AccountID; // Fallback
-      Print("WARNING: Failed to generate config topic, using AccountID fallback: ", g_config_topic);
+      LogWarn(CAT_CONFIG, "Failed to generate config topic, using AccountID fallback: " + g_config_topic);
    }
 
    len = get_global_config_topic(topic_buffer, 256);
    if(len > 0) 
    {
       g_vlogs_topic = ShortArrayToString(topic_buffer);
-      Print("Generated vlogs topic: ", g_vlogs_topic);
+      LogInfo(CAT_SYSTEM, "Generated vlogs topic: " + g_vlogs_topic);
    }
    else 
    {
-      Print("CRITICAL: Failed to generate vlogs topic from mt-bridge");
+      LogError(CAT_SYSTEM, "Failed to generate vlogs topic from mt-bridge");
       return INIT_FAILED;
    }
 
@@ -134,28 +133,28 @@ int OnInit()
                                AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
                                AccountInfoInteger(ACCOUNT_LEVERAGE)))
    {
-      Print("Failed to initialize EaContext");
+      LogError(CAT_SYSTEM, "Failed to initialize EaContext");
       return INIT_FAILED;
    }
 
    // Connect to Relay Server
    if(!g_ea_context.Connect(g_RelayAddress, g_SubAddress))
    {
-      Print("Failed to connect to Relay Server");
+      LogError(CAT_SYSTEM, "Failed to connect to Relay Server");
       return INIT_FAILED;
    }
    
    // Subscribe to global sync and my config topics
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-       Print("Failed to subscribe to config topic: ", g_config_topic);
+       LogWarn(CAT_SYSTEM, "Failed to subscribe to config topic: " + g_config_topic);
    }
    if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
    {
-       Print("Failed to subscribe to vlogs topic: ", g_vlogs_topic);
+       LogWarn(CAT_SYSTEM, "Failed to subscribe to vlogs topic: " + g_vlogs_topic);
    }
 
-   Print("EaContext initialized and connected");
+   LogInfo(CAT_SYSTEM, "EaContext initialized and connected");
    g_initialized = true;
 
    g_trade.SetExpertMagicNumber(0);
@@ -166,11 +165,11 @@ int OnInit()
    int recovered = RecoverMappingsFromPositions(g_order_map, g_pending_order_map);
    if(recovered > 0)
    {
-      Print("Recovered ", recovered, " position mappings from previous session");
+      LogInfo(CAT_SYSTEM, "Recovered " + IntegerToString(recovered) + " position mappings from previous session");
    }
    else
    {
-      Print("No previous position mappings to recover (fresh start)");
+      LogInfo(CAT_SYSTEM, "No previous position mappings to recover (fresh start)");
    }
 
    // Initialize configuration arrays
@@ -180,7 +179,7 @@ int OnInit()
    // Also handles heartbeat (every HEARTBEAT_INTERVAL_SECONDS) and config messages
    int interval_ms = MathMax(100, MathMin(5000, SignalPollingIntervalMs));
    EventSetMillisecondTimer(interval_ms);
-   Print("Signal polling interval: ", interval_ms, "ms");
+   LogInfo(CAT_SYSTEM, StringFormat("Signal polling interval: %dms", interval_ms));
 
    // Initialize configuration panel (Grid Panel)
    if(ShowConfigPanel)
@@ -363,7 +362,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    ulong position_ticket = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
    if(position_ticket == 0)
    {
-      Print("WARNING: Deal ", deal_ticket, " has no position ID");
+      LogWarn(CAT_TRADE, "Deal " + IntegerToString(deal_ticket) + " has no position ID");
       return;
    }
 
@@ -371,7 +370,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    RemovePendingTicketMapping(g_pending_order_map, master_ticket);
    AddTicketMapping(g_order_map, master_ticket, position_ticket);
 
-   Print("[PENDING FILL] Order #", order_ticket, " -> Position #", position_ticket, " (master:#", master_ticket, ")");
+   LogTrade("Pending Fill", (long)order_ticket, "", StringFormat("-> Position #%d (master:#%d)", position_ticket, master_ticket));
 }
 
 //+------------------------------------------------------------------+
@@ -471,21 +470,21 @@ void SubscribeToSyncTopic()
    if(sync_len > 0)
    {
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
-      Print("Generated sync topic: ", g_sync_topic);
+      LogInfo(CAT_SYSTEM, "Generated sync topic: " + g_sync_topic);
       
       if(g_ea_context.SubscribeConfig(g_sync_topic))
       {
-         Print("Subscribed to sync topic: ", g_sync_topic);
+         LogInfo(CAT_SYSTEM, "Subscribed to sync topic: " + g_sync_topic);
          // g_sync_topic_subscribed = true; // Removed global bool usage
       }
       else
       {
-         Print("WARNING: Failed to subscribe to sync topic: ", g_sync_topic);
+         LogWarn(CAT_SYSTEM, "Failed to subscribe to sync topic: " + g_sync_topic);
       }
    }
    else
    {
-      Print("WARNING: Failed to generate sync topic");
+      LogWarn(CAT_SYSTEM, "Failed to generate sync topic");
    }
 }
 
@@ -495,17 +494,17 @@ void SubscribeToSyncTopic()
 //+------------------------------------------------------------------+
 void ProcessPositionSnapshot(SPositionInfo &positions[])
 {
-   Print("=== Processing Position Snapshot ===");
+   LogInfo(CAT_SYNC, "=== Processing Position Snapshot ===");
 
    // Get source account (master)
    string source_account = g_ea_context.GetPositionSnapshotSourceAccount();
    if(source_account == "")
    {
-      Print("ERROR: PositionSnapshot has empty source_account");
+      LogError(CAT_SYNC, "PositionSnapshot has empty source_account");
       return;
    }
 
-   Print("PositionSnapshot from master: ", source_account);
+   LogInfo(CAT_SYNC, "PositionSnapshot from master: " + source_account);
 
    // Find matching config for this master
    int config_index = -1;
@@ -520,7 +519,7 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
 
    if(config_index == -1)
    {
-      Print("PositionSnapshot rejected: No config for master ", source_account);
+      LogWarn(CAT_SYNC, "PositionSnapshot rejected: No config for master " + source_account);
       return;
    }
 
@@ -528,7 +527,7 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
    int sync_mode = g_configs[config_index].sync_mode;
    if(sync_mode == SYNC_MODE_SKIP)
    {
-      Print("PositionSnapshot ignored: sync_mode is SKIP");
+      LogInfo(CAT_SYNC, "PositionSnapshot ignored: sync_mode is SKIP");
       return;
    }
 
@@ -539,15 +538,15 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
                         ? g_configs[config_index].max_slippage
                         : DEFAULT_SLIPPAGE;
 
-   Print("Sync mode: ", (sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER");
+   LogInfo(CAT_SYNC, "Sync mode: " + ((sync_mode == SYNC_MODE_LIMIT_ORDER) ? "LIMIT_ORDER" : "MARKET_ORDER"));
    if(sync_mode == SYNC_MODE_LIMIT_ORDER)
-      Print("Limit order expiry: ", limit_order_expiry, " min (0=GTC)");
+      LogInfo(CAT_SYNC, "Limit order expiry: " + IntegerToString(limit_order_expiry) + " min (0=GTC)");
    else
-      Print("Market sync max pips: ", market_sync_max_pips);
+      LogInfo(CAT_SYNC, "Market sync max pips: " + DoubleToString(market_sync_max_pips, 1));
 
    // Get position count
    int position_count = ArraySize(positions);
-   Print("Positions to sync: ", position_count);
+   LogInfo(CAT_SYNC, "Positions to sync: " + IntegerToString(position_count));
 
    int synced_count = 0;
    int skipped_count = 0;
@@ -565,7 +564,6 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
       // In FFI logic I added earlier for `ea_send_position_snapshot` (Master -> Rust), I converted int to String.
       // Now Slave <- Rust (ea_context_get_position_snapshot), we need to check how FFI implements it.
       // ffi.rs `ea_context_get_position_snapshot` maps logic.
-      // Let's re-verify `ea_context_get_position_snapshot` in `ffi.rs`.
       // It populates `CPositionInfo`.
       // The `CPositionInfo` in Rust `ffi.rs` sets `order_type: i32` by parsing the string stored in Rust `PositionInfo`.
       // So `CPositionInfo.order_type` is `i32` (Enum value).
@@ -584,13 +582,12 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
       long magic_long = positions[i].magic_number;
       int magic_number = (int)magic_long;
 
-      Print("Position ", i + 1, "/", position_count, ": #", master_ticket,
-            " ", symbol, " ", order_type_str, " ", lots, " lots @ ", open_price);
+      LogInfo(CAT_SYNC, StringFormat("Position %d/%d: #%d %s %s %.2f lots @ %.5f", i + 1, position_count, master_ticket, symbol, order_type_str, lots, open_price));
 
       // Check if we already have this position mapped
       if(GetSlaveTicketFromMapping(g_order_map, (ulong)master_ticket) > 0)
       {
-         Print("  -> Already mapped, skipping");
+         LogInfo(CAT_SYNC, "  -> Already mapped, skipping");
          skipped_count++;
          continue;
       }
@@ -632,13 +629,13 @@ void ProcessPositionSnapshot(SPositionInfo &positions[])
          }
          else
          {
-            Print("  -> Price deviation too large, skipped");
+            LogWarn(CAT_SYNC, "  -> Price deviation too large, skipped");
             skipped_count++;
          }
       }
    }
 
-   Print("=== Position Sync Complete: ", synced_count, " synced, ", skipped_count, " skipped ===");
+   LogInfo(CAT_SYNC, StringFormat("=== Position Sync Complete: %d synced, %d skipped ===", synced_count, skipped_count));
 }
 
 // Trade functions are now provided by SlaveTrade.mqh

@@ -54,15 +54,27 @@ int GetLogLevelNum(string level)
 }
 
 //+------------------------------------------------------------------+
-//| Set the minimum log level                                        |
-//| Messages below this level will be silently ignored                |
-//| Parameters:                                                       |
-//|   level - LOG_DEBUG, LOG_INFO, LOG_WARN, or LOG_ERROR            |
+//| Set the minimum log level (numeric)                              |
+//+------------------------------------------------------------------+
+void SetLogLevel(int level)
+{
+   g_log_level = level;
+   // Map back to string for display consistency
+   string level_str = "UNKNOWN";
+   if (level == LOG_LEVEL_DEBUG) level_str = LOG_DEBUG;
+   else if (level == LOG_LEVEL_INFO) level_str = LOG_INFO;
+   else if (level == LOG_LEVEL_WARN) level_str = LOG_WARN;
+   else if (level == LOG_LEVEL_ERROR) level_str = LOG_ERROR;
+   
+   Print("[INFO] [SYSTEM] Log level set to: ", level_str, " (", level, ")");
+}
+
+//+------------------------------------------------------------------+
+//| Set the minimum log level (string wrapper)                       |
 //+------------------------------------------------------------------+
 void VLogsSetLevel(string level)
 {
-   g_log_level = GetLogLevelNum(level);
-   Print("[VLOGS] Log level set to: ", level);
+   SetLogLevel(GetLogLevelNum(level));
 }
 
 //+------------------------------------------------------------------+
@@ -91,12 +103,12 @@ void VLogsInit(string endpoint, string source, int flush_interval_sec = 5)
       g_vlogs_enabled = true;
       g_flush_interval_sec = flush_interval_sec;
       g_last_flush = TimeLocal();
-      Print("[VLOGS] Configured: endpoint=", endpoint, ", source=", source);
+      Print("[INFO] [SYSTEM] VLogs Configured: endpoint=", endpoint, ", source=", source);
    }
    else
    {
       g_vlogs_enabled = false;
-      Print("[VLOGS] Failed to configure VictoriaLogs");
+      Print("[ERROR] [SYSTEM] Failed to configure VictoriaLogs");
    }
 }
 
@@ -116,7 +128,8 @@ void VLog(string level, string category, string message, string context = "")
    int level_num = GetLogLevelNum(level);
    if(level_num < g_log_level) return;
 
-   // Print locally with prefix (consistent with existing log format)
+   // Print locally with prefix (consistent with standardized log format)
+   // Format: [Level] [Category] Message
    Print("[", level, "] [", category, "] ", message);
 
    // Send to VictoriaLogs if enabled
@@ -154,6 +167,16 @@ void LogWarn(string category, string message, string context = "")
 void LogError(string category, string message, string context = "")
 {
    VLog(LOG_ERROR, category, message, context);
+}
+
+//+------------------------------------------------------------------+
+//| Log trade event (Standardized helper)                             |
+//+------------------------------------------------------------------+
+void LogTrade(string action, long ticket, string symbol, string details)
+{
+   string msg = StringFormat("%s: #%d %s %s", action, ticket, symbol, details);
+   string context = BuildTradeContext(ticket, symbol);
+   LogInfo(CAT_TRADE, msg, context);
 }
 
 //+------------------------------------------------------------------+
@@ -259,7 +282,7 @@ bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_
 {
    if(config_handle == 0)
    {
-      Print("[VLOGS] Invalid config handle");
+      LogError(CAT_SYSTEM, "Invalid vlogs config handle");
       return false;
    }
 
@@ -287,20 +310,17 @@ bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_
          if(log_level != "")
          {
             g_log_level = GetLogLevelNum(log_level);
-            Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
-                  ", source=", source, ", flush_interval=", g_flush_interval_sec, "s",
-                  ", log_level=", log_level);
+            LogInfo(CAT_SYSTEM, "VLogs Enabled via server: endpoint=" + endpoint + ", source=" + source + ", flush=" + IntegerToString(g_flush_interval_sec) + "s, level=" + log_level);
          }
          else
          {
-            Print("[VLOGS] Enabled via server config: endpoint=", endpoint,
-                  ", source=", source, ", flush_interval=", g_flush_interval_sec, "s");
+            LogInfo(CAT_SYSTEM, "VLogs Enabled via server: endpoint=" + endpoint + ", source=" + source + ", flush=" + IntegerToString(g_flush_interval_sec) + "s");
          }
          return true;
       }
       else
       {
-         Print("[VLOGS] Failed to configure VictoriaLogs from server settings");
+         LogError(CAT_SYSTEM, "Failed to configure VictoriaLogs from server settings");
          g_vlogs_enabled = false;
          return false;
       }
@@ -310,7 +330,7 @@ bool VLogsApplyConfig(HANDLE_TYPE config_handle, string ea_type, string account_
       // Disable VictoriaLogs
       if(g_vlogs_enabled)
       {
-         Print("[VLOGS] Disabled by server config");
+         LogInfo(CAT_SYSTEM, "VLogs Disabled by server config");
       }
       g_vlogs_enabled = false;
       vlogs_disable();
