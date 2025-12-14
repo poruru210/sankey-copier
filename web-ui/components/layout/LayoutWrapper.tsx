@@ -8,7 +8,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { AppBreadcrumb } from './AppBreadcrumb';
-import { ServerLog } from './ServerLog';
+import { ServerLog } from '@/components/features/server-log/ServerLog';
 import { ServerLogProvider } from '@/lib/contexts/sidebar-context';
 import { Separator } from '@/components/ui/separator';
 
