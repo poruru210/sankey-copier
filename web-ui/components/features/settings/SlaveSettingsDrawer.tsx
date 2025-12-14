@@ -4,7 +4,7 @@
 // Opens from MasterSettingsDrawer when user clicks on a slave in the list
 // Allows editing of slave-specific copy settings
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '@/components/ui/drawer';
@@ -44,6 +44,16 @@ export function SlaveSettingsDrawer({
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   const [formData, setFormData] = useState<SlaveSettingsFormData>({
     lot_calculation_mode: 'multiplier',
@@ -118,16 +128,16 @@ export function SlaveSettingsDrawer({
       // Convert comma-separated mappings back to array format
       const symbolMappings = formData.symbol_mappings
         ? formData.symbol_mappings.split(',').map(pair => {
-            const [source, target] = pair.split('=').map(s => s.trim());
-            return { source_symbol: source, target_symbol: target };
-          }).filter(m => m.source_symbol && m.target_symbol)
+          const [source, target] = pair.split('=').map(s => s.trim());
+          return { source_symbol: source, target_symbol: target };
+        }).filter(m => m.source_symbol && m.target_symbol)
         : [];
 
       // Convert comma-separated magic numbers to array format
       const allowedMagicNumbers = formData.allowed_magic_numbers
         ? formData.allowed_magic_numbers.split(',')
-            .map(s => parseInt(s.trim(), 10))
-            .filter(n => !isNaN(n))
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n))
         : null;
 
       const settings: SlaveSettings = {
@@ -160,7 +170,7 @@ export function SlaveSettingsDrawer({
       setMessage({ type: 'success', text: content.settingsSavedSuccess.value });
 
       // Notify parent and close after short delay
-      setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         onSaved?.();
         onOpenChange(false);
       }, 1000);

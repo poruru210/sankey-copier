@@ -4,7 +4,7 @@
 // Opens when user clicks on a Master node in the connections view
 // Contains symbol_prefix and symbol_suffix settings for the Master EA
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '@/components/ui/drawer';
@@ -52,6 +52,16 @@ export function MasterSettingsDrawer({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     symbol_prefix: '',
@@ -124,7 +134,7 @@ export function MasterSettingsDrawer({
       setMessage({ type: 'success', text: content.settingsSavedSuccess.value });
 
       // Close after short delay
-      setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         onOpenChange(false);
       }, 1000);
     } catch (err) {
@@ -326,7 +336,7 @@ export function MasterSettingsDrawer({
           if (apiClient) {
             apiClient.listTradeGroupMembers(masterAccount)
               .then(data => setMembers(data || []))
-              .catch(() => {});
+              .catch(() => { });
           }
         }}
       />

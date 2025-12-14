@@ -47,8 +47,8 @@ export default function Home() {
 
   return (
     <div className="h-full bg-background relative overflow-hidden flex flex-col">
-      {/* Particles Background */}
-      <ParticlesBackground />
+      {/* Particles Background - disabled for performance testing */}
+      {/* <ParticlesBackground /> */}
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-col overflow-y-auto h-full">

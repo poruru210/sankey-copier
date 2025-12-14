@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio, Globe, Plus, Trash2, Edit2 } from 'lucide-react';
+import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio, Globe, Plus, Trash2, Edit2, FileText } from 'lucide-react';
 import { useAtom } from 'jotai';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
 import { useZeromqConfig } from '@/hooks/useZeromqConfig';
@@ -396,6 +396,43 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* === Section 2: Global System Logging === */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                <CardTitle>{content.logging.title}</CardTitle>
+              </div>
+              <CardDescription>{content.logging.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Log Level Selector */}
+              <div className="space-y-2">
+                <Label htmlFor="global-loglevel">{content.logging.logLevel}</Label>
+                <div className="flex items-center gap-4">
+                  <Select
+                    value={config?.log_level || 'INFO'}
+                    onValueChange={(value) => handleUpdateVLogs({ log_level: value })}
+                    disabled={updating}
+                  >
+                    <SelectTrigger id="global-loglevel" className="w-[180px]">
+                      <SelectValue placeholder="Select log level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DEBUG">{content.logging.levelDebug}</SelectItem>
+                      <SelectItem value="INFO">{content.logging.levelInfo}</SelectItem>
+                      <SelectItem value="WARN">{content.logging.levelWarn}</SelectItem>
+                      <SelectItem value="ERROR">{content.logging.levelError}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground flex-1">
+                    {content.logging.logLevelDescription}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* === Section 3: VictoriaLogs Settings === */}
           {configured ? (
             <Card>
@@ -437,31 +474,6 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => handleUpdateVLogs({ enabled: checked })}
                     disabled={updating}
                   />
-                </div>
-
-                {/* Log Level Selector */}
-                <div className="space-y-2">
-                  <Label htmlFor="vlogs-loglevel">{content.vlogs.logLevel}</Label>
-                  <div className="flex items-center gap-4">
-                    <Select
-                      value={config?.log_level || 'INFO'}
-                      onValueChange={(value) => handleUpdateVLogs({ log_level: value })}
-                      disabled={!enabled || updating}
-                    >
-                      <SelectTrigger id="vlogs-loglevel" className="w-[180px]">
-                        <SelectValue placeholder="Select log level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DEBUG">{content.vlogs.levelDebug}</SelectItem>
-                        <SelectItem value="INFO">{content.vlogs.levelInfo}</SelectItem>
-                        <SelectItem value="WARN">{content.vlogs.levelWarn}</SelectItem>
-                        <SelectItem value="ERROR">{content.vlogs.levelError}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-muted-foreground flex-1">
-                      {content.vlogs.logLevelDescription}
-                    </p>
-                  </div>
                 </div>
 
                 {/* Read-only info alert */}

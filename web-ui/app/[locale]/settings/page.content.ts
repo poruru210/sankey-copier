@@ -211,17 +211,28 @@ const settingsPageContent = {
         en: 'VictoriaLogs integration is enabled. Logs are being sent to the configured endpoint.',
         ja: 'VictoriaLogs連携が有効です。ログは設定されたエンドポイントに送信されています。',
       }),
+    },
+    // Global Logging section
+    logging: {
+      title: t({
+        en: 'System Logging',
+        ja: 'システムログ設定',
+      }),
+      description: t({
+        en: 'Configure global logging verbosity for all components (Relay Server & EAs).',
+        ja: 'すべてのコンポーネント（リレーサーバーおよびEA）のログ詳細度を設定します。',
+      }),
       logLevel: t({
         en: 'Log Level',
         ja: 'ログレベル',
       }),
       logLevelDescription: t({
-        en: 'Minimum level of logs to send to VictoriaLogs',
-        ja: 'VictoriaLogsに送信する最小ログレベル',
+        en: 'Controls the verbosity of logs for both local expert output and VictoriaLogs export',
+        ja: 'エキスパートログ出力およびVictoriaLogs送信の両方に適用されるログレベル',
       }),
       levelDebug: t({
         en: 'DEBUG',
-        ja: 'DEBUG (デバッグ)',
+        ja: 'DEBUG (デバッグ - 全て)',
       }),
       levelInfo: t({
         en: 'INFO',

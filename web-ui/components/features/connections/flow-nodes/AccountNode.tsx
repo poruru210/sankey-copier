@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { isEqual } from 'lodash-es';
 import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
 import { AccountNodeContent } from '@/components/connections/AccountNodeContent';
@@ -67,6 +68,40 @@ export type AccountNodeType = Node<AccountNodeData & Record<string, unknown>, 'a
  * Drag behavior: The node is draggable by clicking on the header area.
  * Interactive elements (switches, buttons) have the 'noDrag' class to prevent dragging.
  */
+// Custom comparison function for memoization
+// Prevents re-renders when deep values remain the same even if object references change
+// This is critical because useFlowData recreates account objects on every WebSocket update (3s)
+function arePropsEqual(prevProps: NodeProps<AccountNodeType>, nextProps: NodeProps<AccountNodeType>) {
+  // Check selection state first (cheap)
+  if (prevProps.selected !== nextProps.selected) return false;
+
+  const prevData = prevProps.data;
+  const nextData = nextProps.data;
+
+  // 1. Account Info (Deep compare most critical data)
+  if (!isEqual(prevData.account, nextData.account)) return false;
+
+  // 2. Connection Info
+  if (!isEqual(prevData.connection, nextData.connection)) return false;
+
+  // 3. Settings
+  if (!isEqual(prevData.accountSettings, nextData.accountSettings)) return false;
+
+  // 4. UI States (Simple values)
+  if (prevData.isHighlighted !== nextData.isHighlighted) return false;
+  if (prevData.hoveredSourceId !== nextData.hoveredSourceId) return false;
+  if (prevData.hoveredReceiverId !== nextData.hoveredReceiverId) return false;
+  if (prevData.selectedSourceId !== nextData.selectedSourceId) return false;
+  if (prevData.isMobile !== nextData.isMobile) return false;
+  if (prevData.isTogglePending !== nextData.isTogglePending) return false;
+
+  // 5. Function references (Should be stable if useCallback is used upstream)
+  // If upstream functions change, we probably want to re-render, but usually they are stable.
+  // We skip comparing functions here assuming they are memoized or don't trigger visual changes alone.
+
+  return true;
+}
+
 export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>) => {
   const { type, isMobile, account } = data;
 
@@ -74,8 +109,8 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
   const handleColorClass = account.hasWarning
     ? '!bg-yellow-500'  // Auto-trading OFF
     : account.isActive
-    ? '!bg-green-500'   // Active (ready for trading)
-    : '!bg-gray-300';   // Inactive or disabled
+      ? '!bg-green-500'   // Active (ready for trading)
+      : '!bg-gray-300';   // Inactive or disabled
 
   return (
     <div
@@ -134,6 +169,6 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
       />
     </div>
   );
-});
+}, arePropsEqual);
 
 AccountNode.displayName = 'AccountNode';

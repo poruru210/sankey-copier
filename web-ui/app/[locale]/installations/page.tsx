@@ -3,7 +3,7 @@
 // Installations page - displays MT4/MT5 installations and allows component installation
 // Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
 
-import { useEffect, useState, useOptimistic, useTransition } from 'react';
+import { useEffect, useState, useOptimistic, useTransition, useRef } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { useMtInstallations } from '@/hooks/useMtInstallations';
@@ -23,6 +23,17 @@ export default function InstallationsPage() {
   const { installations, loading, error, installing, fetchInstallations, installToMt } = useMtInstallations();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
   const [isPending, startTransition] = useTransition();
   const [optimisticInstallations, setOptimisticInstallations] = useOptimistic(
     installations,
@@ -63,7 +74,8 @@ export default function InstallationsPage() {
     }
 
     // Clear message after 5 seconds
-    setTimeout(() => setMessage(null), 5000);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setMessage(null), 5000);
   };
 
   const handleBatchInstall = async () => {
@@ -112,7 +124,8 @@ export default function InstallationsPage() {
       });
     }
 
-    setTimeout(() => setMessage(null), 5000);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setMessage(null), 5000);
   };
 
   const toggleSelection = (id: string) => {
