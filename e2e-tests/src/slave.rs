@@ -21,8 +21,8 @@ use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
-    EaType, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal, UnregisterMessage,
-    VLogsConfigMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, GlobalConfigMessage, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal,
+    UnregisterMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
 // =============================================================================
@@ -49,7 +49,7 @@ struct SlaveEaCore {
     _g_register_sent: Arc<AtomicBool>,
     received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
 
     _subscribed_masters: Arc<Mutex<Vec<String>>>,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
@@ -187,6 +187,10 @@ impl ExpertAdvisor for SlaveEaCore {
                                 .store(cfg.status, Ordering::SeqCst);
                             unsafe { ea_context_mark_config_requested(ctx) };
                         }
+                        // Also check for global config updates
+                        if let Some(cfg) = wrapper.get_global_config() {
+                            self._received_vlogs_configs.lock().unwrap().push(cfg);
+                        }
                     }
                     EaCommandType::ProcessSnapshot => {
                         let snapshots = wrapper.get_position_snapshot();
@@ -305,7 +309,7 @@ pub struct SlaveEaSimulator {
     // --- Received Data Queues (Verification) ---
     received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
 
     // --- Subscription Management ---
     subscribed_masters: Arc<Mutex<Vec<String>>>,
@@ -616,7 +620,7 @@ impl SlaveEaSimulator {
         Ok(())
     }
 
-    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
+    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<GlobalConfigMessage>> {
         let start = std::time::Instant::now();
         while start.elapsed().as_millis() < timeout_ms as u128 {
             let mut lock = self.received_vlogs_configs.lock().unwrap();

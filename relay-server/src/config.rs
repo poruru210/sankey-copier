@@ -174,6 +174,9 @@ pub struct VictoriaLogsConfig {
     /// Source identifier for logs
     #[serde(default = "default_vlogs_source")]
     pub source: String,
+    /// Minimum log level to send (DEBUG, INFO, WARN, ERROR)
+    #[serde(default = "default_vlogs_log_level")]
+    pub log_level: String,
 }
 
 impl VictoriaLogsConfig {
@@ -203,6 +206,10 @@ fn default_vlogs_source() -> String {
     "relay-server".to_string()
 }
 
+fn default_vlogs_log_level() -> String {
+    "INFO".to_string()
+}
+
 impl Default for VictoriaLogsConfig {
     fn default() -> Self {
         Self {
@@ -211,6 +218,7 @@ impl Default for VictoriaLogsConfig {
             batch_size: default_vlogs_batch_size(),
             flush_interval_secs: default_vlogs_flush_interval(),
             source: default_vlogs_source(),
+            log_level: default_vlogs_log_level(),
         }
     }
 }
@@ -416,7 +424,7 @@ pub fn resolve_writable_config_path<P: AsRef<Path>>(base_name: P) -> String {
     }
 }
 
-/// Update VictoriaLogs enabled setting in the appropriate config file.
+/// Update VictoriaLogs settings in the appropriate config file.
 ///
 /// Automatically resolves the correct config file based on `CONFIG_ENV`:
 /// - If `CONFIG_ENV=test`, updates `config.test.toml`
@@ -426,9 +434,14 @@ pub fn resolve_writable_config_path<P: AsRef<Path>>(base_name: P) -> String {
 /// Uses toml_edit to preserve comments, formatting, and structure.
 ///
 /// # Arguments
-/// * `enabled` - The new enabled state for VictoriaLogs
+/// * `enabled` - The new enabled state (Optional)
+/// * `log_level` - The new log level (Optional)
 /// * `config_base` - Base config path without extension (e.g., "config" or "/path/to/config")
-pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_base: P) -> Result<()> {
+pub fn update_victoria_logs_config<P: AsRef<Path>>(
+    enabled: Option<bool>,
+    log_level: Option<String>,
+    config_base: P,
+) -> Result<()> {
     let config_path = resolve_writable_config_path(&config_base);
 
     // Read existing config file
@@ -440,15 +453,22 @@ pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_base: 
         .parse()
         .with_context(|| format!("Failed to parse {}", config_path))?;
 
-    // Update victoria_logs.enabled
+    // Update victoria_logs section
     if let Some(vlogs) = doc.get_mut("victoria_logs") {
         if let Some(table) = vlogs.as_table_mut() {
-            table["enabled"] = toml_edit::value(enabled);
+            if let Some(e) = enabled {
+                table["enabled"] = toml_edit::value(e);
+            }
+            if let Some(l) = log_level.clone() {
+                table["log_level"] = toml_edit::value(l);
+            }
         }
     } else {
         // victoria_logs section doesn't exist, create it
         let mut vlogs_table = toml_edit::Table::new();
-        vlogs_table["enabled"] = toml_edit::value(enabled);
+        vlogs_table["enabled"] = toml_edit::value(enabled.unwrap_or(false));
+        vlogs_table["log_level"] =
+            toml_edit::value(log_level.clone().unwrap_or_else(default_vlogs_log_level));
         doc["victoria_logs"] = toml_edit::Item::Table(vlogs_table);
     }
 
@@ -458,8 +478,9 @@ pub fn update_victoria_logs_enabled<P: AsRef<Path>>(enabled: bool, config_base: 
 
     tracing::info!(
         config_path = %config_path,
-        enabled = enabled,
-        "Successfully updated victoria_logs.enabled in config file"
+        enabled = ?enabled,
+        log_level = ?log_level,
+        "Successfully updated victoria_logs in config file"
     );
 
     Ok(())
@@ -511,7 +532,10 @@ mod tests {
             logging: LoggingConfig::default(),
             installer: InstallerConfig::default(),
             tls: TlsConfig::default(),
-            victoria_logs: VictoriaLogsConfig::default(),
+            victoria_logs: VictoriaLogsConfig {
+                log_level: "WARN".to_string(),
+                ..VictoriaLogsConfig::default()
+            },
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");
@@ -607,6 +631,7 @@ host = "http://localhost:9428"
 batch_size = 100
 flush_interval_secs = 5
 source = "relay-server"
+log_level = "INFO"
 "#;
         let mut file = std::fs::File::create(&config_path).unwrap();
         file.write_all(initial_content.as_bytes()).unwrap();
@@ -616,7 +641,7 @@ source = "relay-server"
         unsafe { std::env::remove_var("CONFIG_ENV") };
 
         // Update enabled to true (passing config_base without extension)
-        update_victoria_logs_enabled(true, &config_base).unwrap();
+        update_victoria_logs_config(Some(true), None, &config_base).unwrap();
 
         // Verify update
         let content = std::fs::read_to_string(&config_path).unwrap();

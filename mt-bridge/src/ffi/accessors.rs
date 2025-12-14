@@ -1,6 +1,8 @@
 use crate::ea_context::EaContext;
 use crate::ffi::helpers::copy_string_to_fixed_array;
-use crate::ffi::types::{SMasterConfig, SPositionInfo, SSlaveConfig, SSymbolMapping, SSyncRequest};
+use crate::ffi::types::{
+    SGlobalConfig, SMasterConfig, SPositionInfo, SSlaveConfig, SSymbolMapping, SSyncRequest,
+};
 use crate::types::{LotCalculationMode, SyncMode};
 use chrono::DateTime;
 
@@ -111,6 +113,7 @@ pub unsafe extern "C" fn ea_context_get_master_config(
             src.symbol_suffix.as_deref().unwrap_or(""),
             &mut dest.symbol_suffix,
         );
+
         dest.config_version = src.config_version;
         1
     } else {
@@ -378,6 +381,38 @@ pub unsafe extern "C" fn ea_context_get_sync_request(
             src.last_sync_time.as_deref().unwrap_or(""),
             &mut dest.last_sync_time,
         );
+        1
+    } else {
+        0
+    }
+}
+
+/// Get the last received Global Config as a C-compatible struct
+///
+/// # Safety
+/// - context: Valid EaContext pointer
+/// - config: Pointer to allocated SGlobalConfig struct
+#[no_mangle]
+pub unsafe extern "C" fn ea_context_get_global_config(
+    context: *const EaContext,
+    config: *mut SGlobalConfig,
+) -> i32 {
+    let ctx = match context.as_ref() {
+        Some(c) => c,
+        None => return 0,
+    };
+    if config.is_null() {
+        return 0;
+    }
+
+    if let Some(src) = &ctx.last_global_config {
+        let dest = &mut *config;
+        dest.enabled = if src.enabled { 1 } else { 0 };
+        copy_string_to_fixed_array(&src.endpoint, &mut dest.endpoint);
+        dest.batch_size = src.batch_size;
+        dest.flush_interval_secs = src.flush_interval_secs;
+        copy_string_to_fixed_array(&src.log_level, &mut dest.log_level);
+        copy_string_to_fixed_array(&src.timestamp, &mut dest.timestamp);
         1
     } else {
         0

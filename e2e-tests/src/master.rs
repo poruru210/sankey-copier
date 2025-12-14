@@ -24,9 +24,9 @@ use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
-    EaType, MasterConfigMessage, OrderType, PositionInfo, PositionSnapshotMessage,
-    SyncRequestMessage, TradeAction, TradeSignal, VLogsConfigMessage, HEARTBEAT_INTERVAL_SECONDS,
-    ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, GlobalConfigMessage, MasterConfigMessage, OrderType, PositionInfo,
+    PositionSnapshotMessage, SyncRequestMessage, TradeAction, TradeSignal,
+    HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
 
 // =============================================================================
@@ -50,7 +50,7 @@ struct MasterEaCore {
     g_symbol_suffix: Arc<Mutex<String>>,
 
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
-    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
     received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
     _g_register_sent: Arc<AtomicBool>,
@@ -199,6 +199,10 @@ impl ExpertAdvisor for MasterEaCore {
                             // Push to received queue for verification
                             *self.received_config.lock().unwrap() = Some(cfg);
                         }
+                        // Also check for global config updates
+                        if let Some(cfg) = wrapper.get_global_config() {
+                            self._received_vlogs_configs.lock().unwrap().push(cfg);
+                        }
                     }
                     _ => {}
                 }
@@ -224,7 +228,7 @@ pub struct MasterEaSimulator {
 
     // --- Received Data Queues (Verification) ---
     received_sync_requests: Arc<Mutex<Vec<SyncRequestMessage>>>,
-    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
     received_config: Arc<Mutex<Option<MasterConfigMessage>>>,
 
     // --- State ---
@@ -627,7 +631,7 @@ impl MasterEaSimulator {
         Ok(())
     }
 
-    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
+    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<GlobalConfigMessage>> {
         let start = std::time::Instant::now();
         while start.elapsed().as_millis() < timeout_ms as u128 {
             let mut lock = self.received_vlogs_configs.lock().unwrap();

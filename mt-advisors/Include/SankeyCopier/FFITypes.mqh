@@ -109,4 +109,22 @@ struct SSyncRequest {
     uchar last_sync_time[64];
 };
 
+//+------------------------------------------------------------------+
+//| SGlobalConfig - Global configuration                             |
+//| Broadcasted on config/global                                     |
+//| Total size: 136 bytes                                            |
+//+------------------------------------------------------------------+
+struct SGlobalConfig {
+    // 4-byte fields
+    int enabled;
+    int batch_size;
+    int flush_interval_secs;
+    int _reserved;
+
+    // Byte arrays
+    uchar endpoint[64];
+    uchar log_level[16];
+    uchar timestamp[32];
+};
+
 #endif // FFI_TYPES_MQH

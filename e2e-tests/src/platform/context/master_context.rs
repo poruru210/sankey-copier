@@ -2,8 +2,8 @@
 use super::common::{bytes_to_string, EaContextWrapper};
 use sankey_copier_zmq::ea_context::EaContext;
 use sankey_copier_zmq::ffi::*;
-use sankey_copier_zmq::ffi::{SMasterConfig, SSyncRequest};
-use sankey_copier_zmq::{MasterConfigMessage, SyncRequestMessage};
+use sankey_copier_zmq::ffi::{SGlobalConfig, SMasterConfig, SSyncRequest};
+use sankey_copier_zmq::{GlobalConfigMessage, MasterConfigMessage, SyncRequestMessage};
 use std::ops::Deref;
 
 pub struct MasterContextWrapper {
@@ -26,6 +26,17 @@ impl MasterContextWrapper {
             let mut c_config = SMasterConfig::default();
             if ea_context_get_master_config(self.base.raw(), &mut c_config) == 1 {
                 Some(convert_master_config(&c_config))
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn get_global_config(&self) -> Option<GlobalConfigMessage> {
+        unsafe {
+            let mut c_config = SGlobalConfig::default();
+            if ea_context_get_global_config(self.base.raw(), &mut c_config) == 1 {
+                Some(convert_global_config(&c_config))
             } else {
                 None
             }
@@ -71,5 +82,16 @@ fn convert_sync_request(c: &SSyncRequest) -> SyncRequestMessage {
         master_account: bytes_to_string(&c.master_account),
         last_sync_time: Some(bytes_to_string(&c.last_sync_time)).filter(|s| !s.is_empty()),
         timestamp: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
+fn convert_global_config(c: &SGlobalConfig) -> GlobalConfigMessage {
+    GlobalConfigMessage {
+        enabled: c.enabled != 0,
+        endpoint: bytes_to_string(&c.endpoint),
+        batch_size: c.batch_size,
+        flush_interval_secs: c.flush_interval_secs,
+        log_level: bytes_to_string(&c.log_level),
+        timestamp: String::new(), // Timestamp not in FFI struct yet or handled differently? SGlobalConfig has timestamp!
     }
 }

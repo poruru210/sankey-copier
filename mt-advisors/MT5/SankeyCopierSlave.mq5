@@ -23,6 +23,7 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 #include "../Include/SankeyCopier/SlaveTrade.mqh"
 // MessageParsing.mqh removed
 #include "../Include/SankeyCopier/Logging.mqh"
+#include "../Include/SankeyCopier/GlobalConfig.mqh"
 
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
@@ -55,6 +56,7 @@ bool        g_config_requested = false; // Track if config has been requested
 bool        g_last_trade_allowed = false; // Track auto-trading state for change detection
 bool        g_register_sent = false;    // Track if register message has been sent
 SlaveContextWrapper g_ea_context;        // Rust EA Context wrapper
+GlobalConfigManager *g_global_config = NULL; // Global config manager
 // g_received_via_timer is defined before includes (required for SlaveTrade.mqh)
 
 //--- Extended configuration variables (from ConfigMessage)
@@ -137,6 +139,9 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Initialize Global Config Manager
+   g_global_config = new GlobalConfigManager(&g_ea_context);
+
    // Connect to Relay Server
    if(!g_ea_context.Connect(g_RelayAddress, g_SubAddress))
    {
@@ -213,6 +218,13 @@ void OnDeinit(const int reason)
       g_ea_context.SendUnregister();
    }
 
+   // Cleanup Global Config Manager
+   if(g_global_config != NULL)
+   {
+      delete g_global_config;
+      g_global_config = NULL;
+   }
+
    // Kill timer
    EventKillTimer();
 
@@ -244,6 +256,9 @@ void OnTimer()
        GetOpenPositionsCount(), 
        current_trade_allowed
    );
+
+   // 1b. Check for Global Config Updates
+   if(g_global_config != NULL) g_global_config.CheckForUpdate();
 
    // 2. Process all pending commands
    EaCommand cmd;

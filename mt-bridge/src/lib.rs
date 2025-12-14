@@ -18,7 +18,7 @@ pub use types::{
     GlobalConfigMessage, HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RegisterMessage, RequestConfigMessage, SlaveConfigMessage,
     SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignal, UnregisterMessage,
-    VLogsConfigMessage, WarningCode,
+    WarningCode,
 };
 
 // Re-export enums for TradeSignal

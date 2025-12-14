@@ -126,7 +126,7 @@ impl ZmqPublisher {
         &self,
         settings: &crate::models::VLogsGlobalSettings,
     ) -> Result<()> {
-        let message = sankey_copier_zmq::VLogsConfigMessage {
+        let message = sankey_copier_zmq::GlobalConfigMessage {
             enabled: settings.enabled,
             endpoint: settings.endpoint.clone(),
             batch_size: settings.batch_size,

@@ -104,6 +104,24 @@ pub struct SSyncRequest {
     pub last_sync_time: [u8; 64], // Increased to 64 to avoid truncation of ISO8601 strings
 }
 
+/// SGlobalConfig - Global configuration for FFI
+/// Layout: 4-byte types first, then byte arrays
+/// Total size: 136 bytes (8-byte aligned)
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SGlobalConfig {
+    // 4-byte fields
+    pub enabled: i32, // bool
+    pub batch_size: i32,
+    pub flush_interval_secs: i32,
+    pub _reserved: i32, // Padding to align to 8 bytes
+
+    // Byte arrays
+    pub endpoint: [u8; MAX_SERVER_LEN], // 64
+    pub log_level: [u8; 16],            // 16
+    pub timestamp: [u8; 32],            // 32
+}
+
 impl Default for SSlaveConfig {
     fn default() -> Self {
         Self {
@@ -185,6 +203,20 @@ impl Default for SSyncRequest {
     }
 }
 
+impl Default for SGlobalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: 0,
+            batch_size: 0,
+            flush_interval_secs: 0,
+            _reserved: 0,
+            endpoint: [0; MAX_SERVER_LEN],
+            log_level: [0; 16],
+            timestamp: [0; 32],
+        }
+    }
+}
+
 // ============================================================================
 // Static Size Assertions
 // ============================================================================
@@ -226,6 +258,13 @@ mod tests {
 
         // SSyncRequest: 64 * 3 = 192
         assert_eq!(size_of::<SSyncRequest>(), 192, "SSyncRequest size mismatch");
+
+        // SGlobalConfig: 16(i32) + 64(endpoint) + 16(log) + 32(time) = 128
+        assert_eq!(
+            size_of::<SGlobalConfig>(),
+            128,
+            "SGlobalConfig size mismatch"
+        );
     }
 
     #[test]

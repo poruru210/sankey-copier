@@ -113,6 +113,8 @@ pub struct EaContext {
     pub slave_configs: HashMap<String, SlaveConfigMessage>, // Key: Master Account ID
     pub last_slave_config: Option<crate::types::SlaveConfigMessage>, // For UI update command (latest received)
 
+    pub last_global_config: Option<crate::types::GlobalConfigMessage>,
+
     pub last_position_snapshot: Option<crate::types::PositionSnapshotMessage>,
     pub last_sync_request: Option<crate::types::SyncRequestMessage>,
 
@@ -162,6 +164,7 @@ impl EaContext {
             last_master_config: None,
             slave_configs: HashMap::new(),
             last_slave_config: None,
+            last_global_config: None,
             last_position_snapshot: None,
             last_sync_request: None,
         }
@@ -337,7 +340,12 @@ impl EaContext {
                 let topic = String::from_utf8_lossy(topic_bytes);
                 self.process_sync_message(&topic, payload);
             } else if topic_bytes.starts_with(b"config/") {
-                self.process_config_message(payload);
+                // Check for global config
+                if topic_bytes == b"config/global" {
+                    self.process_global_config(payload);
+                } else {
+                    self.process_config_message(payload);
+                }
             }
         }
     }
@@ -410,6 +418,18 @@ impl EaContext {
                 };
                 self.enqueue_command(cmd);
             }
+        }
+    }
+
+    fn process_global_config(&mut self, payload: &[u8]) {
+        if let Ok(config) = rmp_serde::from_slice::<crate::types::GlobalConfigMessage>(payload) {
+            self.last_global_config = Some(config);
+            // Trigger UPDATE_UI command so EA picks up the change
+            let cmd = EaCommand {
+                command_type: EaCommandType::UpdateUi as i32,
+                ..Default::default()
+            };
+            self.enqueue_command(cmd);
         }
     }
 
@@ -972,7 +992,7 @@ mod tests {
         // Prepend topic if process_incoming_message expects it?
         // logic: `if let Some(space_pos) = data.iter().position(|&b| b == b' ')`
         // We need to construct "config/global " + msgpack
-        let mut payload = b"config/global ".to_vec();
+        let mut payload = b"config/slave ".to_vec();
         payload.append(&mut config_bytes);
 
         incoming.lock().unwrap().push_back(payload);
@@ -1013,7 +1033,7 @@ mod tests {
             ..Default::default()
         };
         let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
-        let mut payload_conf = b"config/global ".to_vec();
+        let mut payload_conf = b"config/slave ".to_vec();
         payload_conf.append(&mut config_bytes);
         incoming.lock().unwrap().push_back(payload_conf);
 

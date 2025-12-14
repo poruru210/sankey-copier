@@ -2,9 +2,12 @@
 use super::common::{bytes_to_string, EaContextWrapper};
 use sankey_copier_zmq::ea_context::EaContext;
 use sankey_copier_zmq::ffi::*;
-use sankey_copier_zmq::ffi::{SPositionInfo, SSlaveConfig, SSymbolMapping, MAX_ACCOUNT_ID_LEN};
+use sankey_copier_zmq::ffi::{
+    SGlobalConfig, SPositionInfo, SSlaveConfig, SSymbolMapping, MAX_ACCOUNT_ID_LEN,
+};
 use sankey_copier_zmq::{
-    LotCalculationMode, PositionInfo, SlaveConfigMessage, SymbolMapping, SyncMode,
+    GlobalConfigMessage, LotCalculationMode, PositionInfo, SlaveConfigMessage, SymbolMapping,
+    SyncMode,
 };
 use std::ops::Deref;
 
@@ -42,6 +45,17 @@ impl SlaveContextWrapper {
                 }
 
                 Some(config)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn get_global_config(&self) -> Option<GlobalConfigMessage> {
+        unsafe {
+            let mut c_config = SGlobalConfig::default();
+            if ea_context_get_global_config(self.base.raw(), &mut c_config) == 1 {
+                Some(convert_global_config(&c_config))
             } else {
                 None
             }
@@ -176,5 +190,16 @@ fn convert_position_info(c: &SPositionInfo) -> PositionInfo {
             None
         },
         comment: Some(bytes_to_string(&c.comment)).filter(|s| !s.is_empty()),
+    }
+}
+
+fn convert_global_config(c: &SGlobalConfig) -> GlobalConfigMessage {
+    GlobalConfigMessage {
+        enabled: c.enabled != 0,
+        endpoint: bytes_to_string(&c.endpoint),
+        batch_size: c.batch_size,
+        flush_interval_secs: c.flush_interval_secs,
+        log_level: bytes_to_string(&c.log_level),
+        timestamp: String::new(),
     }
 }

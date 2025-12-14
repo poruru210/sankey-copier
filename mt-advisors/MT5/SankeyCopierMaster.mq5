@@ -15,6 +15,7 @@
 #include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
+#include "../Include/SankeyCopier/GlobalConfig.mqh"
 
 //--- Input parameters
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
@@ -67,6 +68,7 @@ string        g_vlogs_topic = "";         // VLogs topic (generated via FFI)
 string        g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 bool          g_register_sent = false;    // Track if register message has been sent
 MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
+GlobalConfigManager *g_global_config = NULL; // Global config manager
 
 
 //--- Configuration panel
@@ -140,6 +142,9 @@ int OnInit()
       LogError(CAT_SYSTEM, "Failed to initialize EA Context");
       return INIT_FAILED;
    }
+   
+   // Initialize Global Config Manager
+   g_global_config = new GlobalConfigManager(&g_ea_context);
    
    // Connect via FFI (High-Level)
    // This creates and manages the sockets internally within the Rust context
@@ -236,6 +241,13 @@ void OnDeinit(const int reason)
       g_ea_context.SendUnregister();
    }
 
+   // Cleanup Global Config Manager
+   if(g_global_config != NULL)
+   {
+      delete g_global_config;
+      g_global_config = NULL;
+   }
+
    // Kill timer (works for both SetTimer and SetMillisecondTimer)
    EventKillTimer();
 
@@ -266,6 +278,9 @@ void OnTimer()
        GetOpenPositionsCount(), 
        current_trade_allowed
    );
+
+   // 1b. Check for Global Config Updates
+   if(g_global_config != NULL) g_global_config.CheckForUpdate();
 
    // 2. Process all pending commands from Rust
    EaCommand cmd;
@@ -915,7 +930,7 @@ void SendOrderCloseSignal(ulong ticket)
 //+------------------------------------------------------------------+
 void ProcessMasterConfigMessage(SMasterConfig &config)
 {
-   Print("=== Processing Master Configuration Message ===");
+   LogInfo(CAT_CONFIG, "=== Processing Master Configuration Message ===");
 
    // Extract fields from the struct
    string config_account_id = CharArrayToString(config.account_id);
@@ -924,35 +939,36 @@ void ProcessMasterConfigMessage(SMasterConfig &config)
    string suffix = CharArrayToString(config.symbol_suffix);
    int version = (int)config.config_version;
 
-   if(config_account_id == "")
-   {
-      Print("ERROR: Invalid config message received - missing account_id");
-      return;
-   }
+    if(config_account_id == "")
+    {
+       LogError(CAT_CONFIG, "Invalid config message received - missing account_id");
+       return;
+    }
 
-   if(config_account_id != AccountID)
-   {
-      Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
-      // Note: No need to free handle - managed by EaContext
-      return;
-   }
+    if(config_account_id != AccountID)
+    {
+       LogWarn(CAT_CONFIG, "Received config for different account: " + config_account_id + " (expected: " + AccountID + ")");
+       // Note: No need to free handle - managed by EaContext
+       return;
+    }
 
-   // Log configuration values
-   Print("Account ID: ", config_account_id);
-   Print("Status: ", status, " (", GetStatusString(status), ")");
-   Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
-   Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
-   Print("Config Version: ", version);
+    // Log configuration values
+    LogInfo(CAT_CONFIG, "Account ID: " + config_account_id);
+    LogInfo(CAT_CONFIG, "Status: " + IntegerToString(status) + " (" + GetStatusString(status) + ")");
+    LogInfo(CAT_CONFIG, "Symbol Prefix: " + (prefix == "" ? "(none)" : prefix));
+    LogInfo(CAT_CONFIG, "Symbol Suffix: " + (suffix == "" ? "(none)" : suffix));
+    
+    LogInfo(CAT_CONFIG, "Config Version: " + IntegerToString(version));
 
-   // Update global configuration variables
-   if(status == STATUS_NO_CONFIG)
-   {
-      Print("Status is NO_CONFIG -> Resetting configuration");
-      g_server_status = STATUS_NO_CONFIG;
-      g_symbol_prefix = "";
-      g_symbol_suffix = "";
-      g_config_version = 0;
-   }
+    // Update global configuration variables
+    if(status == STATUS_NO_CONFIG)
+    {
+       LogInfo(CAT_CONFIG, "Status is NO_CONFIG -> Resetting configuration");
+       g_server_status = STATUS_NO_CONFIG;
+       g_symbol_prefix = "";
+       g_symbol_suffix = "";
+       g_config_version = 0;
+    }
    else
    {
       g_server_status = status;
@@ -969,7 +985,7 @@ void ProcessMasterConfigMessage(SMasterConfig &config)
       ChartRedraw();
    }
 
-   Print("=== Master Configuration Updated ===");
+    LogInfo(CAT_CONFIG, "=== Master Configuration Updated ===");
 }
 
 //+------------------------------------------------------------------+

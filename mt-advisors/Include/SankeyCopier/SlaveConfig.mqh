@@ -61,6 +61,7 @@ void ProcessSlaveConfig(SSlaveConfig &config,
    int new_version = (int)config.config_version;
    double new_source_lot_min = config.source_lot_min;
    double new_source_lot_max = config.source_lot_max;
+
    double new_master_equity = config.master_equity;
 
    // Extract Open Sync Policy fields

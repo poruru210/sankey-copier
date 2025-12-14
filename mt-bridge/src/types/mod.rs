@@ -336,10 +336,10 @@ pub struct SyncRequestMessage {
 // VictoriaLogs Configuration Message
 // =============================================================================
 
-/// VictoriaLogs configuration message
+/// Global configuration message
 /// Broadcasted to all EAs on "config/global" topic
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VLogsConfigMessage {
+pub struct GlobalConfigMessage {
     /// Whether VictoriaLogs logging is enabled
     pub enabled: bool,
     /// VictoriaLogs endpoint URL
@@ -411,8 +411,3 @@ impl Default for TradeSignal {
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct GlobalConfigMessage {
-    // Add fields as needed
-}

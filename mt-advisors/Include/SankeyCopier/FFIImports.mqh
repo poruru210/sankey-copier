@@ -49,6 +49,7 @@
    //--- Struct-Based Accessors ---
    int         ea_context_get_master_config(HANDLE_TYPE context, SMasterConfig &config);
    int         ea_context_get_slave_config(HANDLE_TYPE context, SSlaveConfig &config);
+   int         ea_context_get_global_config(HANDLE_TYPE context, SGlobalConfig &config);
    int         ea_context_get_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int max_count);
    int         ea_context_get_position_snapshot_count(HANDLE_TYPE context);
    int         ea_context_get_position_snapshot_source_account(HANDLE_TYPE context, uchar &buffer[], int len);

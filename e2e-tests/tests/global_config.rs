@@ -123,23 +123,6 @@ async fn test_vlogs_config_validation_errors() {
 
     let update_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
 
-    // Test: Missing enabled field should fail
-    let missing_enabled = serde_json::json!({
-        "something_else": true
-    });
-
-    let response = client
-        .put(&update_url)
-        .json(&missing_enabled)
-        .send()
-        .await
-        .expect("Failed to send request");
-
-    assert!(
-        response.status().is_client_error(),
-        "Request without 'enabled' field should be rejected"
-    );
-
     // Test: Valid toggle request should work
     let valid_toggle = serde_json::json!({
         "enabled": false

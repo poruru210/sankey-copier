@@ -211,6 +211,30 @@ const settingsPageContent = {
         en: 'VictoriaLogs integration is enabled. Logs are being sent to the configured endpoint.',
         ja: 'VictoriaLogs連携が有効です。ログは設定されたエンドポイントに送信されています。',
       }),
+      logLevel: t({
+        en: 'Log Level',
+        ja: 'ログレベル',
+      }),
+      logLevelDescription: t({
+        en: 'Minimum level of logs to send to VictoriaLogs',
+        ja: 'VictoriaLogsに送信する最小ログレベル',
+      }),
+      levelDebug: t({
+        en: 'DEBUG',
+        ja: 'DEBUG (デバッグ)',
+      }),
+      levelInfo: t({
+        en: 'INFO',
+        ja: 'INFO (標準)',
+      }),
+      levelWarn: t({
+        en: 'WARN',
+        ja: 'WARN (警告)',
+      }),
+      levelError: t({
+        en: 'ERROR',
+        ja: 'ERROR (エラー)',
+      }),
     },
     // Buttons
     buttons: {

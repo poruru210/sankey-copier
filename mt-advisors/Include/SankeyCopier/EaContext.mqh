@@ -220,6 +220,12 @@ public:
        if(m_initialized) ea_context_reset(m_context);
    }
 
+   bool GetGlobalConfig(SGlobalConfig &config)
+   {
+      if(!m_initialized) return false;
+      return ea_context_get_global_config(m_context, config) == 1;
+   }
+
    // NOTE: Master/Slave specific methods moved to:
    // - MasterContext.mqh: GetMasterConfig, GetSyncRequest, SendOpenSignal, SendCloseSignal, SendModifySignal, SendPositionSnapshot
    // - SlaveContext.mqh: GetSlaveConfig, GetPositionSnapshot, GetSymbolMappings, SendSyncRequest, SendRequestConfig

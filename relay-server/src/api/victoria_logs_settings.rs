@@ -7,7 +7,7 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::config::update_victoria_logs_enabled;
+use crate::config::update_victoria_logs_config;
 use crate::models::VLogsGlobalSettings;
 
 use super::{AppState, ProblemDetails};
@@ -33,13 +33,15 @@ pub struct VLogsConfigInfo {
     pub batch_size: usize,
     pub flush_interval_secs: u64,
     pub source: String,
+    pub log_level: String,
 }
 
 /// Request for PUT /api/victoria-logs-settings
-/// Only enabled state can be toggled (persisted to config.toml)
+/// Enabled state and log level can be updated (persisted to config.toml)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VLogsToggleRequest {
-    pub enabled: bool,
+pub struct VLogsUpdateRequest {
+    pub enabled: Option<bool>,
+    pub log_level: Option<String>,
 }
 
 /// GET /api/victoria-logs-config
@@ -61,6 +63,7 @@ pub async fn get_vlogs_config(
                     batch_size: config.batch_size,
                     flush_interval_secs: config.flush_interval_secs,
                     source: config.source.clone(),
+                    log_level: config.log_level.clone(),
                 }),
                 enabled: controller.is_enabled(),
             };
@@ -90,41 +93,48 @@ pub async fn get_vlogs_config(
 }
 
 /// PUT /api/victoria-logs-settings
-/// Update VictoriaLogs enabled state
+/// Update VictoriaLogs enabled state and/or log level
 /// Updates runtime state, persists to config.toml, and broadcasts to all connected EAs
-pub async fn toggle_vlogs_enabled(
+pub async fn update_vlogs_settings(
     State(state): State<AppState>,
-    Json(request): Json<VLogsToggleRequest>,
+    Json(request): Json<VLogsUpdateRequest>,
 ) -> Result<StatusCode, ProblemDetails> {
-    let span = tracing::info_span!("toggle_vlogs_enabled", enabled = request.enabled);
+    let span = tracing::info_span!("update_vlogs_settings", ?request);
     let _enter = span.enter();
 
     // Check if VictoriaLogs is configured
     let controller = state.vlogs_controller.as_ref().ok_or_else(|| {
-        tracing::warn!("Attempted to toggle VictoriaLogs but it's not configured");
+        tracing::warn!("Attempted to update VictoriaLogs settings but it's not configured");
         ProblemDetails::validation_error(
             "VictoriaLogs is not configured in config.toml. Add [victoria_logs] section with host to enable this feature.",
         )
     })?;
 
-    // Update runtime state
-    controller.set_enabled(request.enabled);
+    // Update runtime state if enabled is provided
+    if let Some(enabled) = request.enabled {
+        controller.set_enabled(enabled);
+    }
 
-    tracing::info!(
-        enabled = request.enabled,
-        "Updated VictoriaLogs runtime state"
-    );
+    // Note: We don't update log_level in controller runtime state immediately
+    // because controller usually holds the initial config.
+    // However, for correct broadcast, we need to ensure the updated log_level is used.
+    // Since config.rs reload is not trivial without restart, we blindly persist
+    // and then construct the broadcast message using the requested value or fallback.
+    // Ideally, controller should be mutable or reloadable. For now, let's rely on persistence.
 
-    // Save enabled state to config file for persistence across restarts
-    // Respects CONFIG_DIR and CONFIG_ENV environment variables
+    tracing::info!(?request, "Updated VictoriaLogs runtime state");
+
+    // Save state to config file for persistence across restarts
     let config_dir = std::env::var("CONFIG_DIR").unwrap_or_else(|_| ".".to_string());
     let config_base = format!("{}/config", config_dir);
 
-    if let Err(e) = update_victoria_logs_enabled(request.enabled, &config_base) {
+    if let Err(e) =
+        update_victoria_logs_config(request.enabled, request.log_level.clone(), &config_base)
+    {
         tracing::error!(
             error = %e,
             config_base = %config_base,
-            "Failed to persist VictoriaLogs enabled state to config file"
+            "Failed to persist VictoriaLogs settings to config file"
         );
         return Err(ProblemDetails::internal_error(format!(
             "Failed to update config file: {}",
@@ -133,19 +143,26 @@ pub async fn toggle_vlogs_enabled(
     }
 
     tracing::info!(
-        enabled = request.enabled,
+        ?request,
         config_base = %config_base,
-        "VictoriaLogs enabled state saved to config file"
+        "VictoriaLogs settings saved to config file"
     );
 
     // Build settings for broadcast
+    // Logic: Use existing config values, override with request if present
     let config = controller.config();
+    let effective_enabled = request.enabled.unwrap_or_else(|| controller.is_enabled());
+    let effective_log_level = request
+        .log_level
+        .clone()
+        .unwrap_or_else(|| config.log_level.clone());
+
     let settings = VLogsGlobalSettings {
-        enabled: request.enabled,
+        enabled: effective_enabled,
         endpoint: config.endpoint(),
         batch_size: config.batch_size as i32,
         flush_interval_secs: config.flush_interval_secs as i32,
-        log_level: "INFO".to_string(), // Fixed log level
+        log_level: effective_log_level,
     };
 
     // Broadcast settings to all connected EAs
