@@ -2,7 +2,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
-import type { AccountNodeData } from '@/components/flow-nodes';
+import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
 import {
   hoveredSourceIdAtom,
   hoveredReceiverIdAtom,

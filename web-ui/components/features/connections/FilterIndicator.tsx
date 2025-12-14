@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 interface FilterIndicatorProps {
   selectedMaster: string;
-  selectedMasterName: string | undefined;
+  selectedMasterName: string | null | undefined;
   onClearFilter: () => void;
 }
 
