@@ -15,7 +15,7 @@ import {
   DrawerSectionContent,
   DrawerFormField,
 } from '@/components/ui/drawer-section';
-import { SymbolMappingInput } from '@/components/SymbolMappingInput';
+import { SymbolMappingInput } from '@/components/features/settings/SymbolMappingInput';
 import type { LotCalculationMode, SyncMode } from '@/types';
 
 export interface SlaveSettingsFormData {

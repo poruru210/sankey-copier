@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import type { EaConnection } from '@/types';
 import { Button } from '@/components/ui/button';
-import { MasterConfigDialog } from '@/components/MasterConfigDialog';
+import { MasterConfigDialog } from '@/components/features/settings/MasterConfigDialog';
 
 interface MasterConfigSectionProps {
   connection?: EaConnection;

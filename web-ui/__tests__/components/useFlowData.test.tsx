@@ -4,7 +4,7 @@ import { Provider } from 'jotai';
 import { describe, it, expect } from 'vitest';
 import type { AccountInfo, CopySettings } from '@/types';
 import { useFlowData } from '@/hooks/useFlowData';
-import type { AccountNodeData } from '@/components/flow-nodes';
+import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
 import type { Node } from '@xyflow/react';
 
 const contentStub = {
