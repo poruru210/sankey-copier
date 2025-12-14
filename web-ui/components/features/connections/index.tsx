@@ -17,7 +17,7 @@ import {
   sourceAccountsAtom,
   receiverAccountsAtom,
 } from '@/lib/atoms/computed';
-import { useMasterFilter } from '@/hooks/useMasterFilter';
+import { useMasterFilter } from '@/components/features/connections/hooks/useMasterFilter';
 import { ConnectionsActionBar } from '@/components/features/connections/ConnectionsActionBar';
 import { FilterIndicator } from '@/components/features/connections/FilterIndicator';
 import { FlowCanvas } from '@/components/features/connections/FlowCanvas';

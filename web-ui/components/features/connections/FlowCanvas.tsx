@@ -20,12 +20,12 @@ import {
   expandedSourceIdsAtom,
   expandedReceiverIdsAtom,
 } from '@/lib/atoms/ui';
-import { useDagreLayout } from '@/hooks/useDagreLayout';
+import { useDagreLayout } from '@/components/features/connections/hooks/useDagreLayout';
 import { AccountNode } from '@/components/features/connections/flow-nodes/AccountNode';
 import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
 import { SettingsEdge } from '@/components/features/connections/flow-edges';
-import { useFlowData } from '@/hooks/useFlowData';
-import { useConnectionHighlight } from '@/hooks/connections';
+import { useFlowData } from '@/components/features/connections/hooks/useFlowData';
+import { useConnectionHighlight } from '@/components/features/connections/hooks';
 import { CopySettings, EaConnection } from '@/types';
 
 // Define nodeTypes at module level to prevent recreation warnings

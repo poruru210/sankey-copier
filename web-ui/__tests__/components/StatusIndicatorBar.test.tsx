@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { StatusIndicatorBar } from '@/components/connections/StatusIndicatorBar';
+import { StatusIndicatorBar } from '@/components/features/connections/components/StatusIndicatorBar';
 import type { AccountInfo } from '@/types';
 
 const baseAccount: AccountInfo = {

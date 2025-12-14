@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import type { AccountInfo, EaConnection, CopySettings } from '@/types';
-import { AccountNodeContent } from '@/components/connections/AccountNodeContent';
+import { AccountNodeContent } from '@/components/features/connections/components/AccountNodeContent';
 
 export interface AccountNodeData {
   account: AccountInfo;
