@@ -76,14 +76,15 @@
    int         ea_subscribe_config(HANDLE_TYPE context, string topic);
 
    //--- Trade Signals (Master) ---
+   //--- Trade Signals (Master) ---
    int         ea_send_open_signal(HANDLE_TYPE context, long ticket, string symbol, string order_type, 
-                                   double lots, double price, double sl, double tp, long magic, string comment, uchar &output[], int output_len);
-   int         ea_send_close_signal(HANDLE_TYPE context, long ticket, double close_ratio, uchar &output[], int output_len);
-   int         ea_send_modify_signal(HANDLE_TYPE context, long ticket, double sl, double tp, uchar &output[], int output_len);
+                                   double lots, double price, double sl, double tp, long magic, string comment);
+   int         ea_send_close_signal(HANDLE_TYPE context, long ticket, double close_ratio);
+   int         ea_send_modify_signal(HANDLE_TYPE context, long ticket, double sl, double tp);
 
    //--- Sync/Config ---
-   int         ea_send_request_config(HANDLE_TYPE context, uchar &output[], int output_len);
-   int         ea_send_sync_request(HANDLE_TYPE context, string master_account, uchar &output[], int output_len);
+   int         ea_send_request_config(HANDLE_TYPE context, uint version);
+   int         ea_send_sync_request(HANDLE_TYPE context, string master_account, string last_sync_time);
 
    //--- Position Snapshot (Master) ---
    int         ea_send_position_snapshot(HANDLE_TYPE context, SPositionInfo &positions[], int count);

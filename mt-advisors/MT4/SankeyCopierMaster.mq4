@@ -60,6 +60,17 @@ bool        g_config_requested = false;   // Track if config request has been se
 bool        g_register_sent = false;    // Track if register message has been sent
 MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
 
+//--- Forward declarations
+void ProcessMasterConfigMessage(SMasterConfig &config);
+void PerformTradeScan();
+void ScanExistingOrders();
+
+// Scan helper functions
+void CheckForNewOrders();
+void CheckForModifiedOrders();
+void CheckForPartialCloses();
+void CheckForClosedOrders();
+
 
 //--- Configuration panel
 CGridPanel     g_config_panel;
@@ -162,8 +173,11 @@ int OnInit()
    // Scan existing orders
    ScanExistingOrders();
 
-   // Set up timer for heartbeat (1 second interval)
-   EventSetTimer(1);
+   // Set up timer (using ScanInterval in ms)
+   // MT4 lacks OnTradeTransaction, so high-frequency polling via Timer is essential
+   int scan_ms = MathMax(100, MathMin(5000, ScanInterval));
+   EventSetMillisecondTimer(scan_ms);
+   Print("Timer started: ", scan_ms, "ms interval");
 
    // Initialize configuration panel
    if(ShowConfigPanel)
@@ -226,12 +240,12 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
+//| Timer function (called periodically)                              |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
    if(!g_initialized) return;
-
+   
    // 1. Run ManagerTick (Handles ZMQ Polling, Heartbeats internally)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
    
@@ -292,7 +306,12 @@ void OnTimer()
        pending_commands--;
    }
    
-   // Flush VLogs
+   // 3. Scan for changes (Positions/Orders)
+   // Moved from OnTick to ensure it runs even if chart symbol market is closed
+   // Important for MT4 which lacks OnTradeTransaction
+   PerformTradeScan();
+   
+   // 4. Flush VLogs
    VLogsFlushIfNeeded();
    
    // Do NOT free handle - it belongs to EaContext
@@ -355,37 +374,36 @@ void ProcessMasterConfigMessage(SMasterConfig &config)
 
       ChartRedraw();
    }
-   
-   // Do NOT free handle - it belongs to EaContext
 }
 
-// ProcessSyncRequest removed - now inline in OnTimer using SSyncRequest struct
+//+------------------------------------------------------------------+
+//| Perform trade scanning logic                                      |
+//+------------------------------------------------------------------+
+void PerformTradeScan()
+{
+   if(!g_initialized) return;
+
+   CheckForNewOrders();
+   CheckForModifiedOrders();
+   CheckForPartialCloses();
+   CheckForClosedOrders();
+      
+   // Update tracked orders count on panel
+   if(ShowConfigPanel)
+   {
+      g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                              |
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   if(!g_initialized)
-      return;
-
-   // Periodic scan for new orders
-   static datetime last_scan = 0;
-   if(TimeCurrent() - last_scan > ScanInterval / 1000)
-   {
-      CheckForNewOrders();
-      CheckForModifiedOrders();
-      CheckForPartialCloses();
-      CheckForClosedOrders();
-      last_scan = TimeCurrent();
-      
-      // Update tracked orders count on panel
-      if(ShowConfigPanel)
-      {
-         g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_orders));
-      }
-   }
+   // Logic moved to OnTimer/PerformTradeScan
 }
+
+
 
 //+------------------------------------------------------------------+
 //| Scan existing orders on startup                                   |

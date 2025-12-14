@@ -74,20 +74,15 @@ public:
    bool SendSyncRequest(string master_account)
    {
       if(!IsInitialized()) return false;
-      uchar buffer[1024];
-      int len = ea_send_sync_request(GetHandle(), master_account, buffer, 1024);
-      if(len > 0) return ea_send_push(GetHandle(), buffer, len) == 1;
-      return false;
+      // Last sync time not yet tracked, passing NULL for full sync
+      return ea_send_sync_request(GetHandle(), master_account, NULL) == 1;
    }
 
    //--- Request Config ---
    bool SendRequestConfig()
    {
       if(!IsInitialized()) return false;
-      uchar buffer[1024];
-      int len = ea_send_request_config(GetHandle(), buffer, 1024);
-      if(len > 0) return ea_send_push(GetHandle(), buffer, len) == 1;
-      return false;
+      return ea_send_request_config(GetHandle(), 1) == 1;
    }
 };
 

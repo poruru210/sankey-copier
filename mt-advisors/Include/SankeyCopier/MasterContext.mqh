@@ -34,34 +34,26 @@ public:
    }
 
    //--- Trade Signal Sending ---
+   //--- Trade Signals (Master) ---
    bool SendOpenSignal(long ticket, string symbol, string order_type, 
                        double lots, double price, double sl, double tp, 
                        long magic, string comment)
    {
       if(!IsInitialized()) return false;
-      uchar buffer[1024];
-      int len = ea_send_open_signal(GetHandle(), ticket, symbol, order_type, 
-                                    lots, price, sl, tp, magic, comment, buffer, 1024);
-      if(len > 0) return ea_send_push(GetHandle(), buffer, len) == 1;
-      return false;
+      return ea_send_open_signal(GetHandle(), ticket, symbol, order_type, 
+                                 lots, price, sl, tp, magic, comment) == 1;
    }
 
    bool SendCloseSignal(long ticket, double close_ratio)
    {
       if(!IsInitialized()) return false;
-      uchar buffer[1024];
-      int len = ea_send_close_signal(GetHandle(), ticket, close_ratio, buffer, 1024);
-      if(len > 0) return ea_send_push(GetHandle(), buffer, len) == 1;
-      return false;
+      return ea_send_close_signal(GetHandle(), ticket, close_ratio) == 1;
    }
    
    bool SendModifySignal(long ticket, double sl, double tp)
    {
       if(!IsInitialized()) return false;
-      uchar buffer[1024];
-      int len = ea_send_modify_signal(GetHandle(), ticket, sl, tp, buffer, 1024);
-      if(len > 0) return ea_send_push(GetHandle(), buffer, len) == 1;
-      return false;
+      return ea_send_modify_signal(GetHandle(), ticket, sl, tp) == 1;
    }
 
    //--- Position Snapshot (send to Slave) ---

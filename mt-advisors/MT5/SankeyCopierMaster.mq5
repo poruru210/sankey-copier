@@ -191,8 +191,12 @@ int OnInit()
    
    g_initialized = true;
 
-   // Set up timer for heartbeat (1 second interval)
-   EventSetTimer(1);
+   // Set up timer (using ScanInterval in ms)
+   // Using MillisecondTimer ensures we get events even if market is closed (no ticks)
+   // and allows for faster polling than 1 second if needed.
+   int scan_ms = MathMax(100, MathMin(5000, ScanInterval));
+   EventSetMillisecondTimer(scan_ms);
+   Print(StringFormat("Timer started: %d ms interval", scan_ms));
 
    // Initialize configuration panel
    if(ShowConfigPanel)
@@ -233,7 +237,7 @@ void OnDeinit(const int reason)
       g_ea_context.SendUnregister();
    }
 
-   // Kill timer
+   // Kill timer (works for both SetTimer and SetMillisecondTimer)
    EventKillTimer();
 
    // Delete configuration panel
@@ -248,10 +252,7 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
+//| Timer function (called periodically)                              |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -341,7 +342,11 @@ void OnTimer()
        // Rust `get_next_command` pops one. If empty, GetCommand returns false (0).
    }
 
-   // 3. Flush VLogs
+   // 3. Scan for changes (Positions/Orders)
+   // Moved from OnTick to ensure it runs even if chart symbol market is closed (e.g. XAUUSD on Sunday)
+   PerformTradeScan();
+
+   // 4. Flush VLogs
    VLogsFlushIfNeeded();
 }
 
@@ -351,16 +356,19 @@ void OnTimer()
 void OnTick()
 {
    if(!g_initialized) return;
+   // Logic moved to OnTimer/PerformTradeScan
+}
 
-   static datetime last_scan = 0;
-   if(TimeCurrent() - last_scan > ScanInterval / 1000)
-   {
+//+------------------------------------------------------------------+
+//| Perform trade scanning logic                                      |
+//+------------------------------------------------------------------+
+void PerformTradeScan()
+{
       //--- 1. Scan Positions ---
       CheckForNewPositions();
       CheckForModifiedPositions();
       CheckForPartialCloses();
       CheckForClosedPositions();
-      last_scan = TimeCurrent();
       
       //--- 2. Scan Pending Orders ---
       int total_orders = OrdersTotal();
@@ -396,6 +404,7 @@ void OnTick()
                      current_sl != g_tracked_orders[j].sl ||
                      current_tp != g_tracked_orders[j].tp)
                   {
+                     Print(StringFormat("[ORDER MODIFY DETECTED] Ticket: %d", ticket));
                      SendOrderModifySignal(ticket);
                      g_tracked_orders[j].price = current_price;
                      g_tracked_orders[j].sl = current_sl;
@@ -430,7 +439,6 @@ void OnTick()
       {
          g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions) + ArraySize(g_tracked_orders));
       }
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -464,6 +472,44 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
             RemoveTrackedPosition(trans.position);
          }
          // If position still exists, it's a partial close - handled by CheckForPartialCloses
+      }
+   }
+   else if(trans.type == TRADE_TRANSACTION_POSITION)
+   {
+      // Position modified (SL/TP change)
+      // Note: Volume changes usually come with DEAL events, but SL/TP changes trigger POSITION events directly
+      if(IsPositionTracked(trans.position) && PositionSelectByTicket(trans.position))
+      {
+         // Find array index
+         int index = -1;
+         for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+         {
+            if(g_tracked_positions[i].ticket == trans.position)
+            {
+               index = i;
+               break;
+            }
+         }
+
+         if(index != -1)
+         {
+            double current_sl = PositionGetDouble(POSITION_SL);
+            double current_tp = PositionGetDouble(POSITION_TP);
+
+            // Compare with tracked values (using epsilon)
+            if(MathAbs(current_sl - g_tracked_positions[index].sl) > Point() || 
+               MathAbs(current_tp - g_tracked_positions[index].tp) > Point())
+            {
+               Print(StringFormat("[MODIFY EVENT] Ticket: %d, SL: %.5f -> %.5f, TP: %.5f -> %.5f", 
+                                  trans.position, g_tracked_positions[index].sl, current_sl, g_tracked_positions[index].tp, current_tp));
+
+               SendPositionModifySignal(trans.position, current_sl, current_tp);
+               
+               // Update tracked values
+               g_tracked_positions[index].sl = current_sl;
+               g_tracked_positions[index].tp = current_tp;
+            }
+         }
       }
    }
    
@@ -514,6 +560,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                   current_sl != g_tracked_orders[i].sl ||
                   current_tp != g_tracked_orders[i].tp)
                {
+                  Print(StringFormat("[ORDER MODIFY DETECTED] Ticket: %d", ticket));
                   SendOrderModifySignal(ticket);
                   // Update tracked values
                   g_tracked_orders[i].price = current_price;
@@ -575,6 +622,9 @@ void CheckForNewPositions()
 //+------------------------------------------------------------------+
 //| Check for modified positions (SL/TP changes)                      |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Check for modified positions (SL/TP changes)                      |
+//+------------------------------------------------------------------+
 void CheckForModifiedPositions()
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
@@ -586,10 +636,15 @@ void CheckForModifiedPositions()
          double current_tp = PositionGetDouble(POSITION_TP);
 
          // Check if SL or TP has changed
-         if(current_sl != g_tracked_positions[i].sl || current_tp != g_tracked_positions[i].tp)
+         // Compare with epsilon for float equality safety
+         if(MathAbs(current_sl - g_tracked_positions[i].sl) > Point() || 
+            MathAbs(current_tp - g_tracked_positions[i].tp) > Point())
          {
+            Print(StringFormat("[MODIFY DETECTED] Ticket: %d, SL: %.5f -> %.5f, TP: %.5f -> %.5f", 
+                               ticket, g_tracked_positions[i].sl, current_sl, g_tracked_positions[i].tp, current_tp));
+
             // Send modify signal
-            SendPositionModifySignal(ticket, current_sl, current_tp);
+            SendPositionModifySignal(ticket, current_sl, current_tp); // Debug inside function now? No, just trust return for now?
 
             // Update tracked values
             g_tracked_positions[i].sl = current_sl;
