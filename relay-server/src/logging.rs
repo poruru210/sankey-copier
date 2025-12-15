@@ -19,18 +19,23 @@ pub fn cleanup_old_logs(logging_config: &LoggingConfig) {
     // Read all files in the log directory
     let mut log_files: Vec<_> = match fs::read_dir(log_dir) {
         Ok(entries) => entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                // Only consider files that start with the configured prefix
-                entry
-                    .file_name()
-                    .to_str()
-                    .map(|name| name.starts_with(&logging_config.file_prefix))
-                    .unwrap_or(false)
-            })
-            .filter_map(|entry| {
-                // Get file metadata and modified time
+            .filter_map(|entry_res| {
+                let entry = entry_res.ok()?;
                 let metadata = entry.metadata().ok()?;
+
+                // Ensure it's a file, not a directory
+                if !metadata.is_file() {
+                    return None;
+                }
+
+                let file_name = entry.file_name();
+                let name = file_name.to_str()?;
+
+                // Check prefix matches
+                if !name.starts_with(&logging_config.file_prefix) {
+                    return None;
+                }
+
                 let modified = metadata.modified().ok()?;
                 Some((entry.path(), modified))
             })
