@@ -40,8 +40,7 @@ pub struct MessageHandler {
     /// VictoriaLogs controller for EA config broadcasting
     vlogs_controller: Option<VLogsController>,
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
-    /// Snapshot broadcaster for triggering immediate updates
-    snapshot_broadcaster: Option<SnapshotBroadcaster>,
+
     /// Status service for heartbeat processing (Hexagonal Architecture)
     /// Optional for backward compatibility - when None, uses legacy heartbeat logic
     #[allow(dead_code)] // Will be used when heartbeat.rs delegates to it
@@ -68,11 +67,7 @@ impl MessageHandler {
             publisher,
             vlogs_controller,
             runtime_status_metrics,
-            snapshot_broadcaster: Some(SnapshotBroadcaster::new(
-                broadcast_tx,
-                connection_manager,
-                db,
-            )),
+
             status_service,
         }
     }

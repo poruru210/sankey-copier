@@ -135,8 +135,132 @@ impl StatusService {
                     bundle.status_result.status
                 );
             }
+        }
 
-            // TODO: Notify connected Slaves about Master status change
+        // Always update related Slaves when Master heartbeat is received
+        // (even if Master status didn't change, Slaves need to be evaluated)
+        self.update_related_slaves(account_id, &old_master_status, &bundle.status_result)
+            .await;
+    }
+
+    /// Update all Slaves connected to this Master
+    async fn update_related_slaves(
+        &self,
+        master_account: &str,
+        old_master_status: &crate::models::status_engine::MasterStatusResult,
+        _new_master_status: &crate::models::status_engine::MasterStatusResult,
+    ) {
+        let Some(evaluator) = &self.status_evaluator else {
+            tracing::debug!(
+                "StatusEvaluator not configured, skipping Slave updates for Master {}",
+                master_account
+            );
+            return;
+        };
+
+        // Get all Slaves connected to this Master
+        let members = match self.repository.get_members(master_account).await {
+            Ok(members) => members,
+            Err(e) => {
+                tracing::error!("Failed to get members for Master {}: {}", master_account, e);
+                return;
+            }
+        };
+
+        // Track processed slaves to avoid duplicates
+        let mut processed_slaves = std::collections::HashSet::new();
+
+        for member in members {
+            let slave_account = member.slave_account.clone();
+
+            if processed_slaves.contains(&slave_account) {
+                continue;
+            }
+            processed_slaves.insert(slave_account.clone());
+
+            let target = crate::models::status_engine::SlaveRuntimeTarget {
+                master_account,
+                trade_group_id: master_account,
+                slave_account: &slave_account,
+                enabled_flag: member.enabled_flag,
+                slave_settings: &member.slave_settings,
+            };
+
+            // Build new Slave bundle (uses current Master status)
+            // Note: target cannot be cloned because it contains references, so we use it directly
+            // For evaluate_member_status, we construct intents directly avoiding target reuse issues
+            let slave_bundle = evaluator.build_slave_bundle(target).await;
+
+            // Calculate OLD Slave status (uses OLD Master status)
+            let slave_conn = self.connection_manager.get_slave(&slave_account).await;
+            let slave_snapshot = crate::models::status_engine::ConnectionSnapshot {
+                connection_status: slave_conn.as_ref().map(|c| c.status),
+                is_trade_allowed: slave_conn
+                    .as_ref()
+                    .map(|c| c.is_trade_allowed)
+                    .unwrap_or(false),
+            };
+
+            let old_slave_result = crate::models::status_engine::evaluate_member_status(
+                crate::models::status_engine::SlaveIntent {
+                    web_ui_enabled: member.enabled_flag,
+                },
+                slave_snapshot,
+                old_master_status,
+            );
+
+            let slave_changed = slave_bundle.status_result.has_changed(&old_slave_result);
+
+            tracing::debug!(
+                slave = %slave_account,
+                master = %master_account,
+                changed = slave_changed,
+                old_status = old_slave_result.status,
+                new_status = slave_bundle.status_result.status,
+                "[StatusService] Slave status change detection (via Master heartbeat)"
+            );
+
+            if slave_changed {
+                tracing::info!(
+                    slave = %slave_account,
+                    master = %master_account,
+                    old_status = old_slave_result.status,
+                    new_status = slave_bundle.status_result.status,
+                    "Slave state changed via Master heartbeat"
+                );
+
+                // Send config to Slave
+                if let Err(err) = self.publisher.send_slave_config(&slave_bundle.config).await {
+                    tracing::error!(
+                        "Failed to broadcast config to Slave {} on Master heartbeat: {}",
+                        slave_account,
+                        err
+                    );
+                }
+            }
+
+            // Update DB status (always, to reflect current evaluation)
+            if let Err(err) = self
+                .repository
+                .update_member_runtime_status(
+                    master_account,
+                    &slave_account,
+                    slave_bundle.status_result.status,
+                )
+                .await
+            {
+                tracing::error!(
+                    "Failed to persist runtime status for Slave {} (master {}): {}",
+                    slave_account,
+                    master_account,
+                    err
+                );
+            }
+        }
+
+        // WebSocket broadcast for any status changes
+        if let Some(broadcaster) = &self.broadcaster {
+            broadcaster.broadcast_snapshot().await;
         }
     }
 
@@ -324,6 +448,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     struct MockStatusEvaluator;
     #[async_trait]
     impl StatusEvaluator for MockStatusEvaluator {
@@ -385,7 +510,7 @@ mod tests {
     async fn test_handle_heartbeat_master_basic_flow() {
         let mut mock_conn_manager = MockConnectionManager::new();
         let mut mock_repo = MockTradeGroupRepository::new();
-        let mut mock_publisher = MockConfigPublisher::new();
+        let mock_publisher = MockConfigPublisher::new();
 
         let account_id = "MASTER_123";
         let heartbeat = HeartbeatMessage {

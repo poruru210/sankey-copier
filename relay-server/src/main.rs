@@ -12,9 +12,9 @@ mod models;
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
-mod ports;
+pub mod ports;
 mod runtime_status_updater;
-mod services;
+pub mod services;
 mod victoria_logs;
 mod zeromq;
 

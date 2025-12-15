@@ -44,6 +44,33 @@ impl TestContext {
         // (handles both config and trade signals)
         let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
+        // Create runtime status adapter for StatusEvaluator
+        let metrics = Arc::new(RuntimeStatusMetrics::default());
+        let runtime_updater = crate::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+            db.clone(),
+            connection_manager.clone(),
+            metrics.clone(),
+        );
+        let status_evaluator = Arc::new(
+            crate::ports::adapters::RuntimeStatusEvaluatorAdapter::new(runtime_updater),
+        );
+
+        // Create snapshot broadcaster for StatusService (UpdateBroadcaster)
+        let snapshot_broadcaster = Arc::new(crate::api::SnapshotBroadcaster::new(
+            broadcast_tx.clone(),
+            connection_manager.clone(),
+            db.clone(),
+        ));
+
+        // Construct StatusService with real components (acting as adapters)
+        let status_service = crate::services::StatusService::new(
+            connection_manager.clone(),
+            db.clone(),
+            publisher.clone(),
+            Some(status_evaluator),
+            Some(snapshot_broadcaster),
+        );
+
         let handler = MessageHandler::new(
             connection_manager,
             copy_engine,
@@ -52,7 +79,7 @@ impl TestContext {
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
             Arc::new(RuntimeStatusMetrics::default()),
-            None, // status_service - use legacy heartbeat logic for now
+            Some(status_service), // Inject StatusService
         );
 
         Self {
