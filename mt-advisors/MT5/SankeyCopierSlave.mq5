@@ -420,7 +420,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
    // OrderType from Rust (enum i32) -> String
    string order_type_str = GetOrderTypeString(cmd.order_type);
    
-   string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS); // Simplified
+   // string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS); // Removed: passing long directly
    
    // Find matching config for this master (ONLY to get trade execution settings)
    // Business logic (filters, multipliers) is already applied by mt-bridge
@@ -459,7 +459,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       
       // Execute Open Trade
       ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, symbol,
-                       order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
+                       order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, cmd.timestamp, source_account,
                        (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
    // CMD_CLOSE

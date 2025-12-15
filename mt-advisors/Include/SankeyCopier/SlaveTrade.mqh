@@ -110,7 +110,7 @@ bool EnsureSymbolActive(string symbol)
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       ulong master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, string timestamp,
+                      double lots, double price, double sl, double tp, long timestamp_ms,
                       string source_account, int magic, int slippage_points,
                       int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
@@ -122,10 +122,10 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 
    if(!EnsureSymbolActive(symbol)) return;
 
-   // Check signal delay
-   datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeGMT();
-   int delay_ms = (int)((current_time - signal_time) * 1000);
+   // Check signal delay (using TimeGMT as approximation for current UTC time)
+   // Note: TimeGMT() returns seconds, convert to ms
+   long current_time_ms = (long)TimeGMT() * 1000;
+   int delay_ms = (int)(current_time_ms - timestamp_ms);
 
    if(delay_ms > max_signal_delay_ms)
    {
@@ -491,7 +491,7 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       int master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, string timestamp,
+                      double lots, double price, double sl, double tp, long timestamp_ms,
                       string source_account, int magic, int slippage_points,
                       int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
@@ -505,9 +505,8 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
    if(!EnsureSymbolActive(symbol)) return;
 
    // Check signal delay
-   datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeGMT();
-   int delay_ms = (int)((current_time - signal_time) * 1000);
+   long current_time_ms = (long)TimeGMT() * 1000;
+   int delay_ms = (int)(current_time_ms - timestamp_ms);
 
    if(delay_ms > max_signal_delay_ms)
    {

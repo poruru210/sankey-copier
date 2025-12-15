@@ -354,7 +354,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
    // OrderType from Rust (enum i32) -> String
    string order_type_str = GetOrderTypeString(cmd.order_type);
    
-   string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS);
+   // string timestamp_iso = TimeToString(cmd.timestamp, TIME_DATE|TIME_SECONDS); // Removed
    
    // Find matching config for this master
    int config_index = -1;
@@ -400,7 +400,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       
       // Open position (MT4: no CTrade object passed)
       ExecuteOpenTrade(g_order_map, g_pending_order_map, master_ticket, transformed_symbol,
-                       transformed_order_type, transformed_lots, cmd.price, cmd.sl, cmd.tp, timestamp_iso, source_account,
+                       transformed_order_type, transformed_lots, cmd.price, cmd.sl, cmd.tp, cmd.timestamp, source_account,
                        (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
    // CMD_CLOSE
