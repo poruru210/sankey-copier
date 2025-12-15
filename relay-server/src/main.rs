@@ -12,7 +12,9 @@ mod models;
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
+mod ports;
 mod runtime_status_updater;
+mod services;
 mod victoria_logs;
 mod zeromq;
 
@@ -28,7 +30,9 @@ use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
 use message_handler::MessageHandler;
-use runtime_status_updater::RuntimeStatusMetrics;
+use ports::adapters::RuntimeStatusEvaluatorAdapter;
+use runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater};
+use services::StatusService;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
 use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
@@ -268,6 +272,28 @@ async fn main() -> Result<()> {
     // Spawn ZeroMQ message processing task
     tracing::info!("Creating MessageHandler...");
     {
+        // Construct StatusService with Hexagonal adapters
+        let snapshot_broadcaster = api::SnapshotBroadcaster::new(
+            broadcast_tx.clone(),
+            connection_manager.clone(),
+            db.clone(),
+        );
+
+        let status_evaluator =
+            RuntimeStatusEvaluatorAdapter::new(RuntimeStatusUpdater::with_metrics(
+                db.clone(),
+                connection_manager.clone(),
+                runtime_status_metrics.clone(),
+            ));
+
+        let status_service = StatusService::new(
+            connection_manager.clone() as Arc<dyn ports::ConnectionManager>,
+            db.clone() as Arc<dyn ports::TradeGroupRepository>,
+            zmq_publisher.clone() as Arc<dyn ports::ConfigPublisher>,
+            Some(Arc::new(status_evaluator) as Arc<dyn ports::StatusEvaluator>),
+            Some(Arc::new(snapshot_broadcaster) as Arc<dyn ports::UpdateBroadcaster>),
+        );
+
         let handler = MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
@@ -276,8 +302,11 @@ async fn main() -> Result<()> {
             zmq_publisher.clone(),
             vlogs_controller.clone(),
             runtime_status_metrics.clone(),
+            Some(status_service),
         );
-        tracing::info!("MessageHandler created, spawning message processing task...");
+        tracing::info!(
+            "MessageHandler created with StatusService, spawning message processing task..."
+        );
 
         tokio::spawn(async move {
             while let Some(msg) = zmq_rx.recv().await {

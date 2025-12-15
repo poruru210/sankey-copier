@@ -52,6 +52,7 @@ impl TestContext {
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
             Arc::new(RuntimeStatusMetrics::default()),
+            None, // status_service - use legacy heartbeat logic for now
         );
 
         Self {
@@ -139,6 +140,7 @@ pub(crate) async fn create_test_handler() -> MessageHandler {
         publisher,
         None,
         Arc::new(RuntimeStatusMetrics::default()),
+        None, // status_service - use legacy heartbeat logic
     )
 }
 

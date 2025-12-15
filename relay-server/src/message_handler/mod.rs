@@ -42,6 +42,10 @@ pub struct MessageHandler {
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     /// Snapshot broadcaster for triggering immediate updates
     snapshot_broadcaster: Option<SnapshotBroadcaster>,
+    /// Status service for heartbeat processing (Hexagonal Architecture)
+    /// Optional for backward compatibility - when None, uses legacy heartbeat logic
+    #[allow(dead_code)] // Will be used when heartbeat.rs delegates to it
+    status_service: Option<crate::services::StatusService>,
 }
 
 impl MessageHandler {
@@ -54,6 +58,7 @@ impl MessageHandler {
         publisher: Arc<ZmqConfigPublisher>,
         vlogs_controller: Option<VLogsController>,
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
+        status_service: Option<crate::services::StatusService>,
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),
@@ -63,15 +68,12 @@ impl MessageHandler {
             publisher,
             vlogs_controller,
             runtime_status_metrics,
-            // Lazy initialization or passed in?
-            // For now, let's construct it here as we have all deps,
-            // OR we should pass it in. Passing it in is cleaner but requires main.rs change.
-            // But we can construct it since we have deps.
             snapshot_broadcaster: Some(SnapshotBroadcaster::new(
                 broadcast_tx,
                 connection_manager,
                 db,
             )),
+            status_service,
         }
     }
 
