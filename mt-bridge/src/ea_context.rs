@@ -32,7 +32,7 @@ pub enum EaCommandType {
 #[derive(Debug, Clone)]
 pub struct EaCommand {
     pub command_type: i32,
-    pub _pad1: i32, // [FIX] Explicit padding for alignment
+    pub algo_flags: i32, // [FIX] Replaced _pad1 with algo_flags (Bit 0: IsDelayed)
 
     pub ticket: i64,
     pub symbol: [u8; 32], // 32 bytes (aligned to 8, safe)
@@ -57,10 +57,10 @@ impl Default for EaCommand {
     fn default() -> Self {
         Self {
             command_type: 0,
-            _pad1: 0,
+            algo_flags: 0,
             ticket: 0,
             symbol: [0; 32],
-            order_type: 0,
+            order_type: 0, // ...
             _pad2: 0,
             volume: 0.0,
             price: 0.0,
@@ -497,6 +497,8 @@ impl EaContext {
                 }
             }
 
+            let mut algo_flags = 0;
+
             // 3. Latency Check
             let now = Utc::now();
             let latency_ms = (now - signal.timestamp).num_milliseconds();
@@ -509,11 +511,12 @@ impl EaContext {
                     );
                     return;
                 } else {
-                    // Log warning but pass through (Logic to convert to pending is in MQL)
+                    // Log warning and mark as delayed
                     eprintln!(
-                        "Signal delayed from {} (Latency: {}ms). Marking for potential pending order.",
+                        "Signal delayed from {} (Latency: {}ms). Marking for pending order.",
                         signal.source_account, latency_ms
                     );
+                    algo_flags |= 1; // Bit 0: IsDelayed
                 }
             }
 
@@ -524,6 +527,7 @@ impl EaContext {
                     TradeAction::Close => EaCommandType::Close as i32,
                     TradeAction::Modify => EaCommandType::Modify as i32,
                 },
+                algo_flags,
                 ..Default::default()
             };
 

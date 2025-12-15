@@ -65,7 +65,7 @@
 //--- EaCommand structure with MQL4/pack=1 compatibility padding
 struct EaCommand {
    int command_type;
-   int _pad1;        // Rust alignment matches MQL4 pack(1) manually
+   int algo_flags;   // Bit 0: IsDelayed (Replaced _pad1)
 
    long ticket;
    uchar symbol[32]; // Fixed size string buffer

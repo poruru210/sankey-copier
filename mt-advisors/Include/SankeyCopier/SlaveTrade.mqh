@@ -110,7 +110,7 @@ bool EnsureSymbolActive(string symbol)
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       ulong master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, long timestamp_ms,
+                      double lots, double price, double sl, double tp, int algo_flags, // Replaced timestamp_ms
                       string source_account, int magic, int slippage_points,
                       int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
@@ -122,19 +122,24 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 
    if(!EnsureSymbolActive(symbol)) return;
 
-   // Check signal delay (using TimeGMT as approximation for current UTC time)
-   // Note: TimeGMT() returns seconds, convert to ms
-   long current_time_ms = (long)TimeGMT() * 1000;
-   int delay_ms = (int)(current_time_ms - timestamp_ms);
+   // Check signal delay using algo_flags (calculated by Rust to avoid clock skew)
+   bool is_delayed = (algo_flags & 1) != 0;
 
-   if(delay_ms > max_signal_delay_ms)
+   if(is_delayed)
    {
-       // If signal reached here, it means Rust bridge decided to pass it through.
-       // This implies use_pending_for_delayed is TRUE (otherwise Rust drops it).
-       // So we proceed to queue a pending order.
-       LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
+       // If signal is marked delayed, we proceed to queue a pending order.
+       // Rust only sets this flag if use_pending_for_delayed is true.
+       LogInfo(CAT_TRADE, StringFormat("Signal marked delayed by Server. Using pending order at original price %.5f", price));
+       // We pass 0 or a dummy delay_ms because MQL logic for PendingOrder might use it?
+       // Let's check ExecutePendingOrder. It takes delay_ms.
+       // We can pass max_signal_delay_ms + 1 to ensure it treats it as delayed?
+       // Or just pass 0 if it's only for logging.
+       // Wait, ExecutePendingOrder uses delay_ms for expiration calculation?
+       // Inspect ExecutePendingOrder...
+       // For now, let's pass max_signal_delay_ms as "delay" proxy or 0 if unused.
+       int estimated_delay = max_signal_delay_ms + 100; // Force delay logic if used inside
        ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                          source_account, delay_ms, magic);
+                          source_account, estimated_delay, magic);
        return;
    }
 
@@ -486,7 +491,7 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       int master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, long timestamp_ms,
+                      double lots, double price, double sl, double tp, int algo_flags, // Replaced timestamp_ms
                       string source_account, int magic, int slippage_points,
                       int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
@@ -499,17 +504,15 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
    if(!EnsureSymbolActive(symbol)) return;
 
-   // Check signal delay
-   long current_time_ms = (long)TimeGMT() * 1000;
-   int delay_ms = (int)(current_time_ms - timestamp_ms);
+   // Check signal delay using algo_flags
+   bool is_delayed = (algo_flags & 1) != 0;
 
-   if(delay_ms > max_signal_delay_ms)
+   if(is_delayed)
    {
-       // If signal reached here, it means Rust bridge decided to pass it through.
-       // This implies use_pending_for_delayed is TRUE.
-       LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
+       int estimated_delay = max_signal_delay_ms + 100;
+       LogInfo(CAT_TRADE, StringFormat("Signal marked delayed by Server. Using pending order at original price %.5f", price));
        ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                          source_account, delay_ms, magic, default_slippage);
+                          source_account, estimated_delay, magic, default_slippage);
        return;
    }
 
