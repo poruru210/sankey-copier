@@ -5,8 +5,8 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 
 use crate::adapters::inbound::http::SnapshotBroadcaster;
-use crate::connection_manager::ConnectionManager;
 use crate::adapters::outbound::persistence::Database;
+use crate::connection_manager::ConnectionManager;
 use crate::models::HeartbeatMessage;
 
 /// Create a test HeartbeatMessage

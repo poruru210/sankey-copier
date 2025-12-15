@@ -16,8 +16,8 @@ use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinHandle;
 
 use crate::adapters::inbound::http::AppState;
-use crate::connection_manager::ConnectionManager;
 use crate::adapters::outbound::persistence::Database;
+use crate::connection_manager::ConnectionManager;
 use crate::models::{
     status_engine::{
         evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,

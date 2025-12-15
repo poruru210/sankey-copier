@@ -56,11 +56,12 @@ impl TestContext {
         );
 
         // Create snapshot broadcaster for StatusService (UpdateBroadcaster)
-        let snapshot_broadcaster = Arc::new(crate::adapters::inbound::http::SnapshotBroadcaster::new(
-            broadcast_tx.clone(),
-            connection_manager.clone(),
-            db.clone(),
-        ));
+        let snapshot_broadcaster =
+            Arc::new(crate::adapters::inbound::http::SnapshotBroadcaster::new(
+                broadcast_tx.clone(),
+                connection_manager.clone(),
+                db.clone(),
+            ));
 
         // Construct StatusService with real components (acting as adapters)
         let status_service = crate::application::StatusService::new(
