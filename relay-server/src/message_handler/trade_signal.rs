@@ -77,12 +77,9 @@ impl MessageHandler {
     ) {
         // Transform signal
         // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
-        let converter = SymbolConverter {
-            prefix_remove: master_settings.symbol_prefix.clone(),
-            suffix_remove: master_settings.symbol_suffix.clone(),
-            prefix_add: member.slave_settings.symbol_prefix.clone(),
-            suffix_add: member.slave_settings.symbol_suffix.clone(),
-        };
+        // Transform signal
+        // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
+        let converter = SymbolConverter::from_settings(master_settings, &member.slave_settings);
 
         match self
             .copy_engine
