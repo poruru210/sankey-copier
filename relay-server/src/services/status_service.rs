@@ -63,7 +63,7 @@ impl StatusService {
     async fn handle_master_heartbeat(
         &self,
         msg: HeartbeatMessage,
-        _old_conn: Option<crate::models::EaConnection>,
+        old_conn: Option<crate::models::EaConnection>,
     ) {
         let account_id = &msg.account_id;
 
@@ -77,7 +77,7 @@ impl StatusService {
             }
         };
 
-        // Get Master Connection
+        // Get Master Connection (after update_heartbeat)
         let master_conn = self.connection_manager.get_master(account_id).await;
 
         // Build Master Config & Status
@@ -94,11 +94,50 @@ impl StatusService {
             timestamp: chrono::Utc::now(),
         };
 
-        let _bundle = crate::config_builder::ConfigBuilder::build_master_config(context);
+        let bundle = crate::config_builder::ConfigBuilder::build_master_config(context);
 
-        // TODO: Implement change detection and publishing logic similar to heartbeat.rs
-        // For TDD step 1, we just minimally need to pass the basic flow test which expects update_heartbeat (already called above).
-        // Since the test doesn't check for publish calls yet, this is sufficient to turn Green for the current test.
+        // Calculate OLD Master Status
+        let old_master_status = if let Some(conn) = old_conn.as_ref() {
+            let old_snapshot = crate::models::status_engine::ConnectionSnapshot {
+                connection_status: Some(conn.status),
+                is_trade_allowed: conn.is_trade_allowed,
+            };
+            crate::models::status_engine::evaluate_master_status(
+                crate::models::status_engine::MasterIntent {
+                    web_ui_enabled: trade_group.master_settings.enabled,
+                },
+                old_snapshot,
+            )
+        } else {
+            // New registration - treat as "unknown" state which will trigger change
+            crate::models::status_engine::MasterStatusResult::unknown()
+        };
+
+        // Check for changes
+        let master_changed = bundle.status_result.has_changed(&old_master_status);
+
+        tracing::debug!(
+            master = %account_id,
+            changed = master_changed,
+            old_status = old_master_status.status,
+            new_status = bundle.status_result.status,
+            "[StatusService] Master status change detection"
+        );
+
+        if master_changed {
+            // Send config
+            if let Err(e) = self.publisher.send_master_config(&bundle.config).await {
+                tracing::error!("Failed to send master config to {}: {}", account_id, e);
+            } else {
+                tracing::info!(
+                    "Sent Master CONFIG to {} (status: {})",
+                    account_id,
+                    bundle.status_result.status
+                );
+            }
+
+            // TODO: Notify connected Slaves about Master status change
+        }
     }
 
     async fn handle_slave_heartbeat(
@@ -232,6 +271,86 @@ mod tests {
             .expect_get_trade_group()
             .with(eq(account_id))
             .return_once(|_| Ok(Some(trade_group)));
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            None,
+            None,
+        );
+
+        service.handle_heartbeat(heartbeat).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_master_new_registration_sends_config() {
+        let mut mock_conn_manager = MockConnectionManager::new();
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let account_id = "MASTER_NEW";
+        let heartbeat = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            ea_type: "Master".to_string(),
+            is_trade_allowed: true,
+            message_type: "Heartbeat".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            version: "1.0.0".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 123456,
+            broker: "TestBroker".to_string(),
+            account_name: "TestAccount".to_string(),
+            server: "TestServer".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        // First call for old_conn lookup returns None (new registration)
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .return_const(None);
+
+        // Heartbeat update
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .times(1)
+            .return_const(());
+
+        // Second call after registration returns the connection
+        let new_conn = EaConnection {
+            account_id: account_id.to_string(),
+            ea_type: crate::models::EaType::Master,
+            status: ConnectionStatus::Registered,
+            is_trade_allowed: true,
+            ..Default::default()
+        };
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .return_const(Some(new_conn));
+
+        // TradeGroup exists
+        let trade_group = TradeGroup::new(account_id.to_string());
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .return_once(|_| Ok(Some(trade_group)));
+
+        // EXPECT: Config should be published for new registration
+        mock_publisher
+            .expect_send_master_config()
+            .times(1)
+            .returning(|_| Ok(()));
 
         let service = StatusService::new(
             Arc::new(mock_conn_manager),
