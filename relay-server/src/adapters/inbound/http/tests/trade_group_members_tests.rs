@@ -9,7 +9,7 @@ use axum::{
 use tower::ServiceExt;
 
 use crate::{
-    api::{
+    adapters::inbound::http::{
         create_router,
         trade_group_members::{AddMemberRequest, ToggleStatusRequest},
     },
@@ -19,7 +19,10 @@ use crate::{
 use super::create_test_app_state;
 
 /// Helper function to create a test TradeGroup (Master)
-async fn setup_test_trade_group(state: &crate::api::AppState, master_account: &str) {
+async fn setup_test_trade_group(
+    state: &crate::adapters::inbound::http::AppState,
+    master_account: &str,
+) {
     // First create the TradeGroup
     state.db.create_trade_group(master_account).await.unwrap();
 

@@ -3,7 +3,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use super::create_test_app_state;
-use crate::api::runtime_metrics::get_runtime_metrics;
+use crate::adapters::inbound::http::runtime_metrics::get_runtime_metrics;
 use crate::runtime_status_updater::RuntimeStatusMetricsSnapshot;
 
 #[tokio::test]

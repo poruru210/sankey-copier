@@ -4,7 +4,7 @@
 
 use axum::{extract::State, Json};
 
-use crate::api::{AppState, ProblemDetails};
+use crate::adapters::inbound::http::{AppState, ProblemDetails};
 
 /// Get server logs from the log buffer
 pub async fn get_logs(

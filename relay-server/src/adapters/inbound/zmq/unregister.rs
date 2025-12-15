@@ -6,11 +6,11 @@
 
 use super::MessageHandler;
 use crate::{
+    adapters::outbound::messaging::ZmqConfigPublisher,
+    adapters::outbound::persistence::Database,
     connection_manager::ConnectionManager,
-    db::Database,
     models::{status_engine::SlaveRuntimeTarget, EaType, SlaveConfigWithMaster, UnregisterMessage},
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
-    zeromq::ZmqConfigPublisher,
 };
 use std::sync::Arc;
 use tokio::sync::broadcast;

@@ -23,7 +23,7 @@ async fn test_handle_request_config_master() {
     };
 
     // Step 3: Call handle_request_config via handle_message
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     // Step 4: Verify no panic occurred (implementation will be added in Phase 3.2b)
@@ -47,7 +47,7 @@ async fn test_handle_request_config_master_not_found() {
     };
 
     // Call handle_request_config via handle_message
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     // Should not panic even if Master not found (graceful handling)
@@ -98,7 +98,7 @@ async fn test_handle_request_config_slave() {
     };
 
     // Call handle_request_config via handle_message
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     // Should successfully send config to Slave (no panic)
@@ -119,7 +119,7 @@ async fn test_handle_request_config_slave_not_found() {
     };
 
     // Call handle_request_config via handle_message
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     // Should not panic even if Slave not found (graceful handling)
@@ -139,7 +139,7 @@ async fn test_handle_request_config_unknown_ea_type() {
     };
 
     // Call handle_request_config via handle_message
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     // Should handle gracefully (log warning, no panic)
@@ -213,7 +213,7 @@ async fn test_slave_request_config_updates_runtime_status() {
         timestamp: chrono::Utc::now().to_rfc3339(),
         ea_type: "Slave".to_string(),
     };
-    let zmq_msg = crate::zeromq::ZmqMessage::RequestConfig(request_msg);
+    let zmq_msg = crate::adapters::outbound::messaging::ZmqMessage::RequestConfig(request_msg);
     ctx.handle_message(zmq_msg).await;
 
     let after = ctx

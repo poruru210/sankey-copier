@@ -7,14 +7,13 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
-    api::SnapshotBroadcaster,
+    adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage},
+    adapters::outbound::persistence::Database,
     connection_manager::ConnectionManager,
-    db::Database,
     engine::CopyEngine,
     models::WarningCode,
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
     victoria_logs::VLogsController,
-    zeromq::{ZmqConfigPublisher, ZmqMessage},
 };
 
 // Handler submodules
@@ -44,7 +43,7 @@ pub struct MessageHandler {
     /// Status service for heartbeat processing (Hexagonal Architecture)
     /// Optional for backward compatibility - when None, uses legacy heartbeat logic
     #[allow(dead_code)] // Will be used when heartbeat.rs delegates to it
-    status_service: Option<crate::services::StatusService>,
+    status_service: Option<crate::application::StatusService>,
 }
 
 impl MessageHandler {
@@ -57,7 +56,7 @@ impl MessageHandler {
         publisher: Arc<ZmqConfigPublisher>,
         vlogs_controller: Option<VLogsController>,
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
-        status_service: Option<crate::services::StatusService>,
+        status_service: Option<crate::application::StatusService>,
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),

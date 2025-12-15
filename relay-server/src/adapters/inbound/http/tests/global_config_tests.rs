@@ -10,7 +10,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-    use crate::api::{
+    use crate::adapters::inbound::http::{
         create_router,
         victoria_logs_settings::{VLogsConfigResponse, VLogsUpdateRequest},
     };

@@ -1,9 +1,9 @@
 use crate::connection_manager::ConnectionManager;
-use crate::db::Database;
-use crate::message_handler::unregister::{notify_slave_offline, notify_slaves_master_offline};
+use crate::adapters::outbound::persistence::Database;
+use crate::adapters::inbound::zmq::unregister::{notify_slave_offline, notify_slaves_master_offline};
 use crate::models::EaType;
 use crate::runtime_status_updater::RuntimeStatusMetrics;
-use crate::zeromq::ZmqConfigPublisher;
+use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;

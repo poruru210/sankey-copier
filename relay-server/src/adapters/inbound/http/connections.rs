@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::{
-    api::{AppState, ProblemDetails},
+    adapters::inbound::http::{AppState, ProblemDetails},
     models::EaConnection,
 };
 

@@ -40,9 +40,10 @@ use tower_http::LatencyUnit;
 pub use websocket::SnapshotBroadcaster;
 
 use crate::{
-    config::Config, connection_manager::ConnectionManager, db::Database, log_buffer::LogBuffer,
+    adapters::outbound::messaging::ZmqConfigPublisher, adapters::outbound::persistence::Database,
+    config::Config, connection_manager::ConnectionManager, log_buffer::LogBuffer,
     port_resolver::ResolvedPorts, runtime_status_updater::RuntimeStatusMetrics,
-    victoria_logs::VLogsController, zeromq::ZmqConfigPublisher,
+    victoria_logs::VLogsController,
 };
 
 // Import handlers from submodules

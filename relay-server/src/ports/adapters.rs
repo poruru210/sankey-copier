@@ -6,17 +6,17 @@
 use super::{
     ConfigPublisher, ConnectionManager, StatusEvaluator, TradeGroupRepository, UpdateBroadcaster,
 };
-use crate::api::SnapshotBroadcaster;
+use crate::adapters::inbound::http::SnapshotBroadcaster;
 use crate::config_builder::SlaveConfigBundle;
 use crate::connection_manager::ConnectionManager as ConcreteConnectionManager;
-use crate::db::Database;
+use crate::adapters::outbound::persistence::Database;
 use crate::models::status_engine::{ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget};
 use crate::models::{
     EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, TradeGroupMember,
     VLogsGlobalSettings,
 };
 use crate::runtime_status_updater::RuntimeStatusUpdater;
-use crate::zeromq::ZmqConfigPublisher;
+use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use async_trait::async_trait;
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 

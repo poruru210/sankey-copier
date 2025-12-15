@@ -1,41 +1,38 @@
-mod api;
+pub mod adapters;
+pub mod application;
 mod cert;
 mod config;
 mod config_builder;
 mod connection_manager;
-mod db;
 mod engine;
 mod log_buffer;
 mod logging;
-mod message_handler;
 mod models;
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
 pub mod ports;
 mod runtime_status_updater;
-pub mod services;
 mod victoria_logs;
-mod zeromq;
 
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use api::{create_router, AppState};
+use adapters::inbound::http::{create_router, AppState};
+use adapters::inbound::zmq::MessageHandler;
+use adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
+use adapters::outbound::persistence::Database;
+use application::status_service::StatusService;
 use config::Config;
 use connection_manager::ConnectionManager;
-use db::Database;
 use engine::CopyEngine;
 use log_buffer::{create_log_buffer, LogBufferLayer};
-use message_handler::MessageHandler;
 use ports::adapters::RuntimeStatusEvaluatorAdapter;
 use runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater};
-use services::StatusService;
 use std::sync::atomic::AtomicBool;
 use victoria_logs::VLogsController;
-use zeromq::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -273,7 +270,7 @@ async fn main() -> Result<()> {
     tracing::info!("Creating MessageHandler...");
     {
         // Construct StatusService with Hexagonal adapters
-        let snapshot_broadcaster = api::SnapshotBroadcaster::new(
+        let snapshot_broadcaster = adapters::inbound::http::SnapshotBroadcaster::new(
             broadcast_tx.clone(),
             connection_manager.clone(),
             db.clone(),
@@ -346,8 +343,11 @@ async fn main() -> Result<()> {
     let cors_disabled = config.cors.disable;
 
     // Create on-demand snapshot broadcaster for WebSocket clients
-    let snapshot_broadcaster =
-        api::SnapshotBroadcaster::new(broadcast_tx.clone(), connection_manager.clone(), db.clone());
+    let snapshot_broadcaster = adapters::inbound::http::SnapshotBroadcaster::new(
+        broadcast_tx.clone(),
+        connection_manager.clone(),
+        db.clone(),
+    );
 
     let app_state = AppState {
         db: db.clone(),

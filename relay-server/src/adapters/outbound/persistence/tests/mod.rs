@@ -2,7 +2,7 @@
 //!
 //! Shared test utilities and helper functions for database tests
 
-use crate::db::Database;
+use crate::adapters::outbound::persistence::Database;
 use crate::models::SlaveSettings;
 use sankey_copier_zmq::TradeFilters;
 
