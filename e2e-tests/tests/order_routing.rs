@@ -602,8 +602,6 @@ async fn test_delayed_signal_acceptable() {
 /// Test stale signal (10+ seconds old) - should still be delivered with old timestamp
 #[tokio::test]
 async fn test_stale_signal_too_old() {
-
-
     let sandbox = TestSandbox::new().expect("Failed to start sandbox");
     let server = sandbox.server();
 

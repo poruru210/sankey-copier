@@ -176,8 +176,8 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
       {
          ulong ticket = trade.ResultOrder();
          // Enhanced log with queue_time (delay_ms), broker_time, and received_via
-         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
+         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
@@ -557,8 +557,8 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
       if(ticket > 0)
       {
          // Enhanced log with queue_time (delay_ms), broker_time, and received_via
-         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
+         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
