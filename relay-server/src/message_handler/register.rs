@@ -4,11 +4,11 @@
 // Registers an EA explicitly with the connection manager.
 
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
+use crate::models::status_engine::SlaveRuntimeTarget;
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
     RegisterMessage, VLogsGlobalSettings,
 };
-use crate::runtime_status_updater::SlaveRuntimeTarget;
 
 use super::MessageHandler;
 

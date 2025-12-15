@@ -13,6 +13,8 @@ pub mod models;
 pub mod mt_detector;
 pub mod mt_installer;
 pub mod port_resolver;
+pub mod ports;
 pub mod runtime_status_updater;
+pub mod services;
 pub mod victoria_logs;
 pub mod zeromq;

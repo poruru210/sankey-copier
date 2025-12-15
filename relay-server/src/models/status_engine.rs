@@ -3,7 +3,18 @@
 // Next-generation status evaluation engine for Master/Slave EAs.
 // Provides a single source of truth for status and allow_new_orders logic.
 
-use super::{ConnectionStatus, WarningCode, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
+use super::{
+    ConnectionStatus, SlaveSettings, WarningCode, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
+};
+
+/// Input payload describing a specific Slave connection that needs runtime evaluation.
+pub struct SlaveRuntimeTarget<'a> {
+    pub master_account: &'a str,
+    pub slave_account: &'a str,
+    pub trade_group_id: &'a str,
+    pub enabled_flag: bool,
+    pub slave_settings: &'a SlaveSettings,
+}
 
 /// User-facing intent for a Master EA (e.g., Web UI toggle)
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

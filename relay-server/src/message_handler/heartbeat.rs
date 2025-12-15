@@ -9,11 +9,12 @@
 
 use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
+use crate::models::status_engine::SlaveRuntimeTarget;
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
     EaConnection, HeartbeatMessage, VLogsGlobalSettings,
 };
-use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
+use crate::runtime_status_updater::RuntimeStatusUpdater;
 
 impl MessageHandler {
     /// Handle heartbeat messages (auto-registration + health monitoring + is_trade_allowed notification)

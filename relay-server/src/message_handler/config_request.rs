@@ -5,11 +5,11 @@
 
 use super::MessageHandler;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
+use crate::models::status_engine::SlaveRuntimeTarget;
 use crate::models::{
     status_engine::{ConnectionSnapshot, MasterIntent},
     RequestConfigMessage,
 };
-use crate::runtime_status_updater::SlaveRuntimeTarget;
 
 impl MessageHandler {
     /// Handle configuration request from Master or Slave EA

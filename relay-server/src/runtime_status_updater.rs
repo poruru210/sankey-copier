@@ -8,24 +8,11 @@ use crate::{
     config_builder::{ConfigBuilder, SlaveConfigBundle, SlaveConfigContext},
     connection_manager::ConnectionManager,
     db::Database,
-    models::{
-        status_engine::{
-            evaluate_master_status, evaluate_member_status, ConnectionSnapshot,
-            MasterClusterSnapshot, MasterIntent, MasterStatusResult, MemberStatusResult,
-            SlaveIntent,
-        },
-        SlaveSettings,
+    models::status_engine::{
+        evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterClusterSnapshot,
+        MasterIntent, MasterStatusResult, MemberStatusResult, SlaveIntent, SlaveRuntimeTarget,
     },
 };
-
-/// Input payload describing a specific Slave connection that needs runtime evaluation.
-pub struct SlaveRuntimeTarget<'a> {
-    pub master_account: &'a str,
-    pub slave_account: &'a str,
-    pub trade_group_id: &'a str,
-    pub enabled_flag: bool,
-    pub slave_settings: &'a SlaveSettings,
-}
 
 /// Helper that centralizes runtime snapshot gathering for Master/Slave pairs.
 #[derive(Clone)]

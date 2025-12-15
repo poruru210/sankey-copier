@@ -8,8 +8,8 @@ use super::MessageHandler;
 use crate::{
     connection_manager::ConnectionManager,
     db::Database,
-    models::{EaType, SlaveConfigWithMaster, UnregisterMessage},
-    runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater, SlaveRuntimeTarget},
+    models::{status_engine::SlaveRuntimeTarget, EaType, SlaveConfigWithMaster, UnregisterMessage},
+    runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
     zeromq::ZmqConfigPublisher,
 };
 use std::sync::Arc;

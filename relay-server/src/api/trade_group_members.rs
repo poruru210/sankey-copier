@@ -11,8 +11,9 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
+use crate::models::status_engine::SlaveRuntimeTarget;
 use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
-use crate::runtime_status_updater::{RuntimeStatusUpdater, SlaveRuntimeTarget};
+use crate::runtime_status_updater::RuntimeStatusUpdater;
 
 use super::{AppState, ProblemDetails};
 
