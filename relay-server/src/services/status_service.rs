@@ -142,10 +142,133 @@ impl StatusService {
 
     async fn handle_slave_heartbeat(
         &self,
-        _msg: HeartbeatMessage,
-        _old_conn: Option<crate::models::EaConnection>,
+        msg: HeartbeatMessage,
+        old_conn: Option<crate::models::EaConnection>,
     ) {
-        // TODO: Implement slave heartbeat logic
+        let slave_account = &msg.account_id;
+
+        // Get all settings for this slave (one per Master connection)
+        let settings_list = match self.repository.get_settings_for_slave(slave_account).await {
+            Ok(list) => list,
+            Err(err) => {
+                tracing::error!(
+                    "Failed to fetch settings for Slave {} during heartbeat: {}",
+                    slave_account,
+                    err
+                );
+                return;
+            }
+        };
+
+        if settings_list.is_empty() {
+            tracing::debug!(
+                "Skipping Slave {} heartbeat runtime evaluation (no trade groups)",
+                slave_account
+            );
+            return;
+        }
+
+        // Need StatusEvaluator to proceed
+        let Some(evaluator) = &self.status_evaluator else {
+            tracing::debug!(
+                "StatusEvaluator not configured, skipping Slave {} heartbeat evaluation",
+                slave_account
+            );
+            return;
+        };
+
+        for settings in settings_list {
+            // Build new bundle
+            let slave_bundle = evaluator
+                .build_slave_bundle(crate::models::status_engine::SlaveRuntimeTarget {
+                    master_account: settings.master_account.as_str(),
+                    trade_group_id: settings.master_account.as_str(),
+                    slave_account: &settings.slave_account,
+                    enabled_flag: settings.enabled_flag,
+                    slave_settings: &settings.slave_settings,
+                })
+                .await;
+
+            // Calculate OLD status result
+            let old_status_result = if let Some(conn) = old_conn.as_ref() {
+                let old_snapshot = crate::models::status_engine::ConnectionSnapshot {
+                    connection_status: Some(conn.status),
+                    is_trade_allowed: conn.is_trade_allowed,
+                };
+                evaluator
+                    .evaluate_member_runtime_status_with_snapshot(
+                        crate::models::status_engine::SlaveRuntimeTarget {
+                            master_account: settings.master_account.as_str(),
+                            trade_group_id: settings.master_account.as_str(),
+                            slave_account: &settings.slave_account,
+                            enabled_flag: settings.enabled_flag,
+                            slave_settings: &settings.slave_settings,
+                        },
+                        old_snapshot,
+                    )
+                    .await
+            } else {
+                crate::models::status_engine::MemberStatusResult::unknown()
+            };
+
+            let previous_status = settings.status;
+            let evaluated_status = slave_bundle.status_result.status;
+
+            // Detect changes
+            let state_changed = slave_bundle.status_result.has_changed(&old_status_result)
+                || previous_status != evaluated_status;
+
+            tracing::debug!(
+                slave = %settings.slave_account,
+                master = %settings.master_account,
+                changed = state_changed,
+                old_status = previous_status,
+                new_status = evaluated_status,
+                "[StatusService] Slave status change detection"
+            );
+
+            if state_changed {
+                tracing::info!(
+                    slave = %settings.slave_account,
+                    master = %settings.master_account,
+                    old_status = previous_status,
+                    new_status = evaluated_status,
+                    "Slave state changed via heartbeat"
+                );
+
+                // Send config
+                if let Err(err) = self.publisher.send_slave_config(&slave_bundle.config).await {
+                    tracing::error!(
+                        "Failed to broadcast config to Slave {} on heartbeat: {}",
+                        settings.slave_account,
+                        err
+                    );
+                }
+
+                // WebSocket broadcast
+                if let Some(broadcaster) = &self.broadcaster {
+                    broadcaster.broadcast_snapshot().await;
+                }
+            }
+
+            // Update DB status
+            if let Err(err) = self
+                .repository
+                .update_member_runtime_status(
+                    &settings.master_account,
+                    slave_account,
+                    evaluated_status,
+                )
+                .await
+            {
+                tracing::error!(
+                    "Failed to persist runtime status for Slave {} (master {}): {}",
+                    settings.slave_account,
+                    settings.master_account,
+                    err
+                );
+            }
+        }
     }
 }
 
@@ -178,8 +301,8 @@ mod tests {
         impl TradeGroupRepository for TradeGroupRepository {
             async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>>;
             async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>>;
-            async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<SlaveSettings>>;
-            async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: ConnectionStatus) -> anyhow::Result<()>;
+            async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::models::SlaveConfigWithMaster>>;
+            async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: i32) -> anyhow::Result<()>;
         }
     }
 
@@ -209,6 +332,52 @@ mod tests {
             _target: SlaveRuntimeTarget<'_>,
         ) -> MemberStatusResult {
             MemberStatusResult::default()
+        }
+
+        async fn evaluate_member_runtime_status_with_snapshot(
+            &self,
+            _target: SlaveRuntimeTarget<'_>,
+            _snapshot: crate::models::status_engine::ConnectionSnapshot,
+        ) -> MemberStatusResult {
+            MemberStatusResult::default()
+        }
+
+        async fn build_slave_bundle(
+            &self,
+            _target: SlaveRuntimeTarget<'_>,
+        ) -> crate::config_builder::SlaveConfigBundle {
+            // Return a default bundle for testing
+            crate::config_builder::SlaveConfigBundle {
+                config: sankey_copier_zmq::SlaveConfigMessage {
+                    account_id: String::new(),
+                    master_account: String::new(),
+                    timestamp: 0,
+                    trade_group_id: String::new(),
+                    status: 0,
+                    lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
+                    lot_multiplier: None,
+                    reverse_trade: false,
+                    symbol_prefix: None,
+                    symbol_suffix: None,
+                    symbol_mappings: vec![],
+                    filters: sankey_copier_zmq::TradeFilters::default(),
+                    config_version: 0,
+                    source_lot_min: None,
+                    source_lot_max: None,
+                    master_equity: None,
+                    sync_mode: sankey_copier_zmq::SyncMode::default(),
+                    limit_order_expiry_min: None,
+                    market_sync_max_pips: None,
+                    max_slippage: None,
+                    copy_pending_orders: false,
+                    max_retries: 3,
+                    max_signal_delay_ms: 5000,
+                    use_pending_order_for_delayed: false,
+                    allow_new_orders: true,
+                    warning_codes: vec![],
+                },
+                status_result: MemberStatusResult::default(),
+            }
         }
     }
 

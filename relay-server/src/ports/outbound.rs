@@ -1,7 +1,6 @@
 use crate::models::{
-    status_engine::{MemberStatusResult, SlaveRuntimeTarget},
-    ConnectionStatus, EaConnection, HeartbeatMessage, SlaveSettings, TradeGroup,
-    VLogsGlobalSettings,
+    status_engine::{ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget},
+    EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, VLogsGlobalSettings,
 };
 use async_trait::async_trait;
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
@@ -20,12 +19,15 @@ pub trait TradeGroupRepository: Send + Sync {
         &self,
         master_id: &str,
     ) -> anyhow::Result<Vec<crate::models::TradeGroupMember>>;
-    async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<SlaveSettings>>;
+    async fn get_settings_for_slave(
+        &self,
+        slave_id: &str,
+    ) -> anyhow::Result<Vec<SlaveConfigWithMaster>>;
     async fn update_member_runtime_status(
         &self,
         master_id: &str,
         slave_id: &str,
-        status: ConnectionStatus,
+        status: i32,
     ) -> anyhow::Result<()>;
 }
 
@@ -44,9 +46,22 @@ pub trait UpdateBroadcaster: Send + Sync {
 
 #[async_trait]
 pub trait StatusEvaluator: Send + Sync {
+    /// Evaluate member runtime status based on current connection state
     async fn evaluate_member_runtime_status(
         &self,
         target: SlaveRuntimeTarget<'_>,
     ) -> MemberStatusResult;
-    // Add other methods if needed by StatusService
+
+    /// Evaluate member runtime status with an explicit snapshot (for "old" state detection)
+    async fn evaluate_member_runtime_status_with_snapshot(
+        &self,
+        target: SlaveRuntimeTarget<'_>,
+        snapshot: ConnectionSnapshot,
+    ) -> MemberStatusResult;
+
+    /// Build a complete SlaveConfigBundle for a specific Master-Slave connection
+    async fn build_slave_bundle(
+        &self,
+        target: SlaveRuntimeTarget<'_>,
+    ) -> crate::config_builder::SlaveConfigBundle;
 }
