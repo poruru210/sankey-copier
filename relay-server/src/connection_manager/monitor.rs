@@ -185,16 +185,7 @@ mod tests {
 
         // Register a Master EA that is "old"
         let _old_time = Utc::now() - chrono::Duration::seconds(5);
-        /*
-        let ea = EaConnection {
-            account_id: "master_1".to_string(),
-            ea_type: EaType::Master,
-            platform: Platform::MT5,
-            status: ConnectionStatus::Online,
-            last_heartbeat: old_time,
-            ..Default::default()
-        };
-        */
+
         // Inject directly into CM (using some internal knowledge or helper if available,
         // but robustly we rely on check_timeouts logic which we can't easily inject into
         // without mod visibility. Assuming check_timeouts works, we test the integration.)
