@@ -70,7 +70,7 @@ fn convert_master_config(c: &SMasterConfig) -> MasterConfigMessage {
         symbol_prefix: Some(bytes_to_string(&c.symbol_prefix)).filter(|s| !s.is_empty()),
         symbol_suffix: Some(bytes_to_string(&c.symbol_suffix)).filter(|s| !s.is_empty()),
         config_version: c.config_version,
-        timestamp: String::new(),
+        timestamp: 0,
         warning_codes: Vec::new(),
     }
 }

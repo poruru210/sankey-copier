@@ -54,7 +54,7 @@ pub enum SyncMode {
 pub struct SlaveConfigMessage {
     pub account_id: String,
     pub master_account: String,
-    pub timestamp: String,      // ISO 8601 format
+    pub timestamp: i64,         // Unix timestamp in milliseconds
     pub trade_group_id: String, // Used for ZMQ subscription
     pub status: i32, // 0=DISABLED, 1=ENABLED (Master disconnected), 2=CONNECTED (Master connected)
     #[serde(default)]
@@ -139,7 +139,7 @@ pub struct MasterConfigMessage {
     pub symbol_prefix: Option<String>,
     pub symbol_suffix: Option<String>,
     pub config_version: u32,
-    pub timestamp: String, // ISO 8601 format
+    pub timestamp: i64, // Unix timestamp in milliseconds
     /// Warning codes describing why master is disabled (if any)
     #[serde(default)]
     pub warning_codes: Vec<WarningCode>,
@@ -192,7 +192,7 @@ impl WarningCode {
 pub struct UnregisterMessage {
     pub message_type: String, // "Unregister"
     pub account_id: String,
-    pub timestamp: String,
+    pub timestamp: i64, // Unix timestamp in milliseconds
     #[serde(default)]
     pub ea_type: Option<String>, // "Master" or "Slave" (optional for backward compatibility)
 }
@@ -361,7 +361,7 @@ impl Default for SlaveConfigMessage {
         Self {
             account_id: String::new(),
             master_account: String::new(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Utc::now().timestamp_millis(),
             trade_group_id: String::new(),
             status: 0,
             lot_calculation_mode: LotCalculationMode::default(),

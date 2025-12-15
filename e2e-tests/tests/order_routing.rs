@@ -613,7 +613,9 @@ async fn test_stale_signal_too_old() {
     let slave_account = "SLAVE_STALE_001";
 
     setup_test_scenario(&db, master_account, &[slave_account], |_| {
-        default_test_slave_settings()
+        let mut settings = default_test_slave_settings();
+        settings.max_signal_delay_ms = 5000;
+        settings
     })
     .await
     .expect("Failed to setup test scenario");

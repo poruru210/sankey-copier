@@ -110,6 +110,7 @@ pub enum ConnectionStatus {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use sankey_copier_zmq::{LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters};
 
     #[test]
@@ -117,7 +118,7 @@ mod tests {
         let config = SlaveConfigMessage {
             account_id: "TEST_001".to_string(),
             master_account: "MASTER_001".to_string(),
-            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            timestamp: Utc::now().timestamp_millis(),
             trade_group_id: "MASTER_001".to_string(),
             status: 2, // STATUS_CONNECTED
             lot_calculation_mode: LotCalculationMode::default(),

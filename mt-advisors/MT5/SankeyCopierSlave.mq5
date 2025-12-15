@@ -460,7 +460,7 @@ void ProcessTradeSignalFromCommand(EaCommand &cmd)
       // Execute Open Trade
       ExecuteOpenTrade(g_trade, g_order_map, g_pending_order_map, master_ticket, symbol,
                        order_type_str, cmd.volume, cmd.price, cmd.sl, cmd.tp, cmd.algo_flags, source_account, // Replaced cmd.timestamp with cmd.algo_flags
-                       (int)cmd.magic, trade_slippage, max_signal_delay, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
+                       (int)cmd.magic, trade_slippage, use_pending_for_delayed, max_retries, DEFAULT_SLIPPAGE);
    }
    // CMD_CLOSE
    else if(action == CMD_CLOSE)

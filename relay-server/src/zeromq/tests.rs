@@ -105,7 +105,7 @@ fn test_message_discriminator_unregister() {
     let unregister = UnregisterMessage {
         message_type: "Unregister".to_string(),
         account_id: "TEST_001".to_string(),
-        timestamp: Utc::now().to_rfc3339(),
+        timestamp: Utc::now().timestamp_millis(),
         ea_type: None,
     };
 

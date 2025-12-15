@@ -608,7 +608,7 @@ async fn send_disabled_config_to_slave(
         source_lot_min: None,
         source_lot_max: None,
         master_equity: None,
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         trade_group_id: master_account.to_string(),
         // Open Sync Policy defaults
         sync_mode: sankey_copier_zmq::SyncMode::default(),
@@ -649,7 +649,7 @@ async fn send_removed_config_to_master(state: &AppState, master_account: &str) {
         symbol_prefix: None,
         symbol_suffix: None,
         config_version: 0,
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         warning_codes: Vec::new(),
     };
 
@@ -731,7 +731,7 @@ async fn send_initial_config_to_master(state: &AppState, master_account: &str) {
         symbol_prefix: settings.symbol_prefix.clone(),
         symbol_suffix: settings.symbol_suffix.clone(),
         config_version: settings.config_version,
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         warning_codes: Vec::new(),
     };
 

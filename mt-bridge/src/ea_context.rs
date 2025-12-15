@@ -1142,7 +1142,7 @@ mod tests {
         crate::types::SlaveConfigMessage {
             account_id: "test_acc".to_string(),
             master_account: master_account.to_string(),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now().timestamp_millis(),
             trade_group_id: "GROUP_001".to_string(),
             status: 2, // Connected
             lot_calculation_mode: crate::types::LotCalculationMode::Multiplier,
@@ -1257,7 +1257,7 @@ mod tests {
         // Tick 2: Trade (Should be Dropped)
         let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
 
-        // [RED] This assertion expects 0 (Dropped), but currently logic passes it through (so pending=1)
+        // Verify that the expired signal is dropped (pending=0)
         assert_eq!(pending, 0, "Expired signal should be dropped");
     }
 

@@ -129,7 +129,7 @@ pub unsafe extern "C" fn ea_send_unregister(
         let msg = crate::types::UnregisterMessage {
             message_type: "Unregister".to_string(),
             account_id: ctx.account_id.clone(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Utc::now().timestamp_millis(),
             ea_type: Some(ctx.ea_type.clone()),
         };
 

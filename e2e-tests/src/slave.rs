@@ -439,7 +439,7 @@ impl SlaveEaSimulator {
         let msg = UnregisterMessage {
             message_type: "Unregister".to_string(),
             account_id: self.base.account_id().to_string(),
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Utc::now().timestamp_millis(),
             ea_type: Some("Slave".to_string()),
         };
         let bytes = rmp_serde::to_vec_named(&msg)?;
