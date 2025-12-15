@@ -8,7 +8,7 @@ use crate::{
     adapters::outbound::persistence::Database,
     config_builder::{ConfigBuilder, SlaveConfigBundle, SlaveConfigContext},
     connection_manager::ConnectionManager,
-    models::status_engine::{
+    domain::services::status_calculator::{
         evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterClusterSnapshot,
         MasterIntent, MasterStatusResult, MemberStatusResult, SlaveIntent, SlaveRuntimeTarget,
     },

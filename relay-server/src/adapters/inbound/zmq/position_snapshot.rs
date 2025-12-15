@@ -6,7 +6,7 @@
 use sankey_copier_zmq::build_sync_topic;
 
 use super::MessageHandler;
-use crate::models::PositionSnapshotMessage;
+use crate::domain::models::PositionSnapshotMessage;
 
 impl MessageHandler {
     /// Handle PositionSnapshot message from Master EA

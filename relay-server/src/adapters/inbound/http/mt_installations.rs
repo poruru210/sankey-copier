@@ -4,7 +4,7 @@ use axum::{
 };
 use std::path::PathBuf;
 
-use crate::models::{DetectionSummary, EaPortConfig, MtInstallationsResponse};
+use crate::domain::models::{DetectionSummary, EaPortConfig, MtInstallationsResponse};
 use crate::mt_detector::MtDetector;
 use crate::mt_installer::MtInstaller;
 

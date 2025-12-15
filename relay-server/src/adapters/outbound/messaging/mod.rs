@@ -1,6 +1,6 @@
 mod config_publisher;
 
-use crate::models::{
+use crate::domain::models::{
     HeartbeatMessage, PositionSnapshotMessage, RegisterMessage, RequestConfigMessage,
     SyncRequestMessage, TradeSignal, UnregisterMessage,
 };

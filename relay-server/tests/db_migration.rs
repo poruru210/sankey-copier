@@ -3,7 +3,7 @@
 // Tests for database migration to the new trade_groups schema.
 // Validates that the new tables and indexes are created correctly.
 
-use sankey_copier_relay_server::db::Database;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
 
 /// Helper to create an in-memory test database
 async fn create_test_db() -> Database {

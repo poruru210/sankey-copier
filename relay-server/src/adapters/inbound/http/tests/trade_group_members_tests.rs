@@ -8,12 +8,12 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use crate::{
-    adapters::inbound::http::{
-        create_router,
-        trade_group_members::{AddMemberRequest, ToggleStatusRequest},
-    },
-    models::{LotCalculationMode, MasterSettings, SlaveSettings, SymbolMapping, TradeFilters},
+use crate::adapters::inbound::http::{
+    create_router,
+    trade_group_members::{AddMemberRequest, ToggleStatusRequest},
+};
+use crate::domain::models::{
+    LotCalculationMode, MasterSettings, SlaveSettings, SymbolMapping, TradeFilters,
 };
 
 use super::create_test_app_state;
@@ -63,7 +63,8 @@ async fn test_list_members_empty() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let members: Vec<crate::models::TradeGroupMember> = serde_json::from_slice(&body).unwrap();
+    let members: Vec<crate::domain::models::TradeGroupMember> =
+        serde_json::from_slice(&body).unwrap();
 
     assert_eq!(members.len(), 0);
 }
@@ -96,7 +97,7 @@ async fn test_add_member_success() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
-            sync_mode: crate::models::SyncMode::Skip,
+            sync_mode: crate::domain::models::SyncMode::Skip,
             limit_order_expiry_min: None,
             market_sync_max_pips: None,
             max_slippage: None,
@@ -125,7 +126,7 @@ async fn test_add_member_success() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let member: crate::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
+    let member: crate::domain::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(member.slave_account, "SLAVE_001");
     assert_eq!(member.trade_group_id, "MASTER_001");
@@ -207,7 +208,7 @@ async fn test_get_member_success() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let member: crate::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
+    let member: crate::domain::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(member.slave_account, "SLAVE_001");
     assert_eq!(member.slave_settings.lot_multiplier, Some(2.0));
@@ -470,7 +471,8 @@ async fn test_list_members_with_multiple_members() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let members: Vec<crate::models::TradeGroupMember> = serde_json::from_slice(&body).unwrap();
+    let members: Vec<crate::domain::models::TradeGroupMember> =
+        serde_json::from_slice(&body).unwrap();
 
     assert_eq!(members.len(), 3);
     assert_eq!(members[0].slave_account, "SLAVE_001");
@@ -512,7 +514,7 @@ async fn test_member_with_complex_settings() {
             config_version: 0,
             source_lot_min: None,
             source_lot_max: None,
-            sync_mode: crate::models::SyncMode::Skip,
+            sync_mode: crate::domain::models::SyncMode::Skip,
             limit_order_expiry_min: None,
             market_sync_max_pips: None,
             max_slippage: None,
@@ -541,7 +543,7 @@ async fn test_member_with_complex_settings() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let member: crate::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
+    let member: crate::domain::models::TradeGroupMember = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(member.slave_account, "SLAVE_COMPLEX");
     assert_eq!(member.slave_settings.lot_multiplier, Some(2.5));

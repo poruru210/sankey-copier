@@ -1,7 +1,7 @@
 //! Tests for unregister message handling
 
 use super::*;
-use crate::models::UnregisterMessage;
+use crate::domain::models::UnregisterMessage;
 
 #[tokio::test]
 async fn test_handle_unregister() {
@@ -44,7 +44,10 @@ async fn test_handle_unregister() {
     // Verify EA status is Offline
     let ea = ctx.connection_manager.get_master(&account_id).await;
     assert!(ea.is_some());
-    assert_eq!(ea.unwrap().status, crate::models::ConnectionStatus::Offline);
+    assert_eq!(
+        ea.unwrap().status,
+        crate::domain::models::ConnectionStatus::Offline
+    );
 
     ctx.cleanup().await;
 }
@@ -59,10 +62,10 @@ async fn test_master_unregister_updates_slave_runtime_status() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -72,8 +75,8 @@ async fn test_master_unregister_updates_slave_runtime_status() {
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_CONNECTED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_CONNECTED,
         )
         .await
         .unwrap();
@@ -97,14 +100,17 @@ async fn test_master_unregister_updates_slave_runtime_status() {
         .await
         .unwrap()
         .expect("member should exist");
-    assert_eq!(member.status, crate::models::STATUS_ENABLED);
+    assert_eq!(member.status, crate::domain::models::STATUS_ENABLED);
 
     let master_conn = ctx
         .connection_manager
         .get_master(master_account)
         .await
         .expect("master should remain tracked");
-    assert_eq!(master_conn.status, crate::models::ConnectionStatus::Offline);
+    assert_eq!(
+        master_conn.status,
+        crate::domain::models::ConnectionStatus::Offline
+    );
 
     ctx.cleanup().await;
 }

@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 use crate::adapters::inbound::http::SnapshotBroadcaster;
 use crate::adapters::outbound::persistence::Database;
 use crate::connection_manager::ConnectionManager;
-use crate::models::HeartbeatMessage;
+use crate::domain::models::HeartbeatMessage;
 
 /// Create a test HeartbeatMessage
 fn create_test_heartbeat(account_id: &str, ea_type: &str) -> HeartbeatMessage {

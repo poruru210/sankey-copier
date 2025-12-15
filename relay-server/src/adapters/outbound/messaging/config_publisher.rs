@@ -8,7 +8,7 @@ use sankey_copier_zmq::{build_trade_topic, ConfigMessage}; // Trait
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::models::TradeSignal;
+use crate::domain::models::TradeSignal;
 
 /// Pre-serialized message ready for ZMQ transmission
 struct SerializedMessage {
@@ -124,7 +124,7 @@ impl ZmqPublisher {
     /// Uses fixed topic "config/global" for system-wide broadcast
     pub async fn broadcast_vlogs_config(
         &self,
-        settings: &crate::models::VLogsGlobalSettings,
+        settings: &crate::domain::models::VLogsGlobalSettings,
     ) -> Result<()> {
         let message = sankey_copier_zmq::GlobalConfigMessage {
             enabled: settings.enabled,

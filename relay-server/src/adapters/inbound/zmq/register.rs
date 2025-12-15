@@ -4,11 +4,9 @@
 // Registers an EA explicitly with the connection manager.
 
 use crate::config_builder::{ConfigBuilder, MasterConfigContext};
-use crate::models::status_engine::SlaveRuntimeTarget;
-use crate::models::{
-    status_engine::{ConnectionSnapshot, MasterIntent},
-    RegisterMessage, VLogsGlobalSettings,
-};
+use crate::domain::models::{RegisterMessage, VLogsGlobalSettings};
+use crate::domain::services::status_calculator::SlaveRuntimeTarget;
+use crate::domain::services::status_calculator::{ConnectionSnapshot, MasterIntent};
 
 use super::MessageHandler;
 
@@ -125,7 +123,7 @@ impl MessageHandler {
                 web_ui_enabled: trade_group.master_settings.enabled,
             },
             connection_snapshot: ConnectionSnapshot {
-                connection_status: Some(crate::models::ConnectionStatus::Online),
+                connection_status: Some(crate::domain::models::ConnectionStatus::Online),
                 is_trade_allowed: false, // Initial assumption until first Heartbeat
             },
             settings: &trade_group.master_settings,

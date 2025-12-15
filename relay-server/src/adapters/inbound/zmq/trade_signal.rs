@@ -4,7 +4,7 @@
 //! transforms signals, and distributes them to Slave EAs.
 
 use super::MessageHandler;
-use crate::models::{MasterSettings, SymbolConverter, TradeGroupMember, TradeSignal};
+use crate::domain::models::{MasterSettings, SymbolConverter, TradeGroupMember, TradeSignal};
 
 impl MessageHandler {
     /// Handle trade signals and process copying

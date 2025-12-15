@@ -1,6 +1,6 @@
 //! Unit tests for warning_codes change detection logic
 
-use crate::models::WarningCode;
+use crate::domain::models::WarningCode;
 
 #[test]
 fn test_warning_codes_equality_same() {
@@ -62,9 +62,9 @@ fn test_warning_codes_equality_both_empty() {
 
 #[test]
 fn test_warning_codes_sorted_by_priority() {
-    use crate::models::status_engine;
-    use crate::models::status_engine::{ConnectionSnapshot, MasterIntent};
-    use crate::models::ConnectionStatus;
+    use crate::domain::models::ConnectionStatus;
+    use crate::domain::services::status_calculator;
+    use crate::domain::services::status_calculator::{ConnectionSnapshot, MasterIntent};
 
     // Simulate a scenario where Master is offline with Web UI disabled
     let master_intent = MasterIntent {
@@ -76,7 +76,7 @@ fn test_warning_codes_sorted_by_priority() {
         is_trade_allowed: false, // NOT checked when offline (no valid state yet)
     };
 
-    let master_result = status_engine::evaluate_master_status(master_intent, master_conn);
+    let master_result = status_calculator::evaluate_master_status(master_intent, master_conn);
 
     // Verify that warning_codes are present and sorted
     // Note: MasterAutoTradingDisabled is NOT added when offline
@@ -91,9 +91,11 @@ fn test_warning_codes_sorted_by_priority() {
 
 #[test]
 fn test_warning_codes_slave_auto_trading_disabled() {
-    use crate::models::status_engine;
-    use crate::models::status_engine::{ConnectionSnapshot, MasterIntent, SlaveIntent};
-    use crate::models::ConnectionStatus;
+    use crate::domain::models::ConnectionStatus;
+    use crate::domain::services::status_calculator;
+    use crate::domain::services::status_calculator::{
+        ConnectionSnapshot, MasterIntent, SlaveIntent,
+    };
 
     // Simulate Slave with auto-trading disabled
     let slave_intent = SlaveIntent {
@@ -113,10 +115,10 @@ fn test_warning_codes_slave_auto_trading_disabled() {
         connection_status: Some(ConnectionStatus::Online),
         is_trade_allowed: true,
     };
-    let master_result = status_engine::evaluate_master_status(master_intent, master_conn);
+    let master_result = status_calculator::evaluate_master_status(master_intent, master_conn);
 
     let member_result =
-        status_engine::evaluate_member_status(slave_intent, slave_conn, &master_result);
+        status_calculator::evaluate_member_status(slave_intent, slave_conn, &master_result);
 
     // Should have slave_auto_trading_disabled warning
     assert!(
@@ -129,7 +131,7 @@ fn test_warning_codes_slave_auto_trading_disabled() {
     // Slave is DISABLED when auto-trading is off (prevents trade execution)
     assert_eq!(
         member_result.status,
-        crate::models::STATUS_DISABLED,
+        crate::domain::models::STATUS_DISABLED,
         "Status should be DISABLED when auto-trading is off"
     );
 }

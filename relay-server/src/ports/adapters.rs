@@ -11,10 +11,12 @@ use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use crate::adapters::outbound::persistence::Database;
 use crate::config_builder::SlaveConfigBundle;
 use crate::connection_manager::ConnectionManager as ConcreteConnectionManager;
-use crate::models::status_engine::{ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget};
-use crate::models::{
+use crate::domain::models::{
     EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, TradeGroupMember,
     VLogsGlobalSettings,
+};
+use crate::domain::services::status_calculator::{
+    ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget,
 };
 use crate::runtime_status_updater::RuntimeStatusUpdater;
 use async_trait::async_trait;

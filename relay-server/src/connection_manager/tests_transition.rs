@@ -7,7 +7,7 @@ async fn test_register_ea_state_transition() {
     let account_id = "TRANSITION_TEST";
 
     // 1. Explicit Register
-    let register_msg = crate::models::RegisterMessage {
+    let register_msg = crate::domain::models::RegisterMessage {
         message_type: "Register".to_string(),
         account_id: account_id.to_string(),
         ea_type: "Master".to_string(),

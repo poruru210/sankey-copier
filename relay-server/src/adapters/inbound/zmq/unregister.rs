@@ -9,7 +9,8 @@ use crate::{
     adapters::outbound::messaging::ZmqConfigPublisher,
     adapters::outbound::persistence::Database,
     connection_manager::ConnectionManager,
-    models::{status_engine::SlaveRuntimeTarget, EaType, SlaveConfigWithMaster, UnregisterMessage},
+    domain::models::{EaType, SlaveConfigWithMaster, UnregisterMessage},
+    domain::services::status_calculator::SlaveRuntimeTarget,
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
 };
 use std::sync::Arc;
@@ -135,7 +136,7 @@ pub(crate) async fn notify_slaves_master_offline(
                     slave_bundle.status_result.allow_new_orders,
                     &slave_bundle.status_result.warning_codes,
                     1, // per-connection: always 1 Master
-                    new_status == crate::models::STATUS_CONNECTED,
+                    new_status == crate::domain::models::STATUS_CONNECTED,
                 );
 
                 if let Err(e) = publisher.send(&config).await {
@@ -250,7 +251,7 @@ pub(crate) async fn notify_slave_offline(
             slave_bundle.status_result.allow_new_orders,
             &slave_bundle.status_result.warning_codes,
             1, // per-connection: always 1 Master
-            new_status == crate::models::STATUS_CONNECTED,
+            new_status == crate::domain::models::STATUS_CONNECTED,
         );
 
         // Update database with new status

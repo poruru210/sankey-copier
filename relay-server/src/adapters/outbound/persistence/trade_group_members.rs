@@ -3,7 +3,7 @@
 //! Implementation of Database methods for managing TradeGroupMembers,
 //! which represent Slave EA accounts and their relationship to Master accounts.
 
-use crate::models::{SlaveSettings, TradeGroupMember};
+use crate::domain::models::{SlaveSettings, TradeGroupMember};
 use anyhow::Result;
 use sqlx::Row;
 

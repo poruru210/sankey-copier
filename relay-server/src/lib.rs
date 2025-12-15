@@ -6,9 +6,10 @@ pub mod application;
 pub mod config;
 pub mod config_builder;
 pub mod connection_manager;
-pub mod engine;
+pub mod domain;
+
 pub mod log_buffer;
-pub mod models;
+
 pub mod mt_detector;
 pub mod mt_installer;
 pub mod port_resolver;

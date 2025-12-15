@@ -5,14 +5,14 @@ use axum::{
 use serde_json::Value;
 use tower::util::ServiceExt;
 
-use sankey_copier_relay_server::api::create_router;
-use sankey_copier_relay_server::api::{AppState, SnapshotBroadcaster};
+use sankey_copier_relay_server::adapters::inbound::http::create_router;
+use sankey_copier_relay_server::adapters::inbound::http::{AppState, SnapshotBroadcaster};
+use sankey_copier_relay_server::adapters::outbound::messaging::ZmqConfigPublisher;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
 use sankey_copier_relay_server::connection_manager::ConnectionManager;
-use sankey_copier_relay_server::db::Database;
 use sankey_copier_relay_server::log_buffer::create_log_buffer;
 use sankey_copier_relay_server::port_resolver::ResolvedPorts;
 use sankey_copier_relay_server::runtime_status_updater::RuntimeStatusMetrics;
-use sankey_copier_relay_server::zeromq::ZmqConfigPublisher;
 
 use std::sync::Arc;
 use tokio::sync::broadcast;

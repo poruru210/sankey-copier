@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
+use crate::domain::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
 
 pub mod monitor;
 
@@ -32,7 +32,7 @@ impl ConnectionManager {
     /// Register専用のメソッド。Heartbeatによる自動登録とは異なり、
     /// is_trade_allowedは初期値falseで設定される。
     /// 最初のHeartbeatで正確なis_trade_allowed値に更新される。
-    pub async fn register_ea(&self, msg: &crate::models::RegisterMessage) {
+    pub async fn register_ea(&self, msg: &crate::domain::models::RegisterMessage) {
         let ea_type: EaType = msg.ea_type.parse().unwrap_or(EaType::Master);
         let key = (msg.account_id.clone(), ea_type);
 

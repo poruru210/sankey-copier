@@ -3,7 +3,7 @@
 // Next-generation status evaluation engine for Master/Slave EAs.
 // Provides a single source of truth for status and allow_new_orders logic.
 
-use super::{
+use crate::domain::models::{
     ConnectionStatus, SlaveSettings, WarningCode, STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED,
 };
 
@@ -1046,7 +1046,7 @@ mod tests {
         let unknown = MemberStatusResult::unknown();
         let default = MemberStatusResult::default(); // usually status=0 (Disabled)
         let connected = MemberStatusResult {
-            status: crate::models::STATUS_CONNECTED,
+            status: crate::domain::models::STATUS_CONNECTED,
             warning_codes: vec![],
             allow_new_orders: true,
         };

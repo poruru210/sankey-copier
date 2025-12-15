@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::WarningCode;
+use crate::domain::models::WarningCode;
 
 /// Default value for enabled field (used when deserializing old DB records)
 fn default_enabled() -> bool {

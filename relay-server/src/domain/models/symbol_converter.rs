@@ -1,41 +1,5 @@
-mod connection;
-mod global_settings;
-mod mt_installation;
-mod snapshot;
-pub mod status_engine;
-mod trade_group;
-mod trade_group_member;
-
-pub use connection::*;
-pub use global_settings::*;
-pub use mt_installation::*;
-pub use snapshot::*;
-pub use trade_group::*;
-pub use trade_group_member::*;
-
-// Re-export shared types from DLL
-pub use sankey_copier_zmq::{
-    OrderType, SymbolMapping, TradeAction, TradeFilters, TradeSignal, WarningCode,
-    STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
-};
-
+use crate::domain::models::{MasterSettings, SlaveSettings, SymbolMapping};
 use serde::{Deserialize, Serialize};
-
-/// Slave configuration with associated Master account information.
-/// Used for config distribution to Slave EAs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SlaveConfigWithMaster {
-    pub master_account: String,
-    pub slave_account: String,
-    #[serde(default)]
-    pub status: i32,
-    #[serde(default)]
-    pub enabled_flag: bool,
-    /// Detailed warning codes from the Status Engine (empty when healthy)
-    #[serde(default)]
-    pub warning_codes: Vec<WarningCode>,
-    pub slave_settings: SlaveSettings,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolConverter {
@@ -199,6 +163,3 @@ mod tests {
         assert_eq!(result, "CUSTOM_EURUSD");
     }
 }
-
-#[cfg(test)]
-mod settings_conversion_tests;

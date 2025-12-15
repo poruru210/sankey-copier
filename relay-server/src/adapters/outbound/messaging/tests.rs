@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::{
+use crate::domain::models::{
     HeartbeatMessage, OrderType, RequestConfigMessage, TradeAction, TradeSignal, UnregisterMessage,
 };
 use chrono::Utc;

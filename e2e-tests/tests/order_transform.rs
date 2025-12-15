@@ -8,7 +8,7 @@
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
 use e2e_tests::SymbolMapping;
 use e2e_tests::TestSandbox;
-use sankey_copier_relay_server::db::Database;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
 use tokio::time::{sleep, Duration};
 
 // =============================================================================

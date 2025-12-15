@@ -4,7 +4,7 @@
 //! Uses TestContext wrapper for proper ZeroMQ resource cleanup.
 
 use super::*;
-use crate::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
+use crate::domain::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
 use crate::runtime_status_updater::RuntimeStatusMetrics;
 use chrono::Utc;
 use std::ops::Deref;

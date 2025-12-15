@@ -7,10 +7,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
 
-use sankey_copier_relay_server::api::SnapshotBroadcaster;
+use sankey_copier_relay_server::adapters::inbound::http::SnapshotBroadcaster;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
 use sankey_copier_relay_server::connection_manager::ConnectionManager;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{EaConnection, HeartbeatMessage, SystemStateSnapshot};
+use sankey_copier_relay_server::domain::models::{
+    EaConnection, HeartbeatMessage, SystemStateSnapshot,
+};
 
 /// Create a test HeartbeatMessage with configurable parameters
 fn create_heartbeat(

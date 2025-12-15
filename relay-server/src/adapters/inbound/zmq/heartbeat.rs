@@ -7,7 +7,7 @@
 //!  - Slave: DISABLED (web_ui OFF or !is_trade_allowed) or ENABLED (master not connected) or CONNECTED)
 
 use super::MessageHandler;
-use crate::models::HeartbeatMessage;
+use crate::domain::models::HeartbeatMessage;
 
 impl MessageHandler {
     /// Handle heartbeat messages

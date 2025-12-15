@@ -12,8 +12,8 @@
 // DO NOT directly manipulate runtime_status in the database.
 
 use anyhow::Result;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::{
     LotCalculationMode, MasterSettings, SlaveSettings, SyncMode, TradeFilters,
 };
 use tokio::time::{sleep, Duration};

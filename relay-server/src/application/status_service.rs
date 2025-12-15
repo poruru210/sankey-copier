@@ -1,4 +1,4 @@
-use crate::models::HeartbeatMessage;
+use crate::domain::models::HeartbeatMessage;
 use crate::ports::outbound::{
     ConfigPublisher, ConnectionManager, StatusEvaluator, TradeGroupRepository, UpdateBroadcaster,
     VLogsConfigProvider,
@@ -84,7 +84,7 @@ impl StatusService {
     async fn handle_master_heartbeat(
         &self,
         msg: HeartbeatMessage,
-        old_conn: Option<crate::models::EaConnection>,
+        old_conn: Option<crate::domain::models::EaConnection>,
     ) {
         let account_id = &msg.account_id;
 
@@ -104,10 +104,10 @@ impl StatusService {
         // Build Master Config & Status
         let context = crate::config_builder::MasterConfigContext {
             account_id: account_id.clone(),
-            intent: crate::models::status_engine::MasterIntent {
+            intent: crate::domain::services::status_calculator::MasterIntent {
                 web_ui_enabled: trade_group.master_settings.enabled,
             },
-            connection_snapshot: crate::models::status_engine::ConnectionSnapshot {
+            connection_snapshot: crate::domain::services::status_calculator::ConnectionSnapshot {
                 connection_status: master_conn.as_ref().map(|c| c.status),
                 is_trade_allowed: msg.is_trade_allowed,
             },
@@ -119,19 +119,19 @@ impl StatusService {
 
         // Calculate OLD Master Status
         let old_master_status = if let Some(conn) = old_conn.as_ref() {
-            let old_snapshot = crate::models::status_engine::ConnectionSnapshot {
+            let old_snapshot = crate::domain::services::status_calculator::ConnectionSnapshot {
                 connection_status: Some(conn.status),
                 is_trade_allowed: conn.is_trade_allowed,
             };
-            crate::models::status_engine::evaluate_master_status(
-                crate::models::status_engine::MasterIntent {
+            crate::domain::services::status_calculator::evaluate_master_status(
+                crate::domain::services::status_calculator::MasterIntent {
                     web_ui_enabled: trade_group.master_settings.enabled,
                 },
                 old_snapshot,
             )
         } else {
             // New registration - treat as "unknown" state which will trigger change
-            crate::models::status_engine::MasterStatusResult::unknown()
+            crate::domain::services::status_calculator::MasterStatusResult::unknown()
         };
 
         // Check for changes
@@ -168,8 +168,8 @@ impl StatusService {
     async fn update_related_slaves(
         &self,
         master_account: &str,
-        old_master_status: &crate::models::status_engine::MasterStatusResult,
-        _new_master_status: &crate::models::status_engine::MasterStatusResult,
+        old_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
+        _new_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
     ) {
         let Some(evaluator) = &self.status_evaluator else {
             tracing::debug!(
@@ -200,7 +200,7 @@ impl StatusService {
             }
             processed_slaves.insert(slave_account.clone());
 
-            let target = crate::models::status_engine::SlaveRuntimeTarget {
+            let target = crate::domain::services::status_calculator::SlaveRuntimeTarget {
                 master_account,
                 trade_group_id: master_account,
                 slave_account: &slave_account,
@@ -215,7 +215,7 @@ impl StatusService {
 
             // Calculate OLD Slave status (uses OLD Master status)
             let slave_conn = self.connection_manager.get_slave(&slave_account).await;
-            let slave_snapshot = crate::models::status_engine::ConnectionSnapshot {
+            let slave_snapshot = crate::domain::services::status_calculator::ConnectionSnapshot {
                 connection_status: slave_conn.as_ref().map(|c| c.status),
                 is_trade_allowed: slave_conn
                     .as_ref()
@@ -223,13 +223,14 @@ impl StatusService {
                     .unwrap_or(false),
             };
 
-            let old_slave_result = crate::models::status_engine::evaluate_member_status(
-                crate::models::status_engine::SlaveIntent {
-                    web_ui_enabled: member.enabled_flag,
-                },
-                slave_snapshot,
-                old_master_status,
-            );
+            let old_slave_result =
+                crate::domain::services::status_calculator::evaluate_member_status(
+                    crate::domain::services::status_calculator::SlaveIntent {
+                        web_ui_enabled: member.enabled_flag,
+                    },
+                    slave_snapshot,
+                    old_master_status,
+                );
 
             let slave_changed = slave_bundle.status_result.has_changed(&old_slave_result);
 
@@ -283,7 +284,7 @@ impl StatusService {
     async fn handle_slave_heartbeat(
         &self,
         msg: HeartbeatMessage,
-        old_conn: Option<crate::models::EaConnection>,
+        old_conn: Option<crate::domain::models::EaConnection>,
     ) {
         let slave_account = &msg.account_id;
 
@@ -320,24 +321,26 @@ impl StatusService {
         for settings in settings_list {
             // Build new bundle
             let slave_bundle = evaluator
-                .build_slave_bundle(crate::models::status_engine::SlaveRuntimeTarget {
-                    master_account: settings.master_account.as_str(),
-                    trade_group_id: settings.master_account.as_str(),
-                    slave_account: &settings.slave_account,
-                    enabled_flag: settings.enabled_flag,
-                    slave_settings: &settings.slave_settings,
-                })
+                .build_slave_bundle(
+                    crate::domain::services::status_calculator::SlaveRuntimeTarget {
+                        master_account: settings.master_account.as_str(),
+                        trade_group_id: settings.master_account.as_str(),
+                        slave_account: &settings.slave_account,
+                        enabled_flag: settings.enabled_flag,
+                        slave_settings: &settings.slave_settings,
+                    },
+                )
                 .await;
 
             // Calculate OLD status result
             let old_status_result = if let Some(conn) = old_conn.as_ref() {
-                let old_snapshot = crate::models::status_engine::ConnectionSnapshot {
+                let old_snapshot = crate::domain::services::status_calculator::ConnectionSnapshot {
                     connection_status: Some(conn.status),
                     is_trade_allowed: conn.is_trade_allowed,
                 };
                 evaluator
                     .evaluate_member_runtime_status_with_snapshot(
-                        crate::models::status_engine::SlaveRuntimeTarget {
+                        crate::domain::services::status_calculator::SlaveRuntimeTarget {
                             master_account: settings.master_account.as_str(),
                             trade_group_id: settings.master_account.as_str(),
                             slave_account: &settings.slave_account,
@@ -348,7 +351,7 @@ impl StatusService {
                     )
                     .await
             } else {
-                crate::models::status_engine::MemberStatusResult::unknown()
+                crate::domain::services::status_calculator::MemberStatusResult::unknown()
             };
 
             let previous_status = settings.status;
@@ -415,9 +418,9 @@ impl StatusService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::status_engine::{MemberStatusResult, SlaveRuntimeTarget};
-    use crate::models::{ConnectionStatus, EaConnection};
-    use crate::models::{TradeGroup, TradeGroupMember, VLogsGlobalSettings};
+    use crate::domain::models::{ConnectionStatus, EaConnection};
+    use crate::domain::models::{TradeGroup, TradeGroupMember, VLogsGlobalSettings};
+    use crate::domain::services::status_calculator::{MemberStatusResult, SlaveRuntimeTarget};
     use async_trait::async_trait;
     use mockall::mock;
 
@@ -441,7 +444,7 @@ mod tests {
         impl TradeGroupRepository for TradeGroupRepository {
             async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>>;
             async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>>;
-            async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::models::SlaveConfigWithMaster>>;
+            async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::domain::models::SlaveConfigWithMaster>>;
             async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: i32) -> anyhow::Result<()>;
         }
     }
@@ -467,7 +470,7 @@ mod tests {
     mock! {
         pub VLogsConfigProvider {}
         impl VLogsConfigProvider for VLogsConfigProvider {
-            fn get_config(&self) -> crate::models::VLogsGlobalSettings;
+            fn get_config(&self) -> crate::domain::models::VLogsGlobalSettings;
         }
     }
 
@@ -485,7 +488,7 @@ mod tests {
         async fn evaluate_member_runtime_status_with_snapshot(
             &self,
             _target: SlaveRuntimeTarget<'_>,
-            _snapshot: crate::models::status_engine::ConnectionSnapshot,
+            _snapshot: crate::domain::services::status_calculator::ConnectionSnapshot,
         ) -> MemberStatusResult {
             MemberStatusResult::default()
         }
@@ -534,7 +537,7 @@ mod tests {
         mock_conn_manager
             .expect_update_heartbeat()
             .with(mockall::predicate::function(
-                |msg: &crate::models::HeartbeatMessage| {
+                |msg: &crate::domain::models::HeartbeatMessage| {
                     msg.account_id == "NEW_SLAVE_999" && msg.ea_type == "Slave"
                 },
             ))
@@ -548,7 +551,7 @@ mod tests {
             .returning(|_| None);
 
         // EXPECT: vlogs provider called
-        let vlogs_settings = crate::models::VLogsGlobalSettings {
+        let vlogs_settings = crate::domain::models::VLogsGlobalSettings {
             enabled: true,
             endpoint: "http://vlogs:8428".to_string(),
             batch_size: 1000,
@@ -639,8 +642,8 @@ mod tests {
         // Initial connection lookup
         let existing_conn = EaConnection {
             account_id: account_id.to_string(),
-            ea_type: crate::models::EaType::Master, // Fixed: use default or correct type
-            status: ConnectionStatus::Registered,   // Simulate online/registered
+            ea_type: crate::domain::models::EaType::Master, // Fixed: use default or correct type
+            status: ConnectionStatus::Registered,           // Simulate online/registered
             is_trade_allowed: true,
             ..Default::default()
         };
@@ -715,7 +718,7 @@ mod tests {
         // Second call after registration returns the connection
         let new_conn = EaConnection {
             account_id: account_id.to_string(),
-            ea_type: crate::models::EaType::Master,
+            ea_type: crate::domain::models::EaType::Master,
             status: ConnectionStatus::Registered,
             is_trade_allowed: true,
             ..Default::default()
@@ -796,10 +799,10 @@ mod tests {
             .return_const(true);
 
         // Slave settings exist for this slave
-        let slave_settings = crate::models::SlaveConfigWithMaster {
+        let slave_settings = crate::domain::models::SlaveConfigWithMaster {
             master_account: master_account_id.to_string(),
             slave_account: slave_account_id.to_string(),
-            slave_settings: crate::models::SlaveSettings::default(),
+            slave_settings: crate::domain::models::SlaveSettings::default(),
             enabled_flag: true,
             status: 0, // DISABLED - will change to ENABLED/CONNECTED
             warning_codes: vec![],
@@ -846,7 +849,7 @@ mod tests {
         ) -> MemberStatusResult {
             // Return CONNECTED status (status changed from DISABLED)
             MemberStatusResult {
-                status: crate::models::STATUS_CONNECTED,
+                status: crate::domain::models::STATUS_CONNECTED,
                 allow_new_orders: true,
                 warning_codes: vec![],
             }
@@ -855,7 +858,7 @@ mod tests {
         async fn evaluate_member_runtime_status_with_snapshot(
             &self,
             _target: SlaveRuntimeTarget<'_>,
-            _snapshot: crate::models::status_engine::ConnectionSnapshot,
+            _snapshot: crate::domain::services::status_calculator::ConnectionSnapshot,
         ) -> MemberStatusResult {
             // Return unknown/disabled for old state (to simulate change)
             MemberStatusResult::unknown()
@@ -872,7 +875,7 @@ mod tests {
                     master_account: target.master_account.to_string(),
                     timestamp: 0,
                     trade_group_id: target.trade_group_id.to_string(),
-                    status: crate::models::STATUS_CONNECTED,
+                    status: crate::domain::models::STATUS_CONNECTED,
                     lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: None,
                     reverse_trade: false,
@@ -896,7 +899,7 @@ mod tests {
                     warning_codes: vec![],
                 },
                 status_result: MemberStatusResult {
-                    status: crate::models::STATUS_CONNECTED,
+                    status: crate::domain::models::STATUS_CONNECTED,
                     allow_new_orders: true,
                     warning_codes: vec![],
                 },

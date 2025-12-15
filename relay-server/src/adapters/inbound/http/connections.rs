@@ -9,7 +9,7 @@ use axum::{
 
 use crate::{
     adapters::inbound::http::{AppState, ProblemDetails},
-    models::EaConnection,
+    domain::models::EaConnection,
 };
 
 /// List all EA connections

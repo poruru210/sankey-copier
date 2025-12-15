@@ -3,7 +3,7 @@
 //! Implementation of Database methods for managing TradeGroups,
 //! which represent Master EA accounts and their settings.
 
-use crate::models::{MasterSettings, TradeGroup};
+use crate::domain::models::{MasterSettings, TradeGroup};
 use anyhow::{anyhow, Result};
 use sqlx::Row;
 

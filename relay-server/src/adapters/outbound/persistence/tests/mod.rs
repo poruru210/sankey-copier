@@ -3,7 +3,7 @@
 //! Shared test utilities and helper functions for database tests
 
 use crate::adapters::outbound::persistence::Database;
-use crate::models::SlaveSettings;
+use crate::domain::models::SlaveSettings;
 use sankey_copier_zmq::TradeFilters;
 
 pub(crate) async fn create_test_db() -> Database {
@@ -12,7 +12,7 @@ pub(crate) async fn create_test_db() -> Database {
 
 pub(crate) fn create_test_slave_settings() -> SlaveSettings {
     SlaveSettings {
-        lot_calculation_mode: crate::models::LotCalculationMode::default(),
+        lot_calculation_mode: crate::domain::models::LotCalculationMode::default(),
         config_version: 1,
         symbol_prefix: None,
         symbol_suffix: None,
@@ -27,7 +27,7 @@ pub(crate) fn create_test_slave_settings() -> SlaveSettings {
         },
         source_lot_min: None,
         source_lot_max: None,
-        sync_mode: crate::models::SyncMode::Skip,
+        sync_mode: crate::domain::models::SyncMode::Skip,
         limit_order_expiry_min: None,
         market_sync_max_pips: None,
         max_slippage: None,

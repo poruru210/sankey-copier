@@ -18,12 +18,9 @@ use tokio::task::JoinHandle;
 use crate::adapters::inbound::http::AppState;
 use crate::adapters::outbound::persistence::Database;
 use crate::connection_manager::ConnectionManager;
-use crate::models::{
-    status_engine::{
-        evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,
-        SlaveIntent,
-    },
-    SystemStateSnapshot,
+use crate::domain::models::SystemStateSnapshot;
+use crate::domain::services::status_calculator::{
+    evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent, SlaveIntent,
 };
 
 /// Interval for snapshot broadcasts (in seconds)

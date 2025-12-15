@@ -12,15 +12,16 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
-    api::{AppState, SnapshotBroadcaster},
+    adapters::{
+        inbound::http::{AppState, SnapshotBroadcaster},
+        outbound::{messaging::ZmqConfigPublisher, persistence::Database},
+    },
     config::{Config, VictoriaLogsConfig},
     connection_manager::ConnectionManager,
-    db::Database,
     log_buffer::LogBuffer,
     port_resolver::ResolvedPorts,
     runtime_status_updater::RuntimeStatusMetrics,
     victoria_logs::VLogsController,
-    zeromq::ZmqConfigPublisher,
 };
 
 /// Create a test AppState with in-memory database (VictoriaLogs not configured)

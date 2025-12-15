@@ -4,10 +4,11 @@ mod cert;
 mod config;
 mod config_builder;
 mod connection_manager;
-mod engine;
+pub mod domain;
+
 mod log_buffer;
 mod logging;
-mod models;
+
 mod mt_detector;
 mod mt_installer;
 mod port_resolver;
@@ -15,23 +16,20 @@ pub mod ports;
 mod runtime_status_updater;
 mod victoria_logs;
 
-use anyhow::Result;
-use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
 use adapters::inbound::http::{create_router, AppState};
 use adapters::inbound::zmq::MessageHandler;
 use adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
 use adapters::outbound::persistence::Database;
+use anyhow::Result;
 use application::status_service::StatusService;
 use config::Config;
 use connection_manager::ConnectionManager;
-use engine::CopyEngine;
-use log_buffer::{create_log_buffer, LogBufferLayer};
+use domain::services::copy_engine::CopyEngine;
+use log_buffer::create_log_buffer;
 use ports::adapters::RuntimeStatusEvaluatorAdapter;
 use runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater};
-use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
 use victoria_logs::VLogsController;
 
 #[tokio::main]
@@ -76,79 +74,12 @@ async fn main() -> Result<()> {
     // Create log buffer
     let log_buffer = create_log_buffer();
 
-    // Create VictoriaLogs layer if configured (endpoint is not empty)
-    // The layer is controlled by a shared Arc<AtomicBool> for runtime enable/disable.
-    // _vlogs_handle can be used for graceful shutdown (flush remaining logs).
-    // vlogs_enabled_flag is shared with VLogsController for runtime toggle.
-    let (vlogs_layer, _vlogs_handle, vlogs_enabled_flag) = if !config.victoria_logs.host.is_empty()
-    {
-        // Create shared enabled flag - initially from config.toml
-        // Will be updated from DB after DB initialization
-        let enabled_flag = Arc::new(AtomicBool::new(config.victoria_logs.enabled));
-        let (layer, handle) = victoria_logs::VictoriaLogsLayer::new_with_enabled(
-            &config.victoria_logs,
-            enabled_flag.clone(),
-        );
-        let vlogs_handle = victoria_logs::VictoriaLogsHandle::new(&layer);
-        (
-            Some(layer),
-            Some((vlogs_handle, handle)),
-            Some(enabled_flag),
-        )
-    } else {
-        (None, None, None)
-    };
+    // Initialize VictoriaLogs
+    let (vlogs_layer, _vlogs_handles, vlogs_enabled_flag) =
+        victoria_logs::init(&config.victoria_logs);
 
-    // Initialize logging with log buffer layer and optional file output
-    // Default to info level for all modules; can be overridden via RUST_LOG env var
-    let env_filter =
-        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
-
-    let subscriber = tracing_subscriber::registry()
-        .with(env_filter)
-        .with(tracing_subscriber::fmt::layer())
-        .with(LogBufferLayer::new(log_buffer.clone()))
-        .with(vlogs_layer);
-
-    // Add file logging layer if enabled in config
-    if config.logging.enabled {
-        use std::fs;
-        use tracing_appender::rolling;
-
-        // Create log directory if it doesn't exist
-        if let Err(e) = fs::create_dir_all(&config.logging.directory) {
-            eprintln!(
-                "Failed to create log directory {}: {}",
-                config.logging.directory, e
-            );
-        }
-
-        // Clean up old log files based on retention policy
-        logging::cleanup_old_logs(&config.logging);
-
-        // Create file appender based on rotation strategy
-        let file_appender = match config.logging.rotation.as_str() {
-            "hourly" => rolling::hourly(&config.logging.directory, &config.logging.file_prefix),
-            "never" => rolling::never(&config.logging.directory, &config.logging.file_prefix),
-            _ => rolling::daily(&config.logging.directory, &config.logging.file_prefix), // default to daily
-        };
-
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-        subscriber
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(non_blocking)
-                    .with_ansi(false),
-            ) // Disable ANSI colors in file output
-            .init();
-
-        // Store guard to prevent it from being dropped
-        // In a real application, you'd want to keep this alive for the entire program lifetime
-        std::mem::forget(_guard);
-    } else {
-        subscriber.init();
-    }
+    // Initialize logging (console + file + log buffer + VictoriaLogs)
+    logging::init(&config.logging, log_buffer.clone(), vlogs_layer);
 
     tracing::info!("Starting SANKEY Copier Server...");
     tracing::info!("Server Version: {}", env!("BUILD_INFO"));
@@ -163,13 +94,13 @@ async fn main() -> Result<()> {
         );
     }
 
-    if vlogs_enabled_flag.is_some() {
+    if let Some(enabled) = &vlogs_enabled_flag {
         tracing::info!(
             "VictoriaLogs configured: host={}, batch_size={}, flush_interval={}s, initial_enabled={}",
             config.victoria_logs.host,
             config.victoria_logs.batch_size,
             config.victoria_logs.flush_interval_secs,
-            config.victoria_logs.enabled
+            enabled.load(std::sync::atomic::Ordering::Relaxed)
         );
     }
 

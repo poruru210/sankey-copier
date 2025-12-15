@@ -8,6 +8,8 @@
 //! - Events are sent to a background task via mpsc channel
 //! - Background task batches and sends logs via HTTP
 
+#![allow(clippy::type_complexity)]
+
 use crate::config::VictoriaLogsConfig;
 use chrono::Utc;
 use serde::Serialize;
@@ -55,9 +57,39 @@ pub struct VictoriaLogsLayer {
     enabled: Arc<AtomicBool>,
 }
 
+/// Initialize VictoriaLogs layer if configured.
+///
+/// Returns a tuple containing:
+/// - `Option<VictoriaLogsLayer>`: The tracing layer (if enabled/configured)
+/// - `Option<(VictoriaLogsHandle, tokio::task::JoinHandle<()>)>`: Handles for control and shutdown
+/// - `Option<Arc<AtomicBool>>`: Shared flag for runtime toggle
+pub fn init(
+    config: &VictoriaLogsConfig,
+) -> (
+    Option<VictoriaLogsLayer>,
+    Option<(VictoriaLogsHandle, tokio::task::JoinHandle<()>)>,
+    Option<Arc<AtomicBool>>,
+) {
+    if !config.host.is_empty() {
+        // Create shared enabled flag - initially from config.toml
+        // Will be updated from DB after DB initialization
+        let enabled_flag = Arc::new(AtomicBool::new(config.enabled));
+        let (layer, handle) = VictoriaLogsLayer::new_with_enabled(config, enabled_flag.clone());
+        let vlogs_handle = VictoriaLogsHandle::new(&layer);
+        (
+            Some(layer),
+            Some((vlogs_handle, handle)),
+            Some(enabled_flag),
+        )
+    } else {
+        (None, None, None)
+    }
+}
+
 impl VictoriaLogsLayer {
     /// Create a new VictoriaLogs layer and spawn the background task
     ///
+    /// Returns the layer and a handle to the background task.
     /// Returns the layer and a handle to the background task.
     /// The layer is enabled by default based on config.enabled.
     #[allow(dead_code)]

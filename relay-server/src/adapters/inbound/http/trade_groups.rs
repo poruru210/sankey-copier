@@ -11,12 +11,10 @@ use axum::{
 use serde::Serialize;
 
 use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
-use crate::models::status_engine::SlaveRuntimeTarget;
-use crate::models::{
-    status_engine::{
-        evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
-    },
-    MasterSettings, SlaveConfigWithMaster, TradeGroup, WarningCode,
+use crate::domain::models::{MasterSettings, SlaveConfigWithMaster, TradeGroup, WarningCode};
+use crate::domain::services::status_calculator::SlaveRuntimeTarget;
+use crate::domain::services::status_calculator::{
+    evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
 };
 use crate::runtime_status_updater::RuntimeStatusUpdater;
 

@@ -4,7 +4,7 @@ use crate::adapters::inbound::zmq::unregister::{
 use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use crate::adapters::outbound::persistence::Database;
 use crate::connection_manager::ConnectionManager;
-use crate::models::EaType;
+use crate::domain::models::EaType;
 use crate::runtime_status_updater::RuntimeStatusMetrics;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -144,7 +144,7 @@ impl TimeoutMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::models::{ConnectionStatus, EaConnection, Platform}; // Removed unused imports
+    // use crate::domain::models::{ConnectionStatus, EaConnection, Platform}; // Removed unused imports
     use chrono::Utc;
     use std::sync::Mutex;
 
@@ -210,7 +210,7 @@ mod tests {
         //
         // Let's try to add a helper to CM for testing or just accept we need to wait 2 seconds.
 
-        let msg = crate::models::HeartbeatMessage {
+        let msg = crate::domain::models::HeartbeatMessage {
             account_id: "master_1".to_string(),
             ea_type: "MASTER".to_string(),
             platform: "MT5".to_string(),

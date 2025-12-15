@@ -3,7 +3,7 @@
 //! Implementation of Database methods for distributing configuration
 //! to Master and Slave EAs, including connection status management.
 
-use crate::models::{MasterSettings, SlaveConfigWithMaster, SlaveSettings};
+use crate::domain::models::{MasterSettings, SlaveConfigWithMaster, SlaveSettings};
 use anyhow::{anyhow, Result};
 use sqlx::Row;
 

@@ -11,8 +11,8 @@ use axum::{
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::models::status_engine::SlaveRuntimeTarget;
-use crate::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
+use crate::domain::models::{SlaveSettings, TradeGroupMember, STATUS_NO_CONFIG};
+use crate::domain::services::status_calculator::SlaveRuntimeTarget;
 use crate::runtime_status_updater::RuntimeStatusUpdater;
 
 use super::{AppState, ProblemDetails};
@@ -604,7 +604,7 @@ async fn send_disabled_config_to_slave(
         symbol_prefix: None,
         symbol_suffix: None,
         symbol_mappings: vec![],
-        filters: crate::models::TradeFilters::default(),
+        filters: crate::domain::models::TradeFilters::default(),
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,
@@ -718,7 +718,7 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
 /// Send initial config to Master EA via ZMQ when TradeGroup is newly created
 /// This allows the Master EA to display the TradeGroup even with default settings
 async fn send_initial_config_to_master(state: &AppState, master_account: &str) {
-    use crate::models::MasterSettings;
+    use crate::domain::models::MasterSettings;
 
     // Get Master connection info (may not exist yet if Master EA is not connected)
     let _master_conn = state.connection_manager.get_master(master_account).await;

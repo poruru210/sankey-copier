@@ -2,8 +2,8 @@ use anyhow::Result;
 use e2e_tests::helpers::setup_test_db;
 use e2e_tests::TestSandbox;
 use futures_util::StreamExt;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{SlaveSettings, SystemStateSnapshot, WarningCode};
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::{SlaveSettings, SystemStateSnapshot, WarningCode};
 use std::time::Duration;
 
 #[tokio::test]

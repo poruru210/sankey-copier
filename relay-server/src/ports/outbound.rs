@@ -1,6 +1,8 @@
-use crate::models::{
-    status_engine::{ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget},
+use crate::domain::models::{
     EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, VLogsGlobalSettings,
+};
+use crate::domain::services::status_calculator::{
+    ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget,
 };
 use async_trait::async_trait;
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
@@ -23,7 +25,7 @@ pub trait TradeGroupRepository: Send + Sync {
     async fn get_members(
         &self,
         master_id: &str,
-    ) -> anyhow::Result<Vec<crate::models::TradeGroupMember>>;
+    ) -> anyhow::Result<Vec<crate::domain::models::TradeGroupMember>>;
     async fn get_settings_for_slave(
         &self,
         slave_id: &str,

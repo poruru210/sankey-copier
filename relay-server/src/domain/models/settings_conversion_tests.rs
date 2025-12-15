@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::models::{MasterSettings, SlaveSettings, SymbolConverter};
+    use crate::domain::models::{MasterSettings, SlaveSettings, SymbolConverter};
 
     #[test]
     fn test_symbol_converter_from_settings() {

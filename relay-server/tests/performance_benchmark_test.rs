@@ -1,4 +1,4 @@
-use sankey_copier_relay_server::models::{SymbolMapping, TradeFilters};
+use sankey_copier_relay_server::domain::models::{SymbolMapping, TradeFilters};
 use sankey_copier_zmq::SlaveConfigMessage;
 use sankey_copier_zmq::{LotCalculationMode, SyncMode};
 

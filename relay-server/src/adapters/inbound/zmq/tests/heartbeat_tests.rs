@@ -38,7 +38,7 @@ async fn test_handle_heartbeat() {
     let ea = ea.unwrap();
     assert_eq!(ea.balance, 12000.0);
     assert_eq!(ea.equity, 11500.0);
-    assert_eq!(ea.status, crate::models::ConnectionStatus::Online);
+    assert_eq!(ea.status, crate::domain::models::ConnectionStatus::Online);
 
     // Explicit cleanup to release ZeroMQ resources
     ctx.cleanup().await;
@@ -51,7 +51,7 @@ async fn test_handle_heartbeat_sends_config_on_new_master_registration() {
     let account_id = "MASTER_NEW_REG";
 
     // Create TradeGroup in DB so Master is recognized
-    let settings = crate::models::MasterSettings {
+    let settings = crate::domain::models::MasterSettings {
         enabled: true,
         symbol_prefix: None,
         symbol_suffix: None,
@@ -89,7 +89,7 @@ async fn test_handle_heartbeat_sends_config_on_new_master_registration() {
 
     // Verify: Connection status should be Online
     let conn = ctx.connection_manager.get_master(account_id).await.unwrap();
-    assert_eq!(conn.status, crate::models::ConnectionStatus::Online);
+    assert_eq!(conn.status, crate::domain::models::ConnectionStatus::Online);
 
     // Note: We cannot easily assert that ZMQ message was sent without mocking the publisher,
     // but we rely on the fact that the code path is executed and no errors are logged.
@@ -106,7 +106,7 @@ async fn test_handle_heartbeat_sends_config_on_trade_allowed_change() {
     let account_id = "MASTER_STATE_CHANGE";
 
     // Create TradeGroup
-    let settings = crate::models::MasterSettings {
+    let settings = crate::domain::models::MasterSettings {
         enabled: true,
         symbol_prefix: None,
         symbol_suffix: None,
@@ -162,10 +162,10 @@ async fn test_master_heartbeat_marks_enabled_slaves_connected() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -176,8 +176,8 @@ async fn test_master_heartbeat_marks_enabled_slaves_connected() {
             .add_member(
                 master_account,
                 slave,
-                crate::models::SlaveSettings::default(),
-                crate::models::STATUS_ENABLED,
+                crate::domain::models::SlaveSettings::default(),
+                crate::domain::models::STATUS_ENABLED,
             )
             .await
             .unwrap();
@@ -192,7 +192,7 @@ async fn test_master_heartbeat_marks_enabled_slaves_connected() {
     let members = ctx.db.get_members(master_account).await.unwrap();
     assert_eq!(members.len(), 2);
     for member in members {
-        assert_eq!(member.status, crate::models::STATUS_CONNECTED);
+        assert_eq!(member.status, crate::domain::models::STATUS_CONNECTED);
     }
 
     ctx.cleanup().await;
@@ -208,10 +208,10 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -221,8 +221,8 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_CONNECTED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_CONNECTED,
         )
         .await
         .unwrap();
@@ -236,7 +236,7 @@ async fn test_slave_heartbeat_updates_runtime_when_master_offline() {
         .await
         .unwrap()
         .expect("member should exist");
-    assert_eq!(member.status, crate::models::STATUS_ENABLED);
+    assert_eq!(member.status, crate::domain::models::STATUS_ENABLED);
 
     ctx.cleanup().await;
 }
@@ -254,10 +254,10 @@ async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -268,8 +268,8 @@ async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_CONNECTED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_CONNECTED,
         )
         .await
         .unwrap();
@@ -291,7 +291,7 @@ async fn test_slave_heartbeat_broadcasts_settings_updated_on_status_change() {
         .expect("member should exist");
     assert_eq!(
         member.status,
-        crate::models::STATUS_ENABLED,
+        crate::domain::models::STATUS_ENABLED,
         "Slave status should be ENABLED when Master is offline"
     );
 
@@ -314,10 +314,10 @@ async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_chan
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -328,8 +328,8 @@ async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_chan
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -354,7 +354,7 @@ async fn test_master_heartbeat_broadcasts_settings_updated_for_slave_status_chan
         .expect("member should exist");
     assert_eq!(
         member.status,
-        crate::models::STATUS_CONNECTED,
+        crate::domain::models::STATUS_CONNECTED,
         "Slave status should be CONNECTED after Master connects"
     );
 
@@ -376,10 +376,10 @@ async fn test_no_broadcast_when_status_unchanged() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -390,8 +390,8 @@ async fn test_no_broadcast_when_status_unchanged() {
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -447,10 +447,10 @@ async fn test_master_reconnection_after_server_restart() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -462,8 +462,8 @@ async fn test_master_reconnection_after_server_restart() {
         .add_member(
             master_account,
             slave_account,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -481,7 +481,7 @@ async fn test_master_reconnection_after_server_restart() {
         .expect("member should exist");
     assert_eq!(
         member.status,
-        crate::models::STATUS_ENABLED,
+        crate::domain::models::STATUS_ENABLED,
         "Slave should be ENABLED before Master connects"
     );
 
@@ -499,7 +499,7 @@ async fn test_master_reconnection_after_server_restart() {
         .expect("member should exist");
     assert_eq!(
         member.status,
-        crate::models::STATUS_CONNECTED,
+        crate::domain::models::STATUS_CONNECTED,
         "Slave should be CONNECTED after Master reconnects (per-connection evaluation)"
     );
 
@@ -518,10 +518,10 @@ async fn test_master_reconnection_updates_multiple_slaves() {
     ctx.db
         .update_master_settings(
             master_account,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
-                ..crate::models::MasterSettings::default()
+                ..crate::domain::models::MasterSettings::default()
             },
         )
         .await
@@ -532,8 +532,8 @@ async fn test_master_reconnection_updates_multiple_slaves() {
         .add_member(
             master_account,
             "SLAVE_A",
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -541,8 +541,8 @@ async fn test_master_reconnection_updates_multiple_slaves() {
         .add_member(
             master_account,
             "SLAVE_B",
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -551,8 +551,8 @@ async fn test_master_reconnection_updates_multiple_slaves() {
         .add_member(
             master_account,
             "SLAVE_C",
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_DISABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_DISABLED,
         )
         .await
         .unwrap();
@@ -594,17 +594,17 @@ async fn test_master_reconnection_updates_multiple_slaves() {
 
     assert_eq!(
         member_a.status,
-        crate::models::STATUS_CONNECTED,
+        crate::domain::models::STATUS_CONNECTED,
         "SLAVE_A should be CONNECTED"
     );
     assert_eq!(
         member_b.status,
-        crate::models::STATUS_CONNECTED,
+        crate::domain::models::STATUS_CONNECTED,
         "SLAVE_B should be CONNECTED"
     );
     assert_eq!(
         member_c.status,
-        crate::models::STATUS_DISABLED,
+        crate::domain::models::STATUS_DISABLED,
         "SLAVE_C should remain DISABLED (enabled_flag=false)"
     );
 
@@ -623,7 +623,7 @@ async fn test_same_account_as_master_and_slave() {
     ctx.db
         .update_master_settings(
             account_id,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
                 ..Default::default()
@@ -638,7 +638,7 @@ async fn test_same_account_as_master_and_slave() {
     ctx.db
         .update_master_settings(
             other_master,
-            crate::models::MasterSettings {
+            crate::domain::models::MasterSettings {
                 enabled: true,
                 config_version: 1,
                 ..Default::default()
@@ -651,8 +651,8 @@ async fn test_same_account_as_master_and_slave() {
         .add_member(
             other_master,
             account_id,
-            crate::models::SlaveSettings::default(),
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::SlaveSettings::default(),
+            crate::domain::models::STATUS_ENABLED,
         )
         .await
         .unwrap();
@@ -675,7 +675,7 @@ async fn test_same_account_as_master_and_slave() {
         .unwrap();
     assert_eq!(
         member.status,
-        crate::models::STATUS_ENABLED,
+        crate::domain::models::STATUS_ENABLED,
         "Exness account as Slave should be ENABLED (Master offline)"
     );
 
@@ -692,7 +692,7 @@ async fn test_same_account_as_master_and_slave() {
         .unwrap();
     assert_eq!(
         member.status,
-        crate::models::STATUS_CONNECTED,
+        crate::domain::models::STATUS_CONNECTED,
         "Exness account as Slave should be CONNECTED (Master online)"
     );
 
@@ -712,7 +712,7 @@ async fn test_multiple_masters_to_one_slave() {
         ctx.db
             .update_master_settings(
                 master,
-                crate::models::MasterSettings {
+                crate::domain::models::MasterSettings {
                     enabled: true,
                     config_version: 1,
                     ..Default::default()
@@ -726,8 +726,8 @@ async fn test_multiple_masters_to_one_slave() {
             .add_member(
                 master,
                 slave_account,
-                crate::models::SlaveSettings::default(),
-                crate::models::STATUS_ENABLED,
+                crate::domain::models::SlaveSettings::default(),
+                crate::domain::models::STATUS_ENABLED,
             )
             .await
             .unwrap();
@@ -747,7 +747,7 @@ async fn test_multiple_masters_to_one_slave() {
             .unwrap();
         assert_eq!(
             member.status,
-            crate::models::STATUS_ENABLED,
+            crate::domain::models::STATUS_ENABLED,
             "Slave should be ENABLED for {} (Master offline)",
             master
         );
@@ -769,7 +769,7 @@ async fn test_multiple_masters_to_one_slave() {
             .unwrap();
         assert_eq!(
             member.status,
-            crate::models::STATUS_CONNECTED,
+            crate::domain::models::STATUS_CONNECTED,
             "Slave should be CONNECTED for {} (Master online)",
             master
         );

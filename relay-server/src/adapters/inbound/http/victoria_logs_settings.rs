@@ -8,7 +8,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::config::update_victoria_logs_config;
-use crate::models::VLogsGlobalSettings;
+use crate::domain::models::VLogsGlobalSettings;
 
 use super::{AppState, ProblemDetails};
 

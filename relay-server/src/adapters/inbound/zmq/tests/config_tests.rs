@@ -1,7 +1,9 @@
 //! Tests for configuration request handling
 
 use super::*;
-use crate::models::{LotCalculationMode, MasterSettings, RequestConfigMessage, SlaveSettings};
+use crate::domain::models::{
+    LotCalculationMode, MasterSettings, RequestConfigMessage, SlaveSettings,
+};
 
 #[tokio::test]
 async fn test_handle_request_config_master() {
@@ -74,7 +76,7 @@ async fn test_handle_request_config_slave() {
         filters: TradeFilters::default(),
         source_lot_min: None,
         source_lot_max: None,
-        sync_mode: crate::models::SyncMode::Skip,
+        sync_mode: crate::domain::models::SyncMode::Skip,
         limit_order_expiry_min: None,
         market_sync_max_pips: None,
         max_slippage: None,

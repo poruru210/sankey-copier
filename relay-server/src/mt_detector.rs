@@ -1,4 +1,6 @@
-use crate::models::{Architecture, EaPortConfig, InstalledComponents, MtInstallation, MtType};
+use crate::domain::models::{
+    Architecture, EaPortConfig, InstalledComponents, MtInstallation, MtType,
+};
 use crate::mt_installer::EA_CONFIG_FILENAME;
 use anyhow::Result;
 use std::fs;

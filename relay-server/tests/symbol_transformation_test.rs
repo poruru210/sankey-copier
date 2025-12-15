@@ -1,7 +1,7 @@
 // E2E tests for symbol transformation
 // Tests that Relay Server correctly transforms symbols from Master to Slave
 
-use sankey_copier_relay_server::models::{
+use sankey_copier_relay_server::domain::models::{
     MasterSettings, OrderType, SlaveSettings, SymbolConverter, SymbolMapping, TradeAction,
     TradeFilters, TradeSignal,
 };

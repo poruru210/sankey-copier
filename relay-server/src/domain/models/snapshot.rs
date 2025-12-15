@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{EaConnection, TradeGroup, TradeGroupMember};
+use crate::domain::models::{EaConnection, TradeGroup, TradeGroupMember};
 
 /// Complete system state snapshot broadcast to connected clients
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 //! Tests for trade signal message handling
 
 use super::*;
-use crate::models::{LotCalculationMode, SlaveSettings, TradeFilters};
+use crate::domain::models::{LotCalculationMode, SlaveSettings, TradeFilters};
 
 #[tokio::test]
 async fn test_handle_trade_signal_with_matching_setting() {
@@ -28,7 +28,7 @@ async fn test_handle_trade_signal_with_matching_setting() {
         },
         source_lot_min: None,
         source_lot_max: None,
-        sync_mode: crate::models::SyncMode::Skip,
+        sync_mode: crate::domain::models::SyncMode::Skip,
         limit_order_expiry_min: None,
         market_sync_max_pips: None,
         max_slippage: None,
@@ -75,7 +75,7 @@ async fn test_handle_trade_signal_no_matching_master() {
         },
         source_lot_min: None,
         source_lot_max: None,
-        sync_mode: crate::models::SyncMode::Skip,
+        sync_mode: crate::domain::models::SyncMode::Skip,
         limit_order_expiry_min: None,
         market_sync_max_pips: None,
         max_slippage: None,
@@ -120,7 +120,7 @@ async fn test_handle_trade_signal_disabled_setting() {
         },
         source_lot_min: None,
         source_lot_max: None,
-        sync_mode: crate::models::SyncMode::Skip,
+        sync_mode: crate::domain::models::SyncMode::Skip,
         limit_order_expiry_min: None,
         market_sync_max_pips: None,
         max_slippage: None,

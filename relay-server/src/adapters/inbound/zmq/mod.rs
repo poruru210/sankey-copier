@@ -10,8 +10,8 @@ use crate::{
     adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage},
     adapters::outbound::persistence::Database,
     connection_manager::ConnectionManager,
-    engine::CopyEngine,
-    models::WarningCode,
+    domain::models::WarningCode,
+    domain::services::copy_engine::CopyEngine,
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
     victoria_logs::VLogsController,
 };

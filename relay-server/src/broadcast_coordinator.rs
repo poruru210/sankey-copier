@@ -6,7 +6,7 @@
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{broadcast, RwLock};
 
-use crate::models::{SlaveConfigWithMaster, WarningCode};
+use crate::domain::models::{SlaveConfigWithMaster, WarningCode};
 
 /// Coordinates WebSocket broadcasts with change detection and caching
 ///
@@ -109,7 +109,7 @@ impl BroadcastCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::SlaveSettings;
+    use crate::domain::models::SlaveSettings;
 
     fn create_test_payload(
         master: &str,

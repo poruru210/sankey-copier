@@ -6,7 +6,7 @@
 use sankey_copier_zmq::build_sync_topic;
 
 use super::MessageHandler;
-use crate::models::SyncRequestMessage;
+use crate::domain::models::SyncRequestMessage;
 
 impl MessageHandler {
     /// Handle SyncRequest message from Slave EA

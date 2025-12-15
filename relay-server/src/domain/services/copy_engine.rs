@@ -1,7 +1,10 @@
-use crate::models::{OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal};
+use crate::domain::models::{
+    OrderType, SymbolConverter, TradeAction, TradeGroupMember, TradeSignal,
+};
 use anyhow::Result;
 
 #[cfg(test)]
+#[path = "copy_engine_tests.rs"]
 mod tests;
 
 pub struct CopyEngine;

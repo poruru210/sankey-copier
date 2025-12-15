@@ -1,4 +1,4 @@
-use crate::models::{Architecture, MtType};
+use crate::domain::models::{Architecture, MtType};
 use crate::port_resolver::ResolvedPorts;
 use anyhow::{Context, Result};
 use std::fs;
