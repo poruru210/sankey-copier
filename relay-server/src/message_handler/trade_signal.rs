@@ -77,8 +77,6 @@ impl MessageHandler {
     ) {
         // Transform signal
         // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
-        // Transform signal
-        // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
         let converter = SymbolConverter::from_settings(master_settings, &member.slave_settings);
 
         match self
