@@ -290,12 +290,16 @@ async fn main() -> Result<()> {
     // Spawn timeout checker task
     tracing::info!("Spawning timeout checker task...");
     {
-        let monitor = connection_manager::monitor::TimeoutMonitor::new(
+        let handler = connection_manager::monitor::RealTimeoutActionHandler::new(
             connection_manager.clone(),
             db.clone(),
             zmq_publisher.clone(),
             broadcast_tx.clone(),
             runtime_status_metrics.clone(),
+        );
+        let monitor = connection_manager::monitor::TimeoutMonitor::new(
+            connection_manager.clone(),
+            std::sync::Arc::new(handler),
         );
 
         tokio::spawn(async move {
