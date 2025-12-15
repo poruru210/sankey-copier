@@ -34,8 +34,28 @@ impl ConnectionManager for ConcreteConnectionManager {
         ConcreteConnectionManager::get_slave(self, account_id).await
     }
 
-    async fn update_heartbeat(&self, msg: HeartbeatMessage) {
+    async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool {
         ConcreteConnectionManager::update_heartbeat(self, msg).await
+    }
+}
+
+// ============================================================================
+// VLogsConfigProvider Adapter
+// ============================================================================
+
+use crate::victoria_logs::VLogsController;
+
+#[async_trait]
+impl super::VLogsConfigProvider for VLogsController {
+    fn get_config(&self) -> VLogsGlobalSettings {
+        let config = self.config();
+        VLogsGlobalSettings {
+            enabled: self.is_enabled(),
+            endpoint: config.endpoint(),
+            batch_size: config.batch_size as i32,
+            flush_interval_secs: config.flush_interval_secs as i32,
+            log_level: "INFO".to_string(), // Default log level
+        }
     }
 }
 

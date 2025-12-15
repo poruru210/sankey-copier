@@ -69,6 +69,7 @@ impl TestContext {
             publisher.clone(),
             Some(status_evaluator),
             Some(snapshot_broadcaster),
+            None,
         );
 
         let handler = MessageHandler::new(

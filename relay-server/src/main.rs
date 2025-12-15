@@ -292,6 +292,9 @@ async fn main() -> Result<()> {
             zmq_publisher.clone() as Arc<dyn ports::ConfigPublisher>,
             Some(Arc::new(status_evaluator) as Arc<dyn ports::StatusEvaluator>),
             Some(Arc::new(snapshot_broadcaster) as Arc<dyn ports::UpdateBroadcaster>),
+            vlogs_controller
+                .clone()
+                .map(|c| Arc::new(c) as Arc<dyn crate::ports::outbound::VLogsConfigProvider>),
         );
 
         let handler = MessageHandler::new(

@@ -93,7 +93,8 @@ impl ConnectionManager {
 
     /// Heartbeatを更新（自動登録機能付き）
     /// Uses (account_id, ea_type) as composite key
-    pub async fn update_heartbeat(&self, msg: HeartbeatMessage) {
+    /// Returns true if this was a new registration (auto-registered), false otherwise
+    pub async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool {
         let account_id = &msg.account_id;
         let ea_type: EaType = msg.ea_type.parse().unwrap_or(EaType::Master);
         let key = (account_id.clone(), ea_type);
@@ -119,6 +120,7 @@ impl ConnectionManager {
                 msg.version,
                 msg.is_trade_allowed
             );
+            false
         } else {
             // 未登録のEA: Heartbeatの情報から自動登録
             tracing::info!(
@@ -150,6 +152,7 @@ impl ConnectionManager {
             };
 
             connections.insert(key, connection);
+            true
         }
     }
 

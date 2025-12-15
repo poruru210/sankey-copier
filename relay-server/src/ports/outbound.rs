@@ -9,7 +9,12 @@ use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 pub trait ConnectionManager: Send + Sync {
     async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
     async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
-    async fn update_heartbeat(&self, msg: HeartbeatMessage);
+    async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool;
+}
+
+#[async_trait]
+pub trait VLogsConfigProvider: Send + Sync {
+    fn get_config(&self) -> VLogsGlobalSettings;
 }
 
 #[async_trait]

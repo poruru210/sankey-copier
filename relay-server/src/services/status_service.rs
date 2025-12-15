@@ -1,6 +1,7 @@
 use crate::models::HeartbeatMessage;
 use crate::ports::outbound::{
     ConfigPublisher, ConnectionManager, StatusEvaluator, TradeGroupRepository, UpdateBroadcaster,
+    VLogsConfigProvider,
 };
 use std::sync::Arc;
 
@@ -11,6 +12,7 @@ pub struct StatusService {
     publisher: Arc<dyn ConfigPublisher>,
     status_evaluator: Option<Arc<dyn StatusEvaluator>>,
     broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
+    vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
 }
 
 impl StatusService {
@@ -20,6 +22,7 @@ impl StatusService {
         publisher: Arc<dyn ConfigPublisher>,
         status_evaluator: Option<Arc<dyn StatusEvaluator>>,
         broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
+        vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
     ) -> Self {
         Self {
             connection_manager,
@@ -27,6 +30,7 @@ impl StatusService {
             publisher,
             status_evaluator,
             broadcaster,
+            vlogs_provider,
         }
     }
 
@@ -49,7 +53,24 @@ impl StatusService {
         };
 
         // Update heartbeat
-        self.connection_manager.update_heartbeat(msg.clone()).await;
+        let is_new_registration = self.connection_manager.update_heartbeat(msg.clone()).await;
+
+        if is_new_registration {
+            tracing::info!(
+                account = %account_id,
+                "New EA registration detected, sending VictoriaLogs config"
+            );
+            if let Some(provider) = &self.vlogs_provider {
+                let config = provider.get_config();
+                if let Err(e) = self.publisher.broadcast_vlogs_config(&config).await {
+                    tracing::error!(
+                        account = %account_id,
+                        error = %e,
+                        "Failed to send VictoriaLogs config to newly registered EA"
+                    );
+                }
+            }
+        }
 
         match ea_type.as_str() {
             "Master" => self.handle_master_heartbeat(msg, old_conn).await,
@@ -169,6 +190,7 @@ impl StatusService {
 
         // Track processed slaves to avoid duplicates
         let mut processed_slaves = std::collections::HashSet::new();
+        let mut any_state_changed = false;
 
         for member in members {
             let slave_account = member.slave_account.clone();
@@ -211,16 +233,8 @@ impl StatusService {
 
             let slave_changed = slave_bundle.status_result.has_changed(&old_slave_result);
 
-            tracing::debug!(
-                slave = %slave_account,
-                master = %master_account,
-                changed = slave_changed,
-                old_status = old_slave_result.status,
-                new_status = slave_bundle.status_result.status,
-                "[StatusService] Slave status change detection (via Master heartbeat)"
-            );
-
             if slave_changed {
+                any_state_changed = true;
                 tracing::info!(
                     slave = %slave_account,
                     master = %master_account,
@@ -259,8 +273,10 @@ impl StatusService {
         }
 
         // WebSocket broadcast for any status changes
-        if let Some(broadcaster) = &self.broadcaster {
-            broadcaster.broadcast_snapshot().await;
+        if any_state_changed {
+            if let Some(broadcaster) = &self.broadcaster {
+                broadcaster.broadcast_snapshot().await;
+            }
         }
     }
 
@@ -415,7 +431,7 @@ mod tests {
         impl ConnectionManager for ConnectionManager {
             async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
             async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
-            async fn update_heartbeat(&self, msg: HeartbeatMessage);
+            async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool;
         }
     }
 
@@ -448,6 +464,13 @@ mod tests {
         }
     }
 
+    mock! {
+        pub VLogsConfigProvider {}
+        impl VLogsConfigProvider for VLogsConfigProvider {
+            fn get_config(&self) -> crate::models::VLogsGlobalSettings;
+        }
+    }
+
     #[allow(dead_code)]
     struct MockStatusEvaluator;
     #[async_trait]
@@ -471,39 +494,108 @@ mod tests {
             &self,
             _target: SlaveRuntimeTarget<'_>,
         ) -> crate::config_builder::SlaveConfigBundle {
-            // Return a default bundle for testing
-            crate::config_builder::SlaveConfigBundle {
-                config: sankey_copier_zmq::SlaveConfigMessage {
-                    account_id: String::new(),
-                    master_account: String::new(),
-                    timestamp: 0,
-                    trade_group_id: String::new(),
-                    status: 0,
-                    lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
-                    lot_multiplier: None,
-                    reverse_trade: false,
-                    symbol_prefix: None,
-                    symbol_suffix: None,
-                    symbol_mappings: vec![],
-                    filters: sankey_copier_zmq::TradeFilters::default(),
-                    config_version: 0,
-                    source_lot_min: None,
-                    source_lot_max: None,
-                    master_equity: None,
-                    sync_mode: sankey_copier_zmq::SyncMode::default(),
-                    limit_order_expiry_min: None,
-                    market_sync_max_pips: None,
-                    max_slippage: None,
-                    copy_pending_orders: false,
-                    max_retries: 3,
-                    max_signal_delay_ms: 5000,
-                    use_pending_order_for_delayed: false,
-                    allow_new_orders: true,
-                    warning_codes: vec![],
-                },
-                status_result: MemberStatusResult::default(),
-            }
+            let mut bundle = crate::config_builder::SlaveConfigBundle::default();
+            bundle.status_result.status = 2; // Enabled
+            bundle
         }
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_new_registration_sends_vlogs_config() {
+        let mut mock_conn_manager = MockConnectionManager::new();
+
+        let mut mock_publisher = MockConfigPublisher::new();
+        let mut mock_vlogs_provider = MockVLogsConfigProvider::new();
+
+        let account_id = "NEW_SLAVE_999";
+        let heartbeat = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            ea_type: "Slave".to_string(),
+            is_trade_allowed: true,
+            message_type: "Heartbeat".to_string(),
+            balance: 500.0,
+            equity: 500.0,
+            open_positions: 0,
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            version: "1.0.0".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 999111,
+            broker: "DemoBroker".to_string(),
+            account_name: "Newbie".to_string(),
+            server: "DemoServer".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        // EXPECT: connection manager to return TRUE (is new)
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .with(mockall::predicate::function(
+                |msg: &crate::models::HeartbeatMessage| {
+                    msg.account_id == "NEW_SLAVE_999" && msg.ea_type == "Slave"
+                },
+            ))
+            .times(1)
+            .returning(|_| true);
+
+        // EXPECT: get_slave called (to check old status)
+        mock_conn_manager
+            .expect_get_slave()
+            .with(mockall::predicate::eq(account_id))
+            .returning(|_| None);
+
+        // EXPECT: vlogs provider called
+        let vlogs_settings = crate::models::VLogsGlobalSettings {
+            enabled: true,
+            endpoint: "http://vlogs:8428".to_string(),
+            batch_size: 1000,
+            flush_interval_secs: 5,
+            log_level: "INFO".to_string(),
+        };
+        let vlogs_settings_clone = vlogs_settings.clone();
+        mock_vlogs_provider
+            .expect_get_config()
+            .times(1)
+            .return_const(vlogs_settings);
+
+        // EXPECT: publisher called with vlogs config
+        mock_publisher
+            .expect_broadcast_vlogs_config()
+            .with(mockall::predicate::eq(vlogs_settings_clone))
+            .times(1)
+            .returning(|_| Ok(()));
+
+        // Since we are not setting up the full flow (repo, evaluator), we might panic if handle_slave_heartbeat continues.
+        // But in unit tests we control the flow.
+        // StatusService splits logic.
+        // We can just verify the first part.
+        // But new() requires all dependencies.
+        // Let's pass mock_repo which panics on use?
+        // Or better, let's configure mock_repo to return error or empty so it finishes gracefully.
+
+        // EXPECT: handle_slave_heartbeat -> repo.get_settings_for_slave
+        // We simulate error or empty list to stop processing
+        // But Mock by default panics.
+        // Let's instantiate a repo that returns empty result.
+
+        let mut safe_mock_repo = MockTradeGroupRepository::new();
+        safe_mock_repo
+            .expect_get_settings_for_slave()
+            .returning(|_| Ok(vec![]));
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(safe_mock_repo),
+            Arc::new(mock_publisher),
+            None,
+            None,
+            Some(Arc::new(mock_vlogs_provider)),
+        );
+
+        service.handle_heartbeat(heartbeat).await;
     }
 
     #[tokio::test]
@@ -542,7 +634,7 @@ mod tests {
                 msg.account_id == "MASTER_123" && msg.ea_type == "Master" && msg.is_trade_allowed
             }))
             .times(1)
-            .return_const(());
+            .return_const(false);
 
         // Initial connection lookup
         let existing_conn = EaConnection {
@@ -570,6 +662,7 @@ mod tests {
             Arc::new(mock_conn_manager),
             Arc::new(mock_repo),
             Arc::new(mock_publisher),
+            None,
             None,
             None,
         );
@@ -617,7 +710,7 @@ mod tests {
         mock_conn_manager
             .expect_update_heartbeat()
             .times(1)
-            .return_const(());
+            .return_const(true);
 
         // Second call after registration returns the connection
         let new_conn = EaConnection {
@@ -650,6 +743,7 @@ mod tests {
             Arc::new(mock_conn_manager),
             Arc::new(mock_repo),
             Arc::new(mock_publisher),
+            None,
             None,
             None,
         );
@@ -699,7 +793,7 @@ mod tests {
         mock_conn_manager
             .expect_update_heartbeat()
             .times(1)
-            .return_const(());
+            .return_const(true);
 
         // Slave settings exist for this slave
         let slave_settings = crate::models::SlaveConfigWithMaster {
@@ -735,6 +829,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_publisher),
             Some(mock_evaluator),
+            None,
             None,
         );
 

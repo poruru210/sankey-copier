@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// VictoriaLogs global settings
 /// Stored in the global_settings table with key "victoria_logs"
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VLogsGlobalSettings {
     /// Whether VictoriaLogs logging is enabled
     pub enabled: bool,

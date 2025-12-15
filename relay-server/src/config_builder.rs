@@ -39,6 +39,7 @@ pub struct MasterConfigBundle {
 }
 
 /// Bundle returned when building a Slave config. Includes the calculated status/result.
+#[derive(Default)]
 pub struct SlaveConfigBundle {
     pub config: SlaveConfigMessage,
     pub status_result: MemberStatusResult,
