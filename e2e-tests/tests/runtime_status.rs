@@ -35,7 +35,7 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
 
     // Create slave simulator
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -48,7 +48,7 @@ async fn test_slave_runtime_status_tracks_master_cluster_events() {
 
     // Create master simulator
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -167,14 +167,14 @@ async fn test_same_account_id_master_and_slave_both_registered() {
 
     // Create Master EA simulator (with shared_account as account_id)
     let mut master_ea = sandbox
-        .create_master(shared_account)
+        .create_master(shared_account, true)
         .expect("Failed to create Master simulator");
 
     // Create Slave EA simulator (with shared_account as account_id, connected to a different master)
     // For this test, we'll simulate a Slave with the same account_id
     // In real scenario, this would be the same MT account running both Master and Slave EAs
     let mut slave_ea = sandbox
-        .create_slave(shared_account, "SOME_OTHER_MASTER")
+        .create_slave(shared_account, "SOME_OTHER_MASTER", true)
         .expect("Failed to create Slave simulator");
 
     // Allow ZMQ connections to stabilize (avoid "slow joiner" problem)

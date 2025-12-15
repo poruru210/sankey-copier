@@ -51,13 +51,21 @@ impl RuntimeStatusUpdater {
     #[instrument(skip(self), fields(slave_account = %slave_account))]
     pub async fn slave_connection_snapshot(&self, slave_account: &str) -> ConnectionSnapshot {
         let slave_conn = self.connection_manager.get_slave(slave_account).await;
-        ConnectionSnapshot {
+        let snapshot = ConnectionSnapshot {
             connection_status: slave_conn.as_ref().map(|conn| conn.status),
             is_trade_allowed: slave_conn
                 .as_ref()
                 .map(|conn| conn.is_trade_allowed)
                 .unwrap_or(false),
-        }
+        };
+        tracing::debug!(
+            target: "status",
+            slave_account = %slave_account,
+            connection_status = ?snapshot.connection_status,
+            is_trade_allowed = snapshot.is_trade_allowed,
+            "slave_connection_snapshot"
+        );
+        snapshot
     }
 
     #[instrument(skip(self), fields(master_account = %master_account))]

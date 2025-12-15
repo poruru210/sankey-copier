@@ -54,6 +54,7 @@ pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> 
             batch_size: 100,
             flush_interval_secs: 5,
             source: "test-relay".to_string(),
+            log_level: "INFO".to_string(),
         };
         Some(VLogsController::new(enabled_flag, vlogs_config))
     } else {

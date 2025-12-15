@@ -43,16 +43,22 @@ impl TestSandbox {
     ///
     /// # Arguments
     /// * `account_id` - Unique identifier for this Master EA (e.g., "master-01").
-    pub fn create_master(&self, account_id: &str) -> Result<MasterEaSimulator> {
+    /// * `is_trade_allowed` - Initial auto-trading state (TERMINAL_TRADE_ALLOWED).
+    pub fn create_master(
+        &self,
+        account_id: &str,
+        is_trade_allowed: bool,
+    ) -> Result<MasterEaSimulator> {
         // Master connects to PULL (for commands) and PUB (for config/sync)
         let push_address = self.server.zmq_pull_address();
         let config_address = self.server.zmq_pub_address();
 
-        let master = MasterEaSimulator::new(&push_address, &config_address, account_id)
-            .context("Failed to create Master EA simulator")?;
+        let master =
+            MasterEaSimulator::new(&push_address, &config_address, account_id, is_trade_allowed)
+                .context("Failed to create Master EA simulator")?;
 
         // Note: We don't automatically call master.start() here to give the caller
-        // a chance to configure it (e.g. set_trade_allowed) before the loop starts.
+        // a chance to configure it before the loop starts.
 
         Ok(master)
     }
@@ -62,10 +68,12 @@ impl TestSandbox {
     /// # Arguments
     /// * `account_id` - Unique identifier for this Slave EA (e.g., "slave-01").
     /// * `master_account_id` - The Master Account ID to subscribe to.
+    /// * `is_trade_allowed` - Initial auto-trading state (TERMINAL_TRADE_ALLOWED).
     pub fn create_slave(
         &self,
         account_id: &str,
         master_account_id: &str,
+        is_trade_allowed: bool,
     ) -> Result<SlaveEaSimulator> {
         let push_address = self.server.zmq_pull_address();
         let config_address = self.server.zmq_pub_address();
@@ -78,6 +86,7 @@ impl TestSandbox {
             &trade_address,
             account_id,
             master_account_id,
+            is_trade_allowed,
         )
         .context("Failed to create Slave EA simulator")?;
 

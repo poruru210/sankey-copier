@@ -8,7 +8,7 @@ import { useEffect } from 'react';
 import { useIntlayer } from 'next-intlayer';
 import { useRouter } from 'next/navigation';
 import { useAtomValue } from 'jotai';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { useTradeGroups } from '@/hooks/useTradeGroups';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';

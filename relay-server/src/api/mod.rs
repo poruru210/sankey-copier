@@ -172,10 +172,10 @@ pub fn create_router(state: AppState) -> Router {
             "/api/victoria-logs-config",
             get(victoria_logs_settings::get_vlogs_config),
         )
-        // PUT /api/victoria-logs-settings: Toggle enabled state only
+        // PUT /api/victoria-logs-settings: Toggle enabled state and update log level
         .route(
             "/api/victoria-logs-settings",
-            axum::routing::put(victoria_logs_settings::toggle_vlogs_enabled),
+            axum::routing::put(victoria_logs_settings::update_vlogs_settings),
         )
         // ZeroMQ API
         // GET /api/zeromq-config: Returns current ZeroMQ port configuration (read-only)

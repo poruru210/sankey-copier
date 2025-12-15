@@ -146,14 +146,17 @@ pub fn evaluate_master_status(
     conn: ConnectionSnapshot,
 ) -> MasterStatusResult {
     let mut warning_codes = Vec::new();
+    let is_online = is_connection_online(conn.connection_status);
 
     if !intent.web_ui_enabled {
         warning_codes.push(WarningCode::MasterWebUiDisabled);
     }
-    if !is_connection_online(conn.connection_status) {
+    if !is_online {
         warning_codes.push(WarningCode::MasterOffline);
     }
-    if !conn.is_trade_allowed {
+    // Only check auto-trading state if Master is online
+    // (offline Master has no valid is_trade_allowed state yet)
+    if is_online && !conn.is_trade_allowed {
         warning_codes.push(WarningCode::MasterAutoTradingDisabled);
     }
 
@@ -187,14 +190,15 @@ pub fn evaluate_slave_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
-    // Always report auto-trading disabled as a separate warning regardless of online state
-    if !slave_conn.is_trade_allowed {
+    // Only check auto-trading state if Slave is online
+    // (offline Slave has no valid is_trade_allowed state yet)
+    if slave_online && !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
 
-    // Slave is DISABLED if Web UI is OFF or Slave is offline
+    // Slave is DISABLED if Web UI is OFF, Slave is offline, or (online but auto-trading disabled)
     // Otherwise, status depends on Master cluster state (for display purposes)
-    let slave_disabled = !slave_web_ui_enabled || !slave_online;
+    let slave_disabled = !slave_web_ui_enabled || !slave_online || !slave_conn.is_trade_allowed;
 
     let mut status = if slave_disabled {
         STATUS_DISABLED
@@ -216,13 +220,9 @@ pub fn evaluate_slave_status(
         }
     }
 
-    // allow_new_orders: Slave can process signals if:
-    // - Web UI is ON
-    // - Slave EA is online
-    // Master's connection state does NOT affect this - if a signal arrives, process it.
-    // Note: is_trade_allowed (MT auto-trading) is not checked here;
-    //       if disabled, the order will simply fail at execution time.
-    let allow_new_orders = slave_web_ui_enabled && slave_online;
+    // allow_new_orders: Slave can process signals only when fully operational
+    // (Web UI ON, online, and auto-trading enabled)
+    let allow_new_orders = slave_web_ui_enabled && slave_online && slave_conn.is_trade_allowed;
 
     SlaveStatusResult {
         status,
@@ -265,13 +265,14 @@ pub fn evaluate_member_status(
     if !slave_online {
         warning_codes.push(WarningCode::SlaveOffline);
     }
-    // Always report auto-trading disabled as a separate warning regardless of online state
-    if !slave_conn.is_trade_allowed {
+    // Only check auto-trading state if Slave is online
+    // (offline Slave has no valid is_trade_allowed state yet)
+    if slave_online && !slave_conn.is_trade_allowed {
         warning_codes.push(WarningCode::SlaveAutoTradingDisabled);
     }
 
-    // Slave is DISABLED if Web UI is OFF or Slave is offline
-    let slave_disabled = !slave_web_ui_enabled || !slave_online;
+    // Slave is DISABLED if Web UI is OFF, Slave is offline, or (online but auto-trading disabled)
+    let slave_disabled = !slave_web_ui_enabled || !slave_online || !slave_conn.is_trade_allowed;
 
     // Always include Master's warning codes regardless of Slave status
     // (Users need to see Master issues even when Slave is offline)
@@ -290,9 +291,9 @@ pub fn evaluate_member_status(
         STATUS_ENABLED
     };
 
-    // allow_new_orders: Slave can process signals if Web UI is ON and Slave is online.
-    // Master's connection state does NOT affect this - if a signal arrives, process it.
-    let allow_new_orders = slave_web_ui_enabled && slave_online;
+    // allow_new_orders: Slave can process signals only when fully operational
+    // (Web UI ON, online, and auto-trading enabled)
+    let allow_new_orders = slave_web_ui_enabled && slave_online && slave_conn.is_trade_allowed;
 
     // Sort warning codes by priority for consistent display
     WarningCode::sort_by_priority(&mut warning_codes);
@@ -347,8 +348,8 @@ mod tests {
 
     #[test]
     fn slave_disabled_when_auto_trade_off() {
-        // is_trade_allowed=false only generates a warning, but does NOT disable slave
-        // Orders will fail at execution time if auto-trading is off
+        // is_trade_allowed=false now DISABLES slave (status=0, allow_new_orders=false)
+        // This ensures panel shows DISABLED when MT auto-trading is OFF
         let result = evaluate_slave_status(
             SlaveIntent {
                 web_ui_enabled: true,
@@ -359,11 +360,10 @@ mod tests {
             },
             MasterClusterSnapshot::new(vec![STATUS_CONNECTED]),
         );
-        // Status is CONNECTED because Web UI is ON and Slave is online
-        assert_eq!(result.status, STATUS_CONNECTED);
-        // allow_new_orders is true because Slave can receive signals
-        // (actual order execution may fail due to auto-trading being off)
-        assert!(result.allow_new_orders);
+        // Status is now DISABLED because auto-trading is OFF
+        assert_eq!(result.status, STATUS_DISABLED);
+        // allow_new_orders is false because auto-trading is OFF
+        assert!(!result.allow_new_orders);
         assert!(result
             .warning_codes
             .contains(&WarningCode::SlaveAutoTradingDisabled));
@@ -538,10 +538,8 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
-                expected_warnings: &[
-                    WarningCode::MasterOffline,
-                    WarningCode::MasterAutoTradingDisabled,
-                ],
+                // Offline: is_trade_allowed is not checked (no valid state yet)
+                expected_warnings: &[WarningCode::MasterOffline],
             },
             MasterCase {
                 name: "unknown_and_trade_blocked",
@@ -549,10 +547,8 @@ mod tests {
                 connection: None,
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
-                expected_warnings: &[
-                    WarningCode::MasterOffline,
-                    WarningCode::MasterAutoTradingDisabled,
-                ],
+                // Unknown/offline: is_trade_allowed is not checked (no valid state yet)
+                expected_warnings: &[WarningCode::MasterOffline],
             },
             MasterCase {
                 name: "intent_off_only",
@@ -587,11 +583,8 @@ mod tests {
                 connection: Some(Offline),
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
-                expected_warnings: &[
-                    WarningCode::MasterWebUiDisabled,
-                    WarningCode::MasterOffline,
-                    WarningCode::MasterAutoTradingDisabled,
-                ],
+                // Offline: is_trade_allowed is not checked
+                expected_warnings: &[WarningCode::MasterWebUiDisabled, WarningCode::MasterOffline],
             },
             MasterCase {
                 name: "intent_off_unknown",
@@ -607,11 +600,8 @@ mod tests {
                 connection: None,
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
-                expected_warnings: &[
-                    WarningCode::MasterWebUiDisabled,
-                    WarningCode::MasterOffline,
-                    WarningCode::MasterAutoTradingDisabled,
-                ],
+                // Unknown/offline: is_trade_allowed is not checked
+                expected_warnings: &[WarningCode::MasterWebUiDisabled, WarningCode::MasterOffline],
             },
         ];
 
@@ -651,8 +641,8 @@ mod tests {
         use ConnectionStatus::{Offline, Online};
         let healthy_cluster = MasterClusterSnapshot::new(vec![STATUS_CONNECTED, STATUS_CONNECTED]);
 
-        // New spec: allow_new_orders = web_ui_enabled && online
-        // is_trade_allowed only adds warning, doesn't affect status or allow_new_orders
+        // allow_new_orders = web_ui_enabled && online && is_trade_allowed
+        // is_trade_allowed=false now causes DISABLED status
         let cases = [
             SlaveCase {
                 name: "all_green",
@@ -668,8 +658,8 @@ mod tests {
                 intent_enabled: true,
                 connection: Some(Online),
                 is_trade_allowed: false,
-                expected_status: STATUS_CONNECTED, // Changed: trade_blocked doesn't disable
-                expected_allow_new_orders: true,   // Slave can still receive signals
+                expected_status: STATUS_DISABLED, // trade_blocked now disables
+                expected_allow_new_orders: false, // Slave cannot process signals when auto-trading OFF
                 expected_warnings: &[WarningCode::SlaveAutoTradingDisabled],
             },
             SlaveCase {
@@ -688,11 +678,8 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
-                // Offline + trade_blocked: include both warnings (offline + auto-trading disabled)
-                expected_warnings: &[
-                    WarningCode::SlaveOffline,
-                    WarningCode::SlaveAutoTradingDisabled,
-                ],
+                // Offline: is_trade_allowed is not checked (no valid state yet)
+                expected_warnings: &[WarningCode::SlaveOffline],
             },
             SlaveCase {
                 name: "unknown_connection",
@@ -710,11 +697,8 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
-                // Unknown/offline: include both offline and auto-trading disabled warnings
-                expected_warnings: &[
-                    WarningCode::SlaveOffline,
-                    WarningCode::SlaveAutoTradingDisabled,
-                ],
+                // Unknown/offline: is_trade_allowed is not checked (no valid state yet)
+                expected_warnings: &[WarningCode::SlaveOffline],
             },
             SlaveCase {
                 name: "intent_off_only",
@@ -753,12 +737,8 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
-                // Web UI OFF + offline + trade_blocked: include SlaveWebUiDisabled, SlaveOffline, SlaveAutoTradingDisabled
-                expected_warnings: &[
-                    WarningCode::SlaveWebUiDisabled,
-                    WarningCode::SlaveOffline,
-                    WarningCode::SlaveAutoTradingDisabled,
-                ],
+                // Web UI OFF + offline: is_trade_allowed is not checked (offline)
+                expected_warnings: &[WarningCode::SlaveWebUiDisabled, WarningCode::SlaveOffline],
             },
             SlaveCase {
                 name: "intent_off_unknown",
@@ -776,12 +756,8 @@ mod tests {
                 is_trade_allowed: false,
                 expected_status: STATUS_DISABLED,
                 expected_allow_new_orders: false,
-                // Web UI OFF + unknown + trade_blocked: include all three warnings
-                expected_warnings: &[
-                    WarningCode::SlaveWebUiDisabled,
-                    WarningCode::SlaveOffline,
-                    WarningCode::SlaveAutoTradingDisabled,
-                ],
+                // Web UI OFF + unknown: is_trade_allowed is not checked (offline)
+                expected_warnings: &[WarningCode::SlaveWebUiDisabled, WarningCode::SlaveOffline],
             },
         ];
 
@@ -973,9 +949,9 @@ mod tests {
     }
 
     #[test]
-    fn member_connected_with_auto_trading_off_shows_warning() {
-        // Slave can still be CONNECTED if Master is CONNECTED
-        // Auto-trading off just generates a warning
+    fn member_disabled_when_slave_auto_trading_off() {
+        // Slave is DISABLED when online but auto-trading is off
+        // This prevents trade execution when MetaTrader's auto-trading is disabled
         let intent = SlaveIntent {
             web_ui_enabled: true,
         };
@@ -989,8 +965,14 @@ mod tests {
         };
 
         let result = evaluate_member_status(intent, slave_snapshot, &master_result);
-        assert_eq!(result.status, STATUS_CONNECTED);
-        assert!(result.allow_new_orders);
+        assert_eq!(
+            result.status, STATUS_DISABLED,
+            "Slave should be DISABLED when auto-trading is off"
+        );
+        assert!(
+            !result.allow_new_orders,
+            "allow_new_orders should be false when auto-trading is off"
+        );
         assert!(result
             .warning_codes
             .contains(&WarningCode::SlaveAutoTradingDisabled));

@@ -1,8 +1,8 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Node, Edge } from '@xyflow/react';
 import type { AccountInfo, CopySettings, EaConnection } from '@/types';
-import type { AccountNodeData } from '@/components/flow-nodes';
+import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
 import {
   hoveredSourceIdAtom,
   hoveredReceiverIdAtom,
@@ -70,6 +70,18 @@ export function useFlowData({
   const [disabledReceiverIds, setDisabledReceiverIds] = useAtom(disabledReceiverIdsAtom);
   const [pendingAccountIds, setPendingAccountIds] = useState<Set<string>>(new Set());
 
+  // Track pending timers for cleanup on unmount
+  const pendingTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Cleanup pending timers on unmount
+  useEffect(() => {
+    const timers = pendingTimersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
   const setAccountPending = useCallback((accountId: string, isPending: boolean) => {
     setPendingAccountIds((prev) => {
       const next = new Set(prev);
@@ -94,9 +106,19 @@ export function useFlowData({
       } finally {
         const elapsed = Date.now() - start;
         const remaining = Math.max(0, MIN_PENDING_DURATION_MS - elapsed);
-        setTimeout(() => {
+
+        // Clear any existing timer for this account
+        const existingTimer = pendingTimersRef.current.get(accountId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        // Set new timer and track it
+        const timer = setTimeout(() => {
           setAccountPending(accountId, false);
+          pendingTimersRef.current.delete(accountId);
         }, remaining);
+        pendingTimersRef.current.set(accountId, timer);
       }
     };
 

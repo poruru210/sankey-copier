@@ -5,11 +5,11 @@
 // Layout is managed by SidebarInset in LayoutWrapper, only ServerLog height adjustment needed
 // Note: generateStaticParams is defined in layout.tsx for static export support
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { apiClientAtom } from '@/lib/atoms/site';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +32,16 @@ export default function TradeGroupDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     symbol_prefix: '',
@@ -80,7 +90,7 @@ export default function TradeGroupDetailPage() {
       setMessage({ type: 'success', text: content.saveSuccess.value });
 
       // Navigate back to list after 1.5 seconds
-      setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         router.push('/trade-groups');
       }, 1500);
     } catch (err) {

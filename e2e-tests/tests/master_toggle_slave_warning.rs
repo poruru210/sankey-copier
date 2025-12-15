@@ -89,14 +89,14 @@ async fn test_master_toggle_off_adds_slave_warning() {
 
     // Start Master EA (online, auto-trading ON)
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // Start Slave EA (online, auto-trading ON)
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
@@ -196,14 +196,14 @@ async fn test_master_toggle_on_clears_slave_warning() {
 
     // Start Master EA (online, auto-trading ON)
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // Start Slave EA (online, auto-trading ON)
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
@@ -297,13 +297,13 @@ async fn test_master_toggle_cycle() {
 
     // Start Master and Slave EAs
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
     master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
     slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");

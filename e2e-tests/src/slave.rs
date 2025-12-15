@@ -3,7 +3,7 @@
 // Slave EA Simulator - MQL5 SankeyCopierSlave.mq5 完全準拠実装
 //
 // Refactored to use EaContext via FFI.
-// Now using the Platform Simulator infrastructure.
+// Now using the Platform Simulator infrastructure and EaContextWrapper.
 
 use anyhow::Result;
 use chrono::Utc;
@@ -13,26 +13,17 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
-use sankey_copier_zmq::ffi::{
-    build_trade_topic, ea_connect, ea_context_free, ea_context_get_position_snapshot,
-    ea_context_get_slave_config, ea_context_mark_config_requested, ea_get_command, ea_init,
-    ea_manager_tick, ea_send_push, ea_send_sync_request, ea_send_unregister, ea_subscribe_config,
-};
-use sankey_copier_zmq::EaContext;
+use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 
 use crate::base::EaSimulatorBase;
+use crate::platform::context::SlaveContextWrapper;
 use crate::platform::runner::PlatformRunner;
 use crate::platform::traits::ExpertAdvisor;
 use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
 use crate::types::{
-    EaType, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal, UnregisterMessage,
-    VLogsConfigMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
+    EaType, GlobalConfigMessage, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal,
+    UnregisterMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
-
-// Wrapper for thread-safe passing of EaContext pointer
-struct ContextWrapper(pub *mut EaContext);
-unsafe impl Send for ContextWrapper {}
-unsafe impl Sync for ContextWrapper {}
 
 // =============================================================================
 // Slave EA Core (MQL5 Logic)
@@ -58,11 +49,11 @@ struct SlaveEaCore {
     _g_register_sent: Arc<AtomicBool>,
     received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-    _received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    _received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
 
     _subscribed_masters: Arc<Mutex<Vec<String>>>,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
-    context: Arc<Mutex<Option<ContextWrapper>>>,
+    context: Arc<Mutex<Option<SlaveContextWrapper>>>,
 
     push_address: String,
     config_address: String,
@@ -80,7 +71,7 @@ impl ExpertAdvisor for SlaveEaCore {
         let server_u16 = to_u16("TestServer");
         let currency_u16 = to_u16("USD");
 
-        let ctx = unsafe {
+        let ctx_ptr = unsafe {
             ea_init(
                 acc_id_u16.as_ptr(),
                 ea_type_u16.as_ptr(),
@@ -94,21 +85,21 @@ impl ExpertAdvisor for SlaveEaCore {
             )
         };
 
-        if ctx.is_null() {
+        if ctx_ptr.is_null() {
             eprintln!("Failed to initialize EA context!");
             return ENUM_INIT_RETCODE::INIT_FAILED;
         }
 
         {
             let mut guard = self.context.lock().unwrap();
-            *guard = Some(ContextWrapper(ctx));
+            *guard = Some(SlaveContextWrapper::new(ctx_ptr));
         }
 
         let push_u16 = to_u16(&self.push_address);
         let sub_u16 = to_u16(&self.config_address);
 
         unsafe {
-            if ea_connect(ctx, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
+            if ea_connect(ctx_ptr, push_u16.as_ptr(), sub_u16.as_ptr()) != 1 {
                 eprintln!("Failed to connect EA context!");
                 return ENUM_INIT_RETCODE::INIT_FAILED;
             }
@@ -120,7 +111,7 @@ impl ExpertAdvisor for SlaveEaCore {
     fn on_deinit(&mut self, _reason: ENUM_DEINIT_REASON) {
         let mut guard = self.context.lock().unwrap();
         if let Some(wrapper) = guard.take() {
-            let ctx = wrapper.0;
+            let ctx = wrapper.raw();
             let mut buffer = vec![0u8; 1024];
             let len = unsafe { ea_send_unregister(ctx, buffer.as_mut_ptr(), buffer.len() as i32) };
             if len > 0 {
@@ -128,18 +119,17 @@ impl ExpertAdvisor for SlaveEaCore {
                     ea_send_push(ctx, buffer.as_ptr(), len);
                 }
             }
-            unsafe {
-                ea_context_free(ctx);
-            }
+            wrapper.free(); // Safely calls ea_context_free
         }
     }
 
     fn on_timer(&mut self) {
         let guard = self.context.lock().unwrap();
-        let ctx = match guard.as_ref() {
-            Some(w) => w.0,
+        let wrapper = match guard.as_ref() {
+            Some(w) => w,
             None => return,
         };
+        let ctx = wrapper.raw();
 
         // Helper for string conversion
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
@@ -179,10 +169,8 @@ impl ExpertAdvisor for SlaveEaCore {
                     unsafe { std::mem::transmute::<i32, EaCommandType>(cmd.command_type) };
                 match cmd_type {
                     EaCommandType::UpdateUi => {
-                        // Config updated.
-                        let cfg_ptr = unsafe { ea_context_get_slave_config(ctx) };
-                        if !cfg_ptr.is_null() {
-                            let cfg = unsafe { &*cfg_ptr };
+                        // Config updated. Retrieve via safe wrapper.
+                        if let Some(cfg) = wrapper.get_slave_config() {
                             // Update verification queues
                             {
                                 let mut configs = self.g_configs.lock().unwrap();
@@ -199,16 +187,26 @@ impl ExpertAdvisor for SlaveEaCore {
                                 .store(cfg.status, Ordering::SeqCst);
                             unsafe { ea_context_mark_config_requested(ctx) };
                         }
+                        // Also check for global config updates
+                        if let Some(cfg) = wrapper.get_global_config() {
+                            self._received_vlogs_configs.lock().unwrap().push(cfg);
+                        }
                     }
                     EaCommandType::ProcessSnapshot => {
-                        let snap_ptr = unsafe { ea_context_get_position_snapshot(ctx) };
-                        if !snap_ptr.is_null() {
-                            let snap = unsafe { &*snap_ptr };
-                            self.received_position_snapshots
-                                .lock()
-                                .unwrap()
-                                .push(snap.clone());
-                        }
+                        let snapshots = wrapper.get_position_snapshot();
+                        let source = wrapper.get_position_snapshot_source_account();
+                        // Always process snapshot command, even if empty positions
+                        let snap = PositionSnapshotMessage {
+                            message_type: "PositionSnapshot".to_string(),
+                            source_account: if source.is_empty() {
+                                "Unknown".to_string()
+                            } else {
+                                source
+                            },
+                            positions: snapshots,
+                            timestamp: Utc::now().to_rfc3339(),
+                        };
+                        self.received_position_snapshots.lock().unwrap().push(snap);
                     }
                     EaCommandType::Open | EaCommandType::Close | EaCommandType::Modify => {
                         // Reconstruct TradeSignal for verification
@@ -311,14 +309,14 @@ pub struct SlaveEaSimulator {
     // --- Received Data Queues (Verification) ---
     received_trade_signals: Arc<Mutex<Vec<TradeSignal>>>,
     received_position_snapshots: Arc<Mutex<Vec<PositionSnapshotMessage>>>,
-    received_vlogs_configs: Arc<Mutex<Vec<VLogsConfigMessage>>>,
+    received_vlogs_configs: Arc<Mutex<Vec<GlobalConfigMessage>>>,
 
     // --- Subscription Management ---
     subscribed_masters: Arc<Mutex<Vec<String>>>,
     pending_subscriptions: Arc<Mutex<Vec<String>>>,
 
     // --- Context (Managed in OnTimer thread) ---
-    context: Arc<Mutex<Option<ContextWrapper>>>,
+    context: Arc<Mutex<Option<SlaveContextWrapper>>>,
 
     // Connection Params
     push_address: String,
@@ -332,8 +330,9 @@ impl SlaveEaSimulator {
         _trade_address: &str,
         account_id: &str,
         master_account: &str,
+        is_trade_allowed: bool,
     ) -> Result<Self> {
-        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave)?;
+        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave, is_trade_allowed)?;
 
         Ok(Self {
             base,
@@ -450,7 +449,7 @@ impl SlaveEaSimulator {
     fn send_raw_bytes(&self, data: &[u8]) -> Result<()> {
         let guard = self.context.lock().unwrap();
         if let Some(wrapper) = guard.as_ref() {
-            let ret = unsafe { ea_send_push(wrapper.0, data.as_ptr(), data.len() as i32) };
+            let ret = unsafe { ea_send_push(wrapper.raw(), data.as_ptr(), data.len() as i32) };
             if ret == 1 {
                 Ok(())
             } else {
@@ -573,10 +572,11 @@ impl SlaveEaSimulator {
 
     pub fn send_sync_request(&self, last_sync_time: Option<String>) -> Result<()> {
         let guard = self.context.lock().unwrap();
-        let ctx = match guard.as_ref() {
-            Some(w) => w.0,
+        let wrapper = match guard.as_ref() {
+            Some(w) => w,
             None => return Err(anyhow::anyhow!("Context not initialized")),
         };
+        let ctx = wrapper.raw();
 
         let to_u16 = |s: &str| -> Vec<u16> { s.encode_utf16().chain(Some(0)).collect() };
 
@@ -621,7 +621,7 @@ impl SlaveEaSimulator {
         Ok(())
     }
 
-    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<VLogsConfigMessage>> {
+    pub fn try_receive_vlogs_config(&self, timeout_ms: i32) -> Result<Option<GlobalConfigMessage>> {
         let start = std::time::Instant::now();
         while start.elapsed().as_millis() < timeout_ms as u128 {
             let mut lock = self.received_vlogs_configs.lock().unwrap();

@@ -3,12 +3,12 @@
 // Settings page - Centralized configuration and management
 // Integrates:
 // 1. Unified Site Management (Select/Connect/Add/Edit/Delete)
-// 2. VictoriaLogs configuration (Read-only status, Enabled toggle)
+// 2. VictoriaLogs configuration (Read-only status, Enabled toggle, Log Level)
 // 3. ZeroMQ configuration (Read-only status)
 
 import { useState } from 'react';
 import { useIntlayer } from 'next-intlayer';
-import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio, Globe, Plus, Trash2, Edit2 } from 'lucide-react';
+import { RefreshCw, Activity, AlertCircle, CheckCircle2, Info, Settings2, Radio, Globe, Plus, Trash2, Edit2, FileText } from 'lucide-react';
 import { useAtom } from 'jotai';
 import { useVLogsConfig } from '@/hooks/useVLogsConfig';
 import { useZeromqConfig } from '@/hooks/useZeromqConfig';
@@ -17,6 +17,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
@@ -25,7 +32,7 @@ import { Site } from '@/lib/types/site';
 
 export default function SettingsPage() {
   const content = useIntlayer('settings-page');
-  const { configured, config, enabled, loading, toggling, error, toggleEnabled, refetch } = useVLogsConfig();
+  const { configured, config, enabled, loading, updating, error, updateSettings, refetch } = useVLogsConfig();
   const { config: zmqConfig, loading: zmqLoading, error: zmqError, refetch: zmqRefetch } = useZeromqConfig();
   const { toast } = useToast();
 
@@ -132,19 +139,23 @@ export default function SettingsPage() {
 
   // --- VictoriaLogs Handlers ---
 
-  const handleToggleVLogs = async (checked: boolean) => {
-    const success = await toggleEnabled(checked);
+  const handleUpdateVLogs = async (updates: { enabled?: boolean; log_level?: string }) => {
+    // Optimistic check: if toggling enable, use updates.enabled, else use current enabled state
+    const isEnabling = updates.enabled !== undefined ? updates.enabled : enabled;
+
+    const success = await updateSettings(updates);
+
     if (success) {
       toast({
-        title: String(content.toast.toggleSuccess),
-        description: checked
-          ? String(content.toast.enabledDescription)
-          : String(content.toast.disabledDescription),
+        title: content.toast.toggleSuccess.value,
+        description: isEnabling
+          ? content.toast.enabledDescription.value
+          : content.toast.disabledDescription.value,
       });
     } else {
       toast({
-        title: String(content.toast.toggleError),
-        description: error || String(content.toast.toggleErrorDescription),
+        title: content.toast.toggleError.value,
+        description: error || content.toast.toggleErrorDescription.value,
         variant: 'destructive',
       });
     }
@@ -385,6 +396,43 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* === Section 2: Global System Logging === */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                <CardTitle>{content.logging.title}</CardTitle>
+              </div>
+              <CardDescription>{content.logging.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Log Level Selector */}
+              <div className="space-y-2">
+                <Label htmlFor="global-loglevel">{content.logging.logLevel}</Label>
+                <div className="flex items-center gap-4">
+                  <Select
+                    value={config?.log_level || 'INFO'}
+                    onValueChange={(value) => handleUpdateVLogs({ log_level: value })}
+                    disabled={updating}
+                  >
+                    <SelectTrigger id="global-loglevel" className="w-[180px]">
+                      <SelectValue placeholder="Select log level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DEBUG">{content.logging.levelDebug}</SelectItem>
+                      <SelectItem value="INFO">{content.logging.levelInfo}</SelectItem>
+                      <SelectItem value="WARN">{content.logging.levelWarn}</SelectItem>
+                      <SelectItem value="ERROR">{content.logging.levelError}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground flex-1">
+                    {content.logging.logLevelDescription}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* === Section 3: VictoriaLogs Settings === */}
           {configured ? (
             <Card>
@@ -423,8 +471,8 @@ export default function SettingsPage() {
                   <Switch
                     id="vlogs-enabled"
                     checked={enabled}
-                    onCheckedChange={handleToggleVLogs}
-                    disabled={toggling}
+                    onCheckedChange={(checked) => handleUpdateVLogs({ enabled: checked })}
+                    disabled={updating}
                   />
                 </div>
 
@@ -644,7 +692,7 @@ source = "sankey-copier"`}
             <Button
               variant="outline"
               onClick={() => { refetch(); zmqRefetch(); }}
-              disabled={loading || toggling || zmqLoading}
+              disabled={loading || updating || zmqLoading}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               {content.buttons.refresh}

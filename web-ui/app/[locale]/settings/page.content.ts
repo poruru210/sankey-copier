@@ -212,6 +212,41 @@ const settingsPageContent = {
         ja: 'VictoriaLogs連携が有効です。ログは設定されたエンドポイントに送信されています。',
       }),
     },
+    // Global Logging section
+    logging: {
+      title: t({
+        en: 'System Logging',
+        ja: 'システムログ設定',
+      }),
+      description: t({
+        en: 'Configure global logging verbosity for all components (Relay Server & EAs).',
+        ja: 'すべてのコンポーネント（リレーサーバーおよびEA）のログ詳細度を設定します。',
+      }),
+      logLevel: t({
+        en: 'Log Level',
+        ja: 'ログレベル',
+      }),
+      logLevelDescription: t({
+        en: 'Controls the verbosity of logs for both local expert output and VictoriaLogs export',
+        ja: 'エキスパートログ出力およびVictoriaLogs送信の両方に適用されるログレベル',
+      }),
+      levelDebug: t({
+        en: 'DEBUG',
+        ja: 'DEBUG (デバッグ - 全て)',
+      }),
+      levelInfo: t({
+        en: 'INFO',
+        ja: 'INFO (標準)',
+      }),
+      levelWarn: t({
+        en: 'WARN',
+        ja: 'WARN (警告)',
+      }),
+      levelError: t({
+        en: 'ERROR',
+        ja: 'ERROR (エラー)',
+      }),
+    },
     // Buttons
     buttons: {
       refresh: t({

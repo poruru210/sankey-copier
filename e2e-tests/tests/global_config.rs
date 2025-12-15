@@ -123,23 +123,6 @@ async fn test_vlogs_config_validation_errors() {
 
     let update_url = format!("{}/api/victoria-logs-settings", server.http_base_url());
 
-    // Test: Missing enabled field should fail
-    let missing_enabled = serde_json::json!({
-        "something_else": true
-    });
-
-    let response = client
-        .put(&update_url)
-        .json(&missing_enabled)
-        .send()
-        .await
-        .expect("Failed to send request");
-
-    assert!(
-        response.status().is_client_error(),
-        "Request without 'enabled' field should be rejected"
-    );
-
     // Test: Valid toggle request should work
     let valid_toggle = serde_json::json!({
         "enabled": false
@@ -175,7 +158,7 @@ async fn test_master_receives_vlogs_on_registration() {
 
     // Create master EA
     let mut master = sandbox
-        .create_master("VLOGS_MASTER_001")
+        .create_master("VLOGS_MASTER_001", true)
         .expect("Failed to create master");
 
     // Subscribe to global config topic (where VLogs is broadcast)
@@ -221,7 +204,7 @@ async fn test_slave_receives_vlogs_on_registration() {
 
     // Create slave EA
     let mut slave = sandbox
-        .create_slave("VLOGS_SLAVE_001", "VLOGS_MASTER_001")
+        .create_slave("VLOGS_SLAVE_001", "VLOGS_MASTER_001", true)
         .expect("Failed to create slave");
 
     // Subscribe to global config topic
@@ -263,12 +246,12 @@ async fn test_vlogs_broadcast_on_api_update() {
 
     // Create master EA
     let mut master = sandbox
-        .create_master("VLOGS_MASTER_002")
+        .create_master("VLOGS_MASTER_002", true)
         .expect("Failed to create master");
 
     // Create slave EA
     let mut slave = sandbox
-        .create_slave("VLOGS_SLAVE_002", "VLOGS_MASTER_002")
+        .create_slave("VLOGS_SLAVE_002", "VLOGS_MASTER_002", true)
         .expect("Failed to create slave");
 
     // Subscribe both to global config topic

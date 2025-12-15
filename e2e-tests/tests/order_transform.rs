@@ -40,11 +40,11 @@ async fn test_symbol_prefix_suffix_transformation() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -117,11 +117,11 @@ async fn test_master_sends_all_symbols_no_filtering() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -293,11 +293,11 @@ async fn test_symbol_mapping() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -363,11 +363,11 @@ async fn test_reverse_trade_buy_to_sell() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);
@@ -430,11 +430,11 @@ async fn test_reverse_trade_pending_orders() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     master.set_trade_allowed(true);

@@ -78,19 +78,19 @@ async fn test_multi_master_signal_isolation() {
     .expect("Failed to setup test scenario for master2");
 
     let mut master1 = sandbox
-        .create_master(master1_account)
+        .create_master(master1_account, true)
         .expect("Failed to create master1 simulator");
 
     let mut master2 = sandbox
-        .create_master(master2_account)
+        .create_master(master2_account, true)
         .expect("Failed to create master2 simulator");
 
     let mut slave1 = sandbox
-        .create_slave(slave1_account, master1_account)
+        .create_slave(slave1_account, master1_account, true)
         .expect("Failed to create slave1 simulator");
 
     let mut slave2 = sandbox
-        .create_slave(slave2_account, master2_account)
+        .create_slave(slave2_account, master2_account, true)
         .expect("Failed to create slave2 simulator");
 
     // Start all EAs
@@ -169,19 +169,19 @@ async fn test_multi_master_same_symbol_open() {
     .expect("Failed to setup test scenario for master2");
 
     let mut master1 = sandbox
-        .create_master(master1_account)
+        .create_master(master1_account, true)
         .expect("Failed to create master1 simulator");
 
     let mut master2 = sandbox
-        .create_master(master2_account)
+        .create_master(master2_account, true)
         .expect("Failed to create master2 simulator");
 
     let mut slave1 = sandbox
-        .create_slave(slave1_account, master1_account)
+        .create_slave(slave1_account, master1_account, true)
         .expect("Failed to create slave1 simulator");
 
     let mut slave2 = sandbox
-        .create_slave(slave2_account, master2_account)
+        .create_slave(slave2_account, master2_account, true)
         .expect("Failed to create slave2 simulator");
 
     // Start all EAs
@@ -262,19 +262,19 @@ async fn test_signal_broadcast_to_all_slaves() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave1 = sandbox
-        .create_slave(slave1_account, master_account)
+        .create_slave(slave1_account, master_account, true)
         .expect("Failed to create slave1 simulator");
 
     let mut slave2 = sandbox
-        .create_slave(slave2_account, master_account)
+        .create_slave(slave2_account, master_account, true)
         .expect("Failed to create slave2 simulator");
 
     let mut slave3 = sandbox
-        .create_slave(slave3_account, master_account)
+        .create_slave(slave3_account, master_account, true)
         .expect("Failed to create slave3 simulator");
 
     // Start all EAs
@@ -363,11 +363,11 @@ async fn test_slave_individual_lot_multiplier() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -425,11 +425,11 @@ async fn test_signal_latency_measurement() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -507,11 +507,11 @@ async fn test_delayed_signal_immediate() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -563,11 +563,11 @@ async fn test_delayed_signal_acceptable() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Start all EAs
@@ -621,11 +621,11 @@ async fn test_stale_signal_too_old() {
     .expect("Failed to setup test scenario");
 
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     // Start all EAs

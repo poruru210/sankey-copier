@@ -372,6 +372,7 @@ mod tests {
             batch_size: 10,
             flush_interval_secs: 1,
             source: "test-relay".to_string(),
+            log_level: "INFO".to_string(),
         }
     }
 

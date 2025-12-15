@@ -3,9 +3,9 @@ pub mod constants;
 pub mod ea_context;
 pub mod errors;
 pub mod ffi;
-pub mod ffi_helpers;
+
 pub mod logger;
-pub mod msgpack;
+
 pub mod traits;
 pub mod types;
 pub mod victoria_logs;
@@ -15,10 +15,10 @@ mod symbol_filter_tests;
 
 // Re-export message types for use in relay-server
 pub use types::{
-    HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
+    GlobalConfigMessage, HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RegisterMessage, RequestConfigMessage, SlaveConfigMessage,
     SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignal, UnregisterMessage,
-    VLogsConfigMessage, WarningCode,
+    WarningCode,
 };
 
 // Re-export enums for TradeSignal
@@ -31,7 +31,6 @@ pub use traits::{ConfigMessage, MasterConfig, SlaveConfig};
 pub use ea_context::EaContext;
 
 // Re-export GlobalConfigMessage from msgpack (if it exists there)
-pub use msgpack::GlobalConfigMessage;
 
 // Re-export constants for protocol consistency
 pub use constants::{

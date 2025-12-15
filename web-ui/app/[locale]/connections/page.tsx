@@ -7,8 +7,8 @@ import { useEffect } from 'react';
 import { preconnect } from 'react-dom';
 import { useIntlayer } from 'next-intlayer';
 import { useAtomValue } from 'jotai';
-import { ConnectionsViewReactFlow } from '@/components/ConnectionsViewReactFlow';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { ConnectionsViewReactFlow } from '@/components/features/connections';
+import { ParticlesBackground } from '@/components/layout/ParticlesBackground';
 import { useSankeyCopier } from '@/hooks/useSankeyCopier';
 import { selectedSiteAtom } from '@/lib/atoms/site';
 import { Typography, Muted } from '@/components/ui/typography';
@@ -47,8 +47,8 @@ export default function Home() {
 
   return (
     <div className="h-full bg-background relative overflow-hidden flex flex-col">
-      {/* Particles Background */}
-      <ParticlesBackground />
+      {/* Particles Background - disabled for performance testing */}
+      {/* <ParticlesBackground /> */}
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-col overflow-y-auto h-full">
