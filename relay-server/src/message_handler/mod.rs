@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
+use self::adapters::BroadcastNotifier;
 use crate::{
     api::SnapshotBroadcaster,
     connection_manager::ConnectionManager,
@@ -13,11 +14,13 @@ use crate::{
     engine::CopyEngine,
     models::WarningCode,
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
+    services::trade_copy_service::TradeCopyService,
     victoria_logs::VLogsController,
     zeromq::{ZmqConfigPublisher, ZmqMessage},
 };
 
 // Handler submodules
+mod adapters;
 mod config_request;
 mod heartbeat;
 mod position_snapshot;
@@ -32,7 +35,6 @@ mod tests;
 /// Handles incoming ZMQ messages and coordinates trade copying logic
 pub struct MessageHandler {
     connection_manager: Arc<ConnectionManager>,
-    copy_engine: Arc<CopyEngine>,
     broadcast_tx: broadcast::Sender<String>,
     db: Arc<Database>,
     /// Unified ZMQ publisher for all outgoing messages (trade signals + config)
@@ -42,6 +44,7 @@ pub struct MessageHandler {
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
     /// Snapshot broadcaster for triggering immediate updates
     snapshot_broadcaster: Option<SnapshotBroadcaster>,
+    trade_copy_service: TradeCopyService<Database, ZmqConfigPublisher, BroadcastNotifier>,
 }
 
 impl MessageHandler {
@@ -57,10 +60,9 @@ impl MessageHandler {
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),
-            copy_engine,
             broadcast_tx: broadcast_tx.clone(),
             db: db.clone(),
-            publisher,
+            publisher: publisher.clone(),
             vlogs_controller,
             runtime_status_metrics,
             // Lazy initialization or passed in?
@@ -68,10 +70,16 @@ impl MessageHandler {
             // OR we should pass it in. Passing it in is cleaner but requires main.rs change.
             // But we can construct it since we have deps.
             snapshot_broadcaster: Some(SnapshotBroadcaster::new(
-                broadcast_tx,
+                broadcast_tx.clone(),
                 connection_manager,
-                db,
+                db.clone(),
             )),
+            trade_copy_service: TradeCopyService::new(
+                db.clone(),
+                publisher.clone(),
+                Arc::new(BroadcastNotifier::new(broadcast_tx.clone())),
+                copy_engine.clone(),
+            ),
         }
     }
 
