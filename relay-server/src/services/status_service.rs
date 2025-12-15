@@ -277,10 +277,10 @@ mod tests {
     use super::*;
     use crate::models::status_engine::{MemberStatusResult, SlaveRuntimeTarget};
     use crate::models::{ConnectionStatus, EaConnection};
-    use crate::models::{SlaveSettings, TradeGroup, TradeGroupMember, VLogsGlobalSettings};
+    use crate::models::{TradeGroup, TradeGroupMember, VLogsGlobalSettings};
     use async_trait::async_trait;
     use mockall::mock;
-    use mockall::predicate;
+
     use mockall::predicate::*;
     use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 
@@ -530,5 +530,157 @@ mod tests {
         );
 
         service.handle_heartbeat(heartbeat).await;
+    }
+
+    /// TDD Test: Slave heartbeat with status change sends config
+    #[tokio::test]
+    async fn test_handle_heartbeat_slave_state_change_sends_config() {
+        let mut mock_conn_manager = MockConnectionManager::new();
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let slave_account_id = "SLAVE_123";
+        let master_account_id = "MASTER_001";
+        let heartbeat = HeartbeatMessage {
+            account_id: slave_account_id.to_string(),
+            ea_type: "Slave".to_string(),
+            is_trade_allowed: true,
+            message_type: "Heartbeat".to_string(),
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            version: "1.0.0".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 123456,
+            broker: "TestBroker".to_string(),
+            account_name: "TestAccount".to_string(),
+            server: "TestServer".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        // First call for old_conn lookup returns None (new registration)
+        mock_conn_manager
+            .expect_get_slave()
+            .with(eq(slave_account_id))
+            .times(1)
+            .return_const(None);
+
+        // Heartbeat update
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .times(1)
+            .return_const(());
+
+        // Slave settings exist for this slave
+        let slave_settings = crate::models::SlaveConfigWithMaster {
+            master_account: master_account_id.to_string(),
+            slave_account: slave_account_id.to_string(),
+            slave_settings: crate::models::SlaveSettings::default(),
+            enabled_flag: true,
+            status: 0, // DISABLED - will change to ENABLED/CONNECTED
+            warning_codes: vec![],
+        };
+        mock_repo
+            .expect_get_settings_for_slave()
+            .with(eq(slave_account_id))
+            .return_once(|_| Ok(vec![slave_settings]));
+
+        // DB status update should be called
+        mock_repo
+            .expect_update_member_runtime_status()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        // EXPECT: Slave config should be published on state change
+        mock_publisher
+            .expect_send_slave_config()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        // Create a mock evaluator that returns changed status
+        let mock_evaluator = Arc::new(MockStatusEvaluatorWithChange);
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            Some(mock_evaluator),
+            None,
+        );
+
+        service.handle_heartbeat(heartbeat).await;
+    }
+
+    /// Mock StatusEvaluator that simulates a status change
+    struct MockStatusEvaluatorWithChange;
+    #[async_trait]
+    impl StatusEvaluator for MockStatusEvaluatorWithChange {
+        async fn evaluate_member_runtime_status(
+            &self,
+            _target: SlaveRuntimeTarget<'_>,
+        ) -> MemberStatusResult {
+            // Return CONNECTED status (status changed from DISABLED)
+            MemberStatusResult {
+                status: crate::models::STATUS_CONNECTED,
+                allow_new_orders: true,
+                warning_codes: vec![],
+            }
+        }
+
+        async fn evaluate_member_runtime_status_with_snapshot(
+            &self,
+            _target: SlaveRuntimeTarget<'_>,
+            _snapshot: crate::models::status_engine::ConnectionSnapshot,
+        ) -> MemberStatusResult {
+            // Return unknown/disabled for old state (to simulate change)
+            MemberStatusResult::unknown()
+        }
+
+        async fn build_slave_bundle(
+            &self,
+            target: SlaveRuntimeTarget<'_>,
+        ) -> crate::config_builder::SlaveConfigBundle {
+            // Return a bundle with CONNECTED status
+            crate::config_builder::SlaveConfigBundle {
+                config: sankey_copier_zmq::SlaveConfigMessage {
+                    account_id: target.slave_account.to_string(),
+                    master_account: target.master_account.to_string(),
+                    timestamp: 0,
+                    trade_group_id: target.trade_group_id.to_string(),
+                    status: crate::models::STATUS_CONNECTED,
+                    lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
+                    lot_multiplier: None,
+                    reverse_trade: false,
+                    symbol_prefix: None,
+                    symbol_suffix: None,
+                    symbol_mappings: vec![],
+                    filters: sankey_copier_zmq::TradeFilters::default(),
+                    config_version: 0,
+                    source_lot_min: None,
+                    source_lot_max: None,
+                    master_equity: None,
+                    sync_mode: sankey_copier_zmq::SyncMode::default(),
+                    limit_order_expiry_min: None,
+                    market_sync_max_pips: None,
+                    max_slippage: None,
+                    copy_pending_orders: false,
+                    max_retries: 3,
+                    max_signal_delay_ms: 5000,
+                    use_pending_order_for_delayed: false,
+                    allow_new_orders: true,
+                    warning_codes: vec![],
+                },
+                status_result: MemberStatusResult {
+                    status: crate::models::STATUS_CONNECTED,
+                    allow_new_orders: true,
+                    warning_codes: vec![],
+                },
+            }
+        }
     }
 }
