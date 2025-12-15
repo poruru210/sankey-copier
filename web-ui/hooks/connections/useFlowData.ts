@@ -11,6 +11,7 @@ import {
   expandedReceiverIdsAtom,
   disabledReceiverIdsAtom,
 } from '@/lib/atoms/ui';
+import { calculateInitialPosition } from '@/lib/flow-layout';
 
 interface UseFlowDataProps {
   sourceAccounts: AccountInfo[];
@@ -29,19 +30,6 @@ interface UseFlowDataProps {
 }
 
 const MIN_PENDING_DURATION_MS = 800;
-
-// Layout constants - Desktop (horizontal)
-const NODE_WIDTH = 380;
-const NODE_HEIGHT = 120;
-const VERTICAL_SPACING = 200;
-const SOURCE_X = 0;
-const RECEIVER_X = 600; // Moved closer since no relay server
-
-// Layout constants - Mobile (vertical)
-const MOBILE_X = 0;
-const MOBILE_SOURCE_START_Y = 0;
-const MOBILE_VERTICAL_SPACING = 200;
-const MOBILE_SECTION_GAP = 120; // Gap between source and receiver sections
 
 /**
  * Custom hook to convert account data to React Flow nodes and edges
@@ -174,6 +162,7 @@ export function useFlowData({
 
   const nodes = useMemo(() => {
     const nodeList: Node[] = [];
+    const sourceCount = sourceAccounts.length;
 
     // Create source account nodes
     sourceAccounts.forEach((account, index) => {
@@ -181,10 +170,7 @@ export function useFlowData({
       const connection = getAccountConnection(account.id);
       const isHighlighted = isAccountHighlighted(account.id, 'source');
 
-      // Mobile: vertical layout, Desktop: horizontal layout
-      const position = isMobile
-        ? { x: MOBILE_X, y: MOBILE_SOURCE_START_Y + index * MOBILE_VERTICAL_SPACING }
-        : { x: SOURCE_X, y: index * VERTICAL_SPACING };
+      const position = calculateInitialPosition(index, 'source', isMobile, sourceCount);
 
       nodeList.push({
         id: `source-${account.id}`,
@@ -217,16 +203,7 @@ export function useFlowData({
       const connection = getAccountConnection(account.id);
       const isHighlighted = isAccountHighlighted(account.id, 'receiver');
 
-      // Mobile: vertical layout below source accounts, Desktop: horizontal layout
-      const position = isMobile
-        ? {
-          x: MOBILE_X,
-          y: MOBILE_SOURCE_START_Y +
-            sourceAccounts.length * MOBILE_VERTICAL_SPACING +
-            MOBILE_SECTION_GAP +
-            index * MOBILE_VERTICAL_SPACING,
-        }
-        : { x: RECEIVER_X, y: index * VERTICAL_SPACING };
+      const position = calculateInitialPosition(index, 'receiver', isMobile, sourceCount);
 
       nodeList.push({
         id: `receiver-${account.id}`,
