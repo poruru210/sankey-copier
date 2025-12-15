@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Provider } from 'jotai';
 import { describe, it, expect } from 'vitest';
 import type { AccountInfo, CopySettings } from '@/types';
-import { useFlowData } from '@/hooks/useFlowData';
+import { useFlowData } from '@/hooks/connections';
 import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
 import type { Node } from '@xyflow/react';
 
@@ -138,8 +138,8 @@ describe('useFlowData master/slave combinations', () => {
 
     const { nodes, edges } = renderFlowData({ sourceAccounts, receiverAccounts, settings });
 
-    expect(nodes.filter((node) => node.id.startsWith('source-'))).toHaveLength(1);
-    expect(nodes.filter((node) => node.id.startsWith('receiver-'))).toHaveLength(2);
+    expect(nodes.filter((node: Node) => node.id.startsWith('source-'))).toHaveLength(1);
+    expect(nodes.filter((node: Node) => node.id.startsWith('receiver-'))).toHaveLength(2);
     expect(edges).toHaveLength(2);
 
     expect(getNodeData(nodes, 'source-MASTER-1').accountSettings).toHaveLength(2);
@@ -157,8 +157,8 @@ describe('useFlowData master/slave combinations', () => {
 
     const { nodes, edges } = renderFlowData({ sourceAccounts, receiverAccounts, settings });
 
-    expect(nodes.filter((node) => node.id.startsWith('source-'))).toHaveLength(2);
-    expect(nodes.filter((node) => node.id.startsWith('receiver-'))).toHaveLength(1);
+    expect(nodes.filter((node: Node) => node.id.startsWith('source-'))).toHaveLength(2);
+    expect(nodes.filter((node: Node) => node.id.startsWith('receiver-'))).toHaveLength(1);
     expect(edges).toHaveLength(2);
 
     expect(getNodeData(nodes, 'receiver-SLAVE-A').accountSettings).toHaveLength(2);
@@ -187,9 +187,9 @@ describe('useFlowData master/slave combinations', () => {
 
     const { nodes, edges } = renderFlowData({ sourceAccounts, receiverAccounts, settings });
 
-    expect(nodes.filter((node) => node.id.startsWith('source-'))).toHaveLength(3);
-    expect(nodes.filter((node) => node.id.startsWith('receiver-'))).toHaveLength(3);
-    expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
+    expect(nodes.filter((node: Node) => node.id.startsWith('source-'))).toHaveLength(3);
+    expect(nodes.filter((node: Node) => node.id.startsWith('receiver-'))).toHaveLength(3);
+    expect(new Set(nodes.map((node: Node) => node.id)).size).toBe(nodes.length);
     expect(edges).toHaveLength(settings.length);
 
     expect(getNodeData(nodes, 'source-MASTER-1').accountSettings).toHaveLength(2);

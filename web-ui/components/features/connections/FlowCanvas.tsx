@@ -1,19 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  NodeTypes,
-  EdgeTypes,
-  Node,
-  NodeChange,
   useNodesState,
   useEdgesState,
-  useReactFlow,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { useAtomValue } from 'jotai';
 
 import {
@@ -21,22 +12,10 @@ import {
   expandedReceiverIdsAtom,
 } from '@/lib/atoms/ui';
 import { useDagreLayout } from '@/hooks/useDagreLayout';
-import { AccountNode } from '@/components/features/connections/flow-nodes/AccountNode';
-import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
-import { SettingsEdge } from '@/components/features/connections/flow-edges';
-import { useFlowData } from '@/hooks/useFlowData';
-import { useConnectionHighlight } from '@/hooks/connections';
+import { useFlowData, useConnectionHighlight, useFlowInteractions } from '@/hooks/connections';
 import { CopySettings, EaConnection } from '@/types';
-
-// Define nodeTypes at module level to prevent recreation warnings
-const nodeTypes = Object.freeze({
-  accountNode: AccountNode,
-}) as NodeTypes;
-
-// Define edgeTypes at module level to prevent recreation warnings
-const edgeTypes = Object.freeze({
-  settingsEdge: SettingsEdge,
-}) as EdgeTypes;
+import type { AccountNodeData } from '@/components/features/connections/flow-nodes/AccountNode';
+import { FlowGraph } from './FlowGraph';
 
 interface FlowCanvasProps {
   connections: EaConnection[];
@@ -69,8 +48,6 @@ export function FlowCanvas({
   const {
     hoveredSourceId,
     hoveredReceiverId,
-    setHoveredSource,
-    setHoveredReceiver,
     isAccountHighlighted,
     isMobile,
   } = useConnectionHighlight(settings);
@@ -109,6 +86,12 @@ export function FlowCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  // Interaction logic
+  const { onNodesChangeWithTracking, onNodeMouseEnter, onNodeMouseLeave, userDraggedNodesRef } = useFlowInteractions({
+    isMobile,
+    onNodesChange,
+  });
+
   // atoms: expanded ids
   const expandedSourceIds = useAtomValue(expandedSourceIdsAtom);
   const expandedReceiverIds = useAtomValue(expandedReceiverIdsAtom);
@@ -135,9 +118,6 @@ export function FlowCanvas({
     rankSpacing: 200,
   });
 
-  // Track user-dragged nodes to preserve their positions
-  const userDraggedNodesRef = useRef<Set<string>>(new Set());
-
   // Track node count and filter for layout recalculation
   const layoutTriggerRef = useRef({
     nodeCount: 0,
@@ -156,7 +136,7 @@ export function FlowCanvas({
       const { nodes: layoutedNodes } = applyLayout(initialNodes, initialEdges);
       setNodes(layoutedNodes);
     }
-  }, [visibleSourceAccounts.length, visibleReceiverAccounts.length, selectedMaster, applyLayout, initialNodes, initialEdges, setNodes]);
+  }, [visibleSourceAccounts.length, visibleReceiverAccounts.length, selectedMaster, applyLayout, initialNodes, initialEdges, setNodes, userDraggedNodesRef]);
 
   // Compute hash of warning codes to trigger layout updates
   const warningStateHash = useMemo(() => {
@@ -207,106 +187,14 @@ export function FlowCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  // Track user drags
-  const onNodesChangeWithTracking = useCallback(
-    (changes: NodeChange[]) => {
-      changes.forEach((change) => {
-        if (change.type === 'position' && change.dragging && 'id' in change) {
-          userDraggedNodesRef.current.add(change.id);
-        }
-      });
-      onNodesChange(changes);
-    },
-    [onNodesChange]
-  );
-
-  // Handle node hover
-  const onNodeMouseEnter = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      if (!isMobile) {
-        if (node.id.startsWith('source-')) {
-          const accountId = node.id.replace('source-', '');
-          setHoveredSource(accountId);
-        } else if (node.id.startsWith('receiver-')) {
-          const accountId = node.id.replace('receiver-', '');
-          setHoveredReceiver(accountId);
-        }
-      }
-    },
-    [isMobile, setHoveredSource, setHoveredReceiver]
-  );
-
-  const onNodeMouseLeave = useCallback(() => {
-    if (!isMobile) {
-      setHoveredSource(null);
-      setHoveredReceiver(null);
-    }
-  }, [isMobile, setHoveredSource, setHoveredReceiver]);
-
-  // Auto-fit view
-  const reactFlowInstance = useReactFlow();
-
-  useEffect(() => {
-    if (nodes.length > 0 && reactFlowInstance) {
-      const timer = setTimeout(() => {
-        reactFlowInstance.fitView({
-          padding: 0.2,
-          duration: 800,
-          maxZoom: 1,
-        });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [nodes.length, reactFlowInstance]);
-
-  // Resize handler
-  useEffect(() => {
-    if (!reactFlowInstance) return;
-    let resizeTimer: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        reactFlowInstance.fitView({
-          padding: 0.2,
-          duration: 800,
-          maxZoom: 1,
-        });
-      }, 300);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(resizeTimer);
-    };
-  }, [reactFlowInstance]);
-
   return (
-    <div className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChangeWithTracking}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
-        nodesDraggable={true}
-        nodeDragThreshold={1}
-        nodesConnectable={false}
-        nodesFocusable={true}
-        edgesFocusable={false}
-        selectNodesOnDrag={true}
-        noDragClassName="noDrag"
-        minZoom={0.1}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background />
-        <Controls
-          className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 [&>button]:!bg-white dark:[&>button]:!bg-gray-700 [&>button]:!border-gray-300 dark:[&>button]:!border-gray-600 [&>button]:hover:!bg-gray-50 dark:[&>button]:hover:!bg-gray-600 [&>button>svg]:!fill-gray-700 dark:[&>button>svg]:!fill-gray-200"
-        />
-      </ReactFlow>
-    </div>
+    <FlowGraph
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChangeWithTracking}
+      onEdgesChange={onEdgesChange}
+      onNodeMouseEnter={onNodeMouseEnter}
+      onNodeMouseLeave={onNodeMouseLeave}
+    />
   );
 }
