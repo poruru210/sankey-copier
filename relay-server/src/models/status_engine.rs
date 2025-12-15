@@ -198,8 +198,7 @@ pub fn evaluate_slave_status(
 
     // Slave is DISABLED if Web UI is OFF, Slave is offline, or (online but auto-trading disabled)
     // Otherwise, status depends on Master cluster state (for display purposes)
-    let slave_disabled =
-        !slave_web_ui_enabled || !slave_online || (slave_online && !slave_conn.is_trade_allowed);
+    let slave_disabled = !slave_web_ui_enabled || !slave_online || !slave_conn.is_trade_allowed;
 
     let mut status = if slave_disabled {
         STATUS_DISABLED
@@ -273,8 +272,7 @@ pub fn evaluate_member_status(
     }
 
     // Slave is DISABLED if Web UI is OFF, Slave is offline, or (online but auto-trading disabled)
-    let slave_disabled =
-        !slave_web_ui_enabled || !slave_online || (slave_online && !slave_conn.is_trade_allowed);
+    let slave_disabled = !slave_web_ui_enabled || !slave_online || !slave_conn.is_trade_allowed;
 
     // Always include Master's warning codes regardless of Slave status
     // (Users need to see Master issues even when Slave is offline)
