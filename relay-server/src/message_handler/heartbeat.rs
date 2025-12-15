@@ -21,6 +21,4 @@ impl MessageHandler {
             tracing::error!("StatusService is not initialized! Heartbeat ignored.");
         }
     }
-
-
 }
