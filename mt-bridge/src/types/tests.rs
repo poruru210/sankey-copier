@@ -38,7 +38,7 @@ fn test_unregister_message_serialization() {
     let msg = UnregisterMessage {
         message_type: "Unregister".to_string(),
         account_id: "test_account_123".to_string(),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: 1735689600000,
         ea_type: Some("Master".to_string()),
     };
 
@@ -202,7 +202,7 @@ fn test_config_message_serialization() {
     let config = SlaveConfigMessage {
         account_id: "slave_account_123".to_string(),
         master_account: "master_account_456".to_string(),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: 1735689600000,
         trade_group_id: "master_account_456".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
@@ -309,7 +309,7 @@ fn test_master_config_message_serialization() {
         symbol_prefix: Some("pro.".to_string()),
         symbol_suffix: Some(".m".to_string()),
         config_version: 1,
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: 1735689600000,
         warning_codes: vec![],
     };
 
@@ -340,7 +340,7 @@ fn test_master_config_message_with_none_values() {
         symbol_prefix: None,
         symbol_suffix: None,
         config_version: 2,
-        timestamp: "2025-01-02T12:30:00Z".to_string(),
+        timestamp: 1735821000000,
         warning_codes: vec![],
     };
 

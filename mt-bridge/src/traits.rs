@@ -18,8 +18,8 @@ pub trait ConfigMessage: Serialize {
     /// Get the configuration version number
     fn config_version(&self) -> u32;
 
-    /// Get the ISO 8601 timestamp
-    fn timestamp(&self) -> &str;
+    /// Get the Unix timestamp in milliseconds
+    fn timestamp(&self) -> i64;
 
     /// Get the ZMQ topic for pub/sub
     fn zmq_topic(&self) -> String {
@@ -76,8 +76,8 @@ impl ConfigMessage for MasterConfigMessage {
         self.config_version
     }
 
-    fn timestamp(&self) -> &str {
-        &self.timestamp
+    fn timestamp(&self) -> i64 {
+        self.timestamp
     }
 
     fn symbol_prefix(&self) -> Option<&str> {
@@ -103,8 +103,8 @@ impl ConfigMessage for SlaveConfigMessage {
         self.config_version
     }
 
-    fn timestamp(&self) -> &str {
-        &self.timestamp
+    fn timestamp(&self) -> i64 {
+        self.timestamp
     }
 
     fn symbol_prefix(&self) -> Option<&str> {

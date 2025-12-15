@@ -154,6 +154,7 @@ pub unsafe extern "C" fn ea_context_get_slave_config(
         copy_string_to_fixed_array(&src.trade_group_id, &mut dest.trade_group_id);
 
         dest.status = src.status;
+        dest.timestamp = src.timestamp; // Already i64
         dest.lot_calculation_mode = match src.lot_calculation_mode {
             LotCalculationMode::Multiplier => 0,
             LotCalculationMode::MarginRatio => 1,

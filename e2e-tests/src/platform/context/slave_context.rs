@@ -143,7 +143,7 @@ fn convert_slave_config(c: &SSlaveConfig) -> SlaveConfigMessage {
         use_pending_order_for_delayed: c.use_pending_order_for_delayed != 0,
         allow_new_orders: c.allow_new_orders != 0,
         warning_codes: Vec::new(),
-        timestamp: String::new(),
+        timestamp: c.timestamp,
     }
 }
 

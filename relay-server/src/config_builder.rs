@@ -57,7 +57,7 @@ impl ConfigBuilder {
             symbol_prefix: context.settings.symbol_prefix.clone(),
             symbol_suffix: context.settings.symbol_suffix.clone(),
             config_version: context.settings.config_version,
-            timestamp: context.timestamp.to_rfc3339(),
+            timestamp: context.timestamp.timestamp_millis(),
             warning_codes: status_result.warning_codes.clone(),
         };
 
@@ -80,7 +80,7 @@ impl ConfigBuilder {
         let config = SlaveConfigMessage {
             account_id: context.slave_account,
             master_account: context.master_account,
-            timestamp: context.timestamp.to_rfc3339(),
+            timestamp: context.timestamp.timestamp_millis(),
             trade_group_id: context.trade_group_id,
             status: status_result.status,
             lot_calculation_mode: settings.lot_calculation_mode.clone().into(),

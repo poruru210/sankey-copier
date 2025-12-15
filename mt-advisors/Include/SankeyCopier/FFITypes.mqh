@@ -18,11 +18,12 @@
 
 //+------------------------------------------------------------------+
 //| SSlaveConfig - Slave configuration                               |
-//| Fields: f64 first, then i32/u32, then byte arrays                |
-//| Total size: 344 bytes (8-byte aligned)                           |
+//| Fields: f64/i64 first, then i32/u32, then byte arrays        |
+//| Total size: 352 bytes (8-byte aligned)                           |
 //+------------------------------------------------------------------+
 struct SSlaveConfig {
-    // 8-byte fields first (f64) - 40 bytes
+    // 8-byte fields first (f64) - 48 bytes
+    long timestamp;       // Unix timestamp in milliseconds
     double lot_multiplier;
     double source_lot_min;
     double source_lot_max;

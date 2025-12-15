@@ -36,7 +36,7 @@ async fn test_handle_unregister() {
     ctx.handle_unregister(UnregisterMessage {
         message_type: "Unregister".to_string(),
         account_id: account_id.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         ea_type: Some("Master".to_string()),
     })
     .await;
@@ -86,7 +86,7 @@ async fn test_master_unregister_updates_slave_runtime_status() {
     ctx.handle_unregister(UnregisterMessage {
         message_type: "Unregister".to_string(),
         account_id: master_account.to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         ea_type: Some("Master".to_string()),
     })
     .await;

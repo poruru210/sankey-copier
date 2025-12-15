@@ -24,7 +24,7 @@
 //   - g_pending_order_map[]   : PendingTicketMapping array for pending orders
 //   - Slippage                : Default slippage in points (input parameter)
 //   - MaxRetries              : Max retry attempts for order operations
-//   - MaxSignalDelayMs        : Max acceptable signal delay in milliseconds
+
 //   - UsePendingOrderForDelayed: Use pending order for delayed signals
 //   - g_received_via_timer    : bool tracking whether signal was received via OnTimer
 // For MT5 only:
@@ -110,9 +110,9 @@ bool EnsureSymbolActive(string symbol)
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       ulong master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, string timestamp,
+                      double lots, double price, double sl, double tp, int algo_flags,
                       string source_account, int magic, int slippage_points,
-                      int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
+                      bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
    if(GetSlaveTicketFromMapping(order_map, master_ticket) > 0)
    {
@@ -122,25 +122,17 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 
    if(!EnsureSymbolActive(symbol)) return;
 
-   // Check signal delay
-   datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeGMT();
-   int delay_ms = (int)((current_time - signal_time) * 1000);
+   // Check signal delay using algo_flags (calculated by Rust to avoid clock skew)
+   bool is_delayed = (algo_flags & 1) != 0;
 
-   if(delay_ms > max_signal_delay_ms)
+   if(is_delayed)
    {
-      if(!use_pending_for_delayed)
-      {
-         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
-         return;
-      }
-      else
-      {
-         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
-         ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                            source_account, delay_ms, magic);
-         return;
-      }
+       // If signal is marked delayed, we proceed to queue a pending order.
+       // Rust only sets this flag if use_pending_for_delayed is true.
+       LogInfo(CAT_TRADE, StringFormat("Signal marked delayed by Server. Using pending order at original price %.5f", price));
+       ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
+                          source_account, magic);
+       return;
    }
 
    ENUM_ORDER_TYPE order_type = GetOrderTypeFromString(type_str);
@@ -175,9 +167,9 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
       if(result)
       {
          ulong ticket = trade.ResultOrder();
-         // Enhanced log with queue_time (delay_ms), broker_time, and received_via
-         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
+         // Enhanced log with broker_time and received_via
+         LogInfo(CAT_TRADE, StringFormat("Position opened: #%d from master #%d (broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
@@ -281,7 +273,7 @@ void ExecuteModifyTrade(CTrade &trade, TicketMapping &order_map[],
 void ExecutePendingOrder(CTrade &trade, PendingTicketMapping &pending_map[],
                          ulong master_ticket, string symbol, string type_str,
                          double lots, double price, double sl, double tp,
-                         string source_account, int delay_ms, int magic)
+                         string source_account, int magic)
 {
    if(GetPendingTicketFromMapping(pending_map, master_ticket) > 0)
    {
@@ -491,9 +483,9 @@ void CheckPendingOrderFills(PendingTicketMapping &pending_map[], TicketMapping &
 //+------------------------------------------------------------------+
 void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_map[],
                       int master_ticket, string symbol, string type_str,
-                      double lots, double price, double sl, double tp, string timestamp,
+                      double lots, double price, double sl, double tp, int algo_flags,
                       string source_account, int magic, int slippage_points,
-                      int max_signal_delay_ms, bool use_pending_for_delayed, int max_retries, int default_slippage)
+                      bool use_pending_for_delayed, int max_retries, int default_slippage)
 {
    int slave_ticket = GetSlaveTicketFromMapping(order_map, master_ticket);
    if(slave_ticket > 0)
@@ -504,25 +496,15 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
    if(!EnsureSymbolActive(symbol)) return;
 
-   // Check signal delay
-   datetime signal_time = ParseISO8601(timestamp);
-   datetime current_time = TimeGMT();
-   int delay_ms = (int)((current_time - signal_time) * 1000);
+   // Check signal delay using algo_flags
+   bool is_delayed = (algo_flags & 1) != 0;
 
-   if(delay_ms > max_signal_delay_ms)
+   if(is_delayed)
    {
-      if(!use_pending_for_delayed)
-      {
-         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
-         return;
-      }
-      else
-      {
-         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
-         ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                            source_account, delay_ms, magic, default_slippage);
-         return;
-      }
+       LogInfo(CAT_TRADE, StringFormat("Signal marked delayed by Server. Using pending order at original price %.5f", price));
+       ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
+                          source_account, magic, default_slippage);
+       return;
    }
 
    int order_type = GetOrderTypeFromString(type_str);
@@ -565,9 +547,9 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
       if(ticket > 0)
       {
-         // Enhanced log with queue_time (delay_ms), broker_time, and received_via
-         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (queue: %dms, broker: %dms, via: %s, slippage: %d pts)",
-               ticket, master_ticket, delay_ms, broker_time_ms, received_via, effective_slippage));
+         // Enhanced log with broker_time and received_via
+         LogInfo(CAT_TRADE, StringFormat("Order opened: slave #%d from master #%d (broker: %dms, via: %s, slippage: %d pts)",
+               ticket, master_ticket, broker_time_ms, received_via, effective_slippage));
          AddTicketMapping(order_map, master_ticket, ticket);
          break;
       }
@@ -692,7 +674,7 @@ void ExecuteModifyTrade(TicketMapping &order_map[],
 void ExecutePendingOrder(PendingTicketMapping &pending_map[],
                          int master_ticket, string symbol, string type_str,
                          double lots, double price, double sl, double tp,
-                         string source_account, int delay_ms, int magic, int default_slippage)
+                         string source_account, int magic, int default_slippage)
 {
    if(GetPendingTicketFromMapping(pending_map, master_ticket) > 0)
    {

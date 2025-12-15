@@ -35,6 +35,7 @@
 
 struct CopyConfig {
     string master_account;           // Master EA's account identifier
+    long   timestamp;                // Configuration timestamp (Unix millis)
     string trade_group_id;           // Trade group for PUB/SUB topic subscription
     int    status;                   // Connection status (STATUS_DISABLED/ENABLED/CONNECTED)
     int    lot_calculation_mode;     // 0=multiplier, 1=margin_ratio

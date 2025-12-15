@@ -14,7 +14,7 @@ async fn test_config_message_size_benchmark() {
     let minimal_config = SlaveConfigMessage {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
@@ -57,7 +57,7 @@ async fn test_config_message_size_benchmark() {
     let moderate_config = SlaveConfigMessage {
         account_id: "SLAVE_MODERATE_001".to_string(),
         master_account: "MASTER_MODERATE_001".to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         trade_group_id: "MASTER_MODERATE_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
@@ -117,7 +117,7 @@ async fn test_config_message_size_benchmark() {
     let max_config = SlaveConfigMessage {
         account_id: "SLAVE_MAXIMUM_CONFIGURATION_001".to_string(),
         master_account: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         trade_group_id: "MASTER_MAXIMUM_CONFIGURATION_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),
@@ -247,7 +247,7 @@ async fn test_estimate_parsing_performance() {
     let config = SlaveConfigMessage {
         account_id: "SLAVE_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now().timestamp_millis(),
         trade_group_id: "MASTER_001".to_string(),
         status: 2, // STATUS_CONNECTED
         lot_calculation_mode: LotCalculationMode::default(),

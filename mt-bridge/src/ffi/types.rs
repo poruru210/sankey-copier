@@ -18,7 +18,8 @@ pub const MAX_SERVER_LEN: usize = 64;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct SSlaveConfig {
-    // 8-byte fields first (f64) - 40 bytes total
+    // 8-byte fields first (f64) - 48 bytes total
+    pub timestamp: i64, // Unix timestamp in milliseconds
     pub lot_multiplier: f64,
     pub source_lot_min: f64,
     pub source_lot_max: f64,
@@ -126,6 +127,7 @@ impl Default for SSlaveConfig {
     fn default() -> Self {
         Self {
             // 8-byte fields
+            timestamp: 0,
             lot_multiplier: 0.0,
             source_lot_min: 0.0,
             source_lot_max: 0.0,
@@ -232,8 +234,8 @@ mod tests {
     fn test_struct_exact_sizes() {
         // MQL側とバイト単位で一致しているか確認する
 
-        // SSlaveConfig: 40(f64) + 48(i32) + 256(arr) = 344
-        assert_eq!(size_of::<SSlaveConfig>(), 344, "SSlaveConfig size mismatch");
+        // SSlaveConfig: 48(i64+f64) + 48(i32) + 256(arr) = 352
+        assert_eq!(size_of::<SSlaveConfig>(), 352, "SSlaveConfig size mismatch");
 
         // SMasterConfig: 8(i32) + 128(arr) = 136
         assert_eq!(

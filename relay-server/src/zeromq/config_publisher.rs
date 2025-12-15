@@ -175,6 +175,7 @@ impl ZmqPublisher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
     use std::sync::Arc;
 
@@ -206,11 +207,14 @@ mod tests {
         let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
 
         let master_account = "MASTER456".to_string();
+        let account_id = "TEST123".to_string();
+        let trade_group_id = master_account.clone();
+
         let config = SlaveConfigMessage {
-            account_id: "TEST123".to_string(),
-            master_account: master_account.clone(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            trade_group_id: master_account.clone(),
+            account_id: account_id.to_string(),
+            master_account: master_account.to_string(),
+            timestamp: Utc::now().timestamp_millis(),
+            trade_group_id: trade_group_id.to_string(),
             status: 0, // 0 = DISABLED
             lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
             lot_multiplier: Some(2.0),
@@ -257,7 +261,7 @@ mod tests {
             symbol_prefix: Some("pro.".to_string()),
             symbol_suffix: Some(".m".to_string()),
             config_version: 1,
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Utc::now().timestamp_millis(),
             warning_codes: Vec::new(),
         };
 
@@ -277,17 +281,30 @@ mod tests {
 
         let mut handles = vec![];
 
+        // Define constants/structs needed for the test
+        const STATUS_DISABLED: i32 = 0;
+        struct Member {
+            id: String,
+            master_id: String,
+        }
+
         // Send 10 slave configs concurrently using unified send()
         for i in 0..10 {
             let pub_clone = Arc::clone(&publisher);
             let handle = tokio::spawn(async move {
                 let master_account = "MASTER".to_string();
+                let member = Member {
+                    id: format!("SLAVE{}", i),
+                    master_id: master_account.clone(),
+                };
+                let trade_group_id = master_account.clone();
+
                 let config = SlaveConfigMessage {
-                    account_id: format!("SLAVE{}", i),
-                    master_account: master_account.clone(),
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                    trade_group_id: master_account.clone(),
-                    status: 0, // 0 = DISABLED
+                    account_id: member.id.clone(),
+                    master_account: member.master_id.clone(),
+                    timestamp: Utc::now().timestamp_millis(),
+                    trade_group_id: trade_group_id.clone(),
+                    status: STATUS_DISABLED,
                     lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
                     lot_multiplier: Some(1.0),
                     reverse_trade: false,

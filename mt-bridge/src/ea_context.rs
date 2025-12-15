@@ -32,7 +32,7 @@ pub enum EaCommandType {
 #[derive(Debug, Clone)]
 pub struct EaCommand {
     pub command_type: i32,
-    pub _pad1: i32, // [FIX] Explicit padding for alignment
+    pub algo_flags: i32, // [FIX] Replaced _pad1 with algo_flags (Bit 0: IsDelayed)
 
     pub ticket: i64,
     pub symbol: [u8; 32], // 32 bytes (aligned to 8, safe)
@@ -57,10 +57,10 @@ impl Default for EaCommand {
     fn default() -> Self {
         Self {
             command_type: 0,
-            _pad1: 0,
+            algo_flags: 0,
             ticket: 0,
             symbol: [0; 32],
-            order_type: 0,
+            order_type: 0, // ...
             _pad2: 0,
             volume: 0.0,
             price: 0.0,
@@ -497,13 +497,37 @@ impl EaContext {
                 }
             }
 
-            // 3. Transform Values
+            let mut algo_flags = 0;
+
+            // 3. Latency Check
+            let now = Utc::now();
+            let latency_ms = (now - signal.timestamp).num_milliseconds();
+            if latency_ms > config.max_signal_delay_ms as i64 {
+                if !config.use_pending_order_for_delayed {
+                    // Drop expired signal
+                    eprintln!(
+                        "Dropped expired signal from {} (Latency: {}ms > {}ms)",
+                        signal.source_account, latency_ms, config.max_signal_delay_ms
+                    );
+                    return;
+                } else {
+                    // Log warning and mark as delayed
+                    eprintln!(
+                        "Signal delayed from {} (Latency: {}ms). Marking for pending order.",
+                        signal.source_account, latency_ms
+                    );
+                    algo_flags |= 1; // Bit 0: IsDelayed
+                }
+            }
+
+            // 4. Transform Values
             let mut cmd = EaCommand {
                 command_type: match signal.action {
                     TradeAction::Open => EaCommandType::Open as i32,
                     TradeAction::Close => EaCommandType::Close as i32,
                     TradeAction::Modify => EaCommandType::Modify as i32,
                 },
+                algo_flags,
                 ..Default::default()
             };
 
@@ -570,7 +594,7 @@ impl EaContext {
             // Essential: Set Source Account in new field
             copy_string_to_array(&signal.source_account, &mut cmd.source_account);
 
-            cmd.timestamp = signal.timestamp.timestamp();
+            cmd.timestamp = signal.timestamp.timestamp_millis();
 
             self.enqueue_command(cmd);
         }
@@ -1107,5 +1131,182 @@ mod tests {
         }));
 
         assert!(result.is_ok(), "Manager tick panicked on error!");
+    }
+
+    // Helper to create a dummy config with specific latency settings
+    fn create_latency_test_config(
+        master_account: &str,
+        max_delay: i32,
+        use_pending: bool,
+    ) -> crate::types::SlaveConfigMessage {
+        crate::types::SlaveConfigMessage {
+            account_id: "test_acc".to_string(),
+            master_account: master_account.to_string(),
+            timestamp: Utc::now().timestamp_millis(),
+            trade_group_id: "GROUP_001".to_string(),
+            status: 2, // Connected
+            lot_calculation_mode: crate::types::LotCalculationMode::Multiplier,
+            lot_multiplier: Some(1.0),
+            reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_mappings: vec![],
+            filters: crate::types::TradeFilters::default(),
+            config_version: 1,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: None,
+            sync_mode: Default::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: max_delay,
+            use_pending_order_for_delayed: use_pending,
+            allow_new_orders: true,
+            warning_codes: vec![],
+        }
+    }
+
+    #[test]
+    fn test_latency_check_fresh_signal() {
+        let mut ctx = create_test_context("Slave");
+        let incoming = Arc::new(Mutex::new(VecDeque::new()));
+        let master_acc = "master1";
+
+        // 1. Config
+        let config = create_latency_test_config(master_acc, 1000, false);
+        let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
+        let mut payload_conf = b"config/slave ".to_vec();
+        payload_conf.append(&mut config_bytes);
+        incoming.lock().unwrap().push_back(payload_conf);
+
+        // 2. Fresh Signal (Now)
+        let signal = crate::types::TradeSignal {
+            action: crate::constants::TradeAction::Open,
+            ticket: 1001,
+            symbol: Some("EURUSD".to_string()),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
+            source_account: master_acc.to_string(),
+            timestamp: Utc::now(),
+            ..Default::default()
+        };
+        let mut signal_bytes = rmp_serde::to_vec_named(&signal).unwrap();
+        let mut payload_trade = format!("trade/{} ", master_acc).as_bytes().to_vec();
+        payload_trade.append(&mut signal_bytes);
+        incoming.lock().unwrap().push_back(payload_trade);
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: incoming.clone(),
+            next_error: Arc::new(Mutex::new(None)),
+        });
+
+        // Tick 1: Config
+        ctx.manager_tick(1000.0, 1000.0, 0, true);
+        ctx.get_next_command(); // Clear UI command
+
+        // Tick 2: Trade
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+        assert_eq!(pending, 1, "Fresh signal should be accepted");
+        let cmd = ctx.get_next_command().unwrap();
+        assert_eq!(cmd.ticket, 1001);
+    }
+
+    #[test]
+    fn test_latency_check_expired_signal_drop() {
+        let mut ctx = create_test_context("Slave");
+        let incoming = Arc::new(Mutex::new(VecDeque::new()));
+        let master_acc = "master1";
+
+        // 1. Config (Drop if > 1000ms)
+        let config = create_latency_test_config(master_acc, 1000, false);
+        let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
+        let mut payload_conf = b"config/slave ".to_vec();
+        payload_conf.append(&mut config_bytes);
+        incoming.lock().unwrap().push_back(payload_conf);
+
+        // 2. Expired Signal (5 sec old)
+        let signal = crate::types::TradeSignal {
+            action: crate::constants::TradeAction::Open,
+            ticket: 1002,
+            symbol: Some("EURUSD".to_string()),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
+            source_account: master_acc.to_string(),
+            timestamp: Utc::now() - chrono::Duration::seconds(5),
+            ..Default::default()
+        };
+        let mut signal_bytes = rmp_serde::to_vec_named(&signal).unwrap();
+        let mut payload_trade = format!("trade/{} ", master_acc).as_bytes().to_vec();
+        payload_trade.append(&mut signal_bytes);
+        incoming.lock().unwrap().push_back(payload_trade);
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: incoming.clone(),
+            next_error: Arc::new(Mutex::new(None)),
+        });
+
+        // Tick 1: Config
+        ctx.manager_tick(1000.0, 1000.0, 0, true);
+        ctx.get_next_command();
+
+        // Tick 2: Trade (Should be Dropped)
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+
+        // Verify that the expired signal is dropped (pending=0)
+        assert_eq!(pending, 0, "Expired signal should be dropped");
+    }
+
+    #[test]
+    fn test_latency_check_expired_signal_use_pending() {
+        let mut ctx = create_test_context("Slave");
+        let incoming = Arc::new(Mutex::new(VecDeque::new()));
+        let master_acc = "master1";
+
+        // 1. Config (Keep if > 1000ms)
+        let config = create_latency_test_config(master_acc, 1000, true);
+        let mut config_bytes = rmp_serde::to_vec_named(&config).unwrap();
+        let mut payload_conf = b"config/slave ".to_vec();
+        payload_conf.append(&mut config_bytes);
+        incoming.lock().unwrap().push_back(payload_conf);
+
+        // 2. Expired Signal
+        let signal = crate::types::TradeSignal {
+            action: crate::constants::TradeAction::Open,
+            ticket: 1003,
+            symbol: Some("EURUSD".to_string()),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
+            source_account: master_acc.to_string(),
+            timestamp: Utc::now() - chrono::Duration::seconds(5),
+            ..Default::default()
+        };
+        let mut signal_bytes = rmp_serde::to_vec_named(&signal).unwrap();
+        let mut payload_trade = format!("trade/{} ", master_acc).as_bytes().to_vec();
+        payload_trade.append(&mut signal_bytes);
+        incoming.lock().unwrap().push_back(payload_trade);
+
+        ctx.strategy = Box::new(MockStrategy {
+            sent_data: Arc::new(Mutex::new(Vec::new())),
+            incoming_data: incoming.clone(),
+            next_error: Arc::new(Mutex::new(None)),
+        });
+
+        // Tick 1: Config
+        ctx.manager_tick(1000.0, 1000.0, 0, true);
+        ctx.get_next_command();
+
+        // Tick 2: Trade (Should Pass)
+        let pending = ctx.manager_tick(1000.0, 1000.0, 0, true);
+        assert_eq!(
+            pending, 1,
+            "Expired signal with use_pending should assume pending order creation"
+        );
+        let cmd = ctx.get_next_command().unwrap();
+        assert_eq!(cmd.ticket, 1003);
     }
 }

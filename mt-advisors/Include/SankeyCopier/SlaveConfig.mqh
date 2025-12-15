@@ -52,6 +52,7 @@ void ProcessSlaveConfig(SSlaveConfig &config,
    }
 
    // Extract extended configuration fields
+   long new_timestamp = config.timestamp;
    int new_status = config.status;
    int new_lot_calc_mode = config.lot_calculation_mode; // 0=Multiplier, 1=MarginRatio
    string lot_calc_mode_str = (new_lot_calc_mode == LOT_CALC_MODE_MARGIN_RATIO) ? "margin_ratio" : "multiplier";
@@ -84,7 +85,7 @@ void ProcessSlaveConfig(SSlaveConfig &config,
    bool new_allow_new_orders = (config.allow_new_orders != 0);
 
    // Log configuration values (compact format)
-   LogInfo(CAT_CONFIG, StringFormat("Master: %s, Topic: %s, Status: %d", new_master, new_trade_topic, new_status));
+   LogInfo(CAT_CONFIG, StringFormat("Master: %s, Topic: %s, Status: %d, Time: %I64d", new_master, new_trade_topic, new_status, new_timestamp));
    LogDebug(CAT_CONFIG, StringFormat("Lot mode: %s, multiplier: %.2f, reverse: %d", lot_calc_mode_str, new_lot_mult, new_reverse));
    LogDebug(CAT_CONFIG, StringFormat("Source lot: %.2f-%.2f, master_equity: %.2f", new_source_lot_min, new_source_lot_max, new_master_equity));
    LogDebug(CAT_CONFIG, StringFormat("Sync mode: %s, limit_expiry: %d min, max_pips: %.1f", sync_mode_str, new_limit_order_expiry, new_market_sync_max_pips));
@@ -169,6 +170,7 @@ void ProcessSlaveConfig(SSlaveConfig &config,
       }
       
       // Update fields
+      configs[index].timestamp = new_timestamp;
       configs[index].trade_group_id = new_trade_topic;
       configs[index].status = new_status;
       configs[index].lot_calculation_mode = new_lot_calc_mode;

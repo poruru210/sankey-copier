@@ -56,7 +56,7 @@ fn test_config_message_none_symbol_filters() {
     let config = SlaveConfigMessage {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: 1735689600000,
         trade_group_id: "MASTER_001".to_string(),
         status: 2,
         lot_calculation_mode: LotCalculationMode::default(),
@@ -103,7 +103,7 @@ fn test_config_message_some_symbol_filters() {
     let config = SlaveConfigMessage {
         account_id: "TEST_001".to_string(),
         master_account: "MASTER_001".to_string(),
-        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        timestamp: 1735689600000,
         trade_group_id: "MASTER_001".to_string(),
         status: 2,
         lot_calculation_mode: LotCalculationMode::MarginRatio,

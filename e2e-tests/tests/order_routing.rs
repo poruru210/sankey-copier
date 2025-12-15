@@ -602,8 +602,6 @@ async fn test_delayed_signal_acceptable() {
 /// Test stale signal (10+ seconds old) - should still be delivered with old timestamp
 #[tokio::test]
 async fn test_stale_signal_too_old() {
-    use chrono::Utc;
-
     let sandbox = TestSandbox::new().expect("Failed to start sandbox");
     let server = sandbox.server();
 
@@ -615,7 +613,9 @@ async fn test_stale_signal_too_old() {
     let slave_account = "SLAVE_STALE_001";
 
     setup_test_scenario(&db, master_account, &[slave_account], |_| {
-        default_test_slave_settings()
+        let mut settings = default_test_slave_settings();
+        settings.max_signal_delay_ms = 5000;
+        settings
     })
     .await
     .expect("Failed to setup test scenario");
@@ -648,25 +648,11 @@ async fn test_stale_signal_too_old() {
         .try_receive_trade_signal(3000)
         .expect("Failed to receive signal");
 
-    // Server delivers all signals - EA is responsible for timestamp validation
+    // Server delivers all signals - EA (mt-bridge) validates timestamp and drops it if too old
     assert!(
-        received.is_some(),
-        "Stale signal should be delivered (EA validates timestamp)"
+        received.is_none(),
+        "Stale signal (10s old) should be rejected by EA latency check (max_signal_delay_ms=5000)"
     );
 
-    let signal = received.unwrap();
-
-    // Verify timestamp is indeed old (timestamp is already DateTime<Utc>)
-    let signal_time = signal.timestamp;
-    let now = Utc::now();
-    let signal_age = now - signal_time;
-
-    assert!(
-        signal_age.num_seconds() >= 10,
-        "Signal should have 10+ second old timestamp, got {} seconds",
-        signal_age.num_seconds()
-    );
-
-    println!("✅ test_stale_signal_too_old passed");
-    println!("   Signal age: {} seconds", signal_age.num_seconds());
+    println!("✅ test_stale_signal_too_old passed (Signal correctly rejected)");
 }
