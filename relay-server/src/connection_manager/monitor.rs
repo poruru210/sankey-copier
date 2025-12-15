@@ -184,7 +184,8 @@ mod tests {
         let cm = Arc::new(ConnectionManager::new(1)); // 1 second timeout for EAs
 
         // Register a Master EA that is "old"
-        let old_time = Utc::now() - chrono::Duration::seconds(5);
+        let _old_time = Utc::now() - chrono::Duration::seconds(5);
+        /*
         let ea = EaConnection {
             account_id: "master_1".to_string(),
             ea_type: EaType::Master,
@@ -193,6 +194,7 @@ mod tests {
             last_heartbeat: old_time,
             ..Default::default()
         };
+        */
         // Inject directly into CM (using some internal knowledge or helper if available,
         // but robustly we rely on check_timeouts logic which we can't easily inject into
         // without mod visibility. Assuming check_timeouts works, we test the integration.)

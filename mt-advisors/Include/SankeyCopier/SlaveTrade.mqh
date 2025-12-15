@@ -129,18 +129,13 @@ void ExecuteOpenTrade(CTrade &trade, TicketMapping &order_map[], PendingTicketMa
 
    if(delay_ms > max_signal_delay_ms)
    {
-      if(!use_pending_for_delayed)
-      {
-         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
-         return;
-      }
-      else
-      {
-         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
-         ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                            source_account, delay_ms, magic);
-         return;
-      }
+       // If signal reached here, it means Rust bridge decided to pass it through.
+       // This implies use_pending_for_delayed is TRUE (otherwise Rust drops it).
+       // So we proceed to queue a pending order.
+       LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
+       ExecutePendingOrder(trade, pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
+                          source_account, delay_ms, magic);
+       return;
    }
 
    ENUM_ORDER_TYPE order_type = GetOrderTypeFromString(type_str);
@@ -510,18 +505,12 @@ void ExecuteOpenTrade(TicketMapping &order_map[], PendingTicketMapping &pending_
 
    if(delay_ms > max_signal_delay_ms)
    {
-      if(!use_pending_for_delayed)
-      {
-         LogWarn(CAT_TRADE, StringFormat("Signal too old (%dms > %dms). Skipping master #%d", delay_ms, max_signal_delay_ms, master_ticket));
-         return;
-      }
-      else
-      {
-         LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
-         ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
-                            source_account, delay_ms, magic, default_slippage);
-         return;
-      }
+       // If signal reached here, it means Rust bridge decided to pass it through.
+       // This implies use_pending_for_delayed is TRUE.
+       LogInfo(CAT_TRADE, StringFormat("Signal delayed (%dms). Using pending order at original price %.5f", delay_ms, price));
+       ExecutePendingOrder(pending_map, master_ticket, symbol, type_str, lots, price, sl, tp,
+                          source_account, delay_ms, magic, default_slippage);
+       return;
    }
 
    int order_type = GetOrderTypeFromString(type_str);
