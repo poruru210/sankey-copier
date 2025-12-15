@@ -5,6 +5,8 @@ use tokio::sync::RwLock;
 
 use crate::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
 
+pub mod monitor;
+
 /// EA connection key: (account_id, ea_type)
 /// Allows same account to have both Master and Slave EAs running simultaneously
 type ConnectionKey = (String, EaType);

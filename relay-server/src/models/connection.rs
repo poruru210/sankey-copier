@@ -28,6 +28,28 @@ pub struct EaConnection {
     pub is_trade_allowed: bool, // MT auto-trading enabled state
 }
 
+impl Default for EaConnection {
+    fn default() -> Self {
+        Self {
+            account_id: String::new(),
+            ea_type: EaType::Master,
+            platform: Platform::MT5,
+            account_number: 0,
+            broker: String::new(),
+            account_name: String::new(),
+            server: String::new(),
+            balance: 0.0,
+            equity: 0.0,
+            currency: "USD".to_string(),
+            leverage: 100,
+            last_heartbeat: Utc::now(),
+            status: ConnectionStatus::Offline,
+            connected_at: Utc::now(),
+            is_trade_allowed: false,
+        }
+    }
+}
+
 /// EAの種類
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

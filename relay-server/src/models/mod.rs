@@ -46,6 +46,15 @@ pub struct SymbolConverter {
 }
 
 impl SymbolConverter {
+    pub fn from_settings(master_settings: &MasterSettings, slave_settings: &SlaveSettings) -> Self {
+        Self {
+            prefix_remove: master_settings.symbol_prefix.clone(),
+            suffix_remove: master_settings.symbol_suffix.clone(),
+            prefix_add: slave_settings.symbol_prefix.clone(),
+            suffix_add: slave_settings.symbol_suffix.clone(),
+        }
+    }
+
     pub fn convert(&self, symbol: &str, mappings: &[SymbolMapping]) -> String {
         let mut result = symbol.to_string();
 
@@ -190,3 +199,6 @@ mod tests {
         assert_eq!(result, "CUSTOM_EURUSD");
     }
 }
+
+#[cfg(test)]
+mod settings_conversion_tests;
