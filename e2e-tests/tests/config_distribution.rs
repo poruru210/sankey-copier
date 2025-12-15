@@ -56,7 +56,7 @@ async fn test_slave_config_distribution() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
@@ -143,7 +143,7 @@ async fn test_multiple_slaves_same_master() {
     let mut slave_simulators = Vec::new();
     for slave_account in &slave_accounts {
         let simulator = sandbox
-            .create_slave(slave_account, master_account)
+            .create_slave(slave_account, master_account, true)
             .expect("Failed to create Slave EA simulator");
         slave_simulators.push(simulator);
     }
@@ -240,7 +240,7 @@ async fn test_new_member_initial_status_disabled() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
@@ -310,11 +310,11 @@ async fn test_status_transition_to_connected() {
 
     // Create both Master and Slave EA simulators
     let mut master_ea = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create Master EA simulator");
 
     let mut slave_ea = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
@@ -365,6 +365,8 @@ async fn test_status_transition_to_connected() {
     // When Master sends heartbeat, server will automatically send updated
     // config to all online Slaves with their new status
     master_ea.set_trade_allowed(true);
+    // Small delay to ensure AtomicBool is visible to background thread
+    sleep(Duration::from_millis(100)).await;
     master_ea.start().expect("Failed to start Master EA");
 
     // Wait for server to process Master heartbeat and send Slave configs
@@ -424,7 +426,7 @@ async fn test_sync_policy_skip_mode() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
@@ -485,7 +487,7 @@ async fn test_sync_policy_limit_order_mode() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
@@ -557,7 +559,7 @@ async fn test_sync_policy_market_order_mode() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
@@ -646,7 +648,7 @@ async fn test_trade_execution_settings() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     sleep(Duration::from_millis(500)).await;
@@ -761,17 +763,17 @@ async fn test_multiple_masters_multiple_slaves() {
 
     // Create Slave EA simulators
     let mut slave1_sim = sandbox
-        .create_slave(slave1, master1)
+        .create_slave(slave1, master1, true)
         .expect("Failed to create Slave1 simulator");
     slave1_sim.set_trade_allowed(true);
 
     let mut slave2_sim = sandbox
-        .create_slave(slave2, master1)
+        .create_slave(slave2, master1, true)
         .expect("Failed to create Slave2 simulator");
     slave2_sim.set_trade_allowed(true);
 
     let mut slave3_sim = sandbox
-        .create_slave(slave3, master2)
+        .create_slave(slave3, master2, true)
         .expect("Failed to create Slave3 simulator");
     slave3_sim.set_trade_allowed(true);
 
@@ -871,7 +873,7 @@ async fn test_master_config_distribution() {
 
     // Create Master EA simulator
     let mut simulator = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create Master EA simulator");
 
     // Allow ZMQ connections to establish
@@ -927,7 +929,7 @@ async fn test_master_config_not_found() {
 
     // Create Master EA simulator (no DB setup - account doesn't exist)
     let mut simulator = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create Master EA simulator");
 
     // Allow ZMQ connections to establish
@@ -1004,7 +1006,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
 
     // Create Master EA simulator and start it
     let mut master_sim = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
@@ -1014,7 +1016,7 @@ async fn test_toggle_member_status_off_sends_disabled_config() {
 
     // Create and start Slave EA simulator
     let mut slave_sim = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
     slave_sim.set_trade_allowed(true);
     slave_sim.start().expect("Failed to start slave EA");
@@ -1111,7 +1113,7 @@ async fn test_delete_member_sends_disabled_config() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
@@ -1208,7 +1210,7 @@ async fn test_slave_config_prefix_distribution() {
 
     // Create Slave EA simulator
     let mut simulator = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create Slave EA simulator");
 
     // Allow ZMQ connections to establish
@@ -1297,7 +1299,7 @@ async fn test_allow_new_orders_follows_status() {
 
     // Create and start Master EA simulator
     let mut master_sim = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create Master EA simulator");
     master_sim.set_trade_allowed(true);
     master_sim.start().expect("Failed to start master EA");
@@ -1307,11 +1309,11 @@ async fn test_allow_new_orders_follows_status() {
 
     // Create and start Slave EA simulators
     let mut sim_enabled = sandbox
-        .create_slave(slave_enabled, master_account)
+        .create_slave(slave_enabled, master_account, true)
         .expect("Failed to create enabled slave simulator");
 
     let mut sim_disabled = sandbox
-        .create_slave(slave_disabled, master_account)
+        .create_slave(slave_disabled, master_account, true)
         .expect("Failed to create disabled slave simulator");
 
     // Start enabled slave and wait for CONNECTED status

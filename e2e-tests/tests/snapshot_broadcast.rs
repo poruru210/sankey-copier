@@ -59,7 +59,7 @@ async fn test_system_snapshot_broadcast() -> Result<()> {
     println!("WebSocket connected");
 
     // 4. Start Master EA Simulator
-    let mut master = sandbox.create_master(master_account)?;
+    let mut master = sandbox.create_master(master_account, true)?;
     master.set_trade_allowed(true); // AutoTrading ON
     master.start()?;
     println!("Master EA Simulator started");

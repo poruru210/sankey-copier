@@ -330,8 +330,9 @@ impl SlaveEaSimulator {
         _trade_address: &str,
         account_id: &str,
         master_account: &str,
+        is_trade_allowed: bool,
     ) -> Result<Self> {
-        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave)?;
+        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave, is_trade_allowed)?;
 
         Ok(Self {
             base,

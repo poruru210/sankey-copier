@@ -25,7 +25,11 @@ pub struct EaSimulatorBase {
 }
 
 impl EaSimulatorBase {
-    pub fn new_without_zmq(account_id: &str, ea_type: EaType) -> Result<Self> {
+    pub fn new_without_zmq(
+        account_id: &str,
+        ea_type: EaType,
+        is_trade_allowed: bool,
+    ) -> Result<Self> {
         let heartbeat_params = match ea_type {
             EaType::Master => HeartbeatParams::master_default(),
             EaType::Slave => HeartbeatParams::slave_default(),
@@ -34,7 +38,7 @@ impl EaSimulatorBase {
         Ok(Self {
             account_id: account_id.to_string(),
             ea_type,
-            is_trade_allowed: Arc::new(AtomicBool::new(false)),
+            is_trade_allowed: Arc::new(AtomicBool::new(is_trade_allowed)),
             shutdown_flag: Arc::new(AtomicBool::new(false)),
             heartbeat_params,
         })

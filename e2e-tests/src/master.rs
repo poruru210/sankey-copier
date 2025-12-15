@@ -250,8 +250,13 @@ pub struct MasterEaSimulator {
 }
 
 impl MasterEaSimulator {
-    pub fn new(push_address: &str, config_address: &str, account_id: &str) -> Result<Self> {
-        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master)?;
+    pub fn new(
+        push_address: &str,
+        config_address: &str,
+        account_id: &str,
+        is_trade_allowed: bool,
+    ) -> Result<Self> {
+        let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master, is_trade_allowed)?;
 
         Ok(Self {
             base,

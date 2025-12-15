@@ -250,6 +250,23 @@ void OnTimer()
    // 1. Run ManagerTick (Handles ZMQ Polling, Heartbeats internally)
    bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
    
+   // 1a. Detect auto-trading state change and update panel immediately
+   // This ensures DISABLED/ENABLED status reflects instantly without waiting for CONFIG
+   if(ShowConfigPanel && current_trade_allowed != g_last_trade_allowed)
+   {
+      g_last_trade_allowed = current_trade_allowed;
+      if(!current_trade_allowed)
+      {
+         g_config_panel.UpdateStatusRow(STATUS_DISABLED);
+      }
+      else if(g_has_received_config)
+      {
+         g_config_panel.UpdatePanelStatusFromConfigs(g_configs);
+      }
+      // Else: no config yet, keep current status (NO_CONFIG)
+      ChartRedraw();
+   }
+   
    int pending_commands = g_ea_context.ManagerTick(
        GetAccountBalance(), 
        GetAccountEquity(), 

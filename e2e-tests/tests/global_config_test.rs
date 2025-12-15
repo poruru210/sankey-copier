@@ -10,8 +10,8 @@ fn test_global_config_broadcast() -> Result<()> {
     let relay = sandbox.server();
 
     // 1. Create Master and Slave simulators using factory methods
-    let mut master = sandbox.create_master("MASTER_GLOBAL")?;
-    let mut slave = sandbox.create_slave("SLAVE_GLOBAL", "MASTER_GLOBAL")?;
+    let mut master = sandbox.create_master("MASTER_GLOBAL", true)?;
+    let mut slave = sandbox.create_slave("SLAVE_GLOBAL", "MASTER_GLOBAL", true)?;
 
     master.start()?;
     slave.start()?;
