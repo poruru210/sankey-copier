@@ -316,9 +316,38 @@ impl MessageHandler {
                 })
                 .await;
 
+            // Calculate OLD status result first (before CONFIG send decision)
+            // This allows us to detect warning code changes (e.g., AutoTrading toggle)
+            let old_status_result = if let Some(conn) = old_conn.as_ref() {
+                let old_snapshot = ConnectionSnapshot {
+                    connection_status: Some(conn.status),
+                    is_trade_allowed: conn.is_trade_allowed,
+                };
+
+                runtime_updater
+                    .evaluate_member_runtime_status_with_snapshot(
+                        SlaveRuntimeTarget {
+                            master_account: settings.master_account.as_str(),
+                            trade_group_id: settings.master_account.as_str(),
+                            slave_account: &settings.slave_account,
+                            enabled_flag: settings.enabled_flag,
+                            slave_settings: &settings.slave_settings,
+                        },
+                        old_snapshot,
+                    )
+                    .await
+            } else {
+                crate::models::status_engine::MemberStatusResult::unknown()
+            };
+
             let previous_status = settings.status;
             let evaluated_status = slave_bundle.status_result.status;
             let is_connected = evaluated_status == crate::models::STATUS_CONNECTED;
+            // Detect changes via either:
+            // 1. Warning code changes (e.g., AutoTrading toggle) - has_changed()
+            // 2. DB status changes (e.g., enabled_flag toggle via Web UI) - previous_status != evaluated_status
+            let state_changed = slave_bundle.status_result.has_changed(&old_status_result)
+                || previous_status != evaluated_status;
 
             super::log_slave_runtime_trace(
                 "slave_heartbeat",
@@ -332,13 +361,15 @@ impl MessageHandler {
                 is_connected,
             );
 
-            if evaluated_status != previous_status {
+            // Send CONFIG if status OR warning_codes changed
+            // This ensures AutoTrading toggle (is_trade_allowed change) triggers CONFIG re-send
+            if state_changed {
                 tracing::info!(
                     slave = %settings.slave_account,
                     master = %settings.master_account,
-                    old = previous_status,
-                    new = evaluated_status,
-                    "Slave runtime status changed via heartbeat",
+                    old_status = previous_status,
+                    new_status = evaluated_status,
+                    "Slave state changed via heartbeat (status or warnings)",
                 );
 
                 if let Err(err) = self.publisher.send(&slave_bundle.config).await {
@@ -347,6 +378,14 @@ impl MessageHandler {
                         settings.slave_account,
                         err
                     );
+                }
+
+                // WebSocket broadcast
+                if let Some(broadcaster) = &self.snapshot_broadcaster {
+                    let broadcaster = broadcaster.clone();
+                    tokio::spawn(async move {
+                        broadcaster.broadcast_now().await;
+                    });
                 }
             }
 
@@ -365,43 +404,6 @@ impl MessageHandler {
                     settings.master_account,
                     err
                 );
-            }
-
-            // Compare Old vs New state to detect changes
-            // We need to re-evaluate the OLD state to see if warning codes changed
-            // (e.g., AutoTrading toggled On/Off)
-            let old_status_result = if let Some(conn) = old_conn.as_ref() {
-                let old_snapshot = ConnectionSnapshot {
-                    connection_status: Some(conn.status),
-                    is_trade_allowed: conn.is_trade_allowed,
-                };
-
-                // Evaluate OLD status
-                runtime_updater
-                    .evaluate_member_runtime_status_with_snapshot(
-                        SlaveRuntimeTarget {
-                            master_account: settings.master_account.as_str(),
-                            trade_group_id: settings.master_account.as_str(),
-                            slave_account: &settings.slave_account,
-                            enabled_flag: settings.enabled_flag,
-                            slave_settings: &settings.slave_settings,
-                        },
-                        old_snapshot,
-                    )
-                    .await
-            } else {
-                crate::models::status_engine::MemberStatusResult::unknown()
-            };
-
-            // WebSocket broadcast if Status OR Warning Codes changed
-            // This covers AutoTrading toggles, Offline/Online changes, etc.
-            if slave_bundle.status_result.has_changed(&old_status_result) {
-                if let Some(broadcaster) = &self.snapshot_broadcaster {
-                    let broadcaster = broadcaster.clone();
-                    tokio::spawn(async move {
-                        broadcaster.broadcast_now().await;
-                    });
-                }
             }
         }
     }

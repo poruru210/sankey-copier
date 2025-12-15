@@ -12,14 +12,14 @@
 #ifndef SANKEY_COPIER_MASTER_SIGNALS_MQH
 #define SANKEY_COPIER_MASTER_SIGNALS_MQH
 
-#include "Common.mqh"
+#include "MasterContext.mqh"
 #include "Logging.mqh"
 
 //+------------------------------------------------------------------+
 //| Send open position signal message (Master)                       |
 //| Called when Master EA opens a new position to notify Slaves      |
 //+------------------------------------------------------------------+
-bool SendOpenSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, string symbol,
+bool SendOpenSignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, string symbol,
                     string order_type, double lots, double price, double sl, double tp,
                     long magic, string comment, string account_id)
 {
@@ -31,7 +31,7 @@ bool SendOpenSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, string sym
 //| Called when Master EA closes a position to notify Slaves         |
 //| close_ratio: 0 or >= 1.0 = full close, 0 < ratio < 1.0 = partial |
 //+------------------------------------------------------------------+
-bool SendCloseSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double close_ratio, string account_id)
+bool SendCloseSignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, double close_ratio, string account_id)
 {
    return ea_context.SendCloseSignal((long)ticket, close_ratio);
 }
@@ -40,7 +40,7 @@ bool SendCloseSignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double cl
 //| Send modify signal message (Master)                             |
 //| Called when Master EA modifies SL/TP to notify Slaves            |
 //+------------------------------------------------------------------+
-bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double sl, double tp, string account_id)
+bool SendModifySignal(MasterContextWrapper &ea_context, TICKET_TYPE ticket, double sl, double tp, string account_id)
 {
    return ea_context.SendModifySignal((long)ticket, sl, tp);
 }
@@ -50,22 +50,16 @@ bool SendModifySignal(EaContextWrapper &ea_context, TICKET_TYPE ticket, double s
 //| Called when Master receives SyncRequest from Slave               |
 //| Collects all current positions and sends as PositionSnapshot      |
 //+------------------------------------------------------------------+
-bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
+bool SendPositionSnapshot(MasterContextWrapper &ea_context, string account_id, string symbol_prefix, string symbol_suffix)
 {
-   // Create snapshot builder
-   HANDLE_TYPE builder = create_position_snapshot_builder(account_id);
-   if(builder == 0 || builder == -1)
-   {
-      LogError(CAT_SYNC, "Failed to create position snapshot builder");
-      return false;
-   }
-
-   int position_count = 0;
+   SPositionInfo positions[];
+   int count = 0;
 
    #ifdef IS_MT5
       // MT5: Iterate through all positions
       int total = PositionsTotal();
-      
+      ArrayResize(positions, total); // Pre-allocate maximum size
+
       for(int i = 0; i < total; i++)
       {
          ulong ticket = PositionGetTicket(i);
@@ -83,21 +77,30 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
             double tp = PositionGetDouble(POSITION_TP);
             long magic = PositionGetInteger(POSITION_MAGIC);
             datetime open_time = (datetime)PositionGetInteger(POSITION_TIME);
+            string comment = PositionGetString(POSITION_COMMENT);
 
-            string order_type = GetOrderTypeString((ENUM_POSITION_TYPE)type);
-            string open_time_str = FormatTimestampISO8601(open_time);
+            // Populate struct
+            positions[count].ticket = (long)ticket;
+            StringToCharArray(symbol, positions[count].symbol);
+            positions[count].order_type = (int)type; // Assuming standard Enum mapping (MT5)
+            positions[count].lots = lots;
+            positions[count].open_price = price;
+            positions[count].open_time = (long)open_time;
+            positions[count].stop_loss = sl;
+            positions[count].take_profit = tp;
+            positions[count].magic_number = magic;
+            StringToCharArray(comment, positions[count].comment);
 
-            int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
-                                                                  lots, price, sl, tp, magic, open_time_str);
-            
-            if(result == 1) {
-               position_count++;
-            }
+            count++;
          }
       }
+      ArrayResize(positions, count); // Resize to actual count
    #else
       // MT4: Iterate through all open orders (MODE_TRADES)
-      for(int i = 0; i < OrdersTotal(); i++)
+      int total = OrdersTotal();
+      ArrayResize(positions, total); // Pre-allocate maximum
+
+      for(int i = 0; i < total; i++)
       {
          if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
          {
@@ -118,41 +121,31 @@ bool SendPositionSnapshot(EaContextWrapper &ea_context, string account_id, strin
             double tp = OrderTakeProfit();
             int magic = OrderMagicNumber();
             datetime open_time = OrderOpenTime();
+            string comment = OrderComment();
 
-            string order_type = GetOrderTypeString(type);
-            string open_time_str = FormatTimestampISO8601(open_time);
+            // Populate struct
+            positions[count].ticket = (long)ticket;
+            StringToCharArray(symbol, positions[count].symbol);
+            positions[count].order_type = type; // Assuming standard Enum mapping (MT4)
+            positions[count].lots = lots;
+            positions[count].open_price = price;
+            positions[count].open_time = (long)open_time;
+            positions[count].stop_loss = sl;
+            positions[count].take_profit = tp;
+            positions[count].magic_number = (long)magic;
+            StringToCharArray(comment, positions[count].comment);
 
-            int result = position_snapshot_builder_add_position(builder, (long)ticket, symbol, order_type,
-                                                                  lots, price, sl, tp, magic, open_time_str);
-            if(result == 1) {
-               position_count++;
-            }
+            count++;
          }
       }
+      ArrayResize(positions, count); // Resize to actual count
    #endif
 
-   // Serialize the snapshot
-   uchar buffer[];
-   ArrayResize(buffer, MESSAGE_BUFFER_SIZE);
-   int len = position_snapshot_builder_serialize(builder, buffer, MESSAGE_BUFFER_SIZE);
-
-   // Free the builder
-   position_snapshot_builder_free(builder);
-
-   if(len <= 0)
-   {
-      LogError(CAT_SYNC, "Failed to serialize position snapshot");
-      return false;
-   }
-
-   // Resize to actual length
-   ArrayResize(buffer, len);
-
    // Send via EaContext
-   bool success = ea_context.SendPush(buffer, len);
+   bool success = ea_context.SendPositionSnapshot(positions);
 
    if(success)
-      LogInfo(CAT_SYNC, StringFormat("Snapshot sent: %d positions (%d bytes)", position_count, len));
+      LogInfo(CAT_SYNC, StringFormat("Snapshot sent: %d positions", count));
    else
       LogError(CAT_SYNC, "Failed to send position snapshot");
 

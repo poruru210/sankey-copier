@@ -39,7 +39,7 @@ async fn test_master_ea_connection() {
 
     // Create and connect Master EA simulator
     let mut master = sandbox
-        .create_master("master-smoke-test")
+        .create_master("master-smoke-test", true)
         .expect("Failed to create master simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -62,10 +62,7 @@ async fn test_slave_ea_connection() {
 
     // Create and connect Slave EA simulator
     let mut slave = sandbox
-        .create_slave(
-            "slave-smoke-test",
-            "master-smoke-test", // master_account to subscribe to
-        )
+        .create_slave("slave-smoke-test", "master-smoke-test", true)
         .expect("Failed to create slave simulator");
 
     // Enable auto-trading and start OnTimer loop (sends heartbeat automatically)
@@ -86,15 +83,12 @@ async fn test_master_slave_basic_communication() {
 
     // Create Master
     let mut master = sandbox
-        .create_master("master-comm-test")
+        .create_master("master-comm-test", true)
         .expect("Failed to create master");
 
     // Create Slave subscribed to the master
     let mut slave = sandbox
-        .create_slave(
-            "slave-comm-test",
-            "master-comm-test", // subscribe to master
-        )
+        .create_slave("slave-comm-test", "master-comm-test", true)
         .expect("Failed to create slave");
 
     // Enable auto-trading and start both simulators

@@ -11,8 +11,9 @@
 #ifndef SANKEY_COPIER_GRIDPANEL_MQH
 #define SANKEY_COPIER_GRIDPANEL_MQH
 
-#include "Common.mqh"
+#include "EaContext.mqh"
 #include "SlaveTypes.mqh"
+#include "Logging.mqh"
 
 #property strict
 
@@ -411,7 +412,7 @@ void CGridPanel::SetColumnCount(int count)
 {
    if(count < 1)
    {
-      Print("Invalid column count: ", count);
+      LogError(CAT_SYSTEM, "GridPanel: Invalid column count: " + IntegerToString(count));
       return;
    }
 
@@ -426,7 +427,7 @@ void CGridPanel::SetColumnWidth(int column_index, int width_from_right)
 {
    if(column_index < 0 || column_index >= m_column_count)
    {
-      Print("Invalid column index: ", column_index);
+      LogError(CAT_SYSTEM, "GridPanel: Invalid column index: " + IntegerToString(column_index));
       return;
    }
 
@@ -448,7 +449,7 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
    {
       if(m_row_keys[i] == row_key)
       {
-         Print("Row with key '", row_key, "' already exists");
+         LogWarn(CAT_SYSTEM, "GridPanel: Row with key '" + row_key + "' already exists");
          return -1;
       }
    }
@@ -456,8 +457,7 @@ int CGridPanel::AddRow(string row_key, string &values[], color &colors[])
    // Validate array sizes
    if(ArraySize(values) != m_column_count || ArraySize(colors) != m_column_count)
    {
-      Print("Array size mismatch: expected ", m_column_count, " columns, got ",
-            ArraySize(values), "/", ArraySize(colors));
+      LogError(CAT_SYSTEM, StringFormat("GridPanel: Array size mismatch: expected %d columns, got %d/%d", m_column_count, ArraySize(values), ArraySize(colors)));
       return -1;
    }
 
@@ -566,7 +566,7 @@ int CGridPanel::AddCenteredRow(string row_key, string text, color clr)
    {
       if(m_row_keys[i] == row_key)
       {
-         Print("Row with key '", row_key, "' already exists");
+         LogWarn(CAT_SYSTEM, "GridPanel: Row with key '" + row_key + "' already exists");
          return -1;
       }
    }
@@ -651,7 +651,7 @@ bool CGridPanel::UpdateRow(string row_key, string &values[], color &colors[])
    // Validate array sizes
    if(ArraySize(values) != m_column_count || ArraySize(colors) != m_column_count)
    {
-      Print("Array size mismatch in UpdateRow");
+      LogError(CAT_SYSTEM, "GridPanel: Array size mismatch in UpdateRow");
       return false;
    }
 
@@ -672,7 +672,7 @@ bool CGridPanel::UpdateCell(string row_key, int column_index, string value, colo
 {
    if(column_index < 0 || column_index >= m_column_count)
    {
-      Print("Invalid column index: ", column_index);
+      LogError(CAT_SYSTEM, "GridPanel: Invalid column index: " + IntegerToString(column_index));
       return false;
    }
 

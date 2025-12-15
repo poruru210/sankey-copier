@@ -30,7 +30,7 @@ async fn test_sandbox_master_creation() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
     let mut master = sandbox
-        .create_master("master-test-01")
+        .create_master("master-test-01", true)
         .expect("Failed to create master");
 
     master.set_trade_allowed(true);
@@ -57,7 +57,7 @@ async fn test_sandbox_slave_creation() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
     let mut slave = sandbox
-        .create_slave("slave-test-01", "master-test-01")
+        .create_slave("slave-test-01", "master-test-01", true)
         .expect("Failed to create slave");
 
     slave.set_trade_allowed(true);
@@ -86,10 +86,10 @@ async fn test_parallel_sandboxes() {
     assert_ne!(s1.db_path(), s2.db_path());
 
     // Start EAs in both
-    let mut m1 = sandbox1.create_master("m1").unwrap();
+    let mut m1 = sandbox1.create_master("m1", true).unwrap();
     m1.start().unwrap();
 
-    let mut m2 = sandbox2.create_master("m2").unwrap();
+    let mut m2 = sandbox2.create_master("m2", true).unwrap();
     m2.start().unwrap();
 
     sleep(Duration::from_millis(500)).await;
@@ -102,11 +102,11 @@ async fn test_parallel_sandboxes() {
 async fn test_complex_scenario() {
     let sandbox = TestSandbox::new().expect("Failed to create sandbox");
 
-    let mut m1 = sandbox.create_master("m1").unwrap();
-    let mut m2 = sandbox.create_master("m2").unwrap();
+    let mut m1 = sandbox.create_master("m1", true).unwrap();
+    let mut m2 = sandbox.create_master("m2", true).unwrap();
 
-    let mut s1 = sandbox.create_slave("s1", "m1").unwrap();
-    let mut s2 = sandbox.create_slave("s2", "m2").unwrap();
+    let mut s1 = sandbox.create_slave("s1", "m1", true).unwrap();
+    let mut s2 = sandbox.create_slave("s2", "m2", true).unwrap();
 
     m1.start().unwrap();
     m2.start().unwrap();

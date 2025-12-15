@@ -66,21 +66,22 @@ fn test_warning_codes_sorted_by_priority() {
     use crate::models::status_engine::{ConnectionSnapshot, MasterIntent};
     use crate::models::ConnectionStatus;
 
-    // Simulate a scenario where all Master warnings are present
+    // Simulate a scenario where Master is offline with Web UI disabled
     let master_intent = MasterIntent {
         web_ui_enabled: false, // Should add MasterWebUiDisabled
     };
 
     let master_conn = ConnectionSnapshot {
         connection_status: Some(ConnectionStatus::Offline), // Should add MasterOffline
-        is_trade_allowed: false,                            // Should add MasterAutoTradingDisabled
+        is_trade_allowed: false, // NOT checked when offline (no valid state yet)
     };
 
     let master_result = status_engine::evaluate_master_status(master_intent, master_conn);
 
     // Verify that warning_codes are present and sorted
+    // Note: MasterAutoTradingDisabled is NOT added when offline
     assert!(!master_result.warning_codes.is_empty());
-    assert_eq!(master_result.warning_codes.len(), 3);
+    assert_eq!(master_result.warning_codes.len(), 2);
 
     // After sort_by_priority, order should be consistent
     let codes1 = master_result.warning_codes.clone();
@@ -125,10 +126,10 @@ fn test_warning_codes_slave_auto_trading_disabled() {
         "Expected SlaveAutoTradingDisabled in warning_codes"
     );
 
-    // Runtime status should still be CONNECTED (online + web_ui_enabled + master connected)
+    // Slave is DISABLED when auto-trading is off (prevents trade execution)
     assert_eq!(
         member_result.status,
-        crate::models::STATUS_CONNECTED,
-        "Status should be CONNECTED even with auto-trading disabled"
+        crate::models::STATUS_DISABLED,
+        "Status should be DISABLED when auto-trading is off"
     );
 }

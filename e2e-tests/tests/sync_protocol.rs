@@ -39,11 +39,11 @@ async fn test_position_snapshot_single_slave() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
 
     // Subscribe master to sync requests
@@ -116,15 +116,15 @@ async fn test_position_snapshot_multiple_slaves() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave1 = sandbox
-        .create_slave(slave_accounts[0], master_account)
+        .create_slave(slave_accounts[0], master_account, true)
         .expect("Failed to create slave1");
 
     let mut slave2 = sandbox
-        .create_slave(slave_accounts[1], master_account)
+        .create_slave(slave_accounts[1], master_account, true)
         .expect("Failed to create slave2");
 
     // Start EAs with auto-trading enabled
@@ -208,11 +208,11 @@ async fn test_position_snapshot_empty() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
 
     // Subscribe to sync topic early (before start) to avoid slow joiner issues
@@ -279,11 +279,11 @@ async fn test_sync_request_to_master() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
 
     // Master subscribes to sync requests
@@ -345,11 +345,11 @@ async fn test_sync_request_with_last_sync_time() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
 
     // Master subscribes to sync requests
@@ -412,12 +412,12 @@ async fn test_sync_request_non_member_rejected() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     // Create non-member slave (not registered in trade group)
     let mut non_member = sandbox
-        .create_slave(non_member_slave, master_account)
+        .create_slave(non_member_slave, master_account, true)
         .expect("Failed to create non-member slave");
 
     // Master subscribes to sync requests
@@ -476,11 +476,11 @@ async fn test_full_sync_cycle() {
 
     // Create simulators
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
 
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
 
     // Setup subscriptions

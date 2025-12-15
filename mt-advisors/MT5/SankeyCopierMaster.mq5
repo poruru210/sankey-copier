@@ -9,12 +9,13 @@
 #property icon      "app.ico"
 
 //--- Include common headers
-#include "../Include/SankeyCopier/Common.mqh"
+#include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
-#include "../Include/SankeyCopier/Trade.mqh"
+#include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
+#include "../Include/SankeyCopier/GlobalConfig.mqh"
 
 //--- Input parameters
 // Note: SymbolPrefix/SymbolSuffix moved to Web-UI MasterSettings
@@ -66,7 +67,8 @@ string        g_config_topic = "";        // Config topic (generated via FFI)
 string        g_vlogs_topic = "";         // VLogs topic (generated via FFI)
 string        g_sync_topic = "";          // Sync topic prefix for receiving SyncRequest (sync/{account_id}/)
 bool          g_register_sent = false;    // Track if register message has been sent
-EaContextWrapper g_ea_context;        // Rust EA Context wrapper
+MasterContextWrapper g_ea_context;        // Rust EA Context wrapper
+GlobalConfigManager *g_global_config = NULL; // Global config manager
 
 
 //--- Configuration panel
@@ -77,11 +79,11 @@ CGridPanel     g_config_panel;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("=== SankeyCopier Master EA (MT5) Starting ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Starting ===");
 
    // Auto-generate AccountID from broker name and account number
    AccountID = GenerateAccountID();
-   Print("Auto-generated AccountID: ", AccountID);
+   LogInfo(CAT_SYSTEM, "Auto-generated AccountID: " + AccountID);
 
    // Symbol prefix/suffix are now managed via Web-UI MasterSettings
    // They will be set when config is received from relay-server
@@ -92,12 +94,11 @@ int OnInit()
    // 2-port architecture: Receiver (PULL) and Publisher (unified PUB for trades + configs)
    if(!LoadConfig())
    {
-      Print("WARNING: Failed to load config file, using default ports");
+      LogWarn(CAT_CONFIG, "Failed to load config file, using default ports");
    }
    else
    {
-      Print("Config loaded: ReceiverPort=", GetReceiverPort(),
-            ", PublisherPort=", GetPublisherPort(), " (unified)");
+      LogInfo(CAT_CONFIG, "Config loaded: ReceiverPort=" + IntegerToString(GetReceiverPort()) + ", PublisherPort=" + IntegerToString(GetPublisherPort()) + " (unified)");
    }
 
    // Resolve addresses from sankey_copier.ini config file
@@ -105,7 +106,7 @@ int OnInit()
    g_RelayAddress = GetPushAddress();
    g_ConfigAddress = GetConfigSubAddress();
 
-   Print("Resolved addresses: PUSH=", g_RelayAddress, ", SUB=", g_ConfigAddress, " (unified)");
+   LogInfo(CAT_CONFIG, "Resolved addresses: PUSH=" + g_RelayAddress + ", SUB=" + g_ConfigAddress + " (unified)");
 
    // Initialize topics using FFI
    ushort topic_buffer[256];
@@ -113,23 +114,23 @@ int OnInit()
    if(len > 0) 
    {
       g_config_topic = ShortArrayToString(topic_buffer);
-      Print("Generated config topic: ", g_config_topic);
+      LogInfo(CAT_CONFIG, "Generated config topic: " + g_config_topic);
    }
    else 
    {
       g_config_topic = AccountID; // Fallback
-      Print("WARNING: Failed to generate config topic, using AccountID fallback: ", g_config_topic);
+      LogWarn(CAT_CONFIG, "Failed to generate config topic, using AccountID fallback: " + g_config_topic);
    }
 
    len = get_global_config_topic(topic_buffer, 256);
    if(len > 0) 
    {
       g_vlogs_topic = ShortArrayToString(topic_buffer);
-      Print("Generated vlogs topic: ", g_vlogs_topic);
+      LogInfo(CAT_SYSTEM, "Generated vlogs topic: " + g_vlogs_topic);
    }
    else 
    {
-      Print("CRITICAL: Failed to generate vlogs topic from mt-bridge");
+      LogError(CAT_SYSTEM, "Failed to generate vlogs topic from mt-bridge");
       return INIT_FAILED;
    }
 
@@ -138,15 +139,18 @@ int OnInit()
                                GetBrokerName(), GetAccountName(), GetServerName(), 
                                GetAccountCurrency(), GetAccountLeverage()))
    {
-      Print("[ERROR] Failed to initialize EA Context");
+      LogError(CAT_SYSTEM, "Failed to initialize EA Context");
       return INIT_FAILED;
    }
+   
+   // Initialize Global Config Manager
+   g_global_config = new GlobalConfigManager(&g_ea_context);
    
    // Connect via FFI (High-Level)
    // This creates and manages the sockets internally within the Rust context
    if(!g_ea_context.Connect(g_RelayAddress, g_ConfigAddress))
    {
-       Print("[ERROR] Failed to connect via EA Context");
+       LogError(CAT_SYSTEM, "Failed to connect via EA Context");
        // Note: Depending on FFI implementation, Connect might return success even if immediate connection fails,
        // but if it returns false here, it's a critical setup error.
        return INIT_FAILED;
@@ -155,14 +159,14 @@ int OnInit()
    // Subscribe to config messages for this account ID
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
-      Print("[ERROR] Failed to subscribe to config topic");
+      LogError(CAT_SYSTEM, "Failed to subscribe to config topic");
       return INIT_FAILED;
    }
 
    // Subscribe to VictoriaLogs config (global broadcast)
    if(!g_ea_context.SubscribeConfig(g_vlogs_topic))
    {
-      Print("WARNING: Failed to subscribe to vlogs_config topic");
+      LogWarn(CAT_SYSTEM, "Failed to subscribe to vlogs_config topic");
    }
 
    // Subscribe to sync/{account_id}/ topic for SyncRequest messages from slaves
@@ -171,18 +175,18 @@ int OnInit()
    if(sync_len > 0)
    {
       g_sync_topic = ShortArrayToString(sync_topic_buffer);
-      Print("Generated sync topic prefix: ", g_sync_topic);
+      LogInfo(CAT_SYSTEM, "Generated sync topic prefix: " + g_sync_topic);
       
       // Note: sync_topic is a PREFIX filter in Rust/ZMQ, subscribing to it receives all subtopics?
       // ZMQ usually matches prefix. So subscribing to "sync/{account_id}/" should work.
       if(!g_ea_context.SubscribeConfig(g_sync_topic))
       {
-         Print("WARNING: Failed to subscribe to sync topic");
+         LogWarn(CAT_SYSTEM, "Failed to subscribe to sync topic");
       }
    }
    else
    {
-      Print("WARNING: Failed to generate sync topic prefix");
+      LogWarn(CAT_SYSTEM, "Failed to generate sync topic prefix");
    }
 
    // Scan existing positions and orders
@@ -191,8 +195,12 @@ int OnInit()
    
    g_initialized = true;
 
-   // Set up timer for heartbeat (1 second interval)
-   EventSetTimer(1);
+   // Set up timer (using ScanInterval in ms)
+   // Using MillisecondTimer ensures we get events even if market is closed (no ticks)
+   // and allows for faster polling than 1 second if needed.
+   int scan_ms = MathMax(100, MathMin(5000, ScanInterval));
+   EventSetMillisecondTimer(scan_ms);
+   LogInfo(CAT_SYSTEM, StringFormat("Timer started: %d ms interval", scan_ms));
 
    // Initialize configuration panel
    if(ShowConfigPanel)
@@ -207,7 +215,7 @@ int OnInit()
       g_config_panel.UpdateSymbolConfig(g_symbol_prefix, g_symbol_suffix, "");
    }
 
-   Print("=== SankeyCopier Master EA (MT5) Initialized ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Initialized ===");
 
    // VictoriaLogs is configured via server-pushed vlogs_config message
    // (no local endpoint parameter needed)
@@ -233,7 +241,14 @@ void OnDeinit(const int reason)
       g_ea_context.SendUnregister();
    }
 
-   // Kill timer
+   // Cleanup Global Config Manager
+   if(g_global_config != NULL)
+   {
+      delete g_global_config;
+      g_global_config = NULL;
+   }
+
+   // Kill timer (works for both SetTimer and SetMillisecondTimer)
    EventKillTimer();
 
    // Delete configuration panel
@@ -244,14 +259,11 @@ void OnDeinit(const int reason)
    // Managed by EaContextWrapper destructor
    // CleanupZmqMultiSocket(g_zmq_socket, g_zmq_config_socket, g_zmq_context, "Master PUSH", "Master Config SUB");
 
-   Print("=== SankeyCopier Master EA (MT5) Stopped ===");
+   LogInfo(CAT_SYSTEM, "=== SankeyCopier Master EA (MT5) Stopped ===");
 }
 
 //+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Timer function (called every 1 second)                            |
+//| Timer function (called periodically)                              |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -267,6 +279,9 @@ void OnTimer()
        current_trade_allowed
    );
 
+   // 1b. Check for Global Config Updates
+   if(g_global_config != NULL) g_global_config.CheckForUpdate();
+
    // 2. Process all pending commands from Rust
    EaCommand cmd;
    int processed_count = 0;
@@ -281,16 +296,10 @@ void OnTimer()
            case CMD_UPDATE_UI:
            {
                // Config updated (Master or Global VLogs) via ManagerTick parsing
-               // Rust parsed it and set cached config, we just need to update UI if needed.
-               // We can get cached config if we need specific fields for UI.
-               HANDLE_TYPE config_handle = g_ea_context.GetMasterConfig();
-               if(config_handle != 0 && config_handle != -1) // -1 or 0? Wrapper returns 0 on fail.
+               SMasterConfig config;
+               if(g_ea_context.GetMasterConfig(config))
                {
-                   ProcessMasterConfigMessage(config_handle);
-                   // Note: We don't free cached config handle from GetMasterConfig? 
-                   // No, GetMasterConfig returns pointer to internal cached struct, NOT a new object?
-                   // Wait, FFI `ea_context_get_master_config` returns `*const MasterConfigMessage`.
-                   // `master_config_get_string` takes this pointer. We do NOT free it.
+                   ProcessMasterConfigMessage(config);
                }
                
                // Also check global VLogs? (Maybe stored separately or we just assume updated)
@@ -298,13 +307,13 @@ void OnTimer()
            }
            case CMD_SEND_SNAPSHOT: // SyncRequest Received
            {
-               // Retrieve cached SyncRequest handle (Managed by Rust, DO NOT FREE)
-               HANDLE_TYPE req_handle = g_ea_context.GetSyncRequest();
+               // Retrieve cached SyncRequest struct
+               SSyncRequest request;
                
-               if(req_handle != 0)
+               if(g_ea_context.GetSyncRequest(request))
                {
-                   string req_master = sync_request_get_string(req_handle, "master_account");
-                   string req_slave = sync_request_get_string(req_handle, "slave_account");
+                   string req_master = CharArrayToString(request.master_account);
+                   string req_slave = CharArrayToString(request.slave_account);
 
                    // Validate Master Account
                    if(req_master == AccountID)
@@ -312,27 +321,27 @@ void OnTimer()
                         // Send the snapshot
                         if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                         {
-                             Print("[SYNC] Position snapshot sent to slave: ", req_slave);
+                             LogInfo(CAT_SYNC, "Position snapshot sent to slave: " + req_slave, BuildSyncContext(AccountID, req_slave));
                         }
                         else
                         {
-                             Print("[ERROR] Failed to send position snapshot to slave: ", req_slave);
+                             LogError(CAT_SYNC, "Failed to send position snapshot to slave: " + req_slave);
                         }
                    }
                    else
                    {
-                        Print(StringFormat("[ERROR] SyncRequest Master Mismatch. Req: '%s', Self: '%s'", req_master, AccountID));
+                        LogError(CAT_SYNC, StringFormat("SyncRequest Master Mismatch. Req: '%s', Self: '%s'", req_master, AccountID));
                    }
                }
                else
                {
-                    // Fallback: Use comment if handle is null (should not happen if Rust logic works)
+                    // Fallback: Use comment if struct retrieval fails (should not happen if Rust logic works)
                     string slave_account = CharArrayToString(cmd.comment);
-                    Print("[WARNING] GetSyncRequest returned 0, using comment for slave account: ", slave_account);
+                    LogWarn(CAT_SYNC, "GetSyncRequest failed, using comment for slave account: " + slave_account);
                     
                     if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
                     {
-                         Print("[SYNC] Position snapshot sent to slave: ", slave_account);
+                         LogInfo(CAT_SYNC, "Position snapshot sent to slave: " + slave_account, BuildSyncContext(AccountID, slave_account));
                     }
                }
                break;
@@ -347,47 +356,12 @@ void OnTimer()
        // Rust `get_next_command` pops one. If empty, GetCommand returns false (0).
    }
 
-   // 3. Flush VLogs
+   // 3. Scan for changes (Positions/Orders)
+   // Moved from OnTick to ensure it runs even if chart symbol market is closed (e.g. XAUUSD on Sunday)
+   PerformTradeScan();
+
+   // 4. Flush VLogs
    VLogsFlushIfNeeded();
-}
-
-//+------------------------------------------------------------------+
-//| Process SyncRequest message (from Slave EA)                       |
-//+------------------------------------------------------------------+
-void ProcessSyncRequest(HANDLE_TYPE handle)
-{
-   // Get the fields
-   string slave_account = sync_request_get_string(handle, "slave_account");
-   string master_account = sync_request_get_string(handle, "master_account");
-
-   if(slave_account == "" || master_account == "")
-   {
-      Print("Invalid SyncRequest received - missing fields");
-      sync_request_free(handle);
-      return;
-   }
-
-   // Check if this request is for us
-   if(master_account != AccountID)
-   {
-      Print("SyncRequest for different master: ", master_account, " (we are: ", AccountID, ")");
-      sync_request_free(handle);
-      return;
-   }
-
-   // Free the handle before sending response
-   sync_request_free(handle);
-
-   // Send position snapshot
-   // Note: SendPositionSnapshot helper now takes g_ea_context
-   if(SendPositionSnapshot(g_ea_context, AccountID, g_symbol_prefix, g_symbol_suffix))
-   {
-      Print("[SYNC] Position snapshot sent to slave: ", slave_account);
-   }
-   else
-   {
-      Print("[ERROR] Failed to send position snapshot to slave: ", slave_account);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -396,16 +370,19 @@ void ProcessSyncRequest(HANDLE_TYPE handle)
 void OnTick()
 {
    if(!g_initialized) return;
+   // Logic moved to OnTimer/PerformTradeScan
+}
 
-   static datetime last_scan = 0;
-   if(TimeCurrent() - last_scan > ScanInterval / 1000)
-   {
+//+------------------------------------------------------------------+
+//| Perform trade scanning logic                                      |
+//+------------------------------------------------------------------+
+void PerformTradeScan()
+{
       //--- 1. Scan Positions ---
       CheckForNewPositions();
       CheckForModifiedPositions();
       CheckForPartialCloses();
       CheckForClosedPositions();
-      last_scan = TimeCurrent();
       
       //--- 2. Scan Pending Orders ---
       int total_orders = OrdersTotal();
@@ -441,6 +418,7 @@ void OnTick()
                      current_sl != g_tracked_orders[j].sl ||
                      current_tp != g_tracked_orders[j].tp)
                   {
+                     LogTrade("Modify Order", ticket, OrderGetString(ORDER_SYMBOL), "");
                      SendOrderModifySignal(ticket);
                      g_tracked_orders[j].price = current_price;
                      g_tracked_orders[j].sl = current_sl;
@@ -455,7 +433,7 @@ void OnTick()
                string symbol = OrderGetString(ORDER_SYMBOL);
                SendOrderOpenSignal(ticket);
                AddTrackedOrder(ticket);
-               Print("[ORDER] New: #", ticket, " ", symbol);
+               LogTrade("New Order", ticket, symbol, GetOrderTypeString(type));
             }
          }
       }
@@ -475,7 +453,6 @@ void OnTick()
       {
          g_config_panel.UpdateTrackedOrdersRow(ArraySize(g_tracked_positions) + ArraySize(g_tracked_orders));
       }
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -493,7 +470,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          string symbol = PositionGetString(POSITION_SYMBOL);
          SendPositionOpenSignal(trans.position);
          AddTrackedPosition(trans.position);
-         Print("[POSITION] New: #", trans.position, " ", symbol);
+         LogTrade("New Position", trans.position, symbol, "");
       }
    }
    else if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
@@ -509,6 +486,43 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
             RemoveTrackedPosition(trans.position);
          }
          // If position still exists, it's a partial close - handled by CheckForPartialCloses
+      }
+   }
+   else if(trans.type == TRADE_TRANSACTION_POSITION)
+   {
+      // Position modified (SL/TP change)
+      // Note: Volume changes usually come with DEAL events, but SL/TP changes trigger POSITION events directly
+      if(IsPositionTracked(trans.position) && PositionSelectByTicket(trans.position))
+      {
+         // Find array index
+         int index = -1;
+         for(int i = 0; i < ArraySize(g_tracked_positions); i++)
+         {
+            if(g_tracked_positions[i].ticket == trans.position)
+            {
+               index = i;
+               break;
+            }
+         }
+
+         if(index != -1)
+         {
+            double current_sl = PositionGetDouble(POSITION_SL);
+            double current_tp = PositionGetDouble(POSITION_TP);
+
+            // Compare with tracked values (using epsilon)
+            if(MathAbs(current_sl - g_tracked_positions[index].sl) > Point() || 
+               MathAbs(current_tp - g_tracked_positions[index].tp) > Point())
+            {
+               LogTrade("Modify Position", trans.position, PositionGetString(POSITION_SYMBOL), StringFormat("SL: %.5f -> %.5f, TP: %.5f -> %.5f", g_tracked_positions[index].sl, current_sl, g_tracked_positions[index].tp, current_tp));
+
+               SendPositionModifySignal(trans.position, current_sl, current_tp);
+               
+               // Update tracked values
+               g_tracked_positions[index].sl = current_sl;
+               g_tracked_positions[index].tp = current_tp;
+            }
+         }
       }
    }
    
@@ -559,6 +573,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                   current_sl != g_tracked_orders[i].sl ||
                   current_tp != g_tracked_orders[i].tp)
                {
+                  Print(StringFormat("[ORDER MODIFY DETECTED] Ticket: %d", ticket));
                   SendOrderModifySignal(ticket);
                   // Update tracked values
                   g_tracked_orders[i].price = current_price;
@@ -620,6 +635,9 @@ void CheckForNewPositions()
 //+------------------------------------------------------------------+
 //| Check for modified positions (SL/TP changes)                      |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Check for modified positions (SL/TP changes)                      |
+//+------------------------------------------------------------------+
 void CheckForModifiedPositions()
 {
    for(int i = 0; i < ArraySize(g_tracked_positions); i++)
@@ -631,10 +649,15 @@ void CheckForModifiedPositions()
          double current_tp = PositionGetDouble(POSITION_TP);
 
          // Check if SL or TP has changed
-         if(current_sl != g_tracked_positions[i].sl || current_tp != g_tracked_positions[i].tp)
+         // Compare with epsilon for float equality safety
+         if(MathAbs(current_sl - g_tracked_positions[i].sl) > Point() || 
+            MathAbs(current_tp - g_tracked_positions[i].tp) > Point())
          {
+            Print(StringFormat("[MODIFY DETECTED] Ticket: %d, SL: %.5f -> %.5f, TP: %.5f -> %.5f", 
+                               ticket, g_tracked_positions[i].sl, current_sl, g_tracked_positions[i].tp, current_tp));
+
             // Send modify signal
-            SendPositionModifySignal(ticket, current_sl, current_tp);
+            SendPositionModifySignal(ticket, current_sl, current_tp); // Debug inside function now? No, just trust return for now?
 
             // Update tracked values
             g_tracked_positions[i].sl = current_sl;
@@ -903,50 +926,49 @@ void SendOrderCloseSignal(ulong ticket)
 }
 
 //+------------------------------------------------------------------+
-//| Process Master configuration message (handle)                    |
+//| Process Master configuration message (struct)                    |
 //+------------------------------------------------------------------+
-void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
+void ProcessMasterConfigMessage(SMasterConfig &config)
 {
-   Print("=== Processing Master Configuration Message ===");
+   LogInfo(CAT_CONFIG, "=== Processing Master Configuration Message ===");
 
-   // Extract fields from the parsed config using the handle
-   string config_account_id = master_config_get_string(config_handle, "account_id");
-   int status = master_config_get_int(config_handle, "status");
-   string prefix = master_config_get_string(config_handle, "symbol_prefix");
-   string suffix = master_config_get_string(config_handle, "symbol_suffix");
-   int version = master_config_get_int(config_handle, "config_version");
+   // Extract fields from the struct
+   string config_account_id = CharArrayToString(config.account_id);
+   int status = config.status;
+   string prefix = CharArrayToString(config.symbol_prefix);
+   string suffix = CharArrayToString(config.symbol_suffix);
+   int version = (int)config.config_version;
 
-   if(config_account_id == "")
-   {
-      Print("ERROR: Invalid config message received - missing account_id");
-      master_config_free(config_handle);
-      return;
-   }
+    if(config_account_id == "")
+    {
+       LogError(CAT_CONFIG, "Invalid config message received - missing account_id");
+       return;
+    }
 
-   // Verify this config is for us
-   if(config_account_id != AccountID)
-   {
-      Print("WARNING: Received config for different account: ", config_account_id, " (expected: ", AccountID, ")");
-      master_config_free(config_handle);
-      return;
-   }
+    if(config_account_id != AccountID)
+    {
+       LogWarn(CAT_CONFIG, "Received config for different account: " + config_account_id + " (expected: " + AccountID + ")");
+       // Note: No need to free handle - managed by EaContext
+       return;
+    }
 
-   // Log configuration values
-   Print("Account ID: ", config_account_id);
-   Print("Status: ", status, " (", GetStatusString(status), ")");
-   Print("Symbol Prefix: ", (prefix == "" ? "(none)" : prefix));
-   Print("Symbol Suffix: ", (suffix == "" ? "(none)" : suffix));
-   Print("Config Version: ", version);
+    // Log configuration values
+    LogInfo(CAT_CONFIG, "Account ID: " + config_account_id);
+    LogInfo(CAT_CONFIG, "Status: " + IntegerToString(status) + " (" + GetStatusString(status) + ")");
+    LogInfo(CAT_CONFIG, "Symbol Prefix: " + (prefix == "" ? "(none)" : prefix));
+    LogInfo(CAT_CONFIG, "Symbol Suffix: " + (suffix == "" ? "(none)" : suffix));
+    
+    LogInfo(CAT_CONFIG, "Config Version: " + IntegerToString(version));
 
-   // Update global configuration variables
-   if(status == STATUS_NO_CONFIG)
-   {
-      Print("Status is NO_CONFIG -> Resetting configuration");
-      g_server_status = STATUS_NO_CONFIG;
-      g_symbol_prefix = "";
-      g_symbol_suffix = "";
-      g_config_version = 0;
-   }
+    // Update global configuration variables
+    if(status == STATUS_NO_CONFIG)
+    {
+       LogInfo(CAT_CONFIG, "Status is NO_CONFIG -> Resetting configuration");
+       g_server_status = STATUS_NO_CONFIG;
+       g_symbol_prefix = "";
+       g_symbol_suffix = "";
+       g_config_version = 0;
+    }
    else
    {
       g_server_status = status;
@@ -963,11 +985,7 @@ void ProcessMasterConfigMessage(HANDLE_TYPE config_handle)
       ChartRedraw();
    }
 
-   // Free the config handle (Ownership transferred to this function)
-   // CRITICAL FIX: Do NOT free the handle if it retrieved via GetMasterConfig() (EaContext managed)
-   // master_config_free(config_handle);
-
-   Print("=== Master Configuration Updated ===");
+    LogInfo(CAT_CONFIG, "=== Master Configuration Updated ===");
 }
 
 //+------------------------------------------------------------------+

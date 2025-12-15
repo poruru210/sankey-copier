@@ -71,22 +71,34 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
 
     // Start Master with auto-trading DISABLED AFTER WebSocket connection
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
     master.start().expect("master start should succeed");
 
+    // Wait for Master heartbeat to be processed
+    sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
+
+    // Start Slave with auto-trading ENABLED so Master is seen as online
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account, true)
+        .expect("Failed to create slave simulator");
+
+    slave.set_trade_allowed(true); // Slave auto-trading ON
+    slave.start().expect("slave start should succeed");
+
     // Wait for WebSocket broadcast with master_auto_trading_disabled
+    // Use wait_for_slave_warning to specifically wait for the expected warning
     let broadcast_result = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning(&mut read, slave_account, "master_auto_trading_disabled"),
     )
     .await;
 
     assert!(
         broadcast_result.is_ok(),
-        "Expected WebSocket broadcast within {} seconds",
+        "Expected master_auto_trading_disabled warning within {} seconds",
         BROADCAST_TIMEOUT_SECS
     );
 
@@ -98,13 +110,8 @@ async fn test_master_auto_trading_disabled_warning_broadcast() {
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
 
-    // Slave is offline, Master has auto-trading disabled
-    // Expected warnings: slave_offline, master_auto_trading_disabled
-    assert!(
-        warning_codes.contains(&"slave_offline".to_string()),
-        "Expected slave_offline in warning_codes (Slave is not connected), got: {:?}",
-        warning_codes
-    );
+    // Master is online with auto-trading disabled
+    // Expected warning: master_auto_trading_disabled
     assert!(
         warning_codes.contains(&"master_auto_trading_disabled".to_string()),
         "Expected master_auto_trading_disabled in warning_codes, got: {:?}",
@@ -137,24 +144,35 @@ async fn test_slave_auto_trading_disabled_warning_broadcast() {
     let (_write, mut read) = ws_stream.split();
     sleep(Duration::from_millis(1000)).await;
 
+    // Start Master with auto-trading ENABLED (so Slave sees Master as online)
+    let mut master = sandbox
+        .create_master(master_account, true)
+        .expect("Failed to create master simulator");
+
+    master.start().expect("master start should succeed");
+
+    // Wait for Master heartbeat to be processed
+    sleep(Duration::from_millis(SETTLE_WAIT_MS * 4)).await;
+
     // Start Slave with auto-trading DISABLED
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(false); // Auto-trading OFF
     slave.start().expect("slave start should succeed");
 
-    // Wait for WebSocket broadcast
+    // Wait for WebSocket broadcast with slave_auto_trading_disabled
+    // Use wait_for_slave_warning to specifically wait for the expected warning
     let broadcast_result = timeout(
         Duration::from_secs(BROADCAST_TIMEOUT_SECS),
-        wait_for_settings_updated(&mut read, slave_account),
+        wait_for_slave_warning(&mut read, slave_account, "slave_auto_trading_disabled"),
     )
     .await;
 
     assert!(
         broadcast_result.is_ok(),
-        "WebSocket broadcast timeout (no settings_updated received within {} seconds)",
+        "Expected slave_auto_trading_disabled warning within {} seconds",
         BROADCAST_TIMEOUT_SECS
     );
 
@@ -203,7 +221,7 @@ async fn test_warning_broadcast_timing() {
 
     // Start Master with auto-trading DISABLED
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
@@ -263,7 +281,7 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 
     // Start Master with auto-trading DISABLED
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
     master.set_trade_allowed(false); // Auto-trading OFF
@@ -274,7 +292,7 @@ async fn test_master_warning_clears_on_auto_trading_enabled() {
 
     // Start Slave with auto-trading ENABLED
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
     slave.set_trade_allowed(true); // Slave auto-trading ON
@@ -345,10 +363,9 @@ async fn test_slave_update_when_master_connects_later() {
     // 1. Start Slave FIRST (Master is offline)
     println!("[TEST] Starting Slave...");
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave simulator");
 
-    slave.set_trade_allowed(true);
     slave.start().expect("slave start should succeed");
 
     // 2. Wait for initial status broadcast (should be Master Offline)
@@ -373,10 +390,9 @@ async fn test_slave_update_when_master_connects_later() {
     // 3. Start Master LATER
     println!("[TEST] Starting Master...");
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master simulator");
 
-    master.set_trade_allowed(true);
     master.start().expect("master start should succeed");
 
     // 4. Expect a NEW update for Slave (Transition to CONNECTED / Warnings cleared)
@@ -440,16 +456,14 @@ async fn test_reconnection_after_deletion() {
 
     // 1. Start Master
     let mut master = sandbox
-        .create_master(master_account)
+        .create_master(master_account, true)
         .expect("Failed to create master");
-    master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
 
     // 2. Start Slave
     let mut slave = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create slave");
-    slave.set_trade_allowed(true);
     slave.start().expect("Failed to start slave");
 
     // 3. Wait for initial connection (Slave Connected)
@@ -487,9 +501,8 @@ async fn test_reconnection_after_deletion() {
     // 5. Reconnect (New Simulator instance)
     println!("[TEST] Reconnecting slave...");
     let mut slave_new = sandbox
-        .create_slave(slave_account, master_account)
+        .create_slave(slave_account, master_account, true)
         .expect("Failed to create new slave");
-    slave_new.set_trade_allowed(true);
     slave_new.start().expect("Failed to start new slave");
 
     // 6. Verify Config Broadcast (Should receive update due to Unknown/Offline -> Connected transition)

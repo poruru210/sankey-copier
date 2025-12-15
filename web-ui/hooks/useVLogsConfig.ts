@@ -12,6 +12,7 @@ export interface VLogsConfigInfo {
   batch_size: number;
   flush_interval_secs: number;
   source: string;
+  log_level: string;
 }
 
 // Full config response from GET /api/victoria-logs-config
@@ -19,6 +20,12 @@ export interface VLogsConfigResponse {
   configured: boolean;
   config: VLogsConfigInfo | null;
   enabled: boolean;
+}
+
+// Update request payload
+export interface VLogsUpdateRequest {
+  enabled?: boolean;
+  log_level?: string;
 }
 
 // Default response when not loaded or error
@@ -32,7 +39,7 @@ export function useVLogsConfig() {
   const apiClient = useAtomValue(apiClientAtom);
   const [configData, setConfigData] = useState<VLogsConfigResponse>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch config from server
@@ -54,23 +61,33 @@ export function useVLogsConfig() {
     }
   }, [apiClient]);
 
-  // Toggle enabled state (only operation allowed from web-ui)
-  const toggleEnabled = useCallback(async (enabled: boolean) => {
+  // Update settings (enabled state, log level)
+  const updateSettings = useCallback(async (updates: VLogsUpdateRequest) => {
     if (!apiClient) return false;
 
     try {
-      setToggling(true);
+      setUpdating(true);
       setError(null);
-      await apiClient.put<void>('/victoria-logs-settings', { enabled });
-      // Update local state
-      setConfigData((prev) => ({ ...prev, enabled }));
+      await apiClient.put<void>('/victoria-logs-settings', updates);
+      
+      // Update local state optimistically or re-fetch?
+      // Since log_level is inside 'config' which mimics config.toml, and 'enabled' is top level..
+      // We can update local state partly. Best is to refetch or manually patch.
+      setConfigData((prev) => {
+        const next = { ...prev };
+        if (updates.enabled !== undefined) next.enabled = updates.enabled;
+        if (updates.log_level !== undefined && next.config) {
+            next.config = { ...next.config, log_level: updates.log_level };
+        }
+        return next;
+      });
       return true;
     } catch (err) {
-      console.error('Failed to toggle VictoriaLogs enabled state:', err);
-      setError(err instanceof Error ? err.message : 'Failed to toggle enabled state');
+      console.error('Failed to update VictoriaLogs settings:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update settings');
       return false;
     } finally {
-      setToggling(false);
+      setUpdating(false);
     }
   }, [apiClient]);
 
@@ -88,10 +105,10 @@ export function useVLogsConfig() {
     enabled: configData.enabled,
     // State
     loading,
-    toggling,
+    updating, // renamed from toggling
     error,
     // Actions
-    toggleEnabled,
+    updateSettings, // renamed from toggleEnabled
     refetch: fetchConfig,
   };
 }
