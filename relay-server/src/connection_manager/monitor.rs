@@ -142,7 +142,7 @@ impl TimeoutMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{ConnectionStatus, EaConnection, Platform};
+    // use crate::models::{ConnectionStatus, EaConnection, Platform}; // Removed unused imports
     use chrono::Utc;
     use std::sync::Mutex;
 
