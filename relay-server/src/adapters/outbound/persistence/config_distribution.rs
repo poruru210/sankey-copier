@@ -94,7 +94,6 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::adapters::outbound::persistence::test_helpers::{
         create_test_db, create_test_slave_settings,
     };
