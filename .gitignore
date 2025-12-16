@@ -76,3 +76,10 @@ Cargo.lock
 # Certificates (dynamically generated)
 **/certs/
 certs/
+
+# Coverage reports (cargo-llvm-cov)
+coverage-report/
+lcov.info
+codecov.json
+*.profraw
+*.profdata
