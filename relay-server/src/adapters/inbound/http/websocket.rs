@@ -221,6 +221,16 @@ impl crate::ports::UpdateBroadcaster for SnapshotBroadcaster {
     async fn broadcast_snapshot(&self) {
         self.broadcast_now().await;
     }
+
+    async fn broadcast_ea_disconnected(&self, account_id: &str) {
+        let msg = format!("ea_disconnected:{}", account_id);
+        let _ = self.tx.send(msg);
+    }
+
+    async fn broadcast_settings_updated(&self, json: &str) {
+        let msg = format!("settings_updated:{}", json);
+        let _ = self.tx.send(msg);
+    }
 }
 
 /// WebSocket upgrade handler

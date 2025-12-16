@@ -2,14 +2,8 @@ use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::RwLock;
 
-use crate::adapters::inbound::zmq::unregister::{
-    notify_slave_offline, notify_slaves_master_offline,
-};
-use crate::adapters::outbound::messaging::ZmqConfigPublisher;
-use crate::adapters::outbound::persistence::Database;
-use crate::application::runtime_status_updater::RuntimeStatusMetrics;
 use crate::domain::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
 
 /// EA connection key: (account_id, ea_type)
@@ -271,29 +265,17 @@ pub trait TimeoutActionHandler: Send + Sync {
     async fn handle_slave_timeout(&self, account_id: &str);
 }
 
+use crate::ports::DisconnectionService;
+
 /// Real implementation with DB and ZMQ dependencies
 pub struct RealTimeoutActionHandler {
-    connection_manager: Arc<ConnectionManager>,
-    db: Arc<Database>,
-    publisher: Arc<ZmqConfigPublisher>,
-    broadcast_tx: broadcast::Sender<String>,
-    metrics: Arc<RuntimeStatusMetrics>,
+    disconnection_service: Arc<dyn DisconnectionService>,
 }
 
 impl RealTimeoutActionHandler {
-    pub fn new(
-        connection_manager: Arc<ConnectionManager>,
-        db: Arc<Database>,
-        publisher: Arc<ZmqConfigPublisher>,
-        broadcast_tx: broadcast::Sender<String>,
-        metrics: Arc<RuntimeStatusMetrics>,
-    ) -> Self {
+    pub fn new(disconnection_service: Arc<dyn DisconnectionService>) -> Self {
         Self {
-            connection_manager,
-            db,
-            publisher,
-            broadcast_tx,
-            metrics,
+            disconnection_service,
         }
     }
 }
@@ -301,42 +283,15 @@ impl RealTimeoutActionHandler {
 #[async_trait]
 impl TimeoutActionHandler for RealTimeoutActionHandler {
     async fn handle_master_timeout(&self, account_id: &str) {
-        match self.db.update_master_statuses_enabled(account_id).await {
-            Ok(count) if count > 0 => {
-                tracing::info!(
-                    "Master {} timed out: updated {} settings to ENABLED",
-                    account_id,
-                    count
-                );
-            }
-            Ok(_) => {
-                // No settings updated
-            }
-            Err(e) => {
-                tracing::error!("Failed to update master statuses for {}: {}", account_id, e);
-            }
-        }
-
-        notify_slaves_master_offline(
-            &self.connection_manager,
-            &self.db,
-            &self.publisher,
-            &self.broadcast_tx,
-            self.metrics.clone(),
-            account_id,
-        )
-        .await;
+        self.disconnection_service
+            .handle_master_offline(account_id)
+            .await;
     }
 
     async fn handle_slave_timeout(&self, account_id: &str) {
-        notify_slave_offline(
-            &self.connection_manager,
-            &self.db,
-            &self.broadcast_tx,
-            self.metrics.clone(),
-            account_id,
-        )
-        .await;
+        self.disconnection_service
+            .handle_slave_offline(account_id)
+            .await;
     }
 }
 

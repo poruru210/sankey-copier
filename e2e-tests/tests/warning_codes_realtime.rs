@@ -541,6 +541,83 @@ async fn test_reconnection_after_deletion() {
     );
 }
 
+/// Test that Master disconnection immediately triggers master_offline warning broadcast
+#[tokio::test]
+async fn test_master_disconnection_broadcast() {
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
+    let db = Database::new(&server.db_url())
+        .await
+        .expect("Failed to connect to database");
+
+    let master_account = "DISCONN_MASTER_001";
+    let slave_account = "DISCONN_SLAVE_001";
+
+    // Seed trade group
+    seed_trade_group(&db, master_account, slave_account)
+        .await
+        .expect("failed to seed trade group");
+
+    // Connect WebSocket client
+    let ws_url = format!("wss://127.0.0.1:{}/ws", server.http_port);
+    let ws_stream = create_ws_connector(&ws_url)
+        .await
+        .expect("Failed to connect to WebSocket");
+    let (_write, mut read) = ws_stream.split();
+    sleep(Duration::from_millis(1000)).await;
+
+    // 1. Start Master
+    let mut master = sandbox
+        .create_master(master_account, true)
+        .expect("Failed to create master");
+    master.start().expect("Failed to start master");
+
+    // 2. Start Slave
+    let mut slave = sandbox
+        .create_slave(slave_account, master_account, true)
+        .expect("Failed to create slave");
+    slave.start().expect("Failed to start slave");
+
+    // 3. Wait for initial connection (Warnings cleared)
+    let _ = timeout(
+        Duration::from_secs(BROADCAST_TIMEOUT_SECS),
+        wait_for_slave_warning_cleared(&mut read, slave_account, "master_offline"),
+    )
+    .await
+    .expect("Timeout waiting for system to stabilize (warnings cleared)");
+
+    // 4. Stop Master (Trigger Disconnection/Unregister via Drop)
+    println!("[TEST] Stopping Master (Simulating Disconnection)...");
+    drop(master); // Triggers on_deinit => unregister
+    sleep(Duration::from_millis(1000)).await; // Wait for unregister propagation
+
+    // 5. Wait for master_offline warning
+    let broadcast_result = timeout(
+        Duration::from_secs(BROADCAST_TIMEOUT_SECS),
+        wait_for_slave_warning(&mut read, slave_account, "master_offline"),
+    )
+    .await;
+
+    assert!(
+        broadcast_result.is_ok(),
+        "Expected master_offline warning broadcast after Master disconnection"
+    );
+
+    let settings = broadcast_result.unwrap();
+    let warning_codes: Vec<String> = settings["warning_codes"]
+        .as_array()
+        .expect("warning_codes array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    assert!(
+        warning_codes.contains(&"master_offline".to_string()),
+        "Expected master_offline in warning_codes, got {:?}",
+        warning_codes
+    );
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

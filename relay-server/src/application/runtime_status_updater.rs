@@ -13,6 +13,38 @@ use crate::{
     ports::outbound::{ConnectionManager, TradeGroupRepository},
 };
 
+use crate::domain::models::WarningCode;
+
+#[allow(clippy::too_many_arguments)]
+pub fn log_slave_runtime_trace(
+    source: &'static str,
+    master_account: &str,
+    slave_account: &str,
+    previous_status: i32,
+    new_status: i32,
+    allow_new_orders: bool,
+    warning_codes: &[WarningCode],
+    cluster_size: usize,
+    masters_all_connected: bool,
+) {
+    tracing::event!(
+        target: "status_engine",
+        tracing::Level::INFO,
+        source,
+        master = %master_account,
+        slave = %slave_account,
+        previous_status = previous_status,
+        status = new_status,
+        status_changed = previous_status != new_status,
+        allow_new_orders = allow_new_orders,
+        warning_count = warning_codes.len(),
+        cluster_size = cluster_size,
+        masters_all_connected = masters_all_connected,
+        warnings = ?warning_codes,
+        "slave runtime evaluation"
+    );
+}
+
 /// Helper that centralizes runtime snapshot gathering for Master/Slave pairs.
 #[derive(Clone)]
 pub struct RuntimeStatusUpdater {

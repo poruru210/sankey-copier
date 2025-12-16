@@ -12,7 +12,6 @@ use crate::{
     adapters::outbound::observability::victoria_logs::VLogsController,
     adapters::outbound::persistence::Database,
     application::runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
-    domain::models::WarningCode,
     domain::services::copy_engine::CopyEngine,
 };
 
@@ -42,6 +41,8 @@ pub struct MessageHandler {
 
     /// Status service for heartbeat processing (Hexagonal Architecture)
     status_service: crate::application::StatusService,
+    /// Service for handling disconnection events
+    disconnection_service: Arc<dyn crate::ports::DisconnectionService>,
 }
 
 impl MessageHandler {
@@ -55,6 +56,7 @@ impl MessageHandler {
         vlogs_controller: Option<VLogsController>,
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
         status_service: crate::application::StatusService,
+        disconnection_service: Arc<dyn crate::ports::DisconnectionService>,
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),
@@ -66,6 +68,7 @@ impl MessageHandler {
             runtime_status_metrics,
 
             status_service,
+            disconnection_service,
         }
     }
 
@@ -91,34 +94,4 @@ impl MessageHandler {
             self.runtime_status_metrics.clone(),
         )
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn log_slave_runtime_trace(
-    source: &'static str,
-    master_account: &str,
-    slave_account: &str,
-    previous_status: i32,
-    new_status: i32,
-    allow_new_orders: bool,
-    warning_codes: &[WarningCode],
-    cluster_size: usize,
-    masters_all_connected: bool,
-) {
-    tracing::event!(
-        target: "status_engine",
-        tracing::Level::INFO,
-        source,
-        master = %master_account,
-        slave = %slave_account,
-        previous_status = previous_status,
-        status = new_status,
-        status_changed = previous_status != new_status,
-        allow_new_orders = allow_new_orders,
-        warning_count = warning_codes.len(),
-        cluster_size = cluster_size,
-        masters_all_connected = masters_all_connected,
-        warnings = ?warning_codes,
-        "slave runtime evaluation"
-    );
 }

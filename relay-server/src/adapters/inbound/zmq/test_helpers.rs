@@ -73,6 +73,22 @@ impl TestContext {
             None,
         );
 
+        // Create WebSocket broadcaster for DisconnectionService
+        let ws_broadcaster = Arc::new(
+            crate::adapters::outbound::messaging::WebsocketBroadcaster::new(broadcast_tx.clone()),
+        );
+
+        // Create DisconnectionService
+        let disconnection_service = Arc::new(
+            crate::application::disconnection_service::RealDisconnectionService::new(
+                connection_manager.clone(),
+                db.clone(),
+                publisher.clone(),
+                ws_broadcaster.clone(),
+                metrics.clone(),
+            ),
+        );
+
         let handler = MessageHandler::new(
             connection_manager,
             copy_engine,
@@ -81,7 +97,8 @@ impl TestContext {
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
             Arc::new(RuntimeStatusMetrics::default()),
-            status_service, // Inject StatusService
+            status_service,        // Inject StatusService
+            disconnection_service, // Inject DisconnectionService
         );
 
         Self {

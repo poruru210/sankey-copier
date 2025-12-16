@@ -1,4 +1,5 @@
 mod config_publisher;
+pub mod websocket_broadcaster;
 
 use crate::domain::models::{
     HeartbeatMessage, PositionSnapshotMessage, RegisterMessage, RequestConfigMessage,
@@ -15,7 +16,8 @@ use tokio::task::JoinHandle;
 // ZmqPublisher is the primary name (2-port architecture)
 // ZmqConfigPublisher is kept for backward compatibility
 #[allow(unused_imports)]
-pub use config_publisher::{ZmqConfigPublisher, ZmqPublisher};
+pub use config_publisher::ZmqConfigPublisher;
+pub use websocket_broadcaster::WebsocketBroadcaster;
 
 pub enum ZmqMessage {
     TradeSignal(TradeSignal),

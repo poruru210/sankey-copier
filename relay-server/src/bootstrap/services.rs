@@ -136,6 +136,22 @@ pub async fn setup(
                 .map(|c| Arc::new(c) as Arc<dyn crate::ports::outbound::VLogsConfigProvider>),
         );
 
+        // Create WebSocket broadcaster for DisconnectionService
+        let ws_broadcaster = Arc::new(
+            crate::adapters::outbound::messaging::WebsocketBroadcaster::new(broadcast_tx.clone()),
+        );
+
+        // Create DisconnectionService
+        let disconnection_service = Arc::new(
+            crate::application::disconnection_service::RealDisconnectionService::new(
+                connection_manager.clone(),
+                db.clone(),
+                zmq_publisher.clone(),
+                ws_broadcaster.clone(),
+                runtime_status_metrics.clone(),
+            ),
+        );
+
         let handler = MessageHandler::new(
             connection_manager.clone(),
             copy_engine.clone(),
@@ -145,6 +161,7 @@ pub async fn setup(
             vlogs_controller.clone(),
             runtime_status_metrics.clone(),
             status_service,
+            disconnection_service.clone(),
         );
         tracing::info!(
             "MessageHandler created with StatusService, spawning message processing task..."
@@ -161,13 +178,32 @@ pub async fn setup(
     // Spawn timeout checker task
     tracing::info!("Spawning timeout checker task...");
     {
-        let handler = connection_manager::RealTimeoutActionHandler::new(
-            connection_manager.clone(),
-            db.clone(),
-            zmq_publisher.clone(),
-            broadcast_tx.clone(),
-            runtime_status_metrics.clone(),
+        // Re-create broadcaster/service instances for the timeout handler closure if needed?
+        // Actually, we can just share the Arc if we lift the definition out of the MessageHandler block.
+        // But since we are inside `setup` and moved handler into spawn, we need to create service outside or handle cloning.
+        // Wait, the variables above are inside the block { ... }. They are dropped at end of block.
+        // We need to move the service creation OUTSIDE the block to share it with timeout monitor.
+        // OR re-create it (which is fine since components are Arcs).
+        // Let's re-create broadaster/service here for simplicity OR better refactor to share.
+        // Sharing is better. But blocks limit scope.
+        // Let's remove the block boundaries or duplicate creation?
+        // Duplicating creation logic is easy since dependencies are all Arc.
+
+        // Re-create dependencies for TimeoutMonitor
+        let ws_broadcaster = Arc::new(
+            crate::adapters::outbound::messaging::WebsocketBroadcaster::new(broadcast_tx.clone()),
         );
+        let disconnection_service = Arc::new(
+            crate::application::disconnection_service::RealDisconnectionService::new(
+                connection_manager.clone(),
+                db.clone(),
+                zmq_publisher.clone(),
+                ws_broadcaster.clone(),
+                runtime_status_metrics.clone(),
+            ),
+        );
+
+        let handler = connection_manager::RealTimeoutActionHandler::new(disconnection_service);
         let monitor = connection_manager::TimeoutMonitor::new(
             connection_manager.clone(),
             std::sync::Arc::new(handler),

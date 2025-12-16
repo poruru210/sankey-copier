@@ -49,6 +49,22 @@ impl TestContext {
             db.clone(),
         ));
 
+        let ws_broadcaster = Arc::new(
+            sankey_copier_relay_server::adapters::outbound::messaging::WebsocketBroadcaster::new(
+                broadcast_tx.clone(),
+            ),
+        );
+
+        let disconnection_service = Arc::new(
+            sankey_copier_relay_server::application::disconnection_service::RealDisconnectionService::new(
+                connection_manager.clone(),
+                db.clone(),
+                publisher.clone(),
+                ws_broadcaster.clone(),
+                metrics.clone(),
+            ),
+        );
+
         let status_service = StatusService::new(
             connection_manager.clone(),
             db.clone(),
@@ -67,6 +83,7 @@ impl TestContext {
             None,
             metrics,
             status_service,
+            disconnection_service,
         );
 
         Self {

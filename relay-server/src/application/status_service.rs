@@ -468,6 +468,8 @@ mod tests {
         #[async_trait]
         impl UpdateBroadcaster for UpdateBroadcaster {
             async fn broadcast_snapshot(&self);
+            async fn broadcast_ea_disconnected(&self, account_id: &str);
+            async fn broadcast_settings_updated(&self, json: &str);
         }
     }
 

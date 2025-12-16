@@ -48,4 +48,19 @@ pub trait ConfigPublisher: Send + Sync {
 #[async_trait]
 pub trait UpdateBroadcaster: Send + Sync {
     async fn broadcast_snapshot(&self);
+    async fn broadcast_ea_disconnected(&self, account_id: &str);
+    async fn broadcast_settings_updated(&self, json: &str);
+}
+
+/// Trait for handling EA disconnection events
+/// This encapsulates the logic for notifying other EAs and updating status when an EA goes offline
+#[async_trait]
+pub trait DisconnectionService: Send + Sync {
+    /// Handle Master EA going offline
+    /// Notifies all connected Slaves and updates their runtime status
+    async fn handle_master_offline(&self, master_account: &str);
+
+    /// Handle Slave EA going offline
+    /// Updates runtime status for all trade groups the Slave belongs to
+    async fn handle_slave_offline(&self, slave_account: &str);
 }
