@@ -6,8 +6,8 @@
 use e2e_tests::helpers::default_test_slave_settings;
 use e2e_tests::TestSandbox;
 use e2e_tests::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::MasterSettings;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::MasterSettings;
 use tokio::time::{sleep, Duration};
 
 const SETTLE_WAIT_MS: u64 = 2000;

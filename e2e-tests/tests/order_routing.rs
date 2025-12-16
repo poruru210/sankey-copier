@@ -9,8 +9,8 @@ use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
 use e2e_tests::types::{OrderType, TradeSignal};
 use e2e_tests::SlaveEaSimulator;
 use e2e_tests::TestSandbox;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{LotCalculationMode, SlaveSettings, SyncMode};
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use tokio::time::{sleep, Duration};
 
 // =============================================================================
@@ -346,7 +346,7 @@ async fn test_slave_individual_lot_multiplier() {
         symbol_prefix: None,
         symbol_suffix: None,
         symbol_mappings: vec![],
-        filters: sankey_copier_relay_server::models::TradeFilters::default(),
+        filters: sankey_copier_relay_server::domain::models::TradeFilters::default(),
         config_version: 0,
         source_lot_min: None,
         source_lot_max: None,

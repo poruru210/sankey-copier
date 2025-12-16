@@ -11,8 +11,8 @@ use e2e_tests::helpers::default_test_slave_settings;
 use e2e_tests::TestSandbox;
 use e2e_tests::STATUS_DISABLED;
 use futures_util::StreamExt;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::MasterSettings;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::MasterSettings;
 use serde_json::{json, Value};
 use tokio::time::{sleep, timeout, Duration};
 

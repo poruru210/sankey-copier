@@ -6,8 +6,8 @@
 
 use e2e_tests::helpers::{default_test_slave_settings, enable_member_intent, setup_test_db};
 use e2e_tests::TestSandbox;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::OrderType;
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::OrderType;
 use tokio::time::{sleep, Duration};
 
 /// Test that two independent Master-Slave pairs can operate concurrently.

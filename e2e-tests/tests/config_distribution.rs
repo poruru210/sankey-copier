@@ -9,8 +9,10 @@
 use e2e_tests::helpers::{STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED};
 use e2e_tests::SyncMode;
 use e2e_tests::TestSandbox;
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{LotCalculationMode, MasterSettings, SlaveSettings};
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::{
+    LotCalculationMode, MasterSettings, SlaveSettings,
+};
 use tokio::time::{sleep, Duration};
 
 // =============================================================================
@@ -414,7 +416,7 @@ async fn test_sync_policy_skip_mode() {
     let settings = SlaveSettings {
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.0),
-        sync_mode: sankey_copier_relay_server::models::SyncMode::Skip,
+        sync_mode: sankey_copier_relay_server::domain::models::SyncMode::Skip,
         max_slippage: Some(30),
         copy_pending_orders: false,
         ..Default::default()
@@ -474,7 +476,7 @@ async fn test_sync_policy_limit_order_mode() {
     let settings = SlaveSettings {
         lot_calculation_mode: LotCalculationMode::default(),
         lot_multiplier: Some(1.5),
-        sync_mode: sankey_copier_relay_server::models::SyncMode::LimitOrder,
+        sync_mode: sankey_copier_relay_server::domain::models::SyncMode::LimitOrder,
         limit_order_expiry_min: Some(60), // 60 minutes
         max_slippage: Some(50),
         copy_pending_orders: true,
@@ -546,7 +548,7 @@ async fn test_sync_policy_market_order_mode() {
         lot_multiplier: Some(2.0),
         source_lot_min: Some(0.01),
         source_lot_max: Some(10.0),
-        sync_mode: sankey_copier_relay_server::models::SyncMode::MarketOrder,
+        sync_mode: sankey_copier_relay_server::domain::models::SyncMode::MarketOrder,
         market_sync_max_pips: Some(25.0), // 25 pips max deviation
         max_slippage: Some(20),
         copy_pending_orders: false,

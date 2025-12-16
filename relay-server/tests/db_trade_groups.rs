@@ -3,8 +3,8 @@
 // Tests for TradeGroup and TradeGroupMember database operations.
 // Following TDD principles: write tests first, then implement.
 
-use sankey_copier_relay_server::db::Database;
-use sankey_copier_relay_server::models::{
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::domain::models::{
     LotCalculationMode, MasterSettings, SlaveSettings, SyncMode,
 };
 use sankey_copier_zmq::{SymbolMapping, TradeFilters};

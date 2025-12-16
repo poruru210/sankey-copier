@@ -1,12 +1,10 @@
 use chrono::{DateTime, Utc};
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 
-use crate::models::{
-    status_engine::{
-        evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,
-        MasterStatusResult, MemberStatusResult, SlaveIntent,
-    },
-    MasterSettings, SlaveSettings,
+use crate::domain::models::{MasterSettings, SlaveSettings};
+use crate::domain::services::status_calculator::{
+    evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterIntent,
+    MasterStatusResult, MemberStatusResult, SlaveIntent,
 };
 
 /// Context needed to build a MasterConfigMessage.
@@ -39,6 +37,7 @@ pub struct MasterConfigBundle {
 }
 
 /// Bundle returned when building a Slave config. Includes the calculated status/result.
+#[derive(Default)]
 pub struct SlaveConfigBundle {
     pub config: SlaveConfigMessage,
     pub status_result: MemberStatusResult,
@@ -118,10 +117,12 @@ impl ConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{
-        status_engine::{ConnectionSnapshot, MasterIntent, SlaveIntent},
+    use crate::domain::models::{
         ConnectionStatus, MasterSettings, SlaveSettings, WarningCode, STATUS_CONNECTED,
         STATUS_DISABLED, STATUS_ENABLED,
+    };
+    use crate::domain::services::status_calculator::{
+        ConnectionSnapshot, MasterIntent, SlaveIntent,
     };
 
     fn online_snapshot() -> ConnectionSnapshot {
