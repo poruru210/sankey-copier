@@ -196,4 +196,78 @@ mod tests {
         assert_eq!(converter.prefix_add, None);
         assert_eq!(converter.suffix_add, None);
     }
+
+    #[test]
+    fn test_complex_mapping_with_suffix() {
+        // Scenario: XAUUSD.raw → GOLD-ECN
+        let converter = SymbolConverter {
+            prefix_remove: None,
+            suffix_remove: Some(".raw".to_string()),
+            prefix_add: None,
+            suffix_add: Some("-ECN".to_string()),
+        };
+
+        let mappings = vec![SymbolMapping {
+            source_symbol: "XAUUSD".to_string(),
+            target_symbol: "GOLD".to_string(),
+        }];
+
+        let result = converter.convert("XAUUSD.raw", &mappings);
+        assert_eq!(
+            result, "GOLD-ECN",
+            "XAUUSD.raw should transform to GOLD-ECN"
+        );
+    }
+
+    #[test]
+    fn test_trade_signal_transformation_integration() {
+        use crate::domain::models::{OrderType, TradeAction, TradeFilters, TradeSignal};
+
+        // Integration test: Full trade signal transformation
+        let signal = TradeSignal {
+            action: TradeAction::Open,
+            ticket: 123456,
+            symbol: Some("XAUUSDm".to_string()),
+            order_type: Some(OrderType::Buy),
+            lots: Some(0.1),
+            open_price: Some(2650.0),
+            stop_loss: None,
+            take_profit: None,
+            magic_number: Some(0),
+            comment: None,
+            timestamp: chrono::Utc::now(),
+            source_account: "master_account".to_string(),
+            close_ratio: None,
+        };
+
+        let slave_settings = SlaveSettings {
+            symbol_prefix: Some(String::new()),
+            symbol_suffix: Some("#".to_string()),
+            symbol_mappings: vec![SymbolMapping {
+                source_symbol: "XAUUSD".to_string(),
+                target_symbol: "GOLD".to_string(),
+            }],
+            lot_multiplier: Some(1.0),
+            reverse_trade: false,
+            filters: TradeFilters::default(),
+            ..Default::default()
+        };
+
+        let converter = SymbolConverter {
+            prefix_remove: None,
+            suffix_remove: Some("m".to_string()), // Master settings would provide this
+            prefix_add: slave_settings.symbol_prefix.clone(),
+            suffix_add: slave_settings.symbol_suffix.clone(),
+        };
+
+        let transformed_symbol = converter.convert(
+            signal.symbol.as_ref().unwrap(),
+            &slave_settings.symbol_mappings,
+        );
+
+        assert_eq!(
+            transformed_symbol, "GOLD#",
+            "Trade signal symbol should transform from XAUUSDm to GOLD#"
+        );
+    }
 }

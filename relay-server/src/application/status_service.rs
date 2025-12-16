@@ -11,7 +11,7 @@ pub struct StatusService {
     connection_manager: Arc<dyn ConnectionManager>,
     repository: Arc<dyn TradeGroupRepository>,
     publisher: Arc<dyn ConfigPublisher>,
-    runtime_status_updater: Option<Arc<RuntimeStatusUpdater>>,
+    runtime_status_updater: Arc<RuntimeStatusUpdater>,
     broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
     vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
 }
@@ -21,7 +21,7 @@ impl StatusService {
         connection_manager: Arc<dyn ConnectionManager>,
         repository: Arc<dyn TradeGroupRepository>,
         publisher: Arc<dyn ConfigPublisher>,
-        runtime_status_updater: Option<Arc<RuntimeStatusUpdater>>,
+        runtime_status_updater: Arc<RuntimeStatusUpdater>,
         broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
         vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
     ) -> Self {
@@ -187,13 +187,7 @@ impl StatusService {
         old_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
         _new_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
     ) {
-        let Some(updater) = &self.runtime_status_updater else {
-            tracing::debug!(
-                "RuntimeStatusUpdater not configured, skipping Slave updates for Master {}",
-                master_account
-            );
-            return;
-        };
+        let updater = &self.runtime_status_updater;
 
         // Get all Slaves connected to this Master
         let members = match self.repository.get_members(master_account).await {
@@ -325,14 +319,7 @@ impl StatusService {
             return;
         }
 
-        // Need StatusEvaluator to proceed
-        let Some(updater) = &self.runtime_status_updater else {
-            tracing::debug!(
-                "RuntimeStatusUpdater not configured, skipping Slave {} heartbeat evaluation",
-                slave_account
-            );
-            return;
-        };
+        let updater = &self.runtime_status_updater;
 
         for settings in settings_list {
             // Build new bundle
@@ -581,7 +568,15 @@ mod tests {
             Arc::new(mock_conn_manager),
             Arc::new(safe_mock_repo),
             Arc::new(mock_publisher),
-            None,
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    Arc::new(MockConnectionManager::new()),
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
             None,
             Some(Arc::new(mock_vlogs_provider)),
         );
@@ -649,11 +644,22 @@ mod tests {
             .with(eq(account_id))
             .return_once(|_| Ok(Some(trade_group)));
 
+        // RuntimeStatusUpdater calls get_members
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+
         let service = StatusService::new(
             Arc::new(mock_conn_manager),
             Arc::new(mock_repo),
             Arc::new(mock_publisher),
-            None,
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    Arc::new(MockConnectionManager::new()),
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
             None,
             None,
         );
@@ -691,11 +697,29 @@ mod tests {
         };
 
         // First call for old_conn lookup returns None (new registration)
+        // Note: RuntimeStatusUpdater might also call get_master, so we need sequences or flexible times.
+        // But RuntimeStatusUpdater is called AFTER the registration logic in handle_heartbeat.
+        // handle_heartbeat flow:
+        // 1. connection_manager.get_master (old_conn) -> None
+        // 2. connection_manager.update_heartbeat -> true
+        // 3. connection_manager.get_master (new_conn) -> Some(...)
+        // 4. trade_group_repository.get_trade_group -> None
+        // 5. trade_group_repository.create_trade_group
+        // 6. ConfigPublisher.send_master_config
+        // 7. ConfigPublisher.publish_trade_group_updates
+        // 8. RuntimeStatusUpdater.evaluate_master...
+        //    -> get_trade_group
+        //    -> get_master
+
+        // Sequence for get_master
+        let mut seq = mockall::Sequence::new();
+
         mock_conn_manager
             .expect_get_master()
             .with(eq(account_id))
             .times(1)
-            .return_const(None);
+            .in_sequence(&mut seq)
+            .return_const(None); // 1. old_conn
 
         // Heartbeat update
         mock_conn_manager
@@ -703,7 +727,7 @@ mod tests {
             .times(1)
             .return_const(true);
 
-        // Second call after registration returns the connection
+        // Subsequent calls to get_master (verification + runtime updater) return the new connection
         let new_conn = EaConnection {
             account_id: account_id.to_string(),
             ea_type: crate::domain::models::EaType::Master,
@@ -714,25 +738,40 @@ mod tests {
         mock_conn_manager
             .expect_get_master()
             .with(eq(account_id))
-            .times(1)
+            .times(1..) // 3. new_conn check + 8. RuntimeStatusUpdater
+            .in_sequence(&mut seq)
             .return_const(Some(new_conn));
 
         // TradeGroup missing initially
         let trade_group = TradeGroup::new(account_id.to_string());
         let trade_group_clone = trade_group.clone();
 
+        // Sequence for get_trade_group
+        // Note: Shared mock with RuntimeStatusUpdater, use returning for flexibility
+        let mut call_count = 0;
+        let tg_clone = trade_group.clone();
         mock_repo
             .expect_get_trade_group()
             .with(eq(account_id))
-            .times(1)
-            .return_once(|_| Ok(None));
+            .returning(move |_| {
+                call_count += 1;
+                if call_count == 1 {
+                    Ok(None) // First call: not found
+                } else {
+                    Ok(Some(tg_clone.clone())) // Subsequent calls: found
+                }
+            });
 
         // EXPECT: create_trade_group to be called
+        let tg_for_create = trade_group.clone();
         mock_repo
             .expect_create_trade_group()
             .with(eq(account_id))
             .times(1)
-            .return_once(|_| Ok(trade_group_clone));
+            .return_once(move |_| Ok(tg_for_create));
+
+        // RuntimeStatusUpdater calls get_members
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
 
         // EXPECT: Config should be published for new registration
         mock_publisher
@@ -740,11 +779,24 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
+        // Create Arcs
+        let conn_manager = Arc::new(mock_conn_manager);
+        let repo = Arc::new(mock_repo);
+        let publisher = Arc::new(mock_publisher);
+
         let service = StatusService::new(
-            Arc::new(mock_conn_manager),
-            Arc::new(mock_repo),
-            Arc::new(mock_publisher),
-            None,
+            conn_manager.clone(),
+            repo.clone(),
+            publisher,
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    repo,
+                    conn_manager,
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
             None,
             None,
         );
@@ -902,14 +954,7 @@ mod tests {
             ),
         );
 
-        let service = StatusService::new(
-            conn_arc,
-            repo_arc,
-            pub_arc,
-            Some(runtime_updater),
-            None,
-            None,
-        );
+        let service = StatusService::new(conn_arc, repo_arc, pub_arc, runtime_updater, None, None);
 
         service.handle_heartbeat(heartbeat).await;
     }

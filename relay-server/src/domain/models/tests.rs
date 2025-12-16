@@ -1,13 +1,9 @@
-use sankey_copier_relay_server::domain::models::{SymbolMapping, TradeFilters};
-use sankey_copier_zmq::SlaveConfigMessage;
-use sankey_copier_zmq::{LotCalculationMode, SyncMode};
+use super::*;
+use sankey_copier_zmq::{LotCalculationMode, SlaveConfigMessage, SyncMode, TradeFilters};
 
 /// Performance benchmark test for Phase 1: SlaveConfigMessage Extension
-///
-/// This test measures the size of serialized SlaveConfigMessage to ensure
-/// it meets the performance criteria (< 2KB).
-#[tokio::test]
-async fn test_config_message_size_benchmark() {
+#[test]
+fn test_config_message_size_benchmark() {
     println!("\n=== CONFIG Message Size Benchmark ===\n");
 
     // Test Case 1: Minimal configuration
@@ -240,8 +236,8 @@ async fn test_config_message_size_benchmark() {
 }
 
 /// Estimate MQL5 parsing performance based on JSON complexity
-#[tokio::test]
-async fn test_estimate_parsing_performance() {
+#[test]
+fn test_estimate_parsing_performance() {
     println!("\n=== Estimated MQL5 Parsing Performance ===\n");
 
     let config = SlaveConfigMessage {
@@ -324,8 +320,8 @@ async fn test_estimate_parsing_performance() {
 }
 
 /// Memory usage estimate
-#[tokio::test]
-async fn test_estimate_memory_usage() {
+#[test]
+fn test_estimate_memory_usage() {
     println!("\n=== Memory Usage Estimate ===\n");
 
     // Estimate memory for global variables

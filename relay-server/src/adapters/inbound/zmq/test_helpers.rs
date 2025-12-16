@@ -68,7 +68,7 @@ impl TestContext {
             connection_manager.clone(),
             db.clone(),
             publisher.clone(),
-            Some(runtime_updater),
+            runtime_updater,
             Some(snapshot_broadcaster),
             None,
         );

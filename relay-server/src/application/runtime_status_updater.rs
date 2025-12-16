@@ -295,6 +295,238 @@ pub struct RuntimeStatusMetricsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::models::{
+        ConnectionStatus, EaConnection, EaType, SlaveSettings, TradeGroup, TradeGroupMember,
+    };
+    use async_trait::async_trait;
+    use mockall::mock;
+    use mockall::predicate::*;
+
+    // --- Mocks Definitions ---
+
+    mock! {
+        pub TradeGroupRepository {}
+        #[async_trait]
+        impl TradeGroupRepository for TradeGroupRepository {
+            async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>>;
+            async fn create_trade_group(&self, id: &str) -> anyhow::Result<TradeGroup>;
+            async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>>;
+            async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::domain::models::SlaveConfigWithMaster>>;
+            async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: i32) -> anyhow::Result<()>;
+            async fn get_masters_for_slave(&self, slave_account: &str) -> anyhow::Result<Vec<String>>;
+        }
+    }
+
+    mock! {
+        pub ConnectionManager {}
+        #[async_trait]
+        impl ConnectionManager for ConnectionManager {
+            async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
+            async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
+            async fn update_heartbeat(&self, msg: crate::domain::models::HeartbeatMessage) -> bool;
+        }
+    }
+
+    // --- Helpers ---
+
+    fn create_updater(
+        repo: MockTradeGroupRepository,
+        conn: MockConnectionManager,
+    ) -> RuntimeStatusUpdater {
+        RuntimeStatusUpdater::with_metrics(
+            Arc::new(repo),
+            Arc::new(conn),
+            Arc::new(RuntimeStatusMetrics::default()),
+        )
+    }
+
+    fn default_trade_group(id: &str, enabled: bool) -> TradeGroup {
+        let mut tg = TradeGroup::new(id.to_string());
+        tg.master_settings.enabled = enabled;
+        tg
+    }
+
+    fn online_connection(id: &str, ea_type: EaType, trade_allowed: bool) -> EaConnection {
+        EaConnection {
+            account_id: id.to_string(),
+            ea_type,
+            status: ConnectionStatus::Online,
+            is_trade_allowed: trade_allowed,
+            ..Default::default()
+        }
+    }
+
+    // --- Tests for evaluate_master_runtime_status ---
+
+    #[tokio::test]
+    async fn evaluate_master_missing_trade_group_returns_none() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mock_conn = MockConnectionManager::new();
+
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq("MASTER_1"))
+            .returning(|_| Ok(None)); // Missing
+
+        let updater = create_updater(mock_repo, mock_conn);
+        let result = updater.evaluate_master_runtime_status("MASTER_1").await;
+
+        assert!(result.is_none());
+
+        let snapshot = updater.metrics.snapshot();
+        assert_eq!(snapshot.master_evaluations_failed, 1);
+    }
+
+    #[tokio::test]
+    async fn evaluate_master_db_error_returns_none() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mock_conn = MockConnectionManager::new();
+
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq("MASTER_1"))
+            .returning(|_| Err(anyhow::anyhow!("DB Error"))); // Error
+
+        let updater = create_updater(mock_repo, mock_conn);
+        let result = updater.evaluate_master_runtime_status("MASTER_1").await;
+
+        assert!(result.is_none());
+
+        let snapshot = updater.metrics.snapshot();
+        assert_eq!(snapshot.master_evaluations_failed, 1);
+    }
+
+    #[tokio::test]
+    async fn evaluate_master_disconnected() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_conn = MockConnectionManager::new();
+
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq("MASTER_1"))
+            .returning(|_| Ok(Some(default_trade_group("MASTER_1", true))));
+
+        mock_conn
+            .expect_get_master()
+            .with(eq("MASTER_1"))
+            .returning(|_| None); // Disconnected
+
+        let updater = create_updater(mock_repo, mock_conn);
+        let result = updater
+            .evaluate_master_runtime_status("MASTER_1")
+            .await
+            .unwrap();
+
+        assert_ne!(result.status, 2); // Not ENABLED
+    }
+
+    #[tokio::test]
+    async fn evaluate_master_enabled_and_trade_allowed() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_conn = MockConnectionManager::new();
+
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq("MASTER_1"))
+            .returning(|_| Ok(Some(default_trade_group("MASTER_1", true))));
+
+        mock_conn
+            .expect_get_master()
+            .with(eq("MASTER_1"))
+            .returning(|_| Some(online_connection("MASTER_1", EaType::Master, true)));
+
+        let updater = create_updater(mock_repo, mock_conn);
+        let result = updater
+            .evaluate_master_runtime_status("MASTER_1")
+            .await
+            .unwrap();
+
+        // ENABLED
+        assert_eq!(result.status, 2);
+        assert!(result.warning_codes.is_empty());
+
+        let snapshot = updater.metrics.snapshot();
+        assert_eq!(snapshot.master_evaluations_total, 1);
+    }
+
+    // --- Tests for evaluate_member_runtime_status ---
+
+    #[tokio::test]
+    async fn evaluate_member_propagates_master_status() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_conn = MockConnectionManager::new();
+
+        // Setup Master: Enabled but Trade Disabled (Warning)
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq("MASTER_1"))
+            .returning(|_| Ok(Some(default_trade_group("MASTER_1", true))));
+
+        mock_conn
+            .expect_get_master()
+            .with(eq("MASTER_1"))
+            .returning(|_| Some(online_connection("MASTER_1", EaType::Master, false)));
+
+        // Setup Slave: Online
+        mock_conn
+            .expect_get_slave()
+            .with(eq("SLAVE_1"))
+            .returning(|_| Some(online_connection("SLAVE_1", EaType::Slave, true)));
+
+        let updater = create_updater(mock_repo, mock_conn);
+
+        let target = SlaveRuntimeTarget {
+            master_account: "MASTER_1",
+            trade_group_id: "MASTER_1",
+            slave_account: "SLAVE_1",
+            enabled_flag: true,
+            slave_settings: &SlaveSettings::default(),
+        };
+
+        let result = updater.evaluate_member_runtime_status(target).await;
+
+        // Master trade not allowed -> Master Status DISABLED(0) -> Member Status ENABLED(1) (Waiting)
+        assert_eq!(result.status, 1);
+        // allow_new_orders depends ONLY on Slave state, so it should be TRUE
+        assert!(result.allow_new_orders);
+    }
+
+    // --- Tests for build_slave_bundle ---
+
+    #[tokio::test]
+    async fn build_slave_bundle_assembles_correctly() {
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_conn = MockConnectionManager::new();
+
+        // Master OK
+        mock_repo
+            .expect_get_trade_group()
+            .returning(|_| Ok(Some(default_trade_group("MASTER_1", true))));
+        mock_conn
+            .expect_get_master()
+            .returning(|_| Some(online_connection("MASTER_1", EaType::Master, true)));
+
+        // Slave OK
+        mock_conn
+            .expect_get_slave()
+            .returning(|_| Some(online_connection("SLAVE_1", EaType::Slave, true)));
+
+        let updater = create_updater(mock_repo, mock_conn);
+
+        let target = SlaveRuntimeTarget {
+            master_account: "MASTER_1",
+            trade_group_id: "MASTER_1",
+            slave_account: "SLAVE_1",
+            enabled_flag: true,
+            slave_settings: &SlaveSettings::default(),
+        };
+
+        let bundle = updater.build_slave_bundle(target).await;
+
+        assert_eq!(bundle.config.master_account, "MASTER_1");
+        assert_eq!(bundle.config.account_id, "SLAVE_1");
+        assert_eq!(bundle.status_result.status, 2);
+    }
 
     #[test]
     fn snapshot_reflects_accumulated_counts() {
@@ -313,19 +545,5 @@ mod tests {
         assert_eq!(snapshot.slave_evaluations_failed, 1);
         assert_eq!(snapshot.slave_bundles_built, 1);
         assert_eq!(snapshot.last_cluster_size, 5);
-    }
-
-    #[test]
-    fn failure_helpers_increment_total_and_failed() {
-        let metrics = RuntimeStatusMetrics::default();
-
-        metrics.record_master_eval_failure();
-        metrics.record_slave_eval_failure();
-
-        let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.master_evaluations_total, 1);
-        assert_eq!(snapshot.master_evaluations_failed, 1);
-        assert_eq!(snapshot.slave_evaluations_total, 1);
-        assert_eq!(snapshot.slave_evaluations_failed, 1);
     }
 }

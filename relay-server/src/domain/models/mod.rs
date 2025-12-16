@@ -18,6 +18,8 @@ pub use trade_group::*;
 pub use trade_group_member::*;
 
 // mod settings_conversion_tests;
+#[cfg(test)]
+mod tests;
 
 // Re-export shared types from DLL
 // These are external to our domain but used within it.
