@@ -49,7 +49,7 @@ async fn test_auto_mapping_xauusd_to_gold() {
         .expect("Failed to create slave");
 
     // Inject detected symbols using our new setter
-    slave.set_detected_symbols(vec!["GOLD".to_string()]);
+    slave.set_candidates(vec!["GOLD".to_string()]);
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");
@@ -68,7 +68,7 @@ async fn test_auto_mapping_xauusd_to_gold() {
     let signal = master.create_open_signal(
         ticket,
         "XAUUSD",
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         1.0,
         2000.0,
         None,

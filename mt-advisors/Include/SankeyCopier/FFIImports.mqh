@@ -60,7 +60,7 @@
    int         ea_context_get_symbol_mappings(HANDLE_TYPE context, SSymbolMapping &mappings[], int max_count);
 
    //--- Message Sending ---
-   int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len, string detected_symbols);
+   int         ea_send_register(HANDLE_TYPE context, uchar &output[], int output_len, string candidates);
    int         ea_send_heartbeat(HANDLE_TYPE context, double balance, double equity, int open_positions, 
                                  int is_trade_allowed, uchar &output[], int output_len);
    int         ea_send_unregister(HANDLE_TYPE context, uchar &output[], int output_len);

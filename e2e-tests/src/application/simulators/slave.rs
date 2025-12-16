@@ -15,15 +15,15 @@ use std::time::Instant;
 use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 
-use crate::base::EaSimulatorBase;
-use crate::platform::context::SlaveContextWrapper;
-use crate::platform::runner::PlatformRunner;
-use crate::platform::traits::ExpertAdvisor;
-use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
-use crate::types::{
+use crate::adapters::infrastructure::ffi::slave_context::SlaveContextWrapper;
+use crate::application::runner::PlatformRunner;
+use crate::domain::models::{
     EaType, GlobalConfigMessage, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal,
     UnregisterMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
+use crate::domain::mql_types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
+use crate::domain::simulators::EaSimulatorBase;
+use crate::domain::traits::ExpertAdvisor;
 
 // =============================================================================
 // Slave EA Core (MQL5 Logic)
@@ -34,7 +34,7 @@ struct SlaveEaCore {
     // Shared state from SlaveEaSimulator
     account_id: String,
     ea_type: EaType,
-    heartbeat_params: crate::types::HeartbeatParams,
+    heartbeat_params: crate::domain::models::HeartbeatParams,
     _shutdown_flag: Arc<AtomicBool>,
     is_trade_allowed: Arc<AtomicBool>,
     _master_account: String,
@@ -57,7 +57,9 @@ struct SlaveEaCore {
 
     push_address: String,
     config_address: String,
-    detected_symbols: String,
+    candidates: String,
+    #[allow(dead_code)] // Reserved for future symbol detection feature
+    available_symbols: String,
 }
 
 impl ExpertAdvisor for SlaveEaCore {
@@ -111,16 +113,16 @@ impl ExpertAdvisor for SlaveEaCore {
         // We need to keep the vector alive until function call?
         // Ah, `to_u16` returns Vec. `as_ptr` borrows it.
         // I need to bind it to a variable.
-        let detected_vec = if self.detected_symbols.is_empty() {
+        let candidates_vec = if self.candidates.is_empty() {
             Vec::new()
         } else {
-            to_u16(&self.detected_symbols)
+            to_u16(&self.candidates)
         };
 
-        let detected_ptr = if detected_vec.is_empty() {
+        let candidates_ptr = if candidates_vec.is_empty() {
             std::ptr::null()
         } else {
-            detected_vec.as_ptr()
+            candidates_vec.as_ptr()
         };
 
         let mut buffer = vec![0u8; 1024];
@@ -129,7 +131,7 @@ impl ExpertAdvisor for SlaveEaCore {
                 ctx_ptr,
                 buffer.as_mut_ptr(),
                 buffer.len() as i32,
-                detected_ptr,
+                candidates_ptr,
             )
         };
         if len > 0 {
@@ -138,7 +140,6 @@ impl ExpertAdvisor for SlaveEaCore {
             }
         } else {
             eprintln!("Failed to send register message!");
-            // Don't fail init for this? MQL logs warning.
         }
 
         ENUM_INIT_RETCODE::INIT_SUCCEEDED
@@ -286,7 +287,7 @@ impl ExpertAdvisor for SlaveEaCore {
                             action,
                             ticket: cmd.ticket,
                             symbol: Some(symbol),
-                            order_type: crate::types::OrderType::from_mql(cmd.order_type),
+                            order_type: crate::domain::models::OrderType::from_mql(cmd.order_type),
                             lots: Some(cmd.volume),
                             open_price: Some(cmd.price),
                             stop_loss: if cmd.sl.abs() < 1e-6 {
@@ -357,7 +358,8 @@ pub struct SlaveEaSimulator {
     // Connection Params
     push_address: String,
     config_address: String,
-    detected_symbols: String,
+    candidates: String,
+    available_symbols: String,
 }
 
 impl SlaveEaSimulator {
@@ -370,13 +372,15 @@ impl SlaveEaSimulator {
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave, is_trade_allowed)?;
 
         // Load INI config
-        let ini_conf = crate::ini_config::EaIniConfig::load_from_file(ini_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
+        let ini_conf =
+            crate::adapters::infrastructure::config::EaIniConfig::load_from_file(ini_path)
+                .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
 
         let push_address = format!("tcp://127.0.0.1:{}", ini_conf.receiver_port);
         let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
 
-        let detected_symbols = ini_conf.symbol_search_candidates.join(",");
+        let candidates = ini_conf.symbol_search_candidates.join(",");
+        let available_symbols = String::new(); // Default to empty for simulation
 
         Ok(Self {
             base,
@@ -398,12 +402,17 @@ impl SlaveEaSimulator {
             context: Arc::new(Mutex::new(None)),
             push_address,
             config_address,
-            detected_symbols,
+            candidates,
+            available_symbols,
         })
     }
 
-    pub fn set_detected_symbols(&mut self, symbols: Vec<String>) {
-        self.detected_symbols = symbols.join(",");
+    pub fn set_candidates(&mut self, symbols: Vec<String>) {
+        self.candidates = symbols.join(",");
+    }
+
+    pub fn set_available_symbols(&mut self, symbols: Vec<String>) {
+        self.available_symbols = symbols.join(",");
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -433,7 +442,8 @@ impl SlaveEaSimulator {
             context: self.context.clone(),
             push_address: self.push_address.clone(),
             config_address: self.config_address.clone(),
-            detected_symbols: self.detected_symbols.clone(),
+            candidates: self.candidates.clone(),
+            available_symbols: self.available_symbols.clone(),
         };
 
         let runner = PlatformRunner::new(core);
@@ -455,7 +465,7 @@ impl SlaveEaSimulator {
                         if shutdown_flag.load(Ordering::SeqCst) {
                             break;
                         }
-                        let _ = timer_sender.send(crate::platform::runner::PlatformEvent::Timer);
+                        let _ = timer_sender.send(crate::application::runner::PlatformEvent::Timer);
                     }
                 });
 

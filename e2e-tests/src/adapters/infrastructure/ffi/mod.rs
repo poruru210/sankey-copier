@@ -1,4 +1,5 @@
 pub mod common;
+pub mod helpers;
 pub mod master_context;
 pub mod slave_context;
 

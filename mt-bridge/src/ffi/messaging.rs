@@ -21,7 +21,7 @@ pub unsafe extern "C" fn ea_send_request_config(context: *mut EaContext, version
     }
 }
 
-/// Create and serialize a RegisterMessage using context data (Zero arguments from MQL!)
+/// Create and serialize a RegisterMessage using context data (using Rust-side SymbolMatcher)
 ///
 /// # Safety
 /// - `context` must be a valid pointer returned by `ea_init()`
@@ -40,10 +40,14 @@ pub unsafe extern "C" fn ea_send_register(
 
         let ctx = &*context;
 
-        // Parse detected symbols if provided
-        let detected = if !detected_symbols.is_null() {
-            crate::ffi::helpers::utf16_to_string(detected_symbols)
-                .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        // Parse detected symbols
+        let detected_vec = if !detected_symbols.is_null() {
+            crate::ffi::helpers::utf16_to_string(detected_symbols).map(|s| {
+                s.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<String>>()
+            })
         } else {
             None
         };
@@ -61,7 +65,7 @@ pub unsafe extern "C" fn ea_send_register(
             currency: ctx.currency.clone(),
             leverage: ctx.leverage,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            detected_symbols: detected,
+            detected_symbols: detected_vec,
         };
 
         unsafe { crate::ffi::helpers::serialize_to_buffer(&msg, output, output_len) }

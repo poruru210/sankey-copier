@@ -17,12 +17,34 @@
 
 use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+
+/// Ensures the relay-server binary is built exactly once per test run.
+/// Uses OnceLock to guarantee thread-safe, single initialization.
+static BUILD_ONCE: OnceLock<()> = OnceLock::new();
+
+fn ensure_binary_built(workspace_root: &Path) {
+    BUILD_ONCE.get_or_init(|| {
+        eprintln!("Building relay-server binary (once per test run)...");
+        let status = Command::new("cargo")
+            .args(["build", "--release", "-p", "sankey-copier-relay-server"])
+            .current_dir(workspace_root)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .expect("Failed to run cargo build");
+
+        if !status.success() {
+            panic!("Failed to build relay-server binary");
+        }
+        eprintln!("Binary build complete.");
+    });
+}
 
 /// Runtime configuration for dynamically assigned ports
 /// Mirrors relay-server/src/config.rs RuntimeConfig structure
@@ -141,8 +163,9 @@ impl RelayServerProcess {
             db_path.to_str().unwrap().replace('\\', "/")
         );
 
-        // Build the binary first (from workspace root) if not already built
-        // This ensures we don't wait for compilation during server startup
+        // Ensure the binary is built (once per test run)
+        // This uses OnceLock to guarantee the build happens exactly once,
+        // preventing stale binary issues while avoiding repeated builds.
         let binary_path = workspace_root
             .join("target")
             .join("release")
@@ -152,20 +175,7 @@ impl RelayServerProcess {
                 "sankey-copier-server"
             });
 
-        if !binary_path.exists() {
-            eprintln!("Building relay-server binary (first time only)...");
-            let build_status = Command::new("cargo")
-                .args(["build", "--release", "-p", "sankey-copier-relay-server"])
-                .current_dir(&workspace_root)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .context("Failed to build relay-server")?;
-
-            if !build_status.success() {
-                anyhow::bail!("Failed to build relay-server binary");
-            }
-        }
+        ensure_binary_built(&workspace_root);
 
         // Start the relay-server binary directly
         // CONFIG_DIR points to the temp directory where config files were copied

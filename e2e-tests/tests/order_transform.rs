@@ -57,7 +57,7 @@ async fn test_symbol_prefix_suffix_transformation() {
     let signal = master.create_open_signal(
         12345,
         "pro.EURUSD.m", // Master's symbol with prefix/suffix
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.1,
         1.0850,
         None,
@@ -134,7 +134,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     let signal1 = master.create_open_signal(
         10001,
         "PRO.EURUSD.m", // Symbol with prefix/suffix
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.1,
         1.0850,
         None,
@@ -163,7 +163,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     let signal2 = master.create_open_signal(
         10002,
         "USDJPY.m", // Only suffix matches, no prefix
-        e2e_tests::types::OrderType::Sell,
+        e2e_tests::OrderType::Sell,
         0.2,
         150.0,
         None,
@@ -192,7 +192,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     let signal3 = master.create_open_signal(
         10003,
         "GBPUSD", // No prefix/suffix at all
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.15,
         1.2500,
         None,
@@ -222,7 +222,7 @@ async fn test_master_sends_all_symbols_no_filtering() {
     let signal4 = master.create_open_signal(
         10004,
         "XAUUSD#", // Different format (e.g., hashtag suffix)
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.5,
         2000.0,
         None,
@@ -310,7 +310,7 @@ async fn test_symbol_mapping() {
     let signal = master.create_open_signal(
         12345,
         "XAUUSD",
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.1,
         2000.0,
         None,
@@ -380,7 +380,7 @@ async fn test_reverse_trade_buy_to_sell() {
     let signal = master.create_open_signal(
         12345,
         "EURUSD",
-        e2e_tests::types::OrderType::Buy,
+        e2e_tests::OrderType::Buy,
         0.1,
         1.0850,
         None,
@@ -400,7 +400,7 @@ async fn test_reverse_trade_buy_to_sell() {
 
     assert_eq!(
         sig.order_type,
-        Some(e2e_tests::types::OrderType::Sell),
+        Some(e2e_tests::OrderType::Sell),
         "Order type should be reversed to Sell by mt-bridge"
     );
 
@@ -447,7 +447,7 @@ async fn test_reverse_trade_pending_orders() {
     let signal = master.create_open_signal(
         12345,
         "EURUSD",
-        e2e_tests::types::OrderType::BuyLimit,
+        e2e_tests::OrderType::BuyLimit,
         0.1,
         1.0800,
         None,
@@ -467,7 +467,7 @@ async fn test_reverse_trade_pending_orders() {
 
     assert_eq!(
         sig.order_type,
-        Some(e2e_tests::types::OrderType::SellLimit),
+        Some(e2e_tests::OrderType::SellLimit),
         "Order type should be reversed to SellLimit by mt-bridge"
     );
 

@@ -18,16 +18,16 @@ use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 use sankey_copier_zmq::EaContext;
 
-use crate::base::EaSimulatorBase;
-use crate::platform::context::MasterContextWrapper;
-use crate::platform::runner::PlatformRunner;
-use crate::platform::traits::ExpertAdvisor;
-use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
-use crate::types::{
+use crate::adapters::infrastructure::ffi::master_context::MasterContextWrapper;
+use crate::application::runner::PlatformRunner;
+use crate::domain::models::{
     EaType, GlobalConfigMessage, MasterConfigMessage, OrderType, PositionInfo,
     PositionSnapshotMessage, SyncRequestMessage, TradeAction, TradeSignal,
     HEARTBEAT_INTERVAL_SECONDS, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
+use crate::domain::mql_types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
+use crate::domain::simulators::EaSimulatorBase;
+use crate::domain::traits::ExpertAdvisor;
 
 // =============================================================================
 // Master EA Core (MQL5 Logic)
@@ -38,7 +38,7 @@ struct MasterEaCore {
     // Shared state from MasterEaSimulator
     account_id: String,
     ea_type: EaType,
-    heartbeat_params: crate::types::HeartbeatParams,
+    heartbeat_params: crate::domain::models::HeartbeatParams,
     _shutdown_flag: Arc<AtomicBool>,
     is_trade_allowed: Arc<AtomicBool>,
 
@@ -258,8 +258,9 @@ impl MasterEaSimulator {
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master, is_trade_allowed)?;
 
         // Load INI config
-        let ini_conf = crate::ini_config::EaIniConfig::load_from_file(ini_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
+        let ini_conf =
+            crate::adapters::infrastructure::config::EaIniConfig::load_from_file(ini_path)
+                .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
 
         let push_address = format!("tcp://127.0.0.1:{}", ini_conf.receiver_port);
         let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
@@ -332,7 +333,7 @@ impl MasterEaSimulator {
                         if shutdown_flag.load(Ordering::SeqCst) {
                             break;
                         }
-                        let _ = timer_sender.send(crate::platform::runner::PlatformEvent::Timer);
+                        let _ = timer_sender.send(crate::application::runner::PlatformEvent::Timer);
                     }
                 });
 

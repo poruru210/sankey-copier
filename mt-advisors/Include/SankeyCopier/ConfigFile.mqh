@@ -19,7 +19,7 @@
 //--- Global port variables (initialized from config file)
 int g_ReceiverPort = DEFAULT_RECEIVER_PORT;
 int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
-int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
+
 string g_SearchCandidates[]; // Array to store symbol search candidates
 bool g_ConfigLoaded = false;
 
@@ -101,7 +101,7 @@ bool LoadConfig()
                g_PublisherPort = (int)StringToInteger(value);
          }
          }
-      }
+
       // Parse [SymbolSearch] section
       else if(in_symbol_search_section)
       {

@@ -162,7 +162,7 @@ public:
       return ea_send_push(m_context, data, len) == 1;
    }
 
-   bool SendRegister(string detected_symbols = NULL)
+   bool SendRegister(string detected_symbols)
    {
       if(!m_initialized) return false;
       

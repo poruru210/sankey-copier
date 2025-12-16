@@ -9,7 +9,7 @@ use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::types::{EaType, HeartbeatParams};
+use crate::domain::models::{EaType, HeartbeatParams};
 
 /// Base structure for EA Simulator state.
 pub struct EaSimulatorBase {

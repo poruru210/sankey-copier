@@ -76,7 +76,7 @@ async fn test_open_close_cycle() {
 
     assert!(received_open.is_some(), "Slave should receive Open signal");
     let open_sig = received_open.unwrap();
-    assert_eq!(open_sig.action, e2e_tests::types::TradeAction::Open);
+    assert_eq!(open_sig.action, e2e_tests::TradeAction::Open);
     assert_eq!(open_sig.ticket, 12345);
     assert_eq!(open_sig.symbol.as_deref(), Some("EURUSD"));
     assert_eq!(open_sig.lots, Some(0.1));
@@ -99,7 +99,7 @@ async fn test_open_close_cycle() {
         "Slave should receive Close signal"
     );
     let close_sig = received_close.unwrap();
-    assert_eq!(close_sig.action, e2e_tests::types::TradeAction::Close);
+    assert_eq!(close_sig.action, e2e_tests::TradeAction::Close);
     assert_eq!(close_sig.ticket, 12345);
 
     println!("✅ test_open_close_cycle passed");
@@ -156,10 +156,7 @@ async fn test_open_modify_close_cycle() {
         .try_receive_trade_signal(2000)
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Open");
-    assert_eq!(
-        received.unwrap().action,
-        e2e_tests::types::TradeAction::Open
-    );
+    assert_eq!(received.unwrap().action, e2e_tests::TradeAction::Open);
 
     // Modify
     let modify_signal = master.create_modify_signal(22222, "GBPUSD", Some(1.2550), Some(1.2350));
@@ -173,7 +170,7 @@ async fn test_open_modify_close_cycle() {
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(1.2550));
     assert_eq!(mod_sig.take_profit, Some(1.2350));
 
@@ -188,10 +185,7 @@ async fn test_open_modify_close_cycle() {
         .try_receive_trade_signal(2000)
         .expect("Receive failed");
     assert!(received.is_some(), "Should receive Close");
-    assert_eq!(
-        received.unwrap().action,
-        e2e_tests::types::TradeAction::Close
-    );
+    assert_eq!(received.unwrap().action, e2e_tests::TradeAction::Close);
 
     println!("✅ test_open_modify_close_cycle passed");
 }
@@ -244,7 +238,7 @@ async fn test_modify_sl_only() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(149.50));
     assert_eq!(mod_sig.take_profit, None);
 
@@ -299,7 +293,7 @@ async fn test_modify_tp_only() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, None);
     assert_eq!(mod_sig.take_profit, Some(1.0800));
 
@@ -354,7 +348,7 @@ async fn test_modify_both_sl_tp() {
     let received = slave.try_receive_trade_signal(2000).unwrap();
     assert!(received.is_some(), "Should receive Modify");
     let mod_sig = received.unwrap();
-    assert_eq!(mod_sig.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig.stop_loss, Some(187.00));
     assert_eq!(mod_sig.take_profit, Some(190.00));
 
@@ -544,7 +538,7 @@ async fn test_close_nonexistent_position() {
         "Close signal for non-existent position should be relayed"
     );
     let signal = received.unwrap();
-    assert_eq!(signal.action, e2e_tests::types::TradeAction::Close);
+    assert_eq!(signal.action, e2e_tests::TradeAction::Close);
     assert_eq!(signal.ticket, 99999);
 
     println!("✅ test_close_nonexistent_position passed");

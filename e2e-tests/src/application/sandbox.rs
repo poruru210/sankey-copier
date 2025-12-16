@@ -15,8 +15,9 @@
 
 use anyhow::{Context, Result};
 
-use super::relay_server::RelayServerProcess;
-use crate::{MasterEaSimulator, SlaveEaSimulator};
+use crate::adapters::infrastructure::process::RelayServerProcess;
+use crate::application::simulators::master::MasterEaSimulator;
+use crate::application::simulators::slave::SlaveEaSimulator;
 
 /// The TestSandbox represents a complete, isolated testing environment.
 pub struct TestSandbox {

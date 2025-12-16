@@ -18,7 +18,8 @@ use sankey_copier_relay_server::domain::models::{
 };
 use tokio::time::{sleep, Duration};
 
-use crate::{MasterEaSimulator, SlaveEaSimulator};
+use crate::application::simulators::master::MasterEaSimulator;
+use crate::application::simulators::slave::SlaveEaSimulator;
 
 // =============================================================================
 // Constants

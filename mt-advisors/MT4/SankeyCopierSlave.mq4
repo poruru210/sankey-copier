@@ -22,6 +22,8 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 #include "../Include/SankeyCopier/SlaveTrade.mqh"
 // MessageParsing.mqh removed
 #include "../Include/SankeyCopier/Logging.mqh"
+#include "../Include/SankeyCopier/GlobalConfig.mqh"
+#include "../Include/SankeyCopier/SymbolUtils.mqh"
 
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
@@ -69,40 +71,7 @@ CGridPanel     g_config_panel;
 
 int g_last_config_count = 0;
 
-//+------------------------------------------------------------------+
-//| Detect symbols from candidates list                              |
-//+------------------------------------------------------------------+
-string DetectSymbols()
-{
-   string candidates[];
-   GetSymbolSearchCandidates(candidates);
-   
-   string detected = "";
-   int count = ArraySize(candidates);
-   
-   for(int i=0; i<count; i++)
-   {
-      string candidate = candidates[i];
-      // Try to select the symbol to check existence
-      if(SymbolSelect(candidate, true))
-      {
-         if(StringLen(detected) > 0) detected += ",";
-         detected += candidate;
-      }
-   }
-   
-   if(StringLen(detected) > 0)
-   {
-      LogInfo(CAT_CONFIG, "Detected symbols: " + detected);
-   }
-   // Only warn if candidates were provided but none found
-   else if(count > 0)
-   {
-      LogWarn(CAT_CONFIG, "No symbols detected from candidates list");
-   }
-   
-   return detected;
-}
+
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -167,11 +136,29 @@ int OnInit()
 
    // Detect symbols and send explicit Register message
    // This ensures the server receives the detected symbols immediately
-   string detected_symbols = DetectSymbols();
+   // Detect symbols and send explicit Register message
+   // This ensures the server receives the detected symbols immediately
+   // Detect symbols locally in MQL
+   string candidates[];
+   GetCandidates(candidates);
+   
+   string detected_symbols = "";
+   int count = ArraySize(candidates);
+   
+   for(int i=0; i<count; i++)
+   {
+      string best_match = DetectBestMatch(candidates[i]);
+      if(StringLen(best_match) > 0)
+      {
+         if(StringLen(detected_symbols) > 0) detected_symbols += ",";
+         detected_symbols += best_match;
+      }
+   }
+   
    if(g_ea_context.SendRegister(detected_symbols))
    {
        g_register_sent = true;
-       LogInfo(CAT_SYSTEM, "Sent initial Register message");
+       LogInfo(CAT_SYSTEM, "Sent initial Register message with symbols: " + detected_symbols);
    }
    else
    {
