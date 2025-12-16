@@ -8,18 +8,18 @@ use sankey_copier_relay_server::adapters::infrastructure::log_buffer::create_log
 use sankey_copier_relay_server::adapters::outbound::messaging::{
     ZmqConfigPublisher, ZmqMessage, ZmqServer,
 };
+use sankey_copier_relay_server::adapters::outbound::observability::victoria_logs;
+use sankey_copier_relay_server::adapters::outbound::observability::victoria_logs::VLogsController;
 use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::application::runtime_status_updater::{
+    RuntimeStatusMetrics, RuntimeStatusUpdater,
+};
 use sankey_copier_relay_server::application::status_service::StatusService;
 use sankey_copier_relay_server::config::Config;
 use sankey_copier_relay_server::domain::services::copy_engine::CopyEngine;
 use sankey_copier_relay_server::logging;
 use sankey_copier_relay_server::ports;
 use sankey_copier_relay_server::ports::adapters::RuntimeStatusEvaluatorAdapter;
-use sankey_copier_relay_server::runtime_status_updater::{
-    RuntimeStatusMetrics, RuntimeStatusUpdater,
-};
-use sankey_copier_relay_server::victoria_logs;
-use sankey_copier_relay_server::victoria_logs::VLogsController;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 

@@ -1,6 +1,6 @@
 use crate::adapters::infrastructure::log_buffer::{LogBuffer, LogBufferLayer};
+use crate::adapters::outbound::observability::victoria_logs::VictoriaLogsLayer;
 use crate::config::LoggingConfig;
-use crate::victoria_logs::VictoriaLogsLayer;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 

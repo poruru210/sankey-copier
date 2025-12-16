@@ -11,7 +11,7 @@ use crate::domain::models::{
 };
 use crate::domain::services::copy_engine::CopyEngine;
 // use crate::ports::{ConnectionManager, TradeGroupRepository};
-use crate::runtime_status_updater::RuntimeStatusMetrics;
+use crate::application::runtime_status_updater::RuntimeStatusMetrics;
 use chrono::Utc;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -47,11 +47,12 @@ impl TestContext {
 
         // Create runtime status adapter for StatusEvaluator
         let metrics = Arc::new(RuntimeStatusMetrics::default());
-        let runtime_updater = crate::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
-            db.clone(),
-            connection_manager.clone(),
-            metrics.clone(),
-        );
+        let runtime_updater =
+            crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                db.clone(),
+                connection_manager.clone(),
+                metrics.clone(),
+            );
         let status_evaluator = Arc::new(
             crate::ports::adapters::RuntimeStatusEvaluatorAdapter::new(runtime_updater),
         );

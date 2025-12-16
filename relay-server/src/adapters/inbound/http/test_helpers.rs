@@ -9,23 +9,25 @@ use tokio::sync::broadcast;
 
 use crate::{
     adapters::infrastructure::connection_manager::ConnectionManager,
+    adapters::outbound::observability::victoria_logs::VLogsController,
     adapters::{
         inbound::http::{AppState, SnapshotBroadcaster},
         infrastructure::log_buffer::LogBuffer,
         infrastructure::port_resolver::ResolvedPorts,
         outbound::{messaging::ZmqConfigPublisher, persistence::Database},
     },
+    application::runtime_status_updater::RuntimeStatusMetrics,
     config::{Config, VictoriaLogsConfig},
-    runtime_status_updater::RuntimeStatusMetrics,
-    victoria_logs::VLogsController,
 };
 
 /// Create a test AppState with in-memory database (VictoriaLogs not configured)
+#[allow(dead_code)]
 pub(crate) async fn create_test_app_state() -> AppState {
     create_test_app_state_with_vlogs(false).await
 }
 
 /// Create a test AppState with optional VictoriaLogs controller
+#[allow(dead_code)]
 pub(crate) async fn create_test_app_state_with_vlogs(vlogs_configured: bool) -> AppState {
     static PORT_COUNTER: AtomicU16 = AtomicU16::new(15557);
 

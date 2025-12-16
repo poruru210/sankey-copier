@@ -9,8 +9,8 @@ use crate::adapters::inbound::zmq::unregister::{
 };
 use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use crate::adapters::outbound::persistence::Database;
+use crate::application::runtime_status_updater::RuntimeStatusMetrics;
 use crate::domain::models::{ConnectionStatus, EaConnection, EaType, HeartbeatMessage, Platform};
-use crate::runtime_status_updater::RuntimeStatusMetrics;
 
 /// EA connection key: (account_id, ea_type)
 /// Allows same account to have both Master and Slave EAs running simultaneously

@@ -10,6 +10,7 @@ use crate::adapters::inbound::http::SnapshotBroadcaster;
 use crate::adapters::infrastructure::connection_manager::ConnectionManager as ConcreteConnectionManager;
 use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use crate::adapters::outbound::persistence::Database;
+use crate::application::runtime_status_updater::RuntimeStatusUpdater;
 use crate::config_builder::SlaveConfigBundle;
 use crate::domain::models::{
     EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, TradeGroupMember,
@@ -18,7 +19,6 @@ use crate::domain::models::{
 use crate::domain::services::status_calculator::{
     ConnectionSnapshot, MemberStatusResult, SlaveRuntimeTarget,
 };
-use crate::runtime_status_updater::RuntimeStatusUpdater;
 use async_trait::async_trait;
 use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
 
@@ -45,7 +45,7 @@ impl ConnectionManager for ConcreteConnectionManager {
 // VLogsConfigProvider Adapter
 // ============================================================================
 
-use crate::victoria_logs::VLogsController;
+use crate::adapters::outbound::observability::victoria_logs::VLogsController;
 
 #[async_trait]
 impl super::VLogsConfigProvider for VLogsController {

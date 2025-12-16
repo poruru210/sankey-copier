@@ -10,5 +10,5 @@ pub mod domain;
 
 pub mod logging;
 pub mod ports;
-pub mod runtime_status_updater;
-pub mod victoria_logs;
+// pub mod runtime_status_updater; // Moved to application
+// pub mod victoria_logs; // Moved to adapters::outbound::observability

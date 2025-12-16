@@ -10,13 +10,13 @@ use axum::{
 };
 // use serde::Serialize;
 
+use crate::application::runtime_status_updater::RuntimeStatusUpdater;
 use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
 use crate::domain::models::{MasterSettings, SlaveConfigWithMaster, TradeGroup};
 use crate::domain::services::status_calculator::SlaveRuntimeTarget;
 use crate::domain::services::status_calculator::{
     evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
 };
-use crate::runtime_status_updater::RuntimeStatusUpdater;
 
 use super::{AppState, ProblemDetails};
 use crate::adapters::inbound::http::dtos::{ToggleMasterRequest, TradeGroupRuntimeView};

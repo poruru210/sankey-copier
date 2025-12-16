@@ -17,8 +17,8 @@ use sankey_copier_relay_server::adapters::infrastructure::log_buffer::create_log
 use sankey_copier_relay_server::adapters::infrastructure::port_resolver::ResolvedPorts;
 use sankey_copier_relay_server::adapters::outbound::messaging::ZmqConfigPublisher;
 use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::application::runtime_status_updater::RuntimeStatusMetrics;
 use sankey_copier_relay_server::domain::models::{LotCalculationMode, MasterSettings};
-use sankey_copier_relay_server::runtime_status_updater::RuntimeStatusMetrics;
 
 use std::sync::Arc;
 use tokio::sync::broadcast;

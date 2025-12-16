@@ -48,7 +48,7 @@ fn test_global_config_broadcast() -> Result<()> {
     let config = master.try_receive_vlogs_config(5000)?;
     assert!(config.is_some(), "Master should receive global config");
     let config = config.unwrap();
-    assert_eq!(config.enabled, true);
+    assert!(config.enabled);
 
     // 5. Verify Slave received the config
     let config = slave.try_receive_vlogs_config(5000)?;

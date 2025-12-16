@@ -9,9 +9,9 @@ use crate::{
     adapters::infrastructure::connection_manager::ConnectionManager,
     adapters::outbound::messaging::ZmqConfigPublisher,
     adapters::outbound::persistence::Database,
+    application::runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
     domain::models::{EaType, SlaveConfigWithMaster, UnregisterMessage},
     domain::services::status_calculator::SlaveRuntimeTarget,
-    runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
 };
 use std::sync::Arc;
 use tokio::sync::broadcast;

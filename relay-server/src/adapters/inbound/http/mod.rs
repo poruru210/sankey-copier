@@ -26,6 +26,7 @@ pub(crate) mod test_helpers;
 // Public re-exports
 pub use error::ProblemDetails;
 pub use middleware::*;
+pub use runtime_metrics::get_runtime_metrics;
 
 use axum::{
     middleware as axum_middleware,
@@ -42,13 +43,13 @@ pub use websocket::SnapshotBroadcaster;
 
 use crate::{
     adapters::infrastructure::connection_manager::ConnectionManager,
+    adapters::outbound::observability::victoria_logs::VLogsController,
     adapters::{
         infrastructure::log_buffer::LogBuffer, infrastructure::port_resolver::ResolvedPorts,
         outbound::messaging::ZmqConfigPublisher, outbound::persistence::Database,
     },
+    application::runtime_status_updater::RuntimeStatusMetrics,
     config::Config,
-    runtime_status_updater::RuntimeStatusMetrics,
-    victoria_logs::VLogsController,
 };
 
 // Import handlers from submodules
