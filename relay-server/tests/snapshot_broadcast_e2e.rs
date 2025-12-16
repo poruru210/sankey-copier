@@ -8,8 +8,8 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 
 use sankey_copier_relay_server::adapters::inbound::http::SnapshotBroadcaster;
+use sankey_copier_relay_server::adapters::infrastructure::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::adapters::outbound::persistence::Database;
-use sankey_copier_relay_server::connection_manager::ConnectionManager;
 use sankey_copier_relay_server::domain::models::{
     EaConnection, HeartbeatMessage, SystemStateSnapshot,
 };

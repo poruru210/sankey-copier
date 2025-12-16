@@ -22,6 +22,7 @@ pub trait VLogsConfigProvider: Send + Sync {
 #[async_trait]
 pub trait TradeGroupRepository: Send + Sync {
     async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>>;
+    async fn create_trade_group(&self, id: &str) -> anyhow::Result<TradeGroup>;
     async fn get_members(
         &self,
         master_id: &str,

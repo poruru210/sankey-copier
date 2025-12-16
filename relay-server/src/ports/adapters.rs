@@ -7,10 +7,10 @@ use super::{
     ConfigPublisher, ConnectionManager, StatusEvaluator, TradeGroupRepository, UpdateBroadcaster,
 };
 use crate::adapters::inbound::http::SnapshotBroadcaster;
+use crate::adapters::infrastructure::connection_manager::ConnectionManager as ConcreteConnectionManager;
 use crate::adapters::outbound::messaging::ZmqConfigPublisher;
 use crate::adapters::outbound::persistence::Database;
 use crate::config_builder::SlaveConfigBundle;
-use crate::connection_manager::ConnectionManager as ConcreteConnectionManager;
 use crate::domain::models::{
     EaConnection, HeartbeatMessage, SlaveConfigWithMaster, TradeGroup, TradeGroupMember,
     VLogsGlobalSettings,
@@ -69,6 +69,10 @@ impl super::VLogsConfigProvider for VLogsController {
 impl TradeGroupRepository for Database {
     async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>> {
         Database::get_trade_group(self, id).await
+    }
+
+    async fn create_trade_group(&self, id: &str) -> anyhow::Result<TradeGroup> {
+        Database::create_trade_group(self, id).await
     }
 
     async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>> {

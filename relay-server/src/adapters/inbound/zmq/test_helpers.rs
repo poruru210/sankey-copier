@@ -1,20 +1,21 @@
-//! Shared test utilities for message handler tests
-//!
-//! Provides helper functions to create test instances and test data.
-//! Uses TestContext wrapper for proper ZeroMQ resource cleanup.
-
-use super::*;
-use crate::domain::models::{HeartbeatMessage, OrderType, TradeAction, TradeFilters, TradeSignal};
+use super::MessageHandler;
+use crate::adapters::infrastructure::connection_manager::ConnectionManager as ConnectionManagerImpl;
+use crate::adapters::outbound::messaging::ZmqConfigPublisher;
+use crate::adapters::outbound::persistence::Database;
+use crate::domain::models::{
+    HeartbeatMessage,
+    OrderType,
+    TradeAction,
+    TradeSignal,
+    // LotCalculationMode, // Unused
+};
+use crate::domain::services::copy_engine::CopyEngine;
+// use crate::ports::{ConnectionManager, TradeGroupRepository};
 use crate::runtime_status_updater::RuntimeStatusMetrics;
 use chrono::Utc;
 use std::ops::Deref;
-
-// Test submodules
-mod config_tests;
-mod heartbeat_tests;
-mod trade_signal_tests;
-mod unregister_tests;
-mod warning_codes_tests;
+use std::sync::Arc;
+use tokio::sync::broadcast;
 
 /// Test context wrapper for MessageHandler with proper cleanup
 ///
@@ -25,14 +26,14 @@ pub(crate) struct TestContext {
     // Store Arc references to ensure proper drop order
     _publisher: Arc<ZmqConfigPublisher>,
     /// Broadcast receiver for testing WebSocket notifications
-    pub broadcast_rx: broadcast::Receiver<String>,
+    pub _broadcast_rx: broadcast::Receiver<String>, // Prefixed with _ to suppress warning
 }
 
 impl TestContext {
     /// Create a new test context with in-memory database
     /// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
     pub async fn new() -> Self {
-        let connection_manager = Arc::new(ConnectionManager::new(30));
+        let connection_manager = Arc::new(ConnectionManagerImpl::new(30));
         let copy_engine = Arc::new(CopyEngine::new());
 
         let (broadcast_tx, broadcast_rx) = broadcast::channel::<String>(100);
@@ -81,30 +82,14 @@ impl TestContext {
             publisher.clone(),
             None, // vlogs_controller - not needed for tests
             Arc::new(RuntimeStatusMetrics::default()),
-            Some(status_service), // Inject StatusService
+            status_service, // Inject StatusService
         );
 
         Self {
             handler,
             _publisher: publisher,
-            broadcast_rx,
+            _broadcast_rx: broadcast_rx,
         }
-    }
-
-    /// Collect all pending broadcast messages (non-blocking)
-    /// Returns messages that were sent via broadcast_tx
-    #[allow(dead_code)]
-    pub fn collect_broadcast_messages(&mut self) -> Vec<String> {
-        let mut messages = Vec::new();
-        loop {
-            match self.broadcast_rx.try_recv() {
-                Ok(msg) => messages.push(msg),
-                Err(broadcast::error::TryRecvError::Empty) => break,
-                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
-                Err(broadcast::error::TryRecvError::Closed) => break,
-            }
-        }
-        messages
     }
 
     /// Explicitly cleanup ZeroMQ resources
@@ -131,46 +116,12 @@ impl Deref for TestContext {
 impl Drop for TestContext {
     fn drop(&mut self) {
         // Resources will be cleaned up when Arc references are dropped
-        // The ZmqPublisher/ZmqConfigPublisher tasks will exit when their
-        // channel senders are dropped, causing blocking_recv() to return None
     }
 }
 
 /// Create a test context with MessageHandler and proper resource management
-/// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
-///
-/// Returns TestContext which derefs to MessageHandler for easy use.
-/// Resources are cleaned up when TestContext is dropped.
 pub(crate) async fn create_test_context() -> TestContext {
     TestContext::new().await
-}
-
-/// Create a test MessageHandler instance with in-memory database
-/// Uses dynamic ports (tcp://127.0.0.1:*) to avoid port conflicts
-///
-/// DEPRECATED: Use create_test_context() for proper cleanup.
-/// This function returns only MessageHandler, losing ZMQ cleanup tracking.
-#[allow(dead_code)]
-pub(crate) async fn create_test_handler() -> MessageHandler {
-    // Note: This creates ZMQ resources that won't be tracked for cleanup.
-    // The resources will still be cleaned up when dropped, but without
-    // explicit lifecycle management.
-    let connection_manager = Arc::new(ConnectionManager::new(30));
-    let copy_engine = Arc::new(CopyEngine::new());
-    let (broadcast_tx, _) = broadcast::channel::<String>(100);
-    let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
-    let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
-
-    MessageHandler::new(
-        connection_manager,
-        copy_engine,
-        broadcast_tx,
-        db,
-        publisher,
-        None,
-        Arc::new(RuntimeStatusMetrics::default()),
-        None, // status_service - use legacy heartbeat logic
-    )
 }
 
 /// Build a reusable HeartbeatMessage for tests

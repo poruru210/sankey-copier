@@ -3,23 +3,19 @@
 //! Provides shared test utilities for creating test objects
 //! like connections, app state, heartbeats, and settings.
 
-mod runtime_metrics_tests;
-mod trade_group_members_tests;
-mod websocket_tests;
-
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
+    adapters::infrastructure::connection_manager::ConnectionManager,
     adapters::{
         inbound::http::{AppState, SnapshotBroadcaster},
+        infrastructure::log_buffer::LogBuffer,
+        infrastructure::port_resolver::ResolvedPorts,
         outbound::{messaging::ZmqConfigPublisher, persistence::Database},
     },
     config::{Config, VictoriaLogsConfig},
-    connection_manager::ConnectionManager,
-    log_buffer::LogBuffer,
-    port_resolver::ResolvedPorts,
     runtime_status_updater::RuntimeStatusMetrics,
     victoria_logs::VLogsController,
 };

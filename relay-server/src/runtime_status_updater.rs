@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::{
+    adapters::infrastructure::connection_manager::ConnectionManager,
     adapters::outbound::persistence::Database,
     config_builder::{ConfigBuilder, SlaveConfigBundle, SlaveConfigContext},
-    connection_manager::ConnectionManager,
     domain::services::status_calculator::{
         evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterClusterSnapshot,
         MasterIntent, MasterStatusResult, MemberStatusResult, SlaveIntent, SlaveRuntimeTarget,

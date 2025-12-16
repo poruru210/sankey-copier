@@ -16,7 +16,7 @@ mod trade_groups;
 
 // Test module
 #[cfg(test)]
-mod tests;
+pub(crate) mod test_helpers;
 
 pub struct Database {
     pool: SqlitePool,

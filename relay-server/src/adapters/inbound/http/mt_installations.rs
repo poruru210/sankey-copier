@@ -4,9 +4,9 @@ use axum::{
 };
 use std::path::PathBuf;
 
+use crate::adapters::infrastructure::mt_detector::MtDetector;
+use crate::adapters::infrastructure::mt_installer::MtInstaller;
 use crate::domain::models::{DetectionSummary, EaPortConfig, MtInstallationsResponse};
-use crate::mt_detector::MtDetector;
-use crate::mt_installer::MtInstaller;
 
 use super::{AppState, ProblemDetails};
 

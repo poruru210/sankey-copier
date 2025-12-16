@@ -155,3 +155,62 @@ impl MessageHandler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    use crate::adapters::inbound::zmq::test_helpers::create_test_context;
+    use crate::domain::models::{RequestConfigMessage, SlaveSettings, STATUS_CONNECTED};
+    use chrono::Utc;
+
+    #[tokio::test]
+    async fn test_handle_config_request_slave() {
+        let ctx = create_test_context().await;
+        let master_account = "MASTER_CFG_001";
+        let slave_account = "SLAVE_CFG_001";
+
+        ctx.db.create_trade_group(master_account).await.unwrap();
+        let slave_settings = SlaveSettings {
+            config_version: 5,
+            lot_multiplier: Some(2.0),
+            ..SlaveSettings::default()
+        };
+        ctx.db
+            .add_member(
+                master_account,
+                slave_account,
+                slave_settings,
+                STATUS_CONNECTED,
+            )
+            .await
+            .unwrap();
+
+        let request = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: slave_account.to_string(),
+            timestamp: Utc::now().timestamp_millis().to_string(),
+            ea_type: "Slave".to_string(),
+        };
+
+        ctx.handle_request_config(request).await;
+        ctx.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_config_request_master() {
+        let ctx = create_test_context().await;
+        let master_account = "MASTER_CFG_002";
+
+        ctx.db.create_trade_group(master_account).await.unwrap();
+
+        let request = RequestConfigMessage {
+            message_type: "RequestConfig".to_string(),
+            account_id: master_account.to_string(),
+            timestamp: Utc::now().timestamp_millis().to_string(),
+            ea_type: "Master".to_string(),
+        };
+
+        ctx.handle_request_config(request).await;
+        ctx.cleanup().await;
+    }
+}

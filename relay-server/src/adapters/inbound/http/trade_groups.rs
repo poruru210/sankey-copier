@@ -8,10 +8,10 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::Serialize;
+// use serde::Serialize;
 
 use crate::config_builder::{ConfigBuilder, MasterConfigContext, SlaveConfigContext};
-use crate::domain::models::{MasterSettings, SlaveConfigWithMaster, TradeGroup, WarningCode};
+use crate::domain::models::{MasterSettings, SlaveConfigWithMaster, TradeGroup};
 use crate::domain::services::status_calculator::SlaveRuntimeTarget;
 use crate::domain::services::status_calculator::{
     evaluate_master_status, ConnectionSnapshot, MasterIntent, MasterStatusResult, SlaveIntent,
@@ -19,30 +19,7 @@ use crate::domain::services::status_calculator::{
 use crate::runtime_status_updater::RuntimeStatusUpdater;
 
 use super::{AppState, ProblemDetails};
-
-/// API response view that augments TradeGroup with runtime status evaluated by the status engine.
-#[derive(Debug, Clone, Serialize)]
-pub struct TradeGroupRuntimeView {
-    pub id: String,
-    pub master_settings: MasterSettings,
-    pub master_runtime_status: i32,
-    pub master_warning_codes: Vec<WarningCode>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl TradeGroupRuntimeView {
-    fn new(trade_group: TradeGroup, master_runtime: MasterStatusResult) -> Self {
-        Self {
-            id: trade_group.id,
-            master_settings: trade_group.master_settings,
-            master_runtime_status: master_runtime.status,
-            master_warning_codes: master_runtime.warning_codes,
-            created_at: trade_group.created_at,
-            updated_at: trade_group.updated_at,
-        }
-    }
-}
+use crate::adapters::inbound::http::dtos::{ToggleMasterRequest, TradeGroupRuntimeView};
 
 /// List all TradeGroups (Master accounts and their settings)
 pub async fn list_trade_groups(
@@ -232,12 +209,6 @@ pub async fn delete_trade_group(
             )
         }
     }
-}
-
-/// Request body for toggling Master enabled state
-#[derive(Debug, serde::Deserialize)]
-pub struct ToggleMasterRequest {
-    pub enabled: bool,
 }
 
 /// Toggle Master enabled state

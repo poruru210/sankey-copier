@@ -1,7 +1,7 @@
+use crate::adapters::infrastructure::mt_installer::EA_CONFIG_FILENAME;
 use crate::domain::models::{
     Architecture, EaPortConfig, InstalledComponents, MtInstallation, MtType,
 };
-use crate::mt_installer::EA_CONFIG_FILENAME;
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};

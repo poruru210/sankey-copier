@@ -1,7 +1,3 @@
-//! Test utilities module
-//!
-//! Shared test utilities and helper functions for database tests
-
 use crate::adapters::outbound::persistence::Database;
 use crate::domain::models::SlaveSettings;
 use sankey_copier_zmq::TradeFilters;
@@ -37,6 +33,3 @@ pub(crate) fn create_test_slave_settings() -> SlaveSettings {
         use_pending_order_for_delayed: false,
     }
 }
-
-// Test submodules
-mod config_distribution_tests;

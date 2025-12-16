@@ -1,36 +1,27 @@
-pub mod adapters;
-pub mod application;
-mod cert;
-mod config;
-mod config_builder;
-mod connection_manager;
-pub mod domain;
-
-mod log_buffer;
-mod logging;
-
-mod mt_detector;
-mod mt_installer;
-mod port_resolver;
-pub mod ports;
-mod runtime_status_updater;
-mod victoria_logs;
-
-use adapters::inbound::http::{create_router, AppState};
-use adapters::inbound::zmq::MessageHandler;
-use adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage, ZmqServer};
-use adapters::outbound::persistence::Database;
 use anyhow::Result;
-use application::status_service::StatusService;
-use config::Config;
-use connection_manager::ConnectionManager;
-use domain::services::copy_engine::CopyEngine;
-use log_buffer::create_log_buffer;
-use ports::adapters::RuntimeStatusEvaluatorAdapter;
-use runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater};
+use sankey_copier_relay_server::adapters;
+use sankey_copier_relay_server::adapters::inbound::http::{create_router, AppState};
+use sankey_copier_relay_server::adapters::inbound::zmq::MessageHandler;
+use sankey_copier_relay_server::adapters::infrastructure::connection_manager;
+use sankey_copier_relay_server::adapters::infrastructure::connection_manager::ConnectionManager;
+use sankey_copier_relay_server::adapters::infrastructure::log_buffer::create_log_buffer;
+use sankey_copier_relay_server::adapters::outbound::messaging::{
+    ZmqConfigPublisher, ZmqMessage, ZmqServer,
+};
+use sankey_copier_relay_server::adapters::outbound::persistence::Database;
+use sankey_copier_relay_server::application::status_service::StatusService;
+use sankey_copier_relay_server::config::Config;
+use sankey_copier_relay_server::domain::services::copy_engine::CopyEngine;
+use sankey_copier_relay_server::logging;
+use sankey_copier_relay_server::ports;
+use sankey_copier_relay_server::ports::adapters::RuntimeStatusEvaluatorAdapter;
+use sankey_copier_relay_server::runtime_status_updater::{
+    RuntimeStatusMetrics, RuntimeStatusUpdater,
+};
+use sankey_copier_relay_server::victoria_logs;
+use sankey_copier_relay_server::victoria_logs::VLogsController;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
-use victoria_logs::VLogsController;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -107,8 +98,11 @@ async fn main() -> Result<()> {
     // Resolve ports (HTTP and ZeroMQ, dynamic or fixed)
     // runtime.toml is stored in CONFIG_DIR (or current directory)
     let runtime_toml_path = format!("{}/runtime.toml", config_dir);
-    let resolved_ports =
-        port_resolver::resolve_ports(&config.server, &config.zeromq, &runtime_toml_path)?;
+    let resolved_ports = adapters::infrastructure::port_resolver::resolve_ports(
+        &config.server,
+        &config.zeromq,
+        &runtime_toml_path,
+    )?;
 
     // Update server address if port was dynamically assigned
     let server_address = if resolved_ports.is_dynamic && config.server.port == 0 {
@@ -137,7 +131,7 @@ async fn main() -> Result<()> {
 
     // Ensure TLS certificate exists (generate and register if needed)
     let base_path = std::env::current_dir()?;
-    cert::ensure_certificate(&config.tls, &base_path)?;
+    adapters::infrastructure::cert::ensure_certificate(&config.tls, &base_path)?;
     tracing::info!("TLS certificate ready");
 
     // Initialize database
@@ -233,7 +227,7 @@ async fn main() -> Result<()> {
             zmq_publisher.clone(),
             vlogs_controller.clone(),
             runtime_status_metrics.clone(),
-            Some(status_service),
+            status_service,
         );
         tracing::info!(
             "MessageHandler created with StatusService, spawning message processing task..."
@@ -250,14 +244,14 @@ async fn main() -> Result<()> {
     // Spawn timeout checker task
     tracing::info!("Spawning timeout checker task...");
     {
-        let handler = connection_manager::monitor::RealTimeoutActionHandler::new(
+        let handler = connection_manager::RealTimeoutActionHandler::new(
             connection_manager.clone(),
             db.clone(),
             zmq_publisher.clone(),
             broadcast_tx.clone(),
             runtime_status_metrics.clone(),
         );
-        let monitor = connection_manager::monitor::TimeoutMonitor::new(
+        let monitor = connection_manager::TimeoutMonitor::new(
             connection_manager.clone(),
             std::sync::Arc::new(handler),
         );

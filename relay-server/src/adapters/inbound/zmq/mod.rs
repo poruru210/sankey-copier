@@ -7,9 +7,9 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::{
+    adapters::infrastructure::connection_manager::ConnectionManager,
     adapters::outbound::messaging::{ZmqConfigPublisher, ZmqMessage},
     adapters::outbound::persistence::Database,
-    connection_manager::ConnectionManager,
     domain::models::WarningCode,
     domain::services::copy_engine::CopyEngine,
     runtime_status_updater::{RuntimeStatusMetrics, RuntimeStatusUpdater},
@@ -26,7 +26,7 @@ mod trade_signal;
 pub(crate) mod unregister;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod test_helpers;
 
 /// Handles incoming ZMQ messages and coordinates trade copying logic
 pub struct MessageHandler {
@@ -41,9 +41,7 @@ pub struct MessageHandler {
     runtime_status_metrics: Arc<RuntimeStatusMetrics>,
 
     /// Status service for heartbeat processing (Hexagonal Architecture)
-    /// Optional for backward compatibility - when None, uses legacy heartbeat logic
-    #[allow(dead_code)] // Will be used when heartbeat.rs delegates to it
-    status_service: Option<crate::application::StatusService>,
+    status_service: crate::application::StatusService,
 }
 
 impl MessageHandler {
@@ -56,7 +54,7 @@ impl MessageHandler {
         publisher: Arc<ZmqConfigPublisher>,
         vlogs_controller: Option<VLogsController>,
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
-        status_service: Option<crate::application::StatusService>,
+        status_service: crate::application::StatusService,
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),

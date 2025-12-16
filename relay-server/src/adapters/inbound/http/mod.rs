@@ -12,6 +12,7 @@ pub mod trade_groups;
 
 // New submodules for modular structure
 mod connections;
+pub mod dtos;
 mod logs;
 mod middleware;
 mod runtime_metrics;
@@ -20,7 +21,7 @@ mod websocket;
 mod zeromq_settings;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod test_helpers;
 
 // Public re-exports
 pub use error::ProblemDetails;
@@ -40,9 +41,13 @@ use tower_http::LatencyUnit;
 pub use websocket::SnapshotBroadcaster;
 
 use crate::{
-    adapters::outbound::messaging::ZmqConfigPublisher, adapters::outbound::persistence::Database,
-    config::Config, connection_manager::ConnectionManager, log_buffer::LogBuffer,
-    port_resolver::ResolvedPorts, runtime_status_updater::RuntimeStatusMetrics,
+    adapters::infrastructure::connection_manager::ConnectionManager,
+    adapters::{
+        infrastructure::log_buffer::LogBuffer, infrastructure::port_resolver::ResolvedPorts,
+        outbound::messaging::ZmqConfigPublisher, outbound::persistence::Database,
+    },
+    config::Config,
+    runtime_status_updater::RuntimeStatusMetrics,
     victoria_logs::VLogsController,
 };
 

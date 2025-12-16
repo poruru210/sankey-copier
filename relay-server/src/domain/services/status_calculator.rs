@@ -1069,4 +1069,78 @@ mod tests {
         assert!(master_unknown.has_changed(&master_default));
         assert!(!master_unknown.has_changed(&master_unknown));
     }
+
+    #[test]
+    fn test_warning_codes_equality() {
+        let codes1 = vec![
+            WarningCode::SlaveAutoTradingDisabled,
+            WarningCode::MasterOffline,
+        ];
+        let codes2 = vec![
+            WarningCode::SlaveAutoTradingDisabled,
+            WarningCode::MasterOffline,
+        ];
+        assert_eq!(codes1, codes2);
+
+        // Different content
+        let codes3 = vec![WarningCode::SlaveAutoTradingDisabled];
+        assert_ne!(codes1, codes3);
+    }
+
+    #[test]
+    fn test_warning_codes_sorted_by_priority() {
+        // Simulate a scenario where Master is offline with Web UI disabled
+        let master_intent = MasterIntent {
+            web_ui_enabled: false,
+        };
+
+        let master_conn = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Offline),
+            is_trade_allowed: false,
+        };
+
+        let master_result = evaluate_master_status(master_intent, master_conn);
+
+        assert!(!master_result.warning_codes.is_empty());
+        assert_eq!(master_result.warning_codes.len(), 2);
+
+        let codes1 = master_result.warning_codes.clone();
+        let codes2 = master_result.warning_codes.clone();
+        assert_eq!(codes1, codes2);
+    }
+
+    #[test]
+    fn test_warning_codes_slave_auto_trading_disabled() {
+        let slave_intent = SlaveIntent {
+            web_ui_enabled: true,
+        };
+
+        let slave_conn = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: false, // Auto-trading disabled
+        };
+
+        let master_intent = MasterIntent {
+            web_ui_enabled: true,
+        };
+        let master_conn = ConnectionSnapshot {
+            connection_status: Some(ConnectionStatus::Online),
+            is_trade_allowed: true,
+        };
+        let master_result = evaluate_master_status(master_intent, master_conn);
+
+        let member_result = evaluate_member_status(slave_intent, slave_conn, &master_result);
+
+        assert!(
+            member_result
+                .warning_codes
+                .contains(&WarningCode::SlaveAutoTradingDisabled),
+            "Expected SlaveAutoTradingDisabled in warning_codes"
+        );
+
+        assert_eq!(
+            member_result.status, STATUS_DISABLED,
+            "Status should be DISABLED when auto-trading is off"
+        );
+    }
 }

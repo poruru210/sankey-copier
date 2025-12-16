@@ -91,7 +91,22 @@ impl StatusService {
         // Get TradeGroup
         let trade_group = match self.repository.get_trade_group(account_id).await {
             Ok(Some(tg)) => tg,
-            Ok(None) => return,
+            Ok(None) => {
+                tracing::info!(
+                    "TradeGroup missing for Master {}, attempting to create...",
+                    account_id
+                );
+                match self.repository.create_trade_group(account_id).await {
+                    Ok(tg) => {
+                        tracing::info!("Successfully created TradeGroup for Master {}", account_id);
+                        tg
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create TradeGroup for {}: {}", account_id, e);
+                        return;
+                    }
+                }
+            }
             Err(e) => {
                 tracing::error!("Failed to get TradeGroup for {}: {}", account_id, e);
                 return;
@@ -443,6 +458,7 @@ mod tests {
         #[async_trait]
         impl TradeGroupRepository for TradeGroupRepository {
             async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>>;
+            async fn create_trade_group(&self, id: &str) -> anyhow::Result<TradeGroup>;
             async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>>;
             async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::domain::models::SlaveConfigWithMaster>>;
             async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: i32) -> anyhow::Result<()>;
@@ -729,12 +745,22 @@ mod tests {
             .times(1)
             .return_const(Some(new_conn));
 
-        // TradeGroup exists
+        // TradeGroup missing initially
         let trade_group = TradeGroup::new(account_id.to_string());
+        let trade_group_clone = trade_group.clone();
+
         mock_repo
             .expect_get_trade_group()
             .with(eq(account_id))
-            .return_once(|_| Ok(Some(trade_group)));
+            .times(1)
+            .return_once(|_| Ok(None));
+
+        // EXPECT: create_trade_group to be called
+        mock_repo
+            .expect_create_trade_group()
+            .with(eq(account_id))
+            .times(1)
+            .return_once(|_| Ok(trade_group_clone));
 
         // EXPECT: Config should be published for new registration
         mock_publisher

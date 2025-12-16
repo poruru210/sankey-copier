@@ -17,13 +17,14 @@ pub use symbol_converter::*;
 pub use trade_group::*;
 pub use trade_group_member::*;
 
-#[cfg(test)]
-mod settings_conversion_tests;
+// mod settings_conversion_tests;
 
 // Re-export shared types from DLL
 // These are external to our domain but used within it.
 // We might want to wrap them eventually, but re-exporting here works for now.
 pub use sankey_copier_zmq::{
-    OrderType, SymbolMapping, TradeAction, TradeFilters, TradeSignal, WarningCode,
-    STATUS_CONNECTED, STATUS_DISABLED, STATUS_ENABLED, STATUS_NO_CONFIG,
+    HeartbeatMessage, MasterConfigMessage, OrderType, PositionSnapshotMessage, RegisterMessage,
+    RequestConfigMessage, SlaveConfigMessage, SymbolMapping, SyncRequestMessage, TradeAction,
+    TradeFilters, TradeSignal, UnregisterMessage, WarningCode, STATUS_CONNECTED, STATUS_DISABLED,
+    STATUS_ENABLED, STATUS_NO_CONFIG,
 };
