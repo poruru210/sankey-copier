@@ -43,6 +43,8 @@ pub struct MessageHandler {
     status_service: crate::application::StatusService,
     /// Service for handling disconnection events
     disconnection_service: Arc<dyn crate::ports::DisconnectionService>,
+    /// Application configuration (for symbol mappings)
+    config: Arc<crate::config::Config>,
 }
 
 impl MessageHandler {
@@ -57,6 +59,7 @@ impl MessageHandler {
         runtime_status_metrics: Arc<RuntimeStatusMetrics>,
         status_service: crate::application::StatusService,
         disconnection_service: Arc<dyn crate::ports::DisconnectionService>,
+        config: Arc<crate::config::Config>,
     ) -> Self {
         Self {
             connection_manager: connection_manager.clone(),
@@ -69,6 +72,7 @@ impl MessageHandler {
 
             status_service,
             disconnection_service,
+            config,
         }
     }
 

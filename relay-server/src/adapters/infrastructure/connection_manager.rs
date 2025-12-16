@@ -38,12 +38,22 @@ impl ConnectionManager {
         let mut connections = self.connections.write().await;
 
         // 既に登録済みの場合は更新しない（Heartbeatに任せる）
-        if connections.contains_key(&key) {
+        // 既に登録済みの場合は更新しない（Heartbeatに任せる）
+        if let Some(conn) = connections.get_mut(&key) {
             tracing::debug!(
-                "EA already registered: {} ({}), skipping register",
+                "EA already registered: {} ({}), updating extended info",
                 msg.account_id,
                 ea_type
             );
+            // Update fields that are unique to Register message
+            if msg.detected_symbols.is_some() {
+                conn.detected_symbols = msg.detected_symbols.clone();
+            }
+            // Always update platform info just in case
+            conn.platform = msg.platform.parse().unwrap_or(conn.platform);
+            conn.server = msg.server.clone();
+            conn.broker = msg.broker.clone();
+            conn.account_name = msg.account_name.clone();
             return;
         }
 
@@ -73,6 +83,7 @@ impl ConnectionManager {
             status: ConnectionStatus::Registered,
             connected_at: now,
             is_trade_allowed: false, // 初期値、最初のHeartbeatで更新
+            detected_symbols: msg.detected_symbols.clone(),
         };
 
         connections.insert(key, connection);
@@ -148,6 +159,7 @@ impl ConnectionManager {
                 status: ConnectionStatus::Online,
                 connected_at: now,
                 is_trade_allowed: msg.is_trade_allowed,
+                detected_symbols: None, // Heartbeat does not carry detection info
             };
 
             connections.insert(key, connection);
@@ -630,6 +642,7 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            detected_symbols: None,
         };
 
         manager.register_ea(&register_msg).await;

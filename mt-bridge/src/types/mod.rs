@@ -212,6 +212,9 @@ pub struct RegisterMessage {
     pub currency: String,
     pub leverage: i64,
     pub timestamp: String,
+    /// List of detected symbols for auto-mapping (sent by Slave)
+    #[serde(default)]
+    pub detected_symbols: Option<Vec<String>>,
 }
 
 /// Request configuration message structure (for Slave EAs)

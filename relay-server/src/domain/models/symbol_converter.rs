@@ -7,6 +7,8 @@ pub struct SymbolConverter {
     pub suffix_remove: Option<String>,
     pub prefix_add: Option<String>,
     pub suffix_add: Option<String>,
+    pub synonym_groups: Vec<Vec<String>>,
+    pub detected_symbols: Option<Vec<String>>,
 }
 
 impl SymbolConverter {
@@ -16,7 +18,19 @@ impl SymbolConverter {
             suffix_remove: master_settings.symbol_suffix.clone(),
             prefix_add: slave_settings.symbol_prefix.clone(),
             suffix_add: slave_settings.symbol_suffix.clone(),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         }
+    }
+
+    pub fn with_auto_mapping(
+        mut self,
+        synonym_groups: Vec<Vec<String>>,
+        detected_symbols: Option<Vec<String>>,
+    ) -> Self {
+        self.synonym_groups = synonym_groups;
+        self.detected_symbols = detected_symbols;
+        self
     }
 
     pub fn convert(&self, symbol: &str, mappings: &[SymbolMapping]) -> String {
@@ -40,6 +54,20 @@ impl SymbolConverter {
         // 2. Apply Mapping (on the clean symbol)
         if let Some(mapping) = mappings.iter().find(|m| m.source_symbol == result) {
             result = mapping.target_symbol.clone();
+        } else {
+            // Auto-mapping: Try to find a match in detected symbols via synonym groups
+            if let Some(detected) = &self.detected_symbols {
+                'group_search: for group in &self.synonym_groups {
+                    if group.contains(&result) {
+                        for candidate in group {
+                            if candidate != &result && detected.contains(candidate) {
+                                result = candidate.clone();
+                                break 'group_search;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 3. Add Slave's prefix/suffix
@@ -66,6 +94,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: None,
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let mappings = vec![SymbolMapping {
@@ -84,6 +114,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: None,
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = converter.convert("MT5_EURUSD", &[]);
@@ -97,6 +129,8 @@ mod tests {
             suffix_remove: Some(".fx".to_string()),
             prefix_add: None,
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = converter.convert("EURUSD.fx", &[]);
@@ -110,6 +144,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: Some("FX_".to_string()),
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = converter.convert("EURUSD", &[]);
@@ -123,6 +159,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: None,
             suffix_add: Some(".pro".to_string()),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = converter.convert("EURUSD", &[]);
@@ -136,6 +174,8 @@ mod tests {
             suffix_remove: Some(".fx".to_string()),
             prefix_add: Some("FX_".to_string()),
             suffix_add: Some(".pro".to_string()),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = converter.convert("MT5_EURUSD.fx", &[]);
@@ -149,6 +189,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: None,
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         // Mapping should match the CLEANED symbol
@@ -182,6 +224,8 @@ mod tests {
         assert_eq!(converter.suffix_remove, Some(".m".to_string()));
         assert_eq!(converter.prefix_add, Some("S_".to_string()));
         assert_eq!(converter.suffix_add, Some(".s".to_string()));
+        assert!(converter.synonym_groups.is_empty());
+        assert!(converter.detected_symbols.is_none());
     }
 
     #[test]
@@ -195,6 +239,8 @@ mod tests {
         assert_eq!(converter.suffix_remove, None);
         assert_eq!(converter.prefix_add, None);
         assert_eq!(converter.suffix_add, None);
+        assert!(converter.synonym_groups.is_empty());
+        assert!(converter.detected_symbols.is_none());
     }
 
     #[test]
@@ -205,6 +251,8 @@ mod tests {
             suffix_remove: Some(".raw".to_string()),
             prefix_add: None,
             suffix_add: Some("-ECN".to_string()),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let mappings = vec![SymbolMapping {
@@ -258,6 +306,8 @@ mod tests {
             suffix_remove: Some("m".to_string()), // Master settings would provide this
             prefix_add: slave_settings.symbol_prefix.clone(),
             suffix_add: slave_settings.symbol_suffix.clone(),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let transformed_symbol = converter.convert(
@@ -269,5 +319,36 @@ mod tests {
             transformed_symbol, "GOLD#",
             "Trade signal symbol should transform from XAUUSDm to GOLD#"
         );
+    }
+
+    #[test]
+    fn test_symbol_converter_auto_mapping() {
+        let converter = SymbolConverter {
+            prefix_remove: None,
+            suffix_remove: None,
+            prefix_add: None,
+            suffix_add: None,
+            synonym_groups: vec![vec!["XAUUSD".to_string(), "GOLD".to_string()]],
+            detected_symbols: Some(vec!["GOLD".to_string()]),
+        };
+
+        let result = converter.convert("XAUUSD", &[]);
+        assert_eq!(result, "GOLD");
+    }
+
+    #[test]
+    fn test_symbol_converter_auto_mapping_with_prefix_suffix() {
+        let converter = SymbolConverter {
+            prefix_remove: Some("m".to_string()),
+            suffix_remove: None,
+            prefix_add: None,
+            suffix_add: Some(".pro".to_string()),
+            synonym_groups: vec![vec!["XAUUSD".to_string(), "GOLD".to_string()]],
+            detected_symbols: Some(vec!["GOLD".to_string()]),
+        };
+
+        // mXAUUSD -> XAUUSD -> GOLD -> GOLD.pro
+        let result = converter.convert("mXAUUSD", &[]);
+        assert_eq!(result, "GOLD.pro");
     }
 }

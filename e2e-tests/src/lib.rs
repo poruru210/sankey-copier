@@ -38,6 +38,9 @@ pub mod helpers;
 // Common types and constants
 pub mod types;
 
+// INI Config Parser
+pub mod ini_config;
+
 // Base simulator functionality
 pub mod base;
 

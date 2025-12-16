@@ -72,6 +72,41 @@ CGridPanel     g_config_panel;                   // Grid panel for displaying co
 int            g_last_config_count = -1;         // Debug: track config count changes
 
 //+------------------------------------------------------------------+
+//| Detect symbols from candidates list                              |
+//+------------------------------------------------------------------+
+string DetectSymbols()
+{
+   string candidates[];
+   GetSymbolSearchCandidates(candidates);
+   
+   string detected = "";
+   int count = ArraySize(candidates);
+   
+   for(int i=0; i<count; i++)
+   {
+      string candidate = candidates[i];
+      // Try to select the symbol to check existence
+      if(SymbolSelect(candidate, true))
+      {
+         if(StringLen(detected) > 0) detected += ",";
+         detected += candidate;
+      }
+   }
+   
+   if(StringLen(detected) > 0)
+   {
+      LogInfo(CAT_CONFIG, "Detected symbols: " + detected);
+   }
+   // Only warn if candidates were provided but none found
+   else if(count > 0)
+   {
+      LogWarn(CAT_CONFIG, "No symbols detected from candidates list");
+   }
+   
+   return detected;
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                     |
 //+------------------------------------------------------------------+
 int OnInit()
@@ -147,6 +182,19 @@ int OnInit()
    {
       LogError(CAT_SYSTEM, "Failed to connect to Relay Server");
       return INIT_FAILED;
+   }
+
+   // Detect symbols and send explicit Register message
+   // This ensures the server receives the detected symbols immediately
+   string detected_symbols = DetectSymbols();
+   if(g_ea_context.SendRegister(detected_symbols))
+   {
+       g_register_sent = true;
+       LogInfo(CAT_SYSTEM, "Sent initial Register message");
+   }
+   else
+   {
+       LogWarn(CAT_SYSTEM, "Failed to send initial Register message");
    }
    
    // Subscribe to global sync and my config topics

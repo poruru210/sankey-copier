@@ -57,6 +57,7 @@ struct SlaveEaCore {
 
     push_address: String,
     config_address: String,
+    detected_symbols: String,
 }
 
 impl ExpertAdvisor for SlaveEaCore {
@@ -103,6 +104,41 @@ impl ExpertAdvisor for SlaveEaCore {
                 eprintln!("Failed to connect EA context!");
                 return ENUM_INIT_RETCODE::INIT_FAILED;
             }
+        }
+
+        // Send Register Message (Automatic)
+
+        // We need to keep the vector alive until function call?
+        // Ah, `to_u16` returns Vec. `as_ptr` borrows it.
+        // I need to bind it to a variable.
+        let detected_vec = if self.detected_symbols.is_empty() {
+            Vec::new()
+        } else {
+            to_u16(&self.detected_symbols)
+        };
+
+        let detected_ptr = if detected_vec.is_empty() {
+            std::ptr::null()
+        } else {
+            detected_vec.as_ptr()
+        };
+
+        let mut buffer = vec![0u8; 1024];
+        let len = unsafe {
+            ea_send_register(
+                ctx_ptr,
+                buffer.as_mut_ptr(),
+                buffer.len() as i32,
+                detected_ptr,
+            )
+        };
+        if len > 0 {
+            unsafe {
+                ea_send_push(ctx_ptr, buffer.as_ptr(), len);
+            }
+        } else {
+            eprintln!("Failed to send register message!");
+            // Don't fail init for this? MQL logs warning.
         }
 
         ENUM_INIT_RETCODE::INIT_SUCCEEDED
@@ -321,18 +357,26 @@ pub struct SlaveEaSimulator {
     // Connection Params
     push_address: String,
     config_address: String,
+    detected_symbols: String,
 }
 
 impl SlaveEaSimulator {
     pub fn new(
-        push_address: &str,
-        config_address: &str,
-        _trade_address: &str,
+        ini_path: &std::path::Path,
         account_id: &str,
         master_account: &str,
         is_trade_allowed: bool,
     ) -> Result<Self> {
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave, is_trade_allowed)?;
+
+        // Load INI config
+        let ini_conf = crate::ini_config::EaIniConfig::load_from_file(ini_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
+
+        let push_address = format!("tcp://127.0.0.1:{}", ini_conf.receiver_port);
+        let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
+
+        let detected_symbols = ini_conf.symbol_search_candidates.join(",");
 
         Ok(Self {
             base,
@@ -352,9 +396,14 @@ impl SlaveEaSimulator {
             g_register_sent: Arc::new(AtomicBool::new(false)),
             pending_subscriptions: Arc::new(Mutex::new(Vec::new())),
             context: Arc::new(Mutex::new(None)),
-            push_address: push_address.to_string(),
-            config_address: config_address.to_string(),
+            push_address,
+            config_address,
+            detected_symbols,
         })
+    }
+
+    pub fn set_detected_symbols(&mut self, symbols: Vec<String>) {
+        self.detected_symbols = symbols.join(",");
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -384,6 +433,7 @@ impl SlaveEaSimulator {
             context: self.context.clone(),
             push_address: self.push_address.clone(),
             config_address: self.config_address.clone(),
+            detected_symbols: self.detected_symbols.clone(),
         };
 
         let runner = PlatformRunner::new(core);

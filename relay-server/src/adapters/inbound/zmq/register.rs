@@ -36,6 +36,14 @@ impl MessageHandler {
             "[REGISTER] EA registration received"
         );
 
+        if let Some(symbols) = &msg.detected_symbols {
+            tracing::info!(
+                account = %account_id,
+                symbols = ?symbols,
+                "[REGISTER] with detected_symbols"
+            );
+        }
+
         // 1. Register the EA with ConnectionManager (is_trade_allowed=false)
         self.connection_manager.register_ea(&msg).await;
 

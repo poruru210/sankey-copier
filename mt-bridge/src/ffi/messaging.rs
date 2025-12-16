@@ -31,6 +31,7 @@ pub unsafe extern "C" fn ea_send_register(
     context: *mut crate::EaContext,
     output: *mut u8,
     output_len: i32,
+    detected_symbols: *const u16,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
@@ -38,6 +39,14 @@ pub unsafe extern "C" fn ea_send_register(
         }
 
         let ctx = &*context;
+
+        // Parse detected symbols if provided
+        let detected = if !detected_symbols.is_null() {
+            crate::ffi::helpers::utf16_to_string(detected_symbols)
+                .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        } else {
+            None
+        };
 
         // Build RegisterMessage using cached context data
         let msg = crate::types::RegisterMessage {
@@ -52,6 +61,7 @@ pub unsafe extern "C" fn ea_send_register(
             currency: ctx.currency.clone(),
             leverage: ctx.leverage,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            detected_symbols: detected,
         };
 
         unsafe { crate::ffi::helpers::serialize_to_buffer(&msg, output, output_len) }

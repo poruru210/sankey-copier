@@ -50,12 +50,10 @@ impl TestSandbox {
         is_trade_allowed: bool,
     ) -> Result<MasterEaSimulator> {
         // Master connects to PULL (for commands) and PUB (for config/sync)
-        let push_address = self.server.zmq_pull_address();
-        let config_address = self.server.zmq_pub_address();
+        let ini_path = self.server.ini_path();
 
-        let master =
-            MasterEaSimulator::new(&push_address, &config_address, account_id, is_trade_allowed)
-                .context("Failed to create Master EA simulator")?;
+        let master = MasterEaSimulator::new(&ini_path, account_id, is_trade_allowed)
+            .context("Failed to create Master EA simulator")?;
 
         // Note: We don't automatically call master.start() here to give the caller
         // a chance to configure it before the loop starts.
@@ -75,20 +73,11 @@ impl TestSandbox {
         master_account_id: &str,
         is_trade_allowed: bool,
     ) -> Result<SlaveEaSimulator> {
-        let push_address = self.server.zmq_pull_address();
-        let config_address = self.server.zmq_pub_address();
-        // Slave also subscribes to trade signals on the same PUB socket (in this architecture)
-        let trade_address = self.server.zmq_pub_address();
+        let ini_path = self.server.ini_path();
 
-        let slave = SlaveEaSimulator::new(
-            &push_address,
-            &config_address,
-            &trade_address,
-            account_id,
-            master_account_id,
-            is_trade_allowed,
-        )
-        .context("Failed to create Slave EA simulator")?;
+        let slave =
+            SlaveEaSimulator::new(&ini_path, account_id, master_account_id, is_trade_allowed)
+                .context("Failed to create Slave EA simulator")?;
 
         Ok(slave)
     }

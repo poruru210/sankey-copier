@@ -264,6 +264,10 @@ impl RelayServerProcess {
         // Wait a bit more for HTTP server to be ready
         std::thread::sleep(Duration::from_millis(500));
 
+        // GENERATE sankey_copier.ini
+        // This simulates the Installer's job, providing the EA with ports and candidates.
+        Self::generate_ea_ini(&working_dir, zmq_pull_port, zmq_pub_port)?;
+
         Ok(Self {
             child: Some(child),
             http_port,
@@ -274,6 +278,59 @@ impl RelayServerProcess {
             shutdown_flag,
             db_path,
         })
+    }
+
+    /// Generate sankey_copier.ini for EAs to read
+    fn generate_ea_ini(working_dir: &std::path::Path, recv_port: u16, pub_port: u16) -> Result<()> {
+        let ini_path = working_dir.join("sankey_copier.ini");
+
+        // 1. Read config.toml to extract Candidates
+        let config_path = working_dir.join("config.toml");
+        let mut candidates = Vec::new();
+
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                        if let Some(mapping) = val.get("symbol_mapping") {
+                            if let Some(groups) = mapping.get("synonym_groups") {
+                                if let Some(arr) = groups.as_array() {
+                                    for group in arr {
+                                        // Each group is array of strings
+                                        if let Some(syms) = group.as_array() {
+                                            for s in syms {
+                                                if let Some(str_val) = s.as_str() {
+                                                    candidates.push(str_val.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("Failed to read config.toml for candidates: {}", e),
+            }
+        }
+
+        // Remove duplicates and join
+        candidates.sort();
+        candidates.dedup();
+        let candidates_str = candidates.join(",");
+
+        let content = format!(
+            "[ZeroMQ]\nReceiverPort={}\nPublisherPort={}\n\n[SymbolSearch]\nCandidates={}\n",
+            recv_port, pub_port, candidates_str
+        );
+
+        std::fs::write(&ini_path, content).context("Failed to write sankey_copier.ini")?;
+        Ok(())
+    }
+
+    /// Get path to the generated sankey_copier.ini
+    pub fn ini_path(&self) -> PathBuf {
+        self.working_dir.join("sankey_copier.ini")
     }
 
     /// Get the ZMQ PULL address (for EA to send messages)

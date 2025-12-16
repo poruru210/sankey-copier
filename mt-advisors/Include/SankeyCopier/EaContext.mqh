@@ -162,12 +162,12 @@ public:
       return ea_send_push(m_context, data, len) == 1;
    }
 
-   bool SendRegister()
+   bool SendRegister(string detected_symbols = NULL)
    {
       if(!m_initialized) return false;
       
       uchar buffer[1024];
-      int len = ea_send_register(m_context, buffer, 1024);
+      int len = ea_send_register(m_context, buffer, 1024, detected_symbols);
       
       if(len > 0)
       {

@@ -99,6 +99,74 @@ impl TestContext {
             Arc::new(RuntimeStatusMetrics::default()),
             status_service,        // Inject StatusService
             disconnection_service, // Inject DisconnectionService
+            Arc::new(crate::config::Config::default()),
+        );
+
+        Self {
+            handler,
+            _publisher: publisher,
+            _broadcast_rx: broadcast_rx,
+        }
+    }
+
+    /// Create a new test context with custom configuration
+    pub async fn with_config(config: crate::config::Config) -> Self {
+        let connection_manager = Arc::new(ConnectionManagerImpl::new(30));
+        let copy_engine = Arc::new(CopyEngine::new());
+        let (broadcast_tx, broadcast_rx) = broadcast::channel::<String>(100);
+        let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
+        // Dynamic port publisher
+        let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
+        let metrics = Arc::new(RuntimeStatusMetrics::default());
+
+        let runtime_updater = Arc::new(
+            crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                db.clone(),
+                connection_manager.clone(),
+                metrics.clone(),
+            ),
+        );
+        let snapshot_broadcaster =
+            Arc::new(crate::adapters::inbound::http::SnapshotBroadcaster::new(
+                broadcast_tx.clone(),
+                connection_manager.clone(),
+                db.clone(),
+            ));
+
+        // Status Service
+        let status_service = crate::application::StatusService::new(
+            connection_manager.clone(),
+            db.clone(),
+            publisher.clone(),
+            runtime_updater,
+            Some(snapshot_broadcaster),
+            None,
+        );
+
+        let ws_broadcaster = Arc::new(
+            crate::adapters::outbound::messaging::WebsocketBroadcaster::new(broadcast_tx.clone()),
+        );
+        let disconnection_service = Arc::new(
+            crate::application::disconnection_service::RealDisconnectionService::new(
+                connection_manager.clone(),
+                db.clone(),
+                publisher.clone(),
+                ws_broadcaster.clone(),
+                metrics.clone(),
+            ),
+        );
+
+        let handler = MessageHandler::new(
+            connection_manager,
+            copy_engine,
+            broadcast_tx,
+            db,
+            publisher.clone(),
+            None,
+            Arc::new(RuntimeStatusMetrics::default()),
+            status_service,
+            disconnection_service,
+            Arc::new(config),
         );
 
         Self {
@@ -135,9 +203,12 @@ impl Drop for TestContext {
     }
 }
 
-/// Create a test context with MessageHandler and proper resource management
 pub(crate) async fn create_test_context() -> TestContext {
     TestContext::new().await
+}
+
+pub(crate) async fn create_test_context_with_config(config: crate::config::Config) -> TestContext {
+    TestContext::with_config(config).await
 }
 
 /// Build a reusable HeartbeatMessage for tests

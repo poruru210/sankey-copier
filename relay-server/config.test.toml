@@ -41,3 +41,13 @@ validity_days = 1  # Short validity for tests
 [victoria_logs]
 enabled = false  # Disable VictoriaLogs for tests
 host = "http://localhost:9428"  # Dummy host for API tests (no actual VLogs server needed)
+
+[symbol_mapping]
+# Synonym groups for auto-mapping logic verification
+synonym_groups = [
+  ["XAUUSD", "GOLD"],
+  ["XAGUSD", "SILVER"],
+  ["US30", "DJI", "WS30"],
+  ["US100", "NDX", "NAS100"],
+  ["BTCUSD", "BITCOIN", "XBTUSD"]
+]

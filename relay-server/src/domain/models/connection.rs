@@ -26,6 +26,9 @@ pub struct EaConnection {
     pub status: ConnectionStatus,
     pub connected_at: DateTime<Utc>,
     pub is_trade_allowed: bool, // MT auto-trading enabled state
+    /// Detected symbols reported by the EA (for auto-mapping)
+    #[serde(default)]
+    pub detected_symbols: Option<Vec<String>>,
 }
 
 impl Default for EaConnection {
@@ -46,6 +49,7 @@ impl Default for EaConnection {
             status: ConnectionStatus::Offline,
             connected_at: Utc::now(),
             is_trade_allowed: false,
+            detected_symbols: None,
         }
     }
 }

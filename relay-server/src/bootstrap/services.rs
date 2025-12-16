@@ -162,6 +162,7 @@ pub async fn setup(
             runtime_status_metrics.clone(),
             status_service,
             disconnection_service.clone(),
+            Arc::new(config.clone()),
         );
         tracing::info!(
             "MessageHandler created with StatusService, spawning message processing task..."

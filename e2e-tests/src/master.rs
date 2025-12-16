@@ -251,12 +251,18 @@ pub struct MasterEaSimulator {
 
 impl MasterEaSimulator {
     pub fn new(
-        push_address: &str,
-        config_address: &str,
+        ini_path: &std::path::Path,
         account_id: &str,
         is_trade_allowed: bool,
     ) -> Result<Self> {
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Master, is_trade_allowed)?;
+
+        // Load INI config
+        let ini_conf = crate::ini_config::EaIniConfig::load_from_file(ini_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
+
+        let push_address = format!("tcp://127.0.0.1:{}", ini_conf.receiver_port);
+        let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
 
         Ok(Self {
             base,
@@ -273,8 +279,8 @@ impl MasterEaSimulator {
             runner: None,
             timer_thread: None,
             context: Arc::new(Mutex::new(None)),
-            push_address: push_address.to_string(),
-            config_address: config_address.to_string(),
+            push_address,
+            config_address,
             pending_subscriptions: Arc::new(Mutex::new(Vec::new())),
         })
     }

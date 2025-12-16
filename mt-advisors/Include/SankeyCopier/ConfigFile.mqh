@@ -19,6 +19,8 @@
 //--- Global port variables (initialized from config file)
 int g_ReceiverPort = DEFAULT_RECEIVER_PORT;
 int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
+int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
+string g_SearchCandidates[]; // Array to store symbol search candidates
 bool g_ConfigLoaded = false;
 
 //+------------------------------------------------------------------+
@@ -54,6 +56,7 @@ bool LoadConfig()
 
    // Parse INI file
    bool in_zeromq_section = false;
+   bool in_symbol_search_section = false;
 
    while(!FileIsEnding(file_handle))
    {
@@ -70,10 +73,11 @@ bool LoadConfig()
       // Check for section header
       if(StringGetCharacter(line, 0) == '[')
       {
-         // Case-insensitive comparison for [ZeroMQ]
+         // Case-insensitive comparison for sections
          string upper_line = line;
          StringToUpper(upper_line);
          in_zeromq_section = (upper_line == "[ZEROMQ]");
+         in_symbol_search_section = (upper_line == "[SYMBOLSEARCH]");
          continue;
       }
 
@@ -95,6 +99,30 @@ bool LoadConfig()
                g_ReceiverPort = (int)StringToInteger(value);
             else if(key == "PublisherPort")
                g_PublisherPort = (int)StringToInteger(value);
+         }
+         }
+      }
+      // Parse [SymbolSearch] section
+      else if(in_symbol_search_section)
+      {
+         int eq_pos = StringFind(line, "=");
+         if(eq_pos > 0)
+         {
+            string key = StringSubstr(line, 0, eq_pos);
+            string value = StringSubstr(line, eq_pos + 1);
+            StringTrimLeft(key);
+            StringTrimRight(key);
+            
+            if(key == "Candidates")
+            {
+               StringSplit(value, ',', g_SearchCandidates);
+               // Trim loop
+               for(int i=0; i<ArraySize(g_SearchCandidates); i++)
+               {
+                   StringTrimLeft(g_SearchCandidates[i]);
+                   StringTrimRight(g_SearchCandidates[i]);
+               }
+            }
          }
       }
    }
@@ -161,6 +189,17 @@ int GetPublisherPort()
 }
 
 //+------------------------------------------------------------------+
+//| Get symbol search candidates                                      |
+//+------------------------------------------------------------------+
+void GetSymbolSearchCandidates(string &candidates[])
+{
+   if(!g_ConfigLoaded)
+      LoadConfig();
+   
+   ArrayCopy(candidates, g_SearchCandidates);
+}
+
+//+------------------------------------------------------------------+
 //| Check if config file exists                                       |
 //+------------------------------------------------------------------+
 bool ConfigFileExists()
@@ -174,8 +213,10 @@ bool ConfigFileExists()
 void ReloadConfig()
 {
    g_ConfigLoaded = false;
+   g_ConfigLoaded = false;
    g_ReceiverPort = DEFAULT_RECEIVER_PORT;
    g_PublisherPort = DEFAULT_PUBLISHER_PORT;
+   ArrayFree(g_SearchCandidates);
    LoadConfig();
 }
 
