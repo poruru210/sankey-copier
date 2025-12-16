@@ -213,6 +213,16 @@ impl SnapshotBroadcaster {
     }
 }
 
+// Adapter implementation for Outbound Port
+use async_trait::async_trait;
+
+#[async_trait]
+impl crate::ports::UpdateBroadcaster for SnapshotBroadcaster {
+    async fn broadcast_snapshot(&self) {
+        self.broadcast_now().await;
+    }
+}
+
 /// WebSocket upgrade handler
 pub async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_websocket(socket, state))

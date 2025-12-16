@@ -8,6 +8,7 @@ pub mod config_builder;
 
 pub mod domain;
 
+pub mod bootstrap;
 pub mod logging;
 pub mod ports;
 // pub mod runtime_status_updater; // Moved to application

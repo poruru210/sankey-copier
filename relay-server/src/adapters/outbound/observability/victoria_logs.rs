@@ -360,6 +360,24 @@ impl VLogsController {
     }
 }
 
+// Adapter implementation for Outbound Port
+use crate::domain::models::VLogsGlobalSettings;
+use async_trait::async_trait;
+
+#[async_trait]
+impl crate::ports::VLogsConfigProvider for VLogsController {
+    fn get_config(&self) -> VLogsGlobalSettings {
+        let config = self.config();
+        VLogsGlobalSettings {
+            enabled: self.is_enabled(),
+            endpoint: config.endpoint(),
+            batch_size: config.batch_size as i32,
+            flush_interval_secs: config.flush_interval_secs as i32,
+            log_level: "INFO".to_string(), // Default log level
+        }
+    }
+}
+
 /// Shared handle for controlling the VictoriaLogs layer
 #[derive(Clone)]
 #[allow(dead_code)]

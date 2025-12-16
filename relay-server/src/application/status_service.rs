@@ -1,6 +1,7 @@
+use crate::application::runtime_status_updater::RuntimeStatusUpdater;
 use crate::domain::models::HeartbeatMessage;
 use crate::ports::outbound::{
-    ConfigPublisher, ConnectionManager, StatusEvaluator, TradeGroupRepository, UpdateBroadcaster,
+    ConfigPublisher, ConnectionManager, TradeGroupRepository, UpdateBroadcaster,
     VLogsConfigProvider,
 };
 use std::sync::Arc;
@@ -10,7 +11,7 @@ pub struct StatusService {
     connection_manager: Arc<dyn ConnectionManager>,
     repository: Arc<dyn TradeGroupRepository>,
     publisher: Arc<dyn ConfigPublisher>,
-    status_evaluator: Option<Arc<dyn StatusEvaluator>>,
+    runtime_status_updater: Option<Arc<RuntimeStatusUpdater>>,
     broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
     vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
 }
@@ -20,7 +21,7 @@ impl StatusService {
         connection_manager: Arc<dyn ConnectionManager>,
         repository: Arc<dyn TradeGroupRepository>,
         publisher: Arc<dyn ConfigPublisher>,
-        status_evaluator: Option<Arc<dyn StatusEvaluator>>,
+        runtime_status_updater: Option<Arc<RuntimeStatusUpdater>>,
         broadcaster: Option<Arc<dyn UpdateBroadcaster>>,
         vlogs_provider: Option<Arc<dyn VLogsConfigProvider>>,
     ) -> Self {
@@ -28,7 +29,7 @@ impl StatusService {
             connection_manager,
             repository,
             publisher,
-            status_evaluator,
+            runtime_status_updater,
             broadcaster,
             vlogs_provider,
         }
@@ -186,9 +187,9 @@ impl StatusService {
         old_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
         _new_master_status: &crate::domain::services::status_calculator::MasterStatusResult,
     ) {
-        let Some(evaluator) = &self.status_evaluator else {
+        let Some(updater) = &self.runtime_status_updater else {
             tracing::debug!(
-                "StatusEvaluator not configured, skipping Slave updates for Master {}",
+                "RuntimeStatusUpdater not configured, skipping Slave updates for Master {}",
                 master_account
             );
             return;
@@ -226,7 +227,7 @@ impl StatusService {
             // Build new Slave bundle (uses current Master status)
             // Note: target cannot be cloned because it contains references, so we use it directly
             // For evaluate_member_status, we construct intents directly avoiding target reuse issues
-            let slave_bundle = evaluator.build_slave_bundle(target).await;
+            let slave_bundle = updater.build_slave_bundle(target).await;
 
             // Calculate OLD Slave status (uses OLD Master status)
             let slave_conn = self.connection_manager.get_slave(&slave_account).await;
@@ -325,9 +326,9 @@ impl StatusService {
         }
 
         // Need StatusEvaluator to proceed
-        let Some(evaluator) = &self.status_evaluator else {
+        let Some(updater) = &self.runtime_status_updater else {
             tracing::debug!(
-                "StatusEvaluator not configured, skipping Slave {} heartbeat evaluation",
+                "RuntimeStatusUpdater not configured, skipping Slave {} heartbeat evaluation",
                 slave_account
             );
             return;
@@ -335,7 +336,7 @@ impl StatusService {
 
         for settings in settings_list {
             // Build new bundle
-            let slave_bundle = evaluator
+            let slave_bundle = updater
                 .build_slave_bundle(
                     crate::domain::services::status_calculator::SlaveRuntimeTarget {
                         master_account: settings.master_account.as_str(),
@@ -353,7 +354,7 @@ impl StatusService {
                     connection_status: Some(conn.status),
                     is_trade_allowed: conn.is_trade_allowed,
                 };
-                evaluator
+                updater
                     .evaluate_member_runtime_status_with_snapshot(
                         crate::domain::services::status_calculator::SlaveRuntimeTarget {
                             master_account: settings.master_account.as_str(),
@@ -435,7 +436,6 @@ mod tests {
     use super::*;
     use crate::domain::models::{ConnectionStatus, EaConnection};
     use crate::domain::models::{TradeGroup, TradeGroupMember, VLogsGlobalSettings};
-    use crate::domain::services::status_calculator::{MemberStatusResult, SlaveRuntimeTarget};
     use async_trait::async_trait;
     use mockall::mock;
 
@@ -462,6 +462,7 @@ mod tests {
             async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>>;
             async fn get_settings_for_slave(&self, slave_id: &str) -> anyhow::Result<Vec<crate::domain::models::SlaveConfigWithMaster>>;
             async fn update_member_runtime_status(&self, master_id: &str, slave_id: &str, status: i32) -> anyhow::Result<()>;
+            async fn get_masters_for_slave(&self, slave_account: &str) -> anyhow::Result<Vec<String>>;
         }
     }
 
@@ -487,35 +488,6 @@ mod tests {
         pub VLogsConfigProvider {}
         impl VLogsConfigProvider for VLogsConfigProvider {
             fn get_config(&self) -> crate::domain::models::VLogsGlobalSettings;
-        }
-    }
-
-    #[allow(dead_code)]
-    struct MockStatusEvaluator;
-    #[async_trait]
-    impl StatusEvaluator for MockStatusEvaluator {
-        async fn evaluate_member_runtime_status(
-            &self,
-            _target: SlaveRuntimeTarget<'_>,
-        ) -> MemberStatusResult {
-            MemberStatusResult::default()
-        }
-
-        async fn evaluate_member_runtime_status_with_snapshot(
-            &self,
-            _target: SlaveRuntimeTarget<'_>,
-            _snapshot: crate::domain::services::status_calculator::ConnectionSnapshot,
-        ) -> MemberStatusResult {
-            MemberStatusResult::default()
-        }
-
-        async fn build_slave_bundle(
-            &self,
-            _target: SlaveRuntimeTarget<'_>,
-        ) -> crate::config_builder::SlaveConfigBundle {
-            let mut bundle = crate::config_builder::SlaveConfigBundle::default();
-            bundle.status_result.status = 2; // Enabled
-            bundle
         }
     }
 
@@ -781,6 +753,7 @@ mod tests {
     }
 
     /// TDD Test: Slave heartbeat with status change sends config
+    /// TDD Test: Slave heartbeat with status change sends config
     #[tokio::test]
     async fn test_handle_heartbeat_slave_state_change_sends_config() {
         let mut mock_conn_manager = MockConnectionManager::new();
@@ -811,125 +784,133 @@ mod tests {
             symbol_map: None,
         };
 
-        // First call for old_conn lookup returns None (new registration)
-        mock_conn_manager
-            .expect_get_slave()
-            .with(eq(slave_account_id))
-            .times(1)
-            .return_const(None);
+        // 1. Setup StatusService dependencies call expectations
+        // Note: RuntimeStatusUpdater will ALSO use these mocks.
 
-        // Heartbeat update
+        // --- ConnectionManager Expectations ---
+
+        // get_slave called only once by StatusService (to check old connections)
+        // AND once by RuntimeStatusUpdater (to get snapshot)
+        // We can just return None for the first call (new heartbeat processing basically)
+        // But wait, handle_slave_heartbeat -> get_settings -> build_slave_bundle -> connection_manager.get_slave
+        // AND handle_slave_heartbeat -> get_slave (old conn)
+
+        // Let's set up the Connections to result in ENABLED status.
+        let slave_conn = EaConnection {
+            account_id: slave_account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Slave,
+            status: ConnectionStatus::Online,
+            is_trade_allowed: true,
+            ..Default::default()
+        };
+        let master_conn = EaConnection {
+            account_id: master_account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Master,
+            status: ConnectionStatus::Online,
+            is_trade_allowed: true,
+            ..Default::default()
+        };
+
+        // Connection Manager will be called multiple times.
+        // 1. update_heartbeat (StatusService)
         mock_conn_manager
             .expect_update_heartbeat()
             .times(1)
             .return_const(true);
 
-        // Slave settings exist for this slave
+        // 2. get_slave (StatusService: old_conn lookup - returns None as if first time or lost track)
+        // Actually if we want to simulate change from DISABLED(0) to ENABLED(2),
+        // we can have old_conn return None (implied Disconnected/Unknown) OR return a Connected conn but previous calc was Disabled.
+        // Let's assume old_conn is None so old_status is Unknown.
+        // But wait, the test says "status changed from disabled".
+        // The DB settings say "status: 0".
+        // If Runtime calc returns 2, then 0 != 2 -> Change Detected.
+        // This is sufficient.
+
+        // However, RuntimeStatusUpdater needs to fetch connections.
+        // StatusService.handle_slave_heartbeat calls:
+        //   repo.get_settings_for_slave
+        //   runtime_status_updater.build_slave_bundle
+        //     -> runtime_status_updater.evaluate_master_runtime_status -> repo.get_trade_group
+        //     -> runtime_status_updater.evaluate_master_runtime_status -> conn.get_master
+        //     -> runtime_status_updater.slave_connection_snapshot -> conn.get_slave
+        //     -> conn.get_master (for equity)
+
+        // So we need to provide these returns.
+        mock_conn_manager
+            .expect_get_slave()
+            .with(eq(slave_account_id))
+            .returning(move |_| Some(slave_conn.clone()));
+
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(master_account_id))
+            .returning(move |_| Some(master_conn.clone()));
+
+        // --- Repository Expectations ---
+
+        // 1. get_settings_for_slave (StatusService)
         let slave_settings = crate::domain::models::SlaveConfigWithMaster {
             master_account: master_account_id.to_string(),
             slave_account: slave_account_id.to_string(),
             slave_settings: crate::domain::models::SlaveSettings::default(),
             enabled_flag: true,
-            status: 0, // DISABLED - will change to ENABLED/CONNECTED
+            status: 0, // DISABLED in DB - this is key for triggering "Change Detected"
             warning_codes: vec![],
         };
         mock_repo
             .expect_get_settings_for_slave()
             .with(eq(slave_account_id))
-            .return_once(|_| Ok(vec![slave_settings]));
+            .return_once(move |_| Ok(vec![slave_settings]));
 
-        // DB status update should be called
+        // 2. get_trade_group (RuntimeStatusUpdater -> evaluate_master_runtime_status)
+        let mut trade_group = TradeGroup::new(master_account_id.to_string());
+        trade_group.master_settings.enabled = true; // Master Enabled
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(master_account_id))
+            .returning(move |_| Ok(Some(trade_group.clone())));
+
+        // 3. update_member_runtime_status (StatusService - persisting change)
         mock_repo
             .expect_update_member_runtime_status()
             .times(1)
             .returning(|_, _, _| Ok(()));
 
+        // --- Publisher Expectations ---
+
         // EXPECT: Slave config should be published on state change
+        // Because 0 (DB) != 2 (Calculated: Master Online + Slave Online + Flags Enabled)
         mock_publisher
             .expect_send_slave_config()
             .times(1)
             .returning(|_| Ok(()));
 
-        // Create a mock evaluator that returns changed status
-        let mock_evaluator = Arc::new(MockStatusEvaluatorWithChange);
+        // Setup Services with shared Arcs
+        let conn_arc: Arc<dyn ConnectionManager> = Arc::new(mock_conn_manager);
+        let repo_arc: Arc<dyn TradeGroupRepository> = Arc::new(mock_repo);
+        let pub_arc: Arc<dyn ConfigPublisher> = Arc::new(mock_publisher);
+        let metrics =
+            Arc::new(crate::application::runtime_status_updater::RuntimeStatusMetrics::default());
+
+        // Create real RuntimeStatusUpdater with Mocks
+        let runtime_updater = Arc::new(
+            crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                repo_arc.clone(),
+                conn_arc.clone(),
+                metrics,
+            ),
+        );
 
         let service = StatusService::new(
-            Arc::new(mock_conn_manager),
-            Arc::new(mock_repo),
-            Arc::new(mock_publisher),
-            Some(mock_evaluator),
+            conn_arc,
+            repo_arc,
+            pub_arc,
+            Some(runtime_updater),
             None,
             None,
         );
 
         service.handle_heartbeat(heartbeat).await;
-    }
-
-    /// Mock StatusEvaluator that simulates a status change
-    struct MockStatusEvaluatorWithChange;
-    #[async_trait]
-    impl StatusEvaluator for MockStatusEvaluatorWithChange {
-        async fn evaluate_member_runtime_status(
-            &self,
-            _target: SlaveRuntimeTarget<'_>,
-        ) -> MemberStatusResult {
-            // Return CONNECTED status (status changed from DISABLED)
-            MemberStatusResult {
-                status: crate::domain::models::STATUS_CONNECTED,
-                allow_new_orders: true,
-                warning_codes: vec![],
-            }
-        }
-
-        async fn evaluate_member_runtime_status_with_snapshot(
-            &self,
-            _target: SlaveRuntimeTarget<'_>,
-            _snapshot: crate::domain::services::status_calculator::ConnectionSnapshot,
-        ) -> MemberStatusResult {
-            // Return unknown/disabled for old state (to simulate change)
-            MemberStatusResult::unknown()
-        }
-
-        async fn build_slave_bundle(
-            &self,
-            target: SlaveRuntimeTarget<'_>,
-        ) -> crate::config_builder::SlaveConfigBundle {
-            // Return a bundle with CONNECTED status
-            crate::config_builder::SlaveConfigBundle {
-                config: sankey_copier_zmq::SlaveConfigMessage {
-                    account_id: target.slave_account.to_string(),
-                    master_account: target.master_account.to_string(),
-                    timestamp: 0,
-                    trade_group_id: target.trade_group_id.to_string(),
-                    status: crate::domain::models::STATUS_CONNECTED,
-                    lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
-                    lot_multiplier: None,
-                    reverse_trade: false,
-                    symbol_prefix: None,
-                    symbol_suffix: None,
-                    symbol_mappings: vec![],
-                    filters: sankey_copier_zmq::TradeFilters::default(),
-                    config_version: 0,
-                    source_lot_min: None,
-                    source_lot_max: None,
-                    master_equity: None,
-                    sync_mode: sankey_copier_zmq::SyncMode::default(),
-                    limit_order_expiry_min: None,
-                    market_sync_max_pips: None,
-                    max_slippage: None,
-                    copy_pending_orders: false,
-                    max_retries: 3,
-                    max_signal_delay_ms: 5000,
-                    use_pending_order_for_delayed: false,
-                    allow_new_orders: true,
-                    warning_codes: vec![],
-                },
-                status_result: MemberStatusResult {
-                    status: crate::domain::models::STATUS_CONNECTED,
-                    allow_new_orders: true,
-                    warning_codes: vec![],
-                },
-            }
-        }
     }
 }

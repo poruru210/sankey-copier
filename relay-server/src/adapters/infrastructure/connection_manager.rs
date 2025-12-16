@@ -244,6 +244,22 @@ impl ConnectionManager {
     }
 }
 
+// Adapter implementation for Outbound Port
+#[async_trait]
+impl crate::ports::ConnectionManager for ConnectionManager {
+    async fn get_master(&self, account_id: &str) -> Option<EaConnection> {
+        self.get_master(account_id).await
+    }
+
+    async fn get_slave(&self, account_id: &str) -> Option<EaConnection> {
+        self.get_slave(account_id).await
+    }
+
+    async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool {
+        self.update_heartbeat(msg).await
+    }
+}
+
 // ============================================================================
 // Monitor Implementation (formerly monitor.rs)
 // ============================================================================

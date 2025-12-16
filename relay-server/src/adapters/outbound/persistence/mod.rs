@@ -161,3 +161,43 @@ impl Database {
             .any(|row| row.get::<String, _>("name") == column))
     }
 }
+
+// Adapter implementation for Outbound Port
+use crate::domain::models::{SlaveConfigWithMaster, TradeGroup, TradeGroupMember};
+use async_trait::async_trait;
+
+#[async_trait]
+impl crate::ports::TradeGroupRepository for Database {
+    async fn get_trade_group(&self, id: &str) -> anyhow::Result<Option<TradeGroup>> {
+        self.get_trade_group(id).await
+    }
+
+    async fn create_trade_group(&self, id: &str) -> anyhow::Result<TradeGroup> {
+        self.create_trade_group(id).await
+    }
+
+    async fn get_members(&self, master_id: &str) -> anyhow::Result<Vec<TradeGroupMember>> {
+        self.get_members(master_id).await
+    }
+
+    async fn get_settings_for_slave(
+        &self,
+        slave_id: &str,
+    ) -> anyhow::Result<Vec<SlaveConfigWithMaster>> {
+        self.get_settings_for_slave(slave_id).await
+    }
+
+    async fn update_member_runtime_status(
+        &self,
+        master_id: &str,
+        slave_id: &str,
+        status: i32,
+    ) -> anyhow::Result<()> {
+        self.update_member_runtime_status(master_id, slave_id, status)
+            .await
+    }
+
+    async fn get_masters_for_slave(&self, slave_account: &str) -> anyhow::Result<Vec<String>> {
+        self.get_masters_for_slave(slave_account).await
+    }
+}

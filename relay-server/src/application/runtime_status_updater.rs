@@ -5,27 +5,26 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::{
-    adapters::infrastructure::connection_manager::ConnectionManager,
-    adapters::outbound::persistence::Database,
     config_builder::{ConfigBuilder, SlaveConfigBundle, SlaveConfigContext},
     domain::services::status_calculator::{
         evaluate_master_status, evaluate_member_status, ConnectionSnapshot, MasterClusterSnapshot,
         MasterIntent, MasterStatusResult, MemberStatusResult, SlaveIntent, SlaveRuntimeTarget,
     },
+    ports::outbound::{ConnectionManager, TradeGroupRepository},
 };
 
 /// Helper that centralizes runtime snapshot gathering for Master/Slave pairs.
 #[derive(Clone)]
 pub struct RuntimeStatusUpdater {
-    db: Arc<Database>,
-    connection_manager: Arc<ConnectionManager>,
+    db: Arc<dyn TradeGroupRepository>,
+    connection_manager: Arc<dyn ConnectionManager>,
     metrics: Arc<RuntimeStatusMetrics>,
 }
 
 impl RuntimeStatusUpdater {
     pub fn with_metrics(
-        db: Arc<Database>,
-        connection_manager: Arc<ConnectionManager>,
+        db: Arc<dyn TradeGroupRepository>,
+        connection_manager: Arc<dyn ConnectionManager>,
         metrics: Arc<RuntimeStatusMetrics>,
     ) -> Self {
         Self {

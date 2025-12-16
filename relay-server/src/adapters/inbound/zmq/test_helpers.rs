@@ -45,16 +45,14 @@ impl TestContext {
         // (handles both config and trade signals)
         let publisher = Arc::new(ZmqConfigPublisher::new("tcp://127.0.0.1:*").unwrap());
 
-        // Create runtime status adapter for StatusEvaluator
+        // Create runtime status updater
         let metrics = Arc::new(RuntimeStatusMetrics::default());
-        let runtime_updater =
+        let runtime_updater = Arc::new(
             crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
                 db.clone(),
                 connection_manager.clone(),
                 metrics.clone(),
-            );
-        let status_evaluator = Arc::new(
-            crate::ports::adapters::RuntimeStatusEvaluatorAdapter::new(runtime_updater),
+            ),
         );
 
         // Create snapshot broadcaster for StatusService (UpdateBroadcaster)
@@ -70,7 +68,7 @@ impl TestContext {
             connection_manager.clone(),
             db.clone(),
             publisher.clone(),
-            Some(status_evaluator),
+            Some(runtime_updater),
             Some(snapshot_broadcaster),
             None,
         );

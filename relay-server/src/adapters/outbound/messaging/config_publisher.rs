@@ -172,6 +172,26 @@ impl ZmqPublisher {
     }
 }
 
+// Adapter implementation for Outbound Port
+use crate::domain::models::VLogsGlobalSettings;
+use async_trait::async_trait;
+use sankey_copier_zmq::{MasterConfigMessage, SlaveConfigMessage};
+
+#[async_trait]
+impl crate::ports::ConfigPublisher for ZmqPublisher {
+    async fn send_master_config(&self, config: &MasterConfigMessage) -> anyhow::Result<()> {
+        self.send(config).await
+    }
+
+    async fn send_slave_config(&self, config: &SlaveConfigMessage) -> anyhow::Result<()> {
+        self.send(config).await
+    }
+
+    async fn broadcast_vlogs_config(&self, config: &VLogsGlobalSettings) -> anyhow::Result<()> {
+        self.broadcast_vlogs_config(config).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
