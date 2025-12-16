@@ -232,6 +232,11 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -239,12 +244,41 @@ jobs:
           workspaces: |
             relay-server
 
-      - name: Run fmt/clippy/tests (relay-server)
+      - name: Check formatting and linting
         working-directory: relay-server
         run: |
           cargo fmt --all -- --check
           cargo clippy --all-targets --all-features -- -D warnings
-          cargo test --workspace --all-features
+
+      - name: Run tests with coverage (E2E included)
+        working-directory: relay-server
+        run: |
+          # Run tests once and generate all reports
+          cargo llvm-cov --workspace --all-features --codecov --output-path codecov.json
+          cargo llvm-cov report --html --output-dir coverage-report
+          cargo llvm-cov report --lcov --output-path lcov.info
+
+          # Extract coverage for summary
+          COVERAGE=$(cargo llvm-cov report 2>&1 | grep "TOTAL" | awk '{print $10}')
+          echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Coverage**: \`${COVERAGE}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Full HTML report available in workflow artifacts." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: relay-server/coverage-report/
+          retention-days: 30
+
+      - name: Upload coverage LCOV file
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: relay-server/lcov.info
+          retention-days: 30
 
   rust-windows-check:
     name: Rust Check (Windows)

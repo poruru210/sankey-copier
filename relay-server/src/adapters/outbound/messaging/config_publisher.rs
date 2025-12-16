@@ -360,4 +360,181 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    #[tokio::test]
+    async fn test_send_trade_signal() {
+        // Test sending trade signal to specific Master-Slave pair
+        use std::sync::atomic::{AtomicU16, Ordering};
+        static PORT: AtomicU16 = AtomicU16::new(29557);
+        let port = PORT.fetch_add(1, Ordering::SeqCst);
+
+        let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
+
+        let signal = TradeSignal {
+            action: sankey_copier_zmq::TradeAction::Open,
+            ticket: 12345,
+            symbol: Some("EURUSD".to_string()),
+            order_type: Some(sankey_copier_zmq::OrderType::Buy),
+            lots: Some(0.1),
+            open_price: Some(1.1000),
+            stop_loss: None,
+            take_profit: None,
+            magic_number: Some(0),
+            comment: Some("Test Trade".to_string()),
+            timestamp: Utc::now(),
+            source_account: "MASTER_001".to_string(),
+            close_ratio: None,
+        };
+
+        let result = publisher
+            .send_trade_signal("MASTER_001", "SLAVE_001", &signal)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_publish_to_topic() {
+        // Test publishing arbitrary message to custom topic
+        use std::sync::atomic::{AtomicU16, Ordering};
+        static PORT: AtomicU16 = AtomicU16::new(30557);
+        let port = PORT.fetch_add(1, Ordering::SeqCst);
+
+        let publisher = ZmqPublisher::new(&format!("tcp://127.0.0.1:{}", port)).unwrap();
+
+        #[derive(serde::Serialize)]
+        struct CustomMessage {
+            msg_type: String,
+            data: String,
+        }
+
+        let custom = CustomMessage {
+            msg_type: "test".to_string(),
+            data: "hello".to_string(),
+        };
+
+        let result = publisher.publish_to_topic("custom/topic", &custom).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_topic_generation_trade() {
+        // Test that trade topic generation works correctly
+        let topic = build_trade_topic("MASTER_001", "SLAVE_001");
+        assert_eq!(topic, "trade/MASTER_001/SLAVE_001");
+
+        let topic_long = build_trade_topic("LONG_MASTER_ID_12345", "LONG_SLAVE_ID_67890");
+        assert_eq!(topic_long, "trade/LONG_MASTER_ID_12345/LONG_SLAVE_ID_67890");
+    }
+
+    #[test]
+    fn test_master_config_zmq_topic() {
+        // Test MasterConfigMessage uses account_id as topic
+        let config = MasterConfigMessage {
+            account_id: "MASTER_FOR_TOPIC".to_string(),
+            status: 2,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            config_version: 1,
+            timestamp: 1234567890,
+            warning_codes: Vec::new(),
+        };
+
+        // Note: Topic includes "config/" prefix for routing
+        assert_eq!(config.zmq_topic(), "config/MASTER_FOR_TOPIC");
+    }
+
+    #[test]
+    fn test_slave_config_zmq_topic() {
+        // Test SlaveConfigMessage uses account_id as topic
+        let config = SlaveConfigMessage {
+            account_id: "SLAVE_FOR_TOPIC".to_string(),
+            master_account: "MASTER_X".to_string(),
+            timestamp: 1234567890,
+            trade_group_id: "MASTER_X".to_string(),
+            status: 2,
+            lot_calculation_mode: sankey_copier_zmq::LotCalculationMode::default(),
+            lot_multiplier: None,
+            reverse_trade: false,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_mappings: vec![],
+            filters: sankey_copier_zmq::TradeFilters::default(),
+            config_version: 0,
+            source_lot_min: None,
+            source_lot_max: None,
+            master_equity: None,
+            sync_mode: sankey_copier_zmq::SyncMode::default(),
+            limit_order_expiry_min: None,
+            market_sync_max_pips: None,
+            max_slippage: None,
+            copy_pending_orders: false,
+            max_retries: 3,
+            max_signal_delay_ms: 5000,
+            use_pending_order_for_delayed: false,
+            allow_new_orders: true,
+            warning_codes: Vec::new(),
+        };
+
+        // Note: Topic includes "config/" prefix for routing
+        assert_eq!(config.zmq_topic(), "config/SLAVE_FOR_TOPIC");
+    }
+
+    #[test]
+    fn test_messagepack_serialization_master_config() {
+        // Test MessagePack serialization format and size
+        let config = MasterConfigMessage {
+            account_id: "MASTER_MSGPACK".to_string(),
+            status: 2,
+            symbol_prefix: Some("pro.".to_string()),
+            symbol_suffix: Some(".m".to_string()),
+            config_version: 5,
+            timestamp: 1702666800000,
+            warning_codes: Vec::new(),
+        };
+
+        let bytes = rmp_serde::to_vec_named(&config).unwrap();
+
+        // Should be non-empty
+        assert!(!bytes.is_empty());
+
+        // Should deserialize back to same values
+        let decoded: MasterConfigMessage = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(decoded.account_id, config.account_id);
+        assert_eq!(decoded.status, config.status);
+        assert_eq!(decoded.symbol_prefix, config.symbol_prefix);
+        assert_eq!(decoded.symbol_suffix, config.symbol_suffix);
+        assert_eq!(decoded.config_version, config.config_version);
+    }
+
+    #[test]
+    fn test_messagepack_serialization_trade_signal() {
+        // Test TradeSignal serialization round-trip
+        let signal = TradeSignal {
+            action: sankey_copier_zmq::TradeAction::Close,
+            ticket: 99999,
+            symbol: Some("GBPJPY".to_string()),
+            order_type: Some(sankey_copier_zmq::OrderType::Sell),
+            lots: Some(0.5),
+            open_price: Some(185.500),
+            stop_loss: Some(186.000),
+            take_profit: Some(184.500),
+            magic_number: Some(12345),
+            comment: Some("Closing trade".to_string()),
+            timestamp: Utc::now(),
+            source_account: "MASTER_CLOSE".to_string(),
+            close_ratio: Some(0.5),
+        };
+
+        let bytes = rmp_serde::to_vec_named(&signal).unwrap();
+
+        // Should be non-empty
+        assert!(!bytes.is_empty());
+
+        // Should deserialize back correctly
+        let decoded: TradeSignal = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(decoded.ticket, signal.ticket);
+        assert_eq!(decoded.symbol, signal.symbol);
+        assert_eq!(decoded.lots, signal.lots);
+        assert_eq!(decoded.close_ratio, signal.close_ratio);
+    }
 }

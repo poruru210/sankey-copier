@@ -533,3 +533,135 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
     assert_eq!(trade_group.master_settings.symbol_prefix, None);
     assert_eq!(trade_group.master_settings.symbol_suffix, None);
 }
+
+// =============================================================================
+// Toggle Master API Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_toggle_master_enable() {
+    let (app, db) = create_test_app().await;
+
+    // Create a trade group with enabled = false (default)
+    db.create_trade_group("MASTER_TOGGLE_ENABLE").await.unwrap();
+
+    // Verify initial state is disabled (default)
+    let initial = db
+        .get_trade_group("MASTER_TOGGLE_ENABLE")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !initial.master_settings.enabled,
+        "Master should start disabled"
+    );
+
+    // Enable Master via toggle API
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/trade-groups/MASTER_TOGGLE_ENABLE/toggle")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"enabled": true}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify response contains updated state
+    assert_eq!(json["id"], "MASTER_TOGGLE_ENABLE");
+    assert_eq!(json["master_settings"]["enabled"], true);
+
+    // Verify database was updated
+    let updated = db
+        .get_trade_group("MASTER_TOGGLE_ENABLE")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        updated.master_settings.enabled,
+        "Master should now be enabled"
+    );
+    assert_eq!(updated.master_settings.config_version, 1);
+}
+
+#[tokio::test]
+async fn test_toggle_master_disable() {
+    let (app, db) = create_test_app().await;
+
+    // Create a trade group and enable it
+    db.create_trade_group("MASTER_TOGGLE_DISABLE")
+        .await
+        .unwrap();
+    let settings = MasterSettings {
+        enabled: true,
+        ..Default::default()
+    };
+    db.update_master_settings("MASTER_TOGGLE_DISABLE", settings)
+        .await
+        .unwrap();
+
+    // Verify initial state is enabled
+    let initial = db
+        .get_trade_group("MASTER_TOGGLE_DISABLE")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        initial.master_settings.enabled,
+        "Master should start enabled"
+    );
+
+    // Disable Master via toggle API
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/trade-groups/MASTER_TOGGLE_DISABLE/toggle")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"enabled": false}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify database was updated
+    let updated = db
+        .get_trade_group("MASTER_TOGGLE_DISABLE")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !updated.master_settings.enabled,
+        "Master should now be disabled"
+    );
+}
+
+#[tokio::test]
+async fn test_toggle_master_not_found() {
+    let (app, _db) = create_test_app().await;
+
+    // Try to toggle non-existent trade group
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/trade-groups/NONEXISTENT_TOGGLE/toggle")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"enabled": true}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    // Should return 404 Not Found
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Check RFC 9457 Problem Details structure
+    assert!(json["type"].is_string());
+    assert_eq!(json["status"], 404);
+}

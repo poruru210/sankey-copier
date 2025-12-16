@@ -744,7 +744,6 @@ mod tests {
 
         // TradeGroup missing initially
         let trade_group = TradeGroup::new(account_id.to_string());
-        let trade_group_clone = trade_group.clone();
 
         // Sequence for get_trade_group
         // Note: Shared mock with RuntimeStatusUpdater, use returning for flexibility
