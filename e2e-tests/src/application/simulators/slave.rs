@@ -57,9 +57,11 @@ struct SlaveEaCore {
 
     push_address: String,
     config_address: String,
+    #[allow(dead_code)]
     candidates: String,
-    #[allow(dead_code)] // Reserved for future symbol detection feature
-    available_symbols: String,
+    detected_prefix: String,
+    detected_suffix: String,
+    detected_specials: String,
 }
 
 impl ExpertAdvisor for SlaveEaCore {
@@ -113,17 +115,9 @@ impl ExpertAdvisor for SlaveEaCore {
         // We need to keep the vector alive until function call?
         // Ah, `to_u16` returns Vec. `as_ptr` borrows it.
         // I need to bind it to a variable.
-        let candidates_vec = if self.candidates.is_empty() {
-            Vec::new()
-        } else {
-            to_u16(&self.candidates)
-        };
-
-        let candidates_ptr = if candidates_vec.is_empty() {
-            std::ptr::null()
-        } else {
-            candidates_vec.as_ptr()
-        };
+        let prefix_vec = to_u16(&self.detected_prefix);
+        let suffix_vec = to_u16(&self.detected_suffix);
+        let specials_vec = to_u16(&self.detected_specials);
 
         let mut buffer = vec![0u8; 1024];
         let len = unsafe {
@@ -131,7 +125,14 @@ impl ExpertAdvisor for SlaveEaCore {
                 ctx_ptr,
                 buffer.as_mut_ptr(),
                 buffer.len() as i32,
-                candidates_ptr,
+                prefix_vec.as_ptr(),
+                suffix_vec.as_ptr(),
+                specials_vec.as_ptr(),
+                if self.is_trade_allowed.load(Ordering::SeqCst) {
+                    1
+                } else {
+                    0
+                }, // New Arg
             )
         };
         if len > 0 {
@@ -359,7 +360,10 @@ pub struct SlaveEaSimulator {
     push_address: String,
     config_address: String,
     candidates: String,
-    available_symbols: String,
+    // Detected Context for Suggestion Mode
+    detected_prefix: String,
+    detected_suffix: String,
+    detected_specials: String,
 }
 
 impl SlaveEaSimulator {
@@ -380,7 +384,6 @@ impl SlaveEaSimulator {
         let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
 
         let candidates = ini_conf.symbol_search_candidates.join(",");
-        let available_symbols = String::new(); // Default to empty for simulation
 
         Ok(Self {
             base,
@@ -403,7 +406,9 @@ impl SlaveEaSimulator {
             push_address,
             config_address,
             candidates,
-            available_symbols,
+            detected_prefix: String::new(),
+            detected_suffix: String::new(),
+            detected_specials: String::new(),
         })
     }
 
@@ -411,8 +416,10 @@ impl SlaveEaSimulator {
         self.candidates = symbols.join(",");
     }
 
-    pub fn set_available_symbols(&mut self, symbols: Vec<String>) {
-        self.available_symbols = symbols.join(",");
+    pub fn set_detected_context(&mut self, prefix: &str, suffix: &str, specials: Vec<String>) {
+        self.detected_prefix = prefix.to_string();
+        self.detected_suffix = suffix.to_string();
+        self.detected_specials = specials.join(",");
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -443,7 +450,9 @@ impl SlaveEaSimulator {
             push_address: self.push_address.clone(),
             config_address: self.config_address.clone(),
             candidates: self.candidates.clone(),
-            available_symbols: self.available_symbols.clone(),
+            detected_prefix: self.detected_prefix.clone(),
+            detected_suffix: self.detected_suffix.clone(),
+            detected_specials: self.detected_specials.clone(),
         };
 
         let runner = PlatformRunner::new(core);

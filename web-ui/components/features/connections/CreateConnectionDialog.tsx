@@ -558,6 +558,7 @@ function CreateConnectionForm({
                 allowed_magic_numbers: formData.allowed_magic_numbers,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
+              detectedContext={connections.find(c => c.account_id === formData.slave_account)?.symbol_context}
             />
 
 

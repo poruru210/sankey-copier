@@ -49,7 +49,7 @@ async fn test_auto_mapping_xauusd_to_gold() {
         .expect("Failed to create slave");
 
     // Inject detected symbols using our new setter
-    slave.set_candidates(vec!["GOLD".to_string()]);
+    slave.set_detected_context("", "", vec!["GOLD".to_string()]);
 
     master.set_trade_allowed(true);
     master.start().expect("Failed to start master");

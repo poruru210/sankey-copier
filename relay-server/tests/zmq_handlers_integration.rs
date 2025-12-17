@@ -110,7 +110,8 @@ fn build_register_message(account_id: &str, ea_type: &str) -> RegisterMessage {
         currency: "USD".to_string(),
         leverage: 100,
         timestamp: chrono::Utc::now().to_rfc3339(),
-        detected_symbols: None,
+        symbol_context: None,
+        is_trade_allowed: false,
     }
 }
 

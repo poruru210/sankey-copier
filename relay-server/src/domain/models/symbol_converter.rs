@@ -27,9 +27,29 @@ impl SymbolConverter {
         mut self,
         synonym_groups: Vec<Vec<String>>,
         detected_symbols: Option<Vec<String>>,
+        detected_prefix: Option<String>,
+        detected_suffix: Option<String>,
     ) -> Self {
         self.synonym_groups = synonym_groups;
         self.detected_symbols = detected_symbols;
+
+        // Apply fallback prefix/suffix if not configured
+        if self.prefix_add.is_none() || self.prefix_add.as_ref().is_some_and(|s| s.is_empty()) {
+            if let Some(p) = detected_prefix {
+                if !p.is_empty() {
+                    self.prefix_add = Some(p);
+                }
+            }
+        }
+
+        if self.suffix_add.is_none() || self.suffix_add.as_ref().is_some_and(|s| s.is_empty()) {
+            if let Some(s) = detected_suffix {
+                if !s.is_empty() {
+                    self.suffix_add = Some(s);
+                }
+            }
+        }
+
         self
     }
 

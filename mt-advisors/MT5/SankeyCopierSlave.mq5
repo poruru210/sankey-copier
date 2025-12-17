@@ -152,26 +152,18 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   // Detect symbols and send explicit Register message
-   // This ensures the server receives the detected symbols immediately
-   // Detect symbols locally in MQL
-   string candidates[];
-   GetCandidates(candidates);
+   // Detect symbols locally in MQL (Phase 2 implemented)
+   string detected_prefix = "";
+   string detected_suffix = "";
+   string detected_specials = "";
    
-   string detected_symbols = "";
-   int count = ArraySize(candidates);
+   DetectSymbolContext(detected_prefix, detected_suffix, detected_specials);
    
-   for(int i=0; i<count; i++)
-   {
-      string best_match = DetectBestMatch(candidates[i]);
-      if(StringLen(best_match) > 0)
-      {
-         if(StringLen(detected_symbols) > 0) detected_symbols += ",";
-         detected_symbols += best_match;
-      }
-   }
+   LogInfo(CAT_SYSTEM, StringFormat("Detected Context: Prefix='%s', Suffix='%s', Specials='%s'", 
+           detected_prefix, detected_suffix, detected_specials));
    
-   if(g_ea_context.SendRegister(detected_symbols))
+   bool is_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   if(g_ea_context.SendRegister(detected_prefix, detected_suffix, detected_specials, is_trade_allowed))
    {
        g_register_sent = true;
        LogInfo(CAT_SYSTEM, "Sent initial Register message");

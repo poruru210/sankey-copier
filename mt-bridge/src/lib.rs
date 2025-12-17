@@ -17,8 +17,8 @@ mod symbol_filter_tests;
 pub use types::{
     GlobalConfigMessage, HeartbeatMessage, LotCalculationMode, MasterConfigMessage, PositionInfo,
     PositionSnapshotMessage, RegisterMessage, RequestConfigMessage, SlaveConfigMessage,
-    SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignal, UnregisterMessage,
-    WarningCode,
+    SymbolContext, SymbolMapping, SyncMode, SyncRequestMessage, TradeFilters, TradeSignal,
+    UnregisterMessage, WarningCode,
 };
 
 // Re-export enums for TradeSignal

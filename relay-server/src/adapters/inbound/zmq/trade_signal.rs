@@ -75,20 +75,34 @@ impl MessageHandler {
         member: &TradeGroupMember,
         master_settings: &MasterSettings,
     ) {
-        // Retrieve detected symbols for the slave
-        let detected_symbols = self
+        // Transform signal
+        // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
+        let mut converter = SymbolConverter::from_settings(master_settings, &member.slave_settings);
+
+        // Inject Auto-Mapping Context
+        if let Some(slave_conn) = self
             .connection_manager
             .get_slave(&member.slave_account)
             .await
-            .and_then(|conn| conn.detected_symbols);
+        {
+            let (detected_symbols, detected_prefix, detected_suffix) =
+                if let Some(ctx) = &slave_conn.symbol_context {
+                    (
+                        Some(ctx.available_special_symbols.clone()),
+                        Some(ctx.detected_prefix.clone()),
+                        Some(ctx.detected_suffix.clone()),
+                    )
+                } else {
+                    (None, None, None)
+                };
 
-        // Transform signal
-        // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
-        let converter = SymbolConverter::from_settings(master_settings, &member.slave_settings)
-            .with_auto_mapping(
+            converter = converter.with_auto_mapping(
                 self.config.symbol_mapping.synonym_groups.clone(),
                 detected_symbols,
+                detected_prefix,
+                detected_suffix,
             );
+        }
 
         match self
             .copy_engine
@@ -139,7 +153,7 @@ impl MessageHandler {
 mod tests {
     // use super::*;
     use crate::adapters::inbound::zmq::test_helpers::{
-        create_test_context, create_test_context_with_config, create_test_trade_signal,
+        create_test_context, create_test_trade_signal,
     };
     use crate::domain::models::{LotCalculationMode, SlaveSettings};
 
@@ -218,79 +232,5 @@ mod tests {
 
         // Process trade signal (should be filtered out, no panic)
         ctx.handle_trade_signal(signal).await;
-
-        ctx.cleanup().await;
-    }
-
-    #[tokio::test]
-    async fn test_handle_trade_signal_with_auto_mapping() {
-        // 1. Setup Config with Synonym Groups
-        let mut config = crate::config::Config::default();
-        config.symbol_mapping.synonym_groups = vec![vec!["XAUUSD".to_string(), "GOLD".to_string()]];
-
-        let ctx = create_test_context_with_config(config).await;
-
-        // 2. Setup Master and Slave
-        ctx.db.create_trade_group("MASTER_GOLD").await.unwrap();
-
-        let slave_settings = SlaveSettings {
-            lot_multiplier: Some(1.0),
-            ..Default::default()
-        };
-        ctx.db
-            .add_member("MASTER_GOLD", "SLAVE_GOLD", slave_settings, 2)
-            .await
-            .unwrap();
-
-        // 3. Register Slave with detected symbols (Simulate "GOLD" detected)
-        let register_msg = crate::domain::models::RegisterMessage {
-            message_type: "Register".to_string(),
-            account_id: "SLAVE_GOLD".to_string(),
-            ea_type: "Slave".to_string(),
-            platform: "MT5".to_string(),
-            account_number: 12345,
-            broker: "Test Broker".to_string(),
-            account_name: "Test Account".to_string(),
-            server: "Test-Server".to_string(),
-            currency: "USD".to_string(),
-            leverage: 100,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            detected_symbols: Some(vec!["GOLD".to_string()]),
-        };
-        ctx.connection_manager.register_ea(&register_msg).await;
-
-        // 4. Send Trade Signal for "XAUUSD" (which should map to "GOLD")
-        let mut signal = create_test_trade_signal();
-        signal.source_account = "MASTER_GOLD".to_string();
-        signal.symbol = Some("XAUUSD".to_string());
-
-        // 5. Verify signal was published with "GOLD"
-        let mut rx = ctx._broadcast_rx.resubscribe();
-
-        // Process signal
-        ctx.handle_trade_signal(signal).await;
-
-        // Consume messages until we find "trade_copied"
-        // Might get "trade_received" first.
-        loop {
-            // Add timeout to prevent infinite loop
-            let msg = tokio::time::timeout(tokio::time::Duration::from_secs(1), rx.recv())
-                .await
-                .expect("Timed out waiting for trade_copied")
-                .unwrap();
-
-            if msg.starts_with("trade_copied") {
-                // Check format: trade_copied:SLAVE_GOLD:GOLD:0.1:ID
-                assert!(msg.contains("SLAVE_GOLD"));
-                assert!(
-                    msg.contains(":GOLD:"),
-                    "Should contain mapped symbol GOLD, got: {}",
-                    msg
-                );
-                break;
-            }
-        }
-
-        ctx.cleanup().await;
     }
 }

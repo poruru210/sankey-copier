@@ -266,7 +266,7 @@ export function useSankeyCopier() {
       }
     };
 
-  }, [selectedSite?.siteUrl]); // Removed fetchSettings, setConnections, setSettings dependencies!
+  }, [selectedSite?.siteUrl, fetchSettings]); // Add fetchSettings dependency
 
   // Initial load only (no polling - WebSocket provides real-time updates)
   useEffect(() => {

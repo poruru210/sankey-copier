@@ -16,7 +16,8 @@ import {
   DrawerFormField,
 } from '@/components/ui/drawer-section';
 import { SymbolMappingInput } from '@/components/features/settings/SymbolMappingInput';
-import type { LotCalculationMode, SyncMode } from '@/types';
+import { DetectedSettingsAlert } from '@/components/features/settings/DetectedSettingsAlert';
+import type { LotCalculationMode, SyncMode, SymbolContext } from '@/types';
 
 export interface SlaveSettingsFormData {
   lot_calculation_mode: LotCalculationMode;
@@ -45,12 +46,14 @@ interface SlaveSettingsFormProps {
   formData: SlaveSettingsFormData;
   onChange: (data: SlaveSettingsFormData) => void;
   disabled?: boolean;
+  detectedContext?: SymbolContext;
 }
 
 export function SlaveSettingsForm({
   formData,
   onChange,
   disabled = false,
+  detectedContext,
 }: SlaveSettingsFormProps) {
   const content = useIntlayer('settings-dialog');
 
@@ -61,8 +64,21 @@ export function SlaveSettingsForm({
     onChange({ ...formData, [key]: value });
   };
 
+  const handleApplyDetected = (changes: Partial<SlaveSettingsFormData>) => {
+    onChange({ ...formData, ...changes });
+  };
+
   return (
     <div className="space-y-6">
+      {/* Alert for Detected Settings */}
+      {detectedContext && (
+        <DetectedSettingsAlert
+          detectedContext={detectedContext}
+          formData={formData}
+          onApply={handleApplyDetected}
+        />
+      )}
+
       {/* Copy Settings Section */}
       <DrawerSection>
         <DrawerSectionHeader

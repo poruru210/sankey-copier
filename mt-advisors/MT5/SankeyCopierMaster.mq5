@@ -12,6 +12,7 @@
 #include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
+#include "../Include/SankeyCopier/SymbolUtils.mqh"
 #include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
@@ -156,6 +157,28 @@ int OnInit()
        return INIT_FAILED;
    }
 
+   // --- Symbol Detection and Registration ---
+   string detected_prefix = "";
+   string detected_suffix = "";
+   string detected_specials = "";
+   
+   DetectSymbolContext(detected_prefix, detected_suffix, detected_specials);
+   
+   LogInfo(CAT_SYSTEM, StringFormat("Detected Context: Prefix='%s', Suffix='%s', Specials='%s'", 
+           detected_prefix, detected_suffix, detected_specials));
+   
+   bool is_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   if(g_ea_context.SendRegister(detected_prefix, detected_suffix, detected_specials, is_trade_allowed))
+   {
+       g_register_sent = true;
+       LogInfo(CAT_SYSTEM, "Sent initial Register message");
+   }
+   else
+   {
+       LogError(CAT_SYSTEM, "Failed to send initial Register message");
+       // Not critical failure?
+   }
+
    // Subscribe to config messages for this account ID
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
@@ -275,7 +298,7 @@ void OnTimer()
    int pending_commands = g_ea_context.ManagerTick(
        GetAccountBalance(), 
        GetAccountEquity(), 
-       GetOpenPositionsCount(), 
+       OrdersTotal() + PositionsTotal(),
        current_trade_allowed
    );
 

@@ -117,6 +117,7 @@ export function ConnectionsDialogManager({
             onSave={handleUpdateSettings}
             onDelete={handleDeleteSetting}
             setting={editingSettings}
+            connection={connections.find(c => c.account_id === editingSettings.slave_account)}
           />
         )}
 

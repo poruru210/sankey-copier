@@ -212,9 +212,24 @@ pub struct RegisterMessage {
     pub currency: String,
     pub leverage: i64,
     pub timestamp: String,
-    /// List of detected symbols for auto-mapping (sent by Slave)
+    /// Symbol context information for auto-configuration suggestions
     #[serde(default)]
-    pub detected_symbols: Option<Vec<String>>,
+    pub symbol_context: Option<SymbolContext>,
+    /// Initial trade allowed status (Added to avoid redundant config updates)
+    #[serde(default)]
+    pub is_trade_allowed: bool,
+}
+
+/// Symbol context structure
+/// Contains detected environment information for setting suggestions
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SymbolContext {
+    /// Detected detected prefix (e.g., "pro." from "pro.EURUSD")
+    pub detected_prefix: String,
+    /// Detected detected suffix (e.g., ".m" from "EURUSD.m")
+    pub detected_suffix: String,
+    /// List of special symbols found in the terminal (e.g., "GOLD.m", "US30.pro")
+    pub available_special_symbols: Vec<String>,
 }
 
 /// Request configuration message structure (for Slave EAs)

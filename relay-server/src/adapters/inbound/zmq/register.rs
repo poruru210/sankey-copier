@@ -36,11 +36,13 @@ impl MessageHandler {
             "[REGISTER] EA registration received"
         );
 
-        if let Some(symbols) = &msg.detected_symbols {
+        if let Some(context) = &msg.symbol_context {
             tracing::info!(
                 account = %account_id,
-                symbols = ?symbols,
-                "[REGISTER] with detected_symbols"
+                prefix = %context.detected_prefix,
+                suffix = %context.detected_suffix,
+                specials = ?context.available_special_symbols,
+                "[REGISTER] with symbol_context"
             );
         }
 
@@ -124,7 +126,13 @@ impl MessageHandler {
             }
         };
 
-        // Build Master config with is_trade_allowed=false (initial assumption)
+        // Determine is_trade_allowed from connection status (now updated via Register)
+        let is_trade_allowed = master_conn
+            .as_ref()
+            .map(|c| c.is_trade_allowed)
+            .unwrap_or(false);
+
+        // Build Master config with accurate is_trade_allowed
         let context = MasterConfigContext {
             account_id: account_id.to_string(),
             intent: MasterIntent {
@@ -132,7 +140,7 @@ impl MessageHandler {
             },
             connection_snapshot: ConnectionSnapshot {
                 connection_status: Some(crate::domain::models::ConnectionStatus::Online),
-                is_trade_allowed: false, // Initial assumption until first Heartbeat
+                is_trade_allowed,
             },
             settings: &trade_group.master_settings,
             timestamp: chrono::Utc::now(),

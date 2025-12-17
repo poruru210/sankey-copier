@@ -24,8 +24,10 @@ use tokio::sync::broadcast;
 pub(crate) struct TestContext {
     pub handler: MessageHandler,
     // Store Arc references to ensure proper drop order
+    #[allow(dead_code)]
     _publisher: Arc<ZmqConfigPublisher>,
     /// Broadcast receiver for testing WebSocket notifications
+    #[allow(dead_code)]
     pub _broadcast_rx: broadcast::Receiver<String>, // Prefixed with _ to suppress warning
 }
 
@@ -110,6 +112,7 @@ impl TestContext {
     }
 
     /// Create a new test context with custom configuration
+    #[allow(dead_code)]
     pub async fn with_config(config: crate::config::Config) -> Self {
         let connection_manager = Arc::new(ConnectionManagerImpl::new(30));
         let copy_engine = Arc::new(CopyEngine::new());
@@ -207,6 +210,7 @@ pub(crate) async fn create_test_context() -> TestContext {
     TestContext::new().await
 }
 
+#[allow(dead_code)]
 pub(crate) async fn create_test_context_with_config(config: crate::config::Config) -> TestContext {
     TestContext::with_config(config).await
 }

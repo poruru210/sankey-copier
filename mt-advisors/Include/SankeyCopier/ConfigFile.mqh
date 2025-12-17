@@ -21,6 +21,7 @@ int g_ReceiverPort = DEFAULT_RECEIVER_PORT;
 int g_PublisherPort = DEFAULT_PUBLISHER_PORT;
 
 string g_SearchCandidates[]; // Array to store symbol search candidates
+string g_DetectionBenchmarks[]; // Array to store detection benchmarks
 bool g_ConfigLoaded = false;
 
 //+------------------------------------------------------------------+
@@ -123,6 +124,16 @@ bool LoadConfig()
                    StringTrimRight(g_SearchCandidates[i]);
                }
             }
+            else if(key == "DetectionBenchmarks")
+            {
+               StringSplit(value, ',', g_DetectionBenchmarks);
+               // Trim loop
+               for(int i=0; i<ArraySize(g_DetectionBenchmarks); i++)
+               {
+                   StringTrimLeft(g_DetectionBenchmarks[i]);
+                   StringTrimRight(g_DetectionBenchmarks[i]);
+               }
+            }
          }
       }
    }
@@ -200,6 +211,17 @@ void GetSymbolSearchCandidates(string &candidates[])
 }
 
 //+------------------------------------------------------------------+
+//| Get detection benchmarks                                          |
+//+------------------------------------------------------------------+
+void GetDetectionBenchmarks(string &benchmarks[])
+{
+   if(!g_ConfigLoaded)
+      LoadConfig();
+      
+   ArrayCopy(benchmarks, g_DetectionBenchmarks);
+}
+
+//+------------------------------------------------------------------+
 //| Check if config file exists                                       |
 //+------------------------------------------------------------------+
 bool ConfigFileExists()
@@ -217,6 +239,7 @@ void ReloadConfig()
    g_ReceiverPort = DEFAULT_RECEIVER_PORT;
    g_PublisherPort = DEFAULT_PUBLISHER_PORT;
    ArrayFree(g_SearchCandidates);
+   ArrayFree(g_DetectionBenchmarks);
    LoadConfig();
 }
 

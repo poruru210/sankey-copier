@@ -46,8 +46,8 @@ impl ConnectionManager {
                 ea_type
             );
             // Update fields that are unique to Register message
-            if msg.detected_symbols.is_some() {
-                conn.detected_symbols = msg.detected_symbols.clone();
+            if msg.symbol_context.is_some() {
+                conn.symbol_context = msg.symbol_context.clone();
             }
             // Always update platform info just in case
             conn.platform = msg.platform.parse().unwrap_or(conn.platform);
@@ -82,8 +82,8 @@ impl ConnectionManager {
             last_heartbeat: now,
             status: ConnectionStatus::Registered,
             connected_at: now,
-            is_trade_allowed: false, // 初期値、最初のHeartbeatで更新
-            detected_symbols: msg.detected_symbols.clone(),
+            is_trade_allowed: msg.is_trade_allowed, // Updated checking
+            symbol_context: msg.symbol_context.clone(),
         };
 
         connections.insert(key, connection);
@@ -159,7 +159,7 @@ impl ConnectionManager {
                 status: ConnectionStatus::Online,
                 connected_at: now,
                 is_trade_allowed: msg.is_trade_allowed,
-                detected_symbols: None, // Heartbeat does not carry detection info
+                symbol_context: None, // Heartbeat does not carry detection info
             };
 
             connections.insert(key, connection);
@@ -642,7 +642,8 @@ mod tests {
             currency: "USD".to_string(),
             leverage: 100,
             timestamp: chrono::Utc::now().to_rfc3339(),
-            detected_symbols: None,
+            symbol_context: None,
+            is_trade_allowed: false,
         };
 
         manager.register_ea(&register_msg).await;
@@ -739,5 +740,80 @@ mod tests {
         let timeouts = mock_handler.master_timeouts.lock().unwrap();
         assert_eq!(timeouts.len(), 1);
         assert_eq!(timeouts[0], "master_1");
+    }
+    #[tokio::test]
+    async fn test_register_ea_with_symbol_context() {
+        let manager = ConnectionManager::new(30);
+        let account_id = "CTX_TEST";
+
+        let context = crate::domain::models::SymbolContext {
+            detected_prefix: "pro.".to_string(),
+            detected_suffix: ".m".to_string(),
+            available_special_symbols: vec!["GOLD.m".to_string(), "US30.pro".to_string()],
+        };
+
+        let register_msg = crate::domain::models::RegisterMessage {
+            message_type: "Register".to_string(),
+            account_id: account_id.to_string(),
+            ea_type: "Slave".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            symbol_context: Some(context),
+            is_trade_allowed: false,
+        };
+
+        manager.register_ea(&register_msg).await;
+
+        let ea = manager.get_slave(account_id).await;
+        assert!(ea.is_some());
+        let ea = ea.unwrap();
+
+        // Verify Symbol Context
+        assert!(ea.symbol_context.is_some());
+        let ctx = ea.symbol_context.unwrap();
+        assert_eq!(ctx.detected_prefix, "pro.");
+        assert_eq!(ctx.detected_suffix, ".m");
+        assert_eq!(ctx.available_special_symbols.len(), 2);
+        assert!(ctx
+            .available_special_symbols
+            .contains(&"GOLD.m".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_register_ea_with_is_trade_allowed() {
+        let manager = ConnectionManager::new(30);
+        let account_id = "TRADE_ALLOWED_TEST";
+
+        // 1. Register with is_trade_allowed = true
+        let register_msg = crate::domain::models::RegisterMessage {
+            message_type: "Register".to_string(),
+            account_id: account_id.to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            symbol_context: None,
+            is_trade_allowed: true, // New field, will fail compilation
+        };
+
+        manager.register_ea(&register_msg).await;
+
+        // Verify status is Registered AND is_trade_allowed is true
+        let ea = manager.get_master(account_id).await;
+        assert!(ea.is_some());
+        let ea = ea.unwrap();
+        assert_eq!(ea.status, ConnectionStatus::Registered);
+        assert!(ea.is_trade_allowed); // Should be true from Register
     }
 }

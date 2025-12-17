@@ -44,6 +44,7 @@ pub struct MessageHandler {
     /// Service for handling disconnection events
     disconnection_service: Arc<dyn crate::ports::DisconnectionService>,
     /// Application configuration (for symbol mappings)
+    #[allow(dead_code)]
     config: Arc<crate::config::Config>,
 }
 

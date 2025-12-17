@@ -73,9 +73,15 @@ export interface EaConnection {
   connected_at: string;
   open_positions?: number; // Number of currently open positions
   is_trade_allowed: boolean; // MT terminal's Algorithm Trading button state
-  // Legacy fields for backwards compatibility
   role?: 'master' | 'slave';
   is_online?: boolean;
+  symbol_context?: SymbolContext;
+}
+
+export interface SymbolContext {
+  detected_prefix: string;
+  detected_suffix: string;
+  available_special_symbols: string[];
 }
 
 export interface ApiResponse<T> {

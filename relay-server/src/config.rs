@@ -24,11 +24,19 @@ pub struct Config {
     pub symbol_mapping: SymbolMappingConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolMappingConfig {
     /// List of synonym groups (e.g., [["XAUUSD", "GOLD"], ["US30", "DJI"]])
     #[serde(default = "default_synonym_groups")]
     pub synonym_groups: Vec<Vec<String>>,
+}
+
+impl Default for SymbolMappingConfig {
+    fn default() -> Self {
+        Self {
+            synonym_groups: default_synonym_groups(),
+        }
+    }
 }
 
 fn default_synonym_groups() -> Vec<Vec<String>> {
