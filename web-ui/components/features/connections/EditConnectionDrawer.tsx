@@ -30,7 +30,6 @@ interface EditConnectionDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (data: CopySettings) => void;
-  onDelete: (data: CopySettings) => void;
   setting: CopySettings;
   connection?: EaConnection;
 }
@@ -39,7 +38,6 @@ export function EditConnectionDrawer({
   open,
   onOpenChange,
   onSave,
-  onDelete,
   setting,
   connection
 }: EditConnectionDrawerProps) {
@@ -72,7 +70,6 @@ export function EditConnectionDrawer({
     allowed_magic_numbers: '',
   });
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Initialize form data when setting changes
   useEffect(() => {
@@ -162,11 +159,6 @@ export function EditConnectionDrawer({
     onOpenChange(false);
   };
 
-  const handleDelete = () => {
-    onDelete(setting);
-    onOpenChange(false);
-    setShowDeleteConfirm(false);
-  };
 
   // Split account name into broker name and account number
   const splitAccountName = (accountName: string) => {
@@ -247,46 +239,19 @@ export function EditConnectionDrawer({
             </div>
 
             <DrawerFooter className="flex-shrink-0 pt-4 border-t mt-4">
-              <div className="flex w-full justify-between items-center">
-                <div>
-                  <Button type="button" variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
-                    {content.delete.value}
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                    {content.cancel.value}
-                  </Button>
-                  <Button type="submit">
-                    {content.save.value}
-                  </Button>
-                </div>
+              <div className="flex w-full justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  {content.cancel.value}
+                </Button>
+                <Button type="submit">
+                  {content.save.value}
+                </Button>
               </div>
             </DrawerFooter>
           </form>
         </DrawerContent>
       </Drawer>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{content.deleteConfirmTitle.value}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {content.deleteConfirmDescription.value}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{content.cancel.value}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {content.delete.value}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

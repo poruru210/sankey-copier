@@ -13,7 +13,6 @@ export interface AccountNodeData {
   onEditSetting?: (setting: CopySettings) => void;
   onDeleteSetting?: (setting: CopySettings) => void;
   onEditMasterSettings?: () => void;
-  onOpenSettingsDrawer?: () => void;
   type: 'source' | 'receiver';
   isHighlighted?: boolean;
   hoveredSourceId: string | null;
@@ -157,7 +156,6 @@ export const AccountNode = memo(({ data, selected }: NodeProps<AccountNodeType>)
         onEditSetting={data.onEditSetting}
         onDeleteSetting={data.onDeleteSetting}
         onEditMasterSettings={data.onEditMasterSettings}
-        onOpenSettingsDrawer={data.onOpenSettingsDrawer}
         type={data.type}
         isHighlighted={data.isHighlighted}
         hoveredSourceId={data.hoveredSourceId}

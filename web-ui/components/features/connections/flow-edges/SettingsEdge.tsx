@@ -8,20 +8,30 @@ import {
   getBezierPath,
   Edge,
 } from '@xyflow/react';
-import { Settings } from 'lucide-react';
+import { Trash2, Settings } from 'lucide-react';
 import { useIntlayer } from 'next-intlayer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { CopySettings } from '@/types';
 
 export interface SettingsEdgeData {
   setting: CopySettings;
   onEditSetting: (setting: CopySettings) => void;
+  onDeleteSetting: (setting: CopySettings) => void;
 }
 
 export type SettingsEdgeType = Edge<SettingsEdgeData & Record<string, unknown>, 'settingsEdge'>;
 
 /**
- * Custom edge component with a settings button
- * Displays connection label and a gear icon for editing
+ * Displays connection label and a trash icon for deletion
  */
 export const SettingsEdge = memo(({
   id,
@@ -35,7 +45,8 @@ export const SettingsEdge = memo(({
   style,
   markerEnd,
 }: EdgeProps<SettingsEdgeType>) => {
-  const content = useIntlayer('settings-edge');
+  const content = useIntlayer('settings-dialog');
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -47,6 +58,7 @@ export const SettingsEdge = memo(({
 
   const setting = data?.setting;
   const onEditSetting = data?.onEditSetting;
+  const onDeleteSetting = data?.onDeleteSetting;
 
   // Build label text with copy settings
   const labelParts: string[] = [];
@@ -64,11 +76,24 @@ export const SettingsEdge = memo(({
   const isConnected = runtimeStatus === 2;
   const isEnabled = runtimeStatus === 1;
 
+
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (setting && onEditSetting) {
       onEditSetting(setting);
     }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (setting && onDeleteSetting) {
+      onDeleteSetting(setting);
+    }
+    setShowDeleteConfirm(false);
   };
 
   return (
@@ -89,19 +114,6 @@ export const SettingsEdge = memo(({
           className="nodrag nopan"
         >
           <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 px-2 py-1">
-            {labelText && (
-              <span
-                className={`text-xs font-semibold ${
-                  isConnected
-                    ? 'text-green-600 dark:text-green-400'
-                    : isEnabled
-                    ? 'text-yellow-600 dark:text-yellow-400'
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}
-              >
-                {labelText}
-              </span>
-            )}
             <button
               onClick={handleSettingsClick}
               className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400"
@@ -109,9 +121,50 @@ export const SettingsEdge = memo(({
             >
               <Settings className="w-3.5 h-3.5" />
             </button>
+            {labelText && (
+              <span
+                className={`text-xs font-semibold ${isConnected
+                  ? 'text-green-600 dark:text-green-400'
+                  : isEnabled
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                  }`}
+              >
+                {labelText}
+              </span>
+            )}
+            <button
+              onClick={handleDeleteClick}
+              className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors text-red-600 dark:text-red-400"
+              title={content.delete.value}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </EdgeLabelRenderer>
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{content.deleteConfirmTitle.value}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {content.deleteConfirmDescription.value}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={(e) => e.stopPropagation()}>{content.cancel.value}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.stopPropagation();
+                confirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {content.delete.value}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 });

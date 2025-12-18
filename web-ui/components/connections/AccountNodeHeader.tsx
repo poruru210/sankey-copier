@@ -3,7 +3,6 @@
 // AccountNodeHeader - Header section of the account node
 // Shows broker icon, account name, enable/disable switch, settings button, and expand toggle
 // For Master (source) nodes: shows Master settings button
-// For Slave (receiver) nodes: shows connection settings button
 
 import type { ReactNode } from 'react';
 import { ChevronDown, Settings } from 'lucide-react';
@@ -24,7 +23,6 @@ interface AccountNodeHeaderProps {
   onToggle: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
   onEditMasterSettings?: () => void;
-  onOpenSettingsDrawer?: () => void;
   isTogglePending?: boolean;
 }
 
@@ -33,7 +31,6 @@ export function AccountNodeHeader({
   onToggle,
   onToggleEnabled,
   onEditMasterSettings,
-  onOpenSettingsDrawer,
   isTogglePending,
 }: AccountNodeHeaderProps) {
   const content = useIntlayer('account-node-header');
@@ -116,20 +113,19 @@ export function AccountNodeHeader({
   const statusBadges = renderStatusBadges();
 
   // Determine which settings button to show
-  const hasSettingsButton = onEditMasterSettings || onOpenSettingsDrawer;
-  const handleSettingsClick = onEditMasterSettings || onOpenSettingsDrawer;
+  const hasSettingsButton = !!onEditMasterSettings;
+  const handleSettingsClick = onEditMasterSettings;
 
   return (
     <div>
       {/* Header row - Draggable area */}
       <div
-        className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 cursor-move drag-handle ${
-          account.hasError
-            ? 'bg-pink-50 dark:bg-pink-900/20'
-            : account.hasWarning
+        className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 cursor-move drag-handle ${account.hasError
+          ? 'bg-pink-50 dark:bg-pink-900/20'
+          : account.hasWarning
             ? 'bg-yellow-50 dark:bg-yellow-900/20'
             : ''
-        }`}
+          }`}
       >
         <BrokerIcon brokerName={brokerName} size="lg" />
         <div className="flex-1 min-w-0">
@@ -140,11 +136,10 @@ export function AccountNodeHeader({
             <div className="flex items-center gap-1.5 mt-1 text-[10px] md:text-xs text-gray-600 dark:text-gray-400">
               {account.platform && (
                 <Badge
-                  className={`text-[8px] md:text-[9px] px-1.5 py-0 h-4 md:h-[18px] font-medium ${
-                    account.platform === 'MT4'
-                      ? 'bg-blue-500 text-white hover:bg-blue-500'
-                      : 'bg-purple-500 text-white hover:bg-purple-500'
-                  }`}
+                  className={`text-[8px] md:text-[9px] px-1.5 py-0 h-4 md:h-[18px] font-medium ${account.platform === 'MT4'
+                    ? 'bg-blue-500 text-white hover:bg-blue-500'
+                    : 'bg-purple-500 text-white hover:bg-purple-500'
+                    }`}
                 >
                   {account.platform}
                 </Badge>
@@ -180,7 +175,7 @@ export function AccountNodeHeader({
               handleSettingsClick?.();
             }}
             className="noDrag p-2 md:p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-            title={onEditMasterSettings ? content.masterSettingsTitle : content.connectionSettingsTitle}
+            title={content.masterSettingsTitle.value}
           >
             <Settings className="w-4 h-4" />
           </button>

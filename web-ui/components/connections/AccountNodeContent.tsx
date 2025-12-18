@@ -14,7 +14,6 @@ interface AccountNodeContentProps {
   onEditSetting?: (setting: CopySettings) => void;
   onDeleteSetting?: (setting: CopySettings) => void;
   onEditMasterSettings?: () => void;
-  onOpenSettingsDrawer?: () => void;
   type: 'source' | 'receiver';
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -73,7 +72,6 @@ export const AccountNodeContent = React.memo(
     onEditSetting,
     onDeleteSetting,
     onEditMasterSettings,
-    onOpenSettingsDrawer,
     type,
     onMouseEnter,
     onMouseLeave,
@@ -115,7 +113,6 @@ export const AccountNodeContent = React.memo(
             onToggleEnabled={onToggleEnabled}
             isTogglePending={isTogglePending}
             onEditMasterSettings={type === 'source' ? onEditMasterSettings : undefined}
-            onOpenSettingsDrawer={type === 'receiver' ? onOpenSettingsDrawer : undefined}
           />
 
           {/* Node Body - Expands on click */}

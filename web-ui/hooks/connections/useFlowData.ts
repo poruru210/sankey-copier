@@ -294,6 +294,7 @@ export function useFlowData({
         data: {
           setting,
           onEditSetting: handleEditSetting,
+          onDeleteSetting: handleDeleteSetting,
         },
       });
     });
