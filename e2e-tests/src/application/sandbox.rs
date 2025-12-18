@@ -83,6 +83,39 @@ impl TestSandbox {
         Ok(slave)
     }
 
+    /// Explicitly create a TradeGroup (Master Resource) via API.
+    /// Required because auto-creation is disabled.
+    pub async fn create_trade_group(&self, master_account_id: &str) -> anyhow::Result<()> {
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .context("Failed to build HTTP client")?;
+
+        let url = format!("{}/api/trade-groups", self.server.http_base_url());
+
+        let response = client
+            .post(&url)
+            .json(&serde_json::json!({
+                "id": master_account_id,
+                "master_settings": {
+                    "enabled": true,
+                    "config_version": 1
+                },
+                "members": []
+            }))
+            .send()
+            .await
+            .context("Failed to send create_trade_group request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create TradeGroup (Status: {}): {}", status, text);
+        }
+
+        Ok(())
+    }
+
     /// Access the underlying server process if needed (e.g. to inspect DB path)
     pub fn server(&self) -> &RelayServerProcess {
         &self.server

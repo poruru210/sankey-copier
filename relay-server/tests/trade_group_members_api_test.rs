@@ -144,7 +144,8 @@ async fn test_add_member_success() {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
         },
-        status: 0,
+
+        enabled: false,
     };
 
     let response = app
@@ -175,13 +176,13 @@ async fn test_add_member_success() {
 }
 
 #[tokio::test]
-async fn test_add_member_auto_creates_trade_group() {
-    let (app, db) = create_test_app().await;
+async fn test_add_member_fails_if_no_trade_group() {
+    let (app, _) = create_test_app().await;
 
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_001".to_string(),
         slave_settings: SlaveSettings::default(),
-        status: 0,
+        enabled: false,
     };
 
     let response = app
@@ -196,16 +197,8 @@ async fn test_add_member_auto_creates_trade_group() {
         .await
         .unwrap();
 
-    // Should auto-create TradeGroup and return CREATED
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    // Verify TradeGroup was created
-    let trade_group = db.get_trade_group("NONEXISTENT").await.unwrap();
-    assert!(trade_group.is_some());
-
-    // Verify member was added
-    let member = db.get_member("NONEXISTENT", "SLAVE_001").await.unwrap();
-    assert!(member.is_some());
+    // Should FAIL with 404 because auto-creation is disabled
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -518,7 +511,8 @@ async fn test_member_with_complex_settings() {
             max_signal_delay_ms: 5000,
             use_pending_order_for_delayed: false,
         },
-        status: 0,
+
+        enabled: false,
     };
 
     let response = app
@@ -587,7 +581,7 @@ async fn test_add_member_duplicate_conflict() {
     let request_body = AddMemberRequest {
         slave_account: "SLAVE_DUP".to_string(),
         slave_settings,
-        status: 0,
+        enabled: false,
     };
 
     let response = app

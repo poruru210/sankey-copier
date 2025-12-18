@@ -10,6 +10,7 @@ import type {
   CreateSettingsRequest,
   SlaveSettings,
   MasterSettings,
+  CreateTradeGroupRequest,
 } from '@/types';
 
 /**
@@ -137,6 +138,30 @@ export function convertCreateRequestToMemberData(request: CreateSettingsRequest)
       use_pending_order_for_delayed: request.use_pending_order_for_delayed,
     },
     status: request.status,
+    // Explicitly map status to enabled boolean.
+    // Backend defaults to TRUE if this is missing, so we must provide it.
+    enabled: request.status !== 0,
+  };
+}
+
+/**
+ * Convert CreateSettingsRequest → CreateTradeGroupRequest
+ * 
+ * Prepares data for creating a new TradeGroup (Master) + optional initial Member.
+ */
+export function convertCreateRequestToTradeGroupData(request: CreateSettingsRequest): CreateTradeGroupRequest {
+  const memberData = convertCreateRequestToMemberData(request);
+
+  return {
+    id: request.master_account,
+    master_settings: {
+      enabled: false, // Default to false (safe mode) for new TradeGroups
+      config_version: 1,
+    },
+    members: [{
+      ...memberData,
+      enabled: request.status !== 0, // 0=DISABLED
+    }],
   };
 }
 

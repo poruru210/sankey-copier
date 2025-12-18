@@ -355,6 +355,7 @@ mod tests {
         impl ConnectionManager for ConnectionManager {
             async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
             async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
+
             async fn update_heartbeat(&self, msg: crate::domain::models::HeartbeatMessage) -> bool;
         }
     }

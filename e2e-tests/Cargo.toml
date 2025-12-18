@@ -34,13 +34,13 @@ tempfile = "3.14"
 # For helpers module (DB seeding, async functions)
 sankey-copier-relay-server = { path = "../relay-server" }
 tokio = { version = "1.42", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1.0"
 
 [dev-dependencies]
 # Async runtime test utilities
+# Async runtime test utilities
 tokio = { version = "1.42", features = ["full", "test-util"] }
-# HTTP client for API tests
-reqwest = { version = "0.12", features = ["json"] }
-serde_json = "1.0"
 
 # WebSocket client for E2E tests
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }

@@ -367,18 +367,105 @@ export function useSankeyCopier() {
     if (!apiClient) return;
 
     try {
-      // Import converter function
-      const { convertCreateRequestToMemberData } = await import('@/utils/tradeGroupAdapter');
-      const memberData = convertCreateRequestToMemberData(formData);
+      // Import converter functions
+      const {
+        convertCreateRequestToMemberData,
+        convertCreateRequestToTradeGroupData
+      } = await import('@/utils/tradeGroupAdapter');
 
-      // Send to new API endpoint
-      await apiClient.post<number>(
-        `/trade-groups/${encodeURIComponent(formData.master_account)}/members`,
-        memberData
-      );
+      // Check if TradeGroup (Master) already exists
+      // Import converter helper
+      const {
+        convertMembersToCopySettings
+      } = await import('@/utils/tradeGroupAdapter');
 
-      // Refresh settings to get updated data
-      await fetchSettings();
+      let newMember: TradeGroupMember | undefined;
+      let newTradeGroup: TradeGroup | undefined;
+
+      const masterExists = tradeGroups.some(tg => tg.id === formData.master_account);
+      console.log(`[createSetting] Master '${formData.master_account}' exists? ${masterExists}`);
+
+      if (masterExists) {
+        // CASE 1: Master exists -> Add Member to existing TradeGroup
+        const memberData = convertCreateRequestToMemberData(formData);
+
+        const response = await apiClient.post<TradeGroupMember>(
+          `/trade-groups/${encodeURIComponent(formData.master_account)}/members`,
+          memberData
+        );
+        newMember = response;
+      } else {
+        // CASE 2: Master does not exist -> Create TradeGroup (Atomic with Member)
+        const tradeGroupData = convertCreateRequestToTradeGroupData(formData);
+
+        const response = await apiClient.post<TradeGroup>(
+          '/trade-groups',
+          tradeGroupData
+        );
+        newTradeGroup = response;
+        if (response.members && response.members.length > 0) {
+          newMember = response.members[0];
+        }
+      }
+
+      // Optimistic Update: Immediately add the new setting to state
+      if (newMember) {
+        // We need the MasterSettings to construct CopySettings
+        let masterConfig: any; // Using any to reuse existing type logic or minimal shape
+
+        if (newTradeGroup) {
+          masterConfig = newTradeGroup.master_settings;
+          // Also update tradeGroups state optimistically
+          setTradeGroups(prev => [...prev, newTradeGroup!]);
+        } else {
+          const existingMaster = tradeGroups.find(tg => tg.id === formData.master_account);
+          masterConfig = existingMaster?.master_settings;
+        }
+
+        if (masterConfig) {
+          // Construct a temporary TradeGroup-like structure for the converter
+          // Or just construct the single CopySettings object manually
+          const newSetting: CopySettings = {
+            // ID is numeric from DB
+            id: newMember.id,
+            master_account: formData.master_account,
+            slave_account: newMember.slave_account,
+
+            // Master Settings are not part of CopySettings but are in TradeGroup
+            // We just populate the Member (Slave) settings here
+
+            // Member Settings props
+            enabled_flag: newMember.enabled_flag,
+            status: newMember.status,
+            lot_calculation_mode: newMember.slave_settings.lot_calculation_mode,
+            lot_multiplier: newMember.slave_settings.lot_multiplier,
+            reverse_trade: newMember.slave_settings.reverse_trade,
+            symbol_prefix: newMember.slave_settings.symbol_prefix || undefined,
+            symbol_suffix: newMember.slave_settings.symbol_suffix || undefined,
+            symbol_mappings: newMember.slave_settings.symbol_mappings,
+
+            // Other props...
+            source_lot_min: newMember.slave_settings.source_lot_min,
+            source_lot_max: newMember.slave_settings.source_lot_max,
+            sync_mode: newMember.slave_settings.sync_mode,
+            limit_order_expiry_min: newMember.slave_settings.limit_order_expiry_min,
+            market_sync_max_pips: newMember.slave_settings.market_sync_max_pips,
+            max_slippage: newMember.slave_settings.max_slippage,
+            copy_pending_orders: newMember.slave_settings.copy_pending_orders,
+            max_retries: newMember.slave_settings.max_retries,
+            max_signal_delay_ms: newMember.slave_settings.max_signal_delay_ms,
+            use_pending_order_for_delayed: newMember.slave_settings.use_pending_order_for_delayed,
+            filters: newMember.slave_settings.filters,
+
+            warning_codes: newMember.warning_codes,
+          };
+
+          setSettings(prev => [...prev, newSetting]);
+        }
+      }
+
+      // Refresh settings in background to ensure consistency
+      fetchSettings();
     } catch (err) {
       throw err; // Re-throw for caller to handle
     }

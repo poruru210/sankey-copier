@@ -43,6 +43,9 @@ export function DetectedSettingsAlert({
             if (hasMappingFor(masterBase)) continue;
 
             for (const candidateBase of slaveCandidates) {
+                // Skip if candidate is same as master (redundant identity mapping)
+                if (candidateBase === masterBase) continue;
+
                 // Construct full slave symbol candidates
                 // e.g., "GOLD", "GOLD.m", "pro.GOLD"
                 // We match strictly what is in available_special_symbols

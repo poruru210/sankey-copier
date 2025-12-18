@@ -27,6 +27,17 @@ impl TradeGroupRuntimeView {
     }
 }
 
+/// Request body for explicit Creation of a TradeGroup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTradeGroupRequest {
+    pub id: String,
+    #[serde(default)]
+    pub master_settings: MasterSettings,
+    /// Optional list of initial members to add atomically
+    #[serde(default)]
+    pub members: Vec<AddMemberRequest>,
+}
+
 /// Request body for toggling Master enabled state
 #[derive(Debug, serde::Deserialize)]
 pub struct ToggleMasterRequest {
@@ -39,10 +50,15 @@ pub struct AddMemberRequest {
     pub slave_account: String,
     #[serde(default)]
     pub slave_settings: SlaveSettings,
-    /// Initial status for the member (0 = DISABLED, 2 = CONNECTED/enabled)
-    /// Defaults to 0 (disabled) if not specified
-    #[serde(default)]
-    pub status: i32,
+    /// Initial enabled state (true/false) in UI terms.
+    /// Backend maps this to status=2 (Enabled) or status=0 (Disabled).
+    /// Default: false (Disabled) for safety
+    #[serde(default = "default_false")]
+    pub enabled: bool,
+}
+
+fn default_false() -> bool {
+    false
 }
 
 /// Request body for toggling member status

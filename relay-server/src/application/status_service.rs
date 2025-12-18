@@ -93,20 +93,11 @@ impl StatusService {
         let trade_group = match self.repository.get_trade_group(account_id).await {
             Ok(Some(tg)) => tg,
             Ok(None) => {
-                tracing::info!(
-                    "TradeGroup missing for Master {}, attempting to create...",
+                tracing::warn!(
+                    "TradeGroup missing for Master {}. Auto-creation is disabled. Config update suppressed.",
                     account_id
                 );
-                match self.repository.create_trade_group(account_id).await {
-                    Ok(tg) => {
-                        tracing::info!("Successfully created TradeGroup for Master {}", account_id);
-                        tg
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to create TradeGroup for {}: {}", account_id, e);
-                        return;
-                    }
-                }
+                return;
             }
             Err(e) => {
                 tracing::error!("Failed to get TradeGroup for {}: {}", account_id, e);
@@ -475,6 +466,7 @@ mod tests {
         impl ConnectionManager for ConnectionManager {
             async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
             async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
+
             async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool;
         }
     }
@@ -709,7 +701,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_heartbeat_master_new_registration_sends_config() {
+    async fn test_handle_heartbeat_master_no_tradegroup_no_action() {
         let mut mock_conn_manager = MockConnectionManager::new();
         let mut mock_repo = MockTradeGroupRepository::new();
         let mut mock_publisher = MockConfigPublisher::new();
@@ -737,87 +729,26 @@ mod tests {
             symbol_map: None,
         };
 
-        // First call for old_conn lookup returns None (new registration)
-        // Note: RuntimeStatusUpdater might also call get_master, so we need sequences or flexible times.
-        // But RuntimeStatusUpdater is called AFTER the registration logic in handle_heartbeat.
-        // handle_heartbeat flow:
-        // 1. connection_manager.get_master (old_conn) -> None
-        // 2. connection_manager.update_heartbeat -> true
-        // 3. connection_manager.get_master (new_conn) -> Some(...)
-        // 4. trade_group_repository.get_trade_group -> None
-        // 5. trade_group_repository.create_trade_group
-        // 6. ConfigPublisher.send_master_config
-        // 7. ConfigPublisher.publish_trade_group_updates
-        // 8. RuntimeStatusUpdater.evaluate_master...
-        //    -> get_trade_group
-        //    -> get_master
-
-        // Sequence for get_master
-        let mut seq = mockall::Sequence::new();
-
-        mock_conn_manager
-            .expect_get_master()
-            .with(eq(account_id))
-            .times(1)
-            .in_sequence(&mut seq)
-            .return_const(None); // 1. old_conn
-
-        // Heartbeat update
-        mock_conn_manager
-            .expect_update_heartbeat()
-            .times(1)
-            .return_const(true);
-
-        // Subsequent calls to get_master (verification + runtime updater) return the new connection
-        let new_conn = EaConnection {
-            account_id: account_id.to_string(),
-            ea_type: crate::domain::models::EaType::Master,
-            status: ConnectionStatus::Registered,
-            is_trade_allowed: true,
-            ..Default::default()
-        };
-        mock_conn_manager
-            .expect_get_master()
-            .with(eq(account_id))
-            .times(1..) // 3. new_conn check + 8. RuntimeStatusUpdater
-            .in_sequence(&mut seq)
-            .return_const(Some(new_conn));
-
-        // TradeGroup missing initially
-        let trade_group = TradeGroup::new(account_id.to_string());
-
-        // Sequence for get_trade_group
-        // Note: Shared mock with RuntimeStatusUpdater, use returning for flexibility
-        let mut call_count = 0;
-        let tg_clone = trade_group.clone();
+        // EXPECT: get_trade_group called, returns None
         mock_repo
             .expect_get_trade_group()
             .with(eq(account_id))
-            .returning(move |_| {
-                call_count += 1;
-                if call_count == 1 {
-                    Ok(None) // First call: not found
-                } else {
-                    Ok(Some(tg_clone.clone())) // Subsequent calls: found
-                }
-            });
-
-        // EXPECT: create_trade_group to be called
-        let tg_for_create = trade_group.clone();
-        mock_repo
-            .expect_create_trade_group()
-            .with(eq(account_id))
             .times(1)
-            .return_once(move |_| Ok(tg_for_create));
+            .returning(|_| Ok(None));
 
-        // RuntimeStatusUpdater calls get_members
-        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+        // EXPECT: create_trade_group to NOT be called
+        mock_repo.expect_create_trade_group().times(0);
 
-        // EXPECT: Config should be published for new registration
-        mock_publisher
-            .expect_send_master_config()
-            .times(1)
-            .returning(|_| Ok(()));
+        // EXPECT: Config should NOT be published
+        mock_publisher.expect_send_master_config().times(0);
+
+        // Mock connection manager calls (might happen before trade group check)
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .returning(|_| true);
+
+        // OLD connection check
+        mock_conn_manager.expect_get_master().returning(|_| None);
 
         // Create Arcs
         let conn_manager = Arc::new(mock_conn_manager);
@@ -1418,7 +1349,7 @@ mod tests {
         // Verify Initial State
         let conn = real_conn_manager.get_master(account_id).await.unwrap();
         assert_eq!(conn.status, ConnectionStatus::Registered);
-        assert_eq!(conn.is_trade_allowed, false);
+        assert!(!conn.is_trade_allowed);
 
         // 2. Send Heartbeat 1 (Transition to Online, Trade Allowed)
         let hb1 = HeartbeatMessage {
@@ -1557,7 +1488,7 @@ mod tests {
         // Verify Status is Registered but is_trade_allowed is TRUE
         let conn = real_conn_manager.get_master(account_id).await.unwrap();
         assert_eq!(conn.status, ConnectionStatus::Registered);
-        assert_eq!(conn.is_trade_allowed, true);
+        assert!(conn.is_trade_allowed);
 
         // 2. Send Heartbeat (Identical)
         let hb = HeartbeatMessage {

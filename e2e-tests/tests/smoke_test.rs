@@ -81,6 +81,12 @@ async fn test_master_slave_basic_communication() {
     let sandbox = TestSandbox::new().expect("Failed to start sandbox");
     sleep(Duration::from_millis(2000)).await;
 
+    // Explicitly create TradeGroup (Strict Lifecycle)
+    sandbox
+        .create_trade_group("master-comm-test")
+        .await
+        .expect("Failed to create TradeGroup");
+
     // Create Master
     let mut master = sandbox
         .create_master("master-comm-test", true)

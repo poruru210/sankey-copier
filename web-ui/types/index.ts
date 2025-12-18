@@ -114,6 +114,18 @@ export interface CreateSettingsRequest {
   use_pending_order_for_delayed?: boolean;
 }
 
+export interface AddMemberRequest {
+  slave_account: string;
+  slave_settings: SlaveSettings;
+  enabled?: boolean;
+}
+
+export interface CreateTradeGroupRequest {
+  id: string; // master_account
+  master_settings?: Partial<MasterSettings>;
+  members?: AddMemberRequest[];
+}
+
 // ConnectionsView specific types
 export interface AccountInfo {
   id: string;
@@ -203,6 +215,7 @@ export interface TradeGroup {
   master_warning_codes?: WarningCode[]; // Warning codes from Status Engine
   created_at: string;
   updated_at: string;
+  members?: TradeGroupMember[];
 }
 
 // Full System State Snapshot

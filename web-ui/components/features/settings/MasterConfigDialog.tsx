@@ -190,6 +190,47 @@ export function MasterConfigDialog({
               </div>
             )}
 
+            {/* Detected Settings Alert */}
+            {(() => {
+              if (!masterAccount.symbol_context) return null;
+
+              const { detected_prefix, detected_suffix } = masterAccount.symbol_context;
+              const diffPrefix = detected_prefix && detected_prefix !== formData.symbol_prefix;
+              const diffSuffix = detected_suffix && detected_suffix !== formData.symbol_suffix;
+
+              if (!diffPrefix && !diffSuffix) return null;
+
+              return (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm">
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg">🪄</span>
+                    <div className="flex-1">
+                      <div className="font-medium text-blue-800 dark:text-blue-300 mb-1">
+                        Detected Settings Available
+                      </div>
+                      <ul className="text-blue-700 dark:text-blue-400 list-disc list-inside mb-2 space-y-0.5">
+                        {diffPrefix && <li>Prefix: <strong>{detected_prefix}</strong></li>}
+                        {diffSuffix && <li>Suffix: <strong>{detected_suffix}</strong></li>}
+                      </ul>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs border-blue-300 hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-800"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          symbol_prefix: diffPrefix ? detected_prefix : prev.symbol_prefix,
+                          symbol_suffix: diffSuffix ? detected_suffix : prev.symbol_suffix
+                        }))}
+                      >
+                        Apply Detected Settings
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Symbol Transformation Settings */}
             <div className="space-y-4">
               <div className="space-y-1">
