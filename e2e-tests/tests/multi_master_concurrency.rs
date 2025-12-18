@@ -154,7 +154,7 @@ async fn test_dual_master_routing() {
         .expect("Recv Mod A");
     assert!(rec_mod_a.is_some(), "Slave A missed modify");
     let mod_sig_a = rec_mod_a.unwrap();
-    assert_eq!(mod_sig_a.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig_a.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig_a.stop_loss, Some(1.0900));
 
     let rec_mod_b = sim_slave_b
@@ -162,7 +162,7 @@ async fn test_dual_master_routing() {
         .expect("Recv Mod B");
     assert!(rec_mod_b.is_some(), "Slave B missed modify");
     let mod_sig_b = rec_mod_b.unwrap();
-    assert_eq!(mod_sig_b.action, e2e_tests::types::TradeAction::Modify);
+    assert_eq!(mod_sig_b.action, e2e_tests::TradeAction::Modify);
     assert_eq!(mod_sig_b.stop_loss, Some(1.2600));
 
     println!("✅ Concurrent Modify Passed");
@@ -183,19 +183,13 @@ async fn test_dual_master_routing() {
         .try_receive_trade_signal(5000)
         .expect("Recv Close A");
     assert!(rec_close_a.is_some(), "Slave A missed close");
-    assert_eq!(
-        rec_close_a.unwrap().action,
-        e2e_tests::types::TradeAction::Close
-    );
+    assert_eq!(rec_close_a.unwrap().action, e2e_tests::TradeAction::Close);
 
     let rec_close_b = sim_slave_b
         .try_receive_trade_signal(5000)
         .expect("Recv Close B");
     assert!(rec_close_b.is_some(), "Slave B missed close");
-    assert_eq!(
-        rec_close_b.unwrap().action,
-        e2e_tests::types::TradeAction::Close
-    );
+    assert_eq!(rec_close_b.unwrap().action, e2e_tests::TradeAction::Close);
 
     println!("✅ Concurrent Close Passed");
 }
@@ -298,10 +292,7 @@ async fn test_multi_master_stress_test() {
                 cycle,
                 i
             );
-            assert_eq!(
-                received.unwrap().action,
-                e2e_tests::types::TradeAction::Modify
-            );
+            assert_eq!(received.unwrap().action, e2e_tests::TradeAction::Modify);
         }
 
         // 3. CLOSE ALL
@@ -320,10 +311,7 @@ async fn test_multi_master_stress_test() {
                 cycle,
                 i
             );
-            assert_eq!(
-                received.unwrap().action,
-                e2e_tests::types::TradeAction::Close
-            );
+            assert_eq!(received.unwrap().action, e2e_tests::TradeAction::Close);
         }
 
         if cycle % 5 == 0 {

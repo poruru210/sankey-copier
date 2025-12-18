@@ -23,6 +23,17 @@ receiver_port = 5555      # Port for receiving messages from EAs (PULL socket)
 sender_port = 5556        # Port for sending all messages to EAs (PUB socket) - trade signals and config updates use different topics
 timeout_seconds = 30      # Connection timeout in seconds
 
+[symbol_mapping]
+# Synonym groups for auto-mapping
+# Each group contains symbols that are considered equivalent
+synonym_groups = [
+  ["XAUUSD", "GOLD"],
+  ["XAGUSD", "SILVER"],
+  ["US30", "DJI", "WS30"],
+  ["US100", "NDX", "NAS100"],
+  ["BTCUSD", "BITCOIN", "XBTUSD"]
+]
+
 [cors]
 # CORS configuration for Web UI access
 # WARNING: Setting disable=true allows ALL origins - use only in development!

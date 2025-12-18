@@ -961,6 +961,79 @@ async fn test_master_config_not_found() {
     }
 }
 
+/// Test Master EA receives config when TradeGroup is created AFTER the EA connects.
+/// (Late Configuration Scenario)
+#[tokio::test]
+async fn test_master_config_update_after_creation() {
+    let sandbox = TestSandbox::new().expect("Failed to start sandbox");
+    let server = sandbox.server();
+    let db = Database::new(&server.db_url())
+        .await
+        .expect("Failed to connect to test DB");
+
+    let master_account = "MASTER_LATE_CONFIG_001";
+
+    // 1. Create Master EA simulator BEFORE creating TradeGroup in DB
+    let mut simulator = sandbox
+        .create_master(master_account, true)
+        .expect("Failed to create Master EA simulator");
+
+    // Allow ZMQ connections to establish
+    sleep(Duration::from_millis(500)).await;
+
+    // Start simulator
+    simulator.set_trade_allowed(true);
+    simulator.start().expect("Failed to start simulator");
+
+    // 2. Wait a bit - should NOT receive valid config yet (or receive disabled/default)
+    // We expect it to effectively be waiting or have a 'disabled' state.
+    // Let's ensure it doesn't crash and is running.
+    sleep(Duration::from_millis(1000)).await;
+
+    println!("Creating TradeGroup late...");
+
+    // 3. Create TradeGroup (Master) LATE via API
+    // Using API triggers immediate config distribution, unlike direct DB injection.
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create HTTP client");
+
+    let response = client
+        .post(format!("{}/api/trade-groups", server.http_base_url()))
+        .json(&serde_json::json!({
+            "id": master_account,
+            "master_settings": {
+                "enabled": true,
+                "symbol_prefix": "LATE_",
+                "config_version": 1
+            },
+            "members": []
+        }))
+        .send()
+        .await
+        .expect("Failed to send create request");
+
+    assert!(response.status().is_success(), "API should succeed");
+
+    // 4. Wait for config update
+    // The Master EA should receive the new config via Status Engine -> ZMQ
+    let config = simulator
+        .wait_for_status(STATUS_CONNECTED, 5000)
+        .expect("Failed to receive config after late creation");
+
+    assert!(
+        config.is_some(),
+        "Master EA should receive MasterConfigMessage after late creation"
+    );
+
+    let config = config.unwrap();
+    assert_eq!(config.account_id, master_account);
+    assert_eq!(config.symbol_prefix, Some("LATE_".to_string()));
+
+    println!("✅ test_master_config_update_after_creation passed");
+}
+
 // =============================================================================
 // Member Management Tests
 // =============================================================================

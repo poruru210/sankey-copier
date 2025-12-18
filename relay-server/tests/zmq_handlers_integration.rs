@@ -84,6 +84,7 @@ impl TestContext {
             metrics,
             status_service,
             disconnection_service,
+            Arc::new(sankey_copier_relay_server::config::Config::default()),
         );
 
         Self {
@@ -109,6 +110,8 @@ fn build_register_message(account_id: &str, ea_type: &str) -> RegisterMessage {
         currency: "USD".to_string(),
         leverage: 100,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        symbol_context: None,
+        is_trade_allowed: false,
     }
 }
 

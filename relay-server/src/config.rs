@@ -20,6 +20,37 @@ pub struct Config {
     pub tls: TlsConfig,
     #[serde(default)]
     pub victoria_logs: VictoriaLogsConfig,
+    #[serde(default)]
+    pub symbol_mapping: SymbolMappingConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolMappingConfig {
+    /// List of synonym groups (e.g., [["XAUUSD", "GOLD"], ["US30", "DJI"]])
+    #[serde(default = "default_synonym_groups")]
+    pub synonym_groups: Vec<Vec<String>>,
+}
+
+impl Default for SymbolMappingConfig {
+    fn default() -> Self {
+        Self {
+            synonym_groups: default_synonym_groups(),
+        }
+    }
+}
+
+fn default_synonym_groups() -> Vec<Vec<String>> {
+    vec![
+        vec!["XAUUSD".to_string(), "GOLD".to_string()],
+        vec!["XAGUSD".to_string(), "SILVER".to_string()],
+        vec!["US30".to_string(), "DJI".to_string(), "WS30".to_string()],
+        vec!["US100".to_string(), "NDX".to_string(), "NAS100".to_string()],
+        vec![
+            "BTCUSD".to_string(),
+            "BITCOIN".to_string(),
+            "XBTUSD".to_string(),
+        ],
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -397,6 +428,7 @@ impl Default for Config {
             installer: InstallerConfig::default(),
             tls: TlsConfig::default(),
             victoria_logs: VictoriaLogsConfig::default(),
+            symbol_mapping: SymbolMappingConfig::default(),
         }
     }
 }
@@ -536,6 +568,7 @@ mod tests {
                 log_level: "WARN".to_string(),
                 ..VictoriaLogsConfig::default()
             },
+            symbol_mapping: SymbolMappingConfig::default(),
         };
 
         assert_eq!(config.server_address(), "127.0.0.1:9090");
@@ -678,5 +711,54 @@ log_level = "INFO"
         // Cleanup
         // SAFETY: Test runs in isolation
         unsafe { std::env::remove_var("CONFIG_ENV") };
+    }
+
+    #[test]
+    fn test_symbol_mapping_config_parsing() {
+        let toml_str = r#"
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[database]
+url = "sqlite::memory:"
+
+[zeromq]
+receiver_port = 5555
+sender_port = 5556
+timeout_seconds = 30
+
+[symbol_mapping]
+synonym_groups = [
+  ["EURUSD", "EU"],
+  ["GBPUSD", "GU"]
+]
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.symbol_mapping.synonym_groups.len(), 2);
+        assert_eq!(
+            config.symbol_mapping.synonym_groups[0],
+            vec!["EURUSD", "EU"]
+        );
+        assert_eq!(
+            config.symbol_mapping.synonym_groups[1],
+            vec!["GBPUSD", "GU"]
+        );
+    }
+
+    #[test]
+    fn test_symbol_mapping_default() {
+        let config = Config::default();
+        // Check if defaults are loaded
+        assert!(config
+            .symbol_mapping
+            .synonym_groups
+            .iter()
+            .any(|g| g.contains(&"GOLD".to_string())));
+        assert!(config
+            .symbol_mapping
+            .synonym_groups
+            .iter()
+            .any(|g| g.contains(&"BTCUSD".to_string())));
     }
 }

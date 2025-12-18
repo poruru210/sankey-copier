@@ -15,15 +15,15 @@ use std::time::Instant;
 use sankey_copier_zmq::ea_context::{EaCommand, EaCommandType};
 use sankey_copier_zmq::ffi::*; // Use all FFI functions available
 
-use crate::base::EaSimulatorBase;
-use crate::platform::context::SlaveContextWrapper;
-use crate::platform::runner::PlatformRunner;
-use crate::platform::traits::ExpertAdvisor;
-use crate::platform::types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
-use crate::types::{
+use crate::adapters::infrastructure::ffi::slave_context::SlaveContextWrapper;
+use crate::application::runner::PlatformRunner;
+use crate::domain::models::{
     EaType, GlobalConfigMessage, PositionSnapshotMessage, SlaveConfig, TradeAction, TradeSignal,
     UnregisterMessage, ONTIMER_INTERVAL_MS, STATUS_NO_CONFIG,
 };
+use crate::domain::mql_types::{ENUM_DEINIT_REASON, ENUM_INIT_RETCODE};
+use crate::domain::simulators::EaSimulatorBase;
+use crate::domain::traits::ExpertAdvisor;
 
 // =============================================================================
 // Slave EA Core (MQL5 Logic)
@@ -34,7 +34,7 @@ struct SlaveEaCore {
     // Shared state from SlaveEaSimulator
     account_id: String,
     ea_type: EaType,
-    heartbeat_params: crate::types::HeartbeatParams,
+    heartbeat_params: crate::domain::models::HeartbeatParams,
     _shutdown_flag: Arc<AtomicBool>,
     is_trade_allowed: Arc<AtomicBool>,
     _master_account: String,
@@ -57,6 +57,11 @@ struct SlaveEaCore {
 
     push_address: String,
     config_address: String,
+    #[allow(dead_code)]
+    candidates: String,
+    detected_prefix: String,
+    detected_suffix: String,
+    detected_specials: String,
 }
 
 impl ExpertAdvisor for SlaveEaCore {
@@ -103,6 +108,39 @@ impl ExpertAdvisor for SlaveEaCore {
                 eprintln!("Failed to connect EA context!");
                 return ENUM_INIT_RETCODE::INIT_FAILED;
             }
+        }
+
+        // Send Register Message (Automatic)
+
+        // We need to keep the vector alive until function call?
+        // Ah, `to_u16` returns Vec. `as_ptr` borrows it.
+        // I need to bind it to a variable.
+        let prefix_vec = to_u16(&self.detected_prefix);
+        let suffix_vec = to_u16(&self.detected_suffix);
+        let specials_vec = to_u16(&self.detected_specials);
+
+        let mut buffer = vec![0u8; 1024];
+        let len = unsafe {
+            ea_send_register(
+                ctx_ptr,
+                buffer.as_mut_ptr(),
+                buffer.len() as i32,
+                prefix_vec.as_ptr(),
+                suffix_vec.as_ptr(),
+                specials_vec.as_ptr(),
+                if self.is_trade_allowed.load(Ordering::SeqCst) {
+                    1
+                } else {
+                    0
+                }, // New Arg
+            )
+        };
+        if len > 0 {
+            unsafe {
+                ea_send_push(ctx_ptr, buffer.as_ptr(), len);
+            }
+        } else {
+            eprintln!("Failed to send register message!");
         }
 
         ENUM_INIT_RETCODE::INIT_SUCCEEDED
@@ -250,7 +288,7 @@ impl ExpertAdvisor for SlaveEaCore {
                             action,
                             ticket: cmd.ticket,
                             symbol: Some(symbol),
-                            order_type: crate::types::OrderType::from_mql(cmd.order_type),
+                            order_type: crate::domain::models::OrderType::from_mql(cmd.order_type),
                             lots: Some(cmd.volume),
                             open_price: Some(cmd.price),
                             stop_loss: if cmd.sl.abs() < 1e-6 {
@@ -321,18 +359,31 @@ pub struct SlaveEaSimulator {
     // Connection Params
     push_address: String,
     config_address: String,
+    candidates: String,
+    // Detected Context for Suggestion Mode
+    detected_prefix: String,
+    detected_suffix: String,
+    detected_specials: String,
 }
 
 impl SlaveEaSimulator {
     pub fn new(
-        push_address: &str,
-        config_address: &str,
-        _trade_address: &str,
+        ini_path: &std::path::Path,
         account_id: &str,
         master_account: &str,
         is_trade_allowed: bool,
     ) -> Result<Self> {
         let base = EaSimulatorBase::new_without_zmq(account_id, EaType::Slave, is_trade_allowed)?;
+
+        // Load INI config
+        let ini_conf =
+            crate::adapters::infrastructure::config::EaIniConfig::load_from_file(ini_path)
+                .map_err(|e| anyhow::anyhow!("Failed to load INI config: {}", e))?;
+
+        let push_address = format!("tcp://127.0.0.1:{}", ini_conf.receiver_port);
+        let config_address = format!("tcp://127.0.0.1:{}", ini_conf.publisher_port);
+
+        let candidates = ini_conf.symbol_search_candidates.join(",");
 
         Ok(Self {
             base,
@@ -352,9 +403,23 @@ impl SlaveEaSimulator {
             g_register_sent: Arc::new(AtomicBool::new(false)),
             pending_subscriptions: Arc::new(Mutex::new(Vec::new())),
             context: Arc::new(Mutex::new(None)),
-            push_address: push_address.to_string(),
-            config_address: config_address.to_string(),
+            push_address,
+            config_address,
+            candidates,
+            detected_prefix: String::new(),
+            detected_suffix: String::new(),
+            detected_specials: String::new(),
         })
+    }
+
+    pub fn set_candidates(&mut self, symbols: Vec<String>) {
+        self.candidates = symbols.join(",");
+    }
+
+    pub fn set_detected_context(&mut self, prefix: &str, suffix: &str, specials: Vec<String>) {
+        self.detected_prefix = prefix.to_string();
+        self.detected_suffix = suffix.to_string();
+        self.detected_specials = specials.join(",");
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -384,6 +449,10 @@ impl SlaveEaSimulator {
             context: self.context.clone(),
             push_address: self.push_address.clone(),
             config_address: self.config_address.clone(),
+            candidates: self.candidates.clone(),
+            detected_prefix: self.detected_prefix.clone(),
+            detected_suffix: self.detected_suffix.clone(),
+            detected_specials: self.detected_specials.clone(),
         };
 
         let runner = PlatformRunner::new(core);
@@ -405,7 +474,7 @@ impl SlaveEaSimulator {
                         if shutdown_flag.load(Ordering::SeqCst) {
                             break;
                         }
-                        let _ = timer_sender.send(crate::platform::runner::PlatformEvent::Timer);
+                        let _ = timer_sender.send(crate::application::runner::PlatformEvent::Timer);
                     }
                 });
 

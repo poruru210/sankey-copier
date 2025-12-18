@@ -45,8 +45,8 @@ mod tests {
         assert_eq!(conn.account_id, account_id);
         assert_eq!(conn.ea_type, crate::domain::models::EaType::Master);
 
-        // Verify TradeGroup creation (auto-created on registration)
-        assert!(ctx.db.get_trade_group(account_id).await.unwrap().is_some());
+        // Verify TradeGroup is NOT created (auto-creation disabled)
+        assert!(ctx.db.get_trade_group(account_id).await.unwrap().is_none());
 
         ctx.cleanup().await;
     }

@@ -93,20 +93,11 @@ impl StatusService {
         let trade_group = match self.repository.get_trade_group(account_id).await {
             Ok(Some(tg)) => tg,
             Ok(None) => {
-                tracing::info!(
-                    "TradeGroup missing for Master {}, attempting to create...",
+                tracing::warn!(
+                    "TradeGroup missing for Master {}. Auto-creation is disabled. Config update suppressed.",
                     account_id
                 );
-                match self.repository.create_trade_group(account_id).await {
-                    Ok(tg) => {
-                        tracing::info!("Successfully created TradeGroup for Master {}", account_id);
-                        tg
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to create TradeGroup for {}: {}", account_id, e);
-                        return;
-                    }
-                }
+                return;
             }
             Err(e) => {
                 tracing::error!("Failed to get TradeGroup for {}: {}", account_id, e);
@@ -151,14 +142,52 @@ impl StatusService {
         };
 
         // Check for changes
-        let master_changed = bundle.status_result.has_changed(&old_master_status);
+        let mut master_changed = bundle.status_result.has_changed(&old_master_status);
+
+        // Optimization: Suppress redundant update if transition is purely Registered -> Online
+        // and is_trade_allowed is consistent (meaning Register already sent the correct config).
+        if master_changed {
+            if let Some(old) = &old_conn {
+                if old.status == crate::domain::models::ConnectionStatus::Registered {
+                    // If trade state is consistent, we assume Register handler sent the correct config.
+                    // Note: old.is_trade_allowed comes from RegisterMessage (now accurate).
+                    // msg.is_trade_allowed comes from Heartbeat.
+                    if old.is_trade_allowed == msg.is_trade_allowed {
+                        tracing::info!(
+                            master = %account_id,
+                            "Suppressing redundant config update (Registered -> Online with consistent trade state)"
+                        );
+                        master_changed = false;
+                    }
+                }
+            }
+        }
+
+        if master_changed {
+            tracing::info!(
+                master = %account_id,
+                old_status = old_master_status.status,
+                new_status = bundle.status_result.status,
+                old_warnings = ?old_master_status.warning_codes,
+                new_warnings = ?bundle.status_result.warning_codes,
+                "[StatusService] Master status CHANGE detected"
+            );
+        } else {
+            // Optional: Trace that no change was detected if we suspect it's NOT changing but sending anyway?
+            // But existing code sends ONLY if master_changed.
+            // So if it sends, master_changed IS true.
+            tracing::debug!(
+                master = %account_id,
+                "[StatusService] Master status stable (No Change)"
+            );
+        }
 
         tracing::debug!(
             master = %account_id,
             changed = master_changed,
             old_status = old_master_status.status,
             new_status = bundle.status_result.status,
-            "[StatusService] Master status change detection"
+            "[StatusService] Master status change detection result"
         );
 
         if master_changed {
@@ -424,6 +453,7 @@ mod tests {
     use crate::domain::models::{ConnectionStatus, EaConnection};
     use crate::domain::models::{TradeGroup, TradeGroupMember, VLogsGlobalSettings};
     use async_trait::async_trait;
+    use chrono::Utc;
     use mockall::mock;
 
     use mockall::predicate::*;
@@ -436,6 +466,7 @@ mod tests {
         impl ConnectionManager for ConnectionManager {
             async fn get_master(&self, account_id: &str) -> Option<EaConnection>;
             async fn get_slave(&self, account_id: &str) -> Option<EaConnection>;
+
             async fn update_heartbeat(&self, msg: HeartbeatMessage) -> bool;
         }
     }
@@ -670,7 +701,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_heartbeat_master_new_registration_sends_config() {
+    async fn test_handle_heartbeat_master_no_tradegroup_no_action() {
         let mut mock_conn_manager = MockConnectionManager::new();
         let mut mock_repo = MockTradeGroupRepository::new();
         let mut mock_publisher = MockConfigPublisher::new();
@@ -698,87 +729,26 @@ mod tests {
             symbol_map: None,
         };
 
-        // First call for old_conn lookup returns None (new registration)
-        // Note: RuntimeStatusUpdater might also call get_master, so we need sequences or flexible times.
-        // But RuntimeStatusUpdater is called AFTER the registration logic in handle_heartbeat.
-        // handle_heartbeat flow:
-        // 1. connection_manager.get_master (old_conn) -> None
-        // 2. connection_manager.update_heartbeat -> true
-        // 3. connection_manager.get_master (new_conn) -> Some(...)
-        // 4. trade_group_repository.get_trade_group -> None
-        // 5. trade_group_repository.create_trade_group
-        // 6. ConfigPublisher.send_master_config
-        // 7. ConfigPublisher.publish_trade_group_updates
-        // 8. RuntimeStatusUpdater.evaluate_master...
-        //    -> get_trade_group
-        //    -> get_master
-
-        // Sequence for get_master
-        let mut seq = mockall::Sequence::new();
-
-        mock_conn_manager
-            .expect_get_master()
-            .with(eq(account_id))
-            .times(1)
-            .in_sequence(&mut seq)
-            .return_const(None); // 1. old_conn
-
-        // Heartbeat update
-        mock_conn_manager
-            .expect_update_heartbeat()
-            .times(1)
-            .return_const(true);
-
-        // Subsequent calls to get_master (verification + runtime updater) return the new connection
-        let new_conn = EaConnection {
-            account_id: account_id.to_string(),
-            ea_type: crate::domain::models::EaType::Master,
-            status: ConnectionStatus::Registered,
-            is_trade_allowed: true,
-            ..Default::default()
-        };
-        mock_conn_manager
-            .expect_get_master()
-            .with(eq(account_id))
-            .times(1..) // 3. new_conn check + 8. RuntimeStatusUpdater
-            .in_sequence(&mut seq)
-            .return_const(Some(new_conn));
-
-        // TradeGroup missing initially
-        let trade_group = TradeGroup::new(account_id.to_string());
-
-        // Sequence for get_trade_group
-        // Note: Shared mock with RuntimeStatusUpdater, use returning for flexibility
-        let mut call_count = 0;
-        let tg_clone = trade_group.clone();
+        // EXPECT: get_trade_group called, returns None
         mock_repo
             .expect_get_trade_group()
             .with(eq(account_id))
-            .returning(move |_| {
-                call_count += 1;
-                if call_count == 1 {
-                    Ok(None) // First call: not found
-                } else {
-                    Ok(Some(tg_clone.clone())) // Subsequent calls: found
-                }
-            });
-
-        // EXPECT: create_trade_group to be called
-        let tg_for_create = trade_group.clone();
-        mock_repo
-            .expect_create_trade_group()
-            .with(eq(account_id))
             .times(1)
-            .return_once(move |_| Ok(tg_for_create));
+            .returning(|_| Ok(None));
 
-        // RuntimeStatusUpdater calls get_members
-        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+        // EXPECT: create_trade_group to NOT be called
+        mock_repo.expect_create_trade_group().times(0);
 
-        // EXPECT: Config should be published for new registration
-        mock_publisher
-            .expect_send_master_config()
-            .times(1)
-            .returning(|_| Ok(()));
+        // EXPECT: Config should NOT be published
+        mock_publisher.expect_send_master_config().times(0);
+
+        // Mock connection manager calls (might happen before trade group check)
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .returning(|_| true);
+
+        // OLD connection check
+        mock_conn_manager.expect_get_master().returning(|_| None);
 
         // Create Arcs
         let conn_manager = Arc::new(mock_conn_manager);
@@ -958,5 +928,592 @@ mod tests {
         let service = StatusService::new(conn_arc, repo_arc, pub_arc, runtime_updater, None, None);
 
         service.handle_heartbeat(heartbeat).await;
+    }
+    #[tokio::test]
+    async fn test_handle_heartbeat_master_regression_status_change() {
+        // Scenario: Master is ENABLED (Online).
+        // Event: Heartbeat arrives with `is_trade_allowed=false` (Disabled).
+        // Expectation: Config MUST be sent (Status Change: Connected -> Disabled).
+
+        let mut mock_conn_manager = MockConnectionManager::new();
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let account_id = "MASTER_REG_1";
+        // 1. Initial State: Online & Trade Allowed
+        let conn_initial = EaConnection {
+            account_id: account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Master,
+            status: ConnectionStatus::Online,
+            is_trade_allowed: true, // Initially Allowed
+            last_heartbeat: Utc::now(),
+            ..Default::default()
+        };
+
+        // 2. Incoming Heartbeat: Trade DISABLED
+        let heartbeat = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: false, // Changed to False
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: Utc::now().to_rfc3339(),
+            version: "1.0.0".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        let mut seq = mockall::Sequence::new();
+
+        // Step 1: get_master returns INITIAL state (Used for old_status calculation)
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_initial.clone()));
+
+        // Step 2: update_heartbeat returns false (Existing connection updated)
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(false);
+
+        // Step 3: get_master returns NEW state (Used for new_status calculation)
+        let mut conn_updated = conn_initial.clone();
+        conn_updated.is_trade_allowed = false; // DB/Mem updated
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1) // Called once by handle_master_heartbeat
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_updated));
+
+        // Step 4: TradeGroup logic (Enabled=true, so is_trade_allowed is the decider)
+        let mut tg = TradeGroup::new(account_id.to_string());
+        tg.master_settings.enabled = true;
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .return_once(move |_| Ok(Some(tg)));
+
+        // Step 5: Publisher MUST be called
+        mock_publisher
+            .expect_send_master_config()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        // Ignore others
+        mock_publisher
+            .expect_broadcast_vlogs_config()
+            .returning(|_| Ok(()));
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    Arc::new(MockConnectionManager::new()),
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
+            None,
+            None,
+        );
+
+        service.handle_heartbeat(heartbeat).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_master_regression_offline_online() {
+        // Scenario: Master is OFFLINE.
+        // Event: Heartbeat arrives (Online).
+        // Expectation: Config MUST be sent (Status Change: Disabled/Offline -> Connected).
+
+        let mut mock_conn_manager = MockConnectionManager::new();
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let account_id = "MASTER_REG_2";
+        // 1. Initial State: Offline
+        let conn_initial = EaConnection {
+            account_id: account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Master,
+            status: ConnectionStatus::Offline, // Offline
+            is_trade_allowed: true,
+            last_heartbeat: Utc::now() - chrono::Duration::seconds(60),
+            ..Default::default()
+        };
+
+        let heartbeat = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: true,
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: Utc::now().to_rfc3339(),
+            version: "1.0.0".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        let mut seq = mockall::Sequence::new();
+
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_initial));
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(false); // Valid update
+
+        let conn_updated = EaConnection {
+            account_id: account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Master,
+            status: ConnectionStatus::Online, // Now Online
+            is_trade_allowed: true,
+            ..Default::default()
+        };
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_updated));
+
+        let mut tg = TradeGroup::new(account_id.to_string());
+        tg.master_settings.enabled = true;
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .return_once(move |_| Ok(Some(tg)));
+
+        // Publisher MUST be called
+        mock_publisher
+            .expect_send_master_config()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        mock_publisher
+            .expect_broadcast_vlogs_config()
+            .returning(|_| Ok(()));
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    Arc::new(MockConnectionManager::new()),
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
+            None,
+            None,
+        );
+
+        service.handle_heartbeat(heartbeat).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_master_idempotency() {
+        // Scenario: Master is ONLINE. Identical Heartbeat arrives.
+        // Expectation: Config should NOT be sent (Redundancy check).
+
+        // !!! IMPORTANT !!!
+        // Before Fix: this test should FAIL (expect 0 calls, gets 1).
+        // After Fix: this test should PASS.
+
+        let mut mock_conn_manager = MockConnectionManager::new();
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let account_id = "MASTER_IDEM";
+        // 1. Initial State: Online & Stable
+        let conn_initial = EaConnection {
+            account_id: account_id.to_string(),
+            ea_type: crate::domain::models::EaType::Master,
+            status: ConnectionStatus::Online,
+            is_trade_allowed: true,
+            last_heartbeat: Utc::now(), // Recent
+            ..Default::default()
+        };
+
+        // 2. Incoming Heartbeat: Identical Status, Different Timestamp
+        let heartbeat = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: true, // Same
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: (Utc::now() + chrono::Duration::seconds(1)).to_rfc3339(), // 1s later
+            version: "1.0.0".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        let mut seq = mockall::Sequence::new();
+
+        // Step 1: get_master for OLD state
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_initial.clone()));
+
+        // Step 2: update_heartbeat (Existing)
+        mock_conn_manager
+            .expect_update_heartbeat()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(false);
+
+        // Step 3: get_master for NEW state (Identical)
+        mock_conn_manager
+            .expect_get_master()
+            .with(eq(account_id))
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Some(conn_initial)); // Same state
+
+        let mut tg = TradeGroup::new(account_id.to_string());
+        tg.master_settings.enabled = true;
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .return_once(move |_| Ok(Some(tg)));
+
+        // Step 4: Publisher
+        // EXPECTATION: 0 calls (Silence).
+        // CURRENT BUG: This likely triggers 1 call.
+        mock_publisher
+            .expect_send_master_config()
+            .times(0) // MUST BE ZERO
+            .returning(|_| Ok(()));
+
+        mock_publisher
+            .expect_broadcast_vlogs_config()
+            .returning(|_| Ok(()));
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+
+        let service = StatusService::new(
+            Arc::new(mock_conn_manager),
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    Arc::new(MockConnectionManager::new()),
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
+            None,
+            None,
+        );
+
+        service.handle_heartbeat(heartbeat).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_master_integration_sequence() {
+        // Scenario: Integration test using REAL ConnectionManager (HashMap based).
+        // 1. Register (Status -> Registered)
+        // 2. Heartbeat 1 (Status -> Online). Expect Config Send (Change Detected).
+        // 3. Heartbeat 2 (Status -> Online). Expect NO Config Send (No Change).
+
+        // Use REAL ConnectionManager
+        let real_conn_manager = Arc::new(
+            crate::adapters::infrastructure::connection_manager::ConnectionManager::new(30),
+        );
+
+        // Mocks for others
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+
+        let account_id = "MASTER_INTEGRATION";
+
+        // Setup TradeGroup (Always present and enabled)
+        let mut tg = TradeGroup::new(account_id.to_string());
+        tg.master_settings.enabled = true;
+
+        // Allow repository to be called multiple times
+        // NOTE: We need to use `returning` with a closure that returns a NEW clone each time
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .returning(move |_| {
+                let mut tg = TradeGroup::new("MASTER_INTEGRATION".to_string());
+                tg.master_settings.enabled = true;
+                Ok(Some(tg))
+            });
+
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+        mock_repo
+            .expect_create_trade_group()
+            .returning(|id| Ok(TradeGroup::new(id.to_string())));
+
+        // ConfigPublisher Expectation:
+        // Should be called EXACTLY ONCE (for the first Heartbeat that transitions Registered->Online).
+        // The second Heartbeat should NOT trigger it.
+        mock_publisher
+            .expect_send_master_config()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        mock_publisher
+            .expect_broadcast_vlogs_config()
+            .returning(|_| Ok(()));
+
+        let service = StatusService::new(
+            real_conn_manager.clone(), // Pass the real implementation
+            Arc::new(mock_repo),
+            Arc::new(mock_publisher),
+            Arc::new(
+                crate::application::runtime_status_updater::RuntimeStatusUpdater::with_metrics(
+                    Arc::new(MockTradeGroupRepository::new()),
+                    real_conn_manager.clone(), // Pass real CM to updater too
+                    Arc::new(
+                        crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                    ),
+                ),
+            ),
+            None,
+            None,
+        );
+
+        // 1. Send Register
+        let register_msg = crate::domain::models::RegisterMessage {
+            message_type: "Register".to_string(),
+            account_id: account_id.to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            timestamp: Utc::now().to_rfc3339(),
+            symbol_context: None,
+            is_trade_allowed: false,
+        };
+        real_conn_manager.register_ea(&register_msg).await;
+
+        // Verify Initial State
+        let conn = real_conn_manager.get_master(account_id).await.unwrap();
+        assert_eq!(conn.status, ConnectionStatus::Registered);
+        assert!(!conn.is_trade_allowed);
+
+        // 2. Send Heartbeat 1 (Transition to Online, Trade Allowed)
+        let hb1 = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: true, // Allow
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: Utc::now().to_rfc3339(),
+            version: "1.0.0".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        service.handle_heartbeat(hb1).await;
+        // Expectation: send_master_config called (times=1)
+
+        // 3. Send Heartbeat 2 (Identical)
+        let hb2 = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: true, // Still Allowed
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: (Utc::now() + chrono::Duration::seconds(1)).to_rfc3339(), // 1s later
+            version: "1.0.0".to_string(),
+            account_number: 123,
+            broker: "B".to_string(),
+            account_name: "N".to_string(),
+            server: "S".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        service.handle_heartbeat(hb2).await;
+        // Expectation: send_master_config NOT called (Total times still 1)
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_after_accurate_register_no_duplicate() {
+        // Scenario:
+        // 1. Register WITH is_trade_allowed=true (New Feature)
+        // 2. Heartbeat (is_trade_allowed=true)
+        // Expectation: Config sent ZERO times by Heartbeat (Register already sent it)
+
+        // Use REAL ConnectionManager
+        let real_conn_manager = Arc::new(
+            crate::adapters::infrastructure::connection_manager::ConnectionManager::new(30),
+        );
+        let mut mock_repo = MockTradeGroupRepository::new();
+        let mut mock_publisher = MockConfigPublisher::new();
+        let account_id = "ACCURATE_REGISTER";
+
+        // Setup TradeGroup
+        let mut tg = TradeGroup::new(account_id.to_string());
+        tg.master_settings.enabled = true;
+
+        mock_repo
+            .expect_get_trade_group()
+            .with(eq(account_id))
+            .returning(move |_| {
+                let mut tg = TradeGroup::new("ACCURATE_REGISTER".to_string());
+                tg.master_settings.enabled = true;
+                Ok(Some(tg))
+            });
+        mock_repo.expect_get_members().returning(|_| Ok(vec![]));
+        mock_repo
+            .expect_create_trade_group()
+            .returning(|id| Ok(TradeGroup::new(id.to_string())));
+
+        // IMPORTANT: We expect send_master_config to NOT be called
+        mock_publisher
+            .expect_send_master_config()
+            .times(0)
+            .returning(|_| Ok(()));
+
+        // Broadcast VLogs config is expected on Register (via MessageHandler), but StatusService doesn't handle Register.
+        // StatusService DOES handle Heartbeat.
+        // Heartbeat logic calls update_related_slaves -> which calls repo.
+
+        let mock_repo = Arc::new(mock_repo);
+        let mock_publisher = Arc::new(mock_publisher);
+        let real_conn_arc =
+            real_conn_manager.clone() as Arc<dyn crate::ports::outbound::ConnectionManager>;
+
+        let service = StatusService::new(
+            real_conn_arc.clone(),
+            mock_repo.clone(),
+            mock_publisher,
+            Arc::new(RuntimeStatusUpdater::with_metrics(
+                mock_repo.clone(),
+                real_conn_arc,
+                Arc::new(
+                    crate::application::runtime_status_updater::RuntimeStatusMetrics::default(),
+                ),
+            )),
+            None,
+            None,
+        );
+
+        // 1. Send Register (is_trade_allowed = true) directly to ConnectionManager
+        // (Simulating MessageHandler::handle_register behavior)
+        let register_msg = crate::domain::models::RegisterMessage {
+            message_type: "Register".to_string(),
+            account_id: account_id.to_string(),
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            symbol_context: None,
+            is_trade_allowed: true, // Accurate from start!
+        };
+        real_conn_manager.register_ea(&register_msg).await;
+
+        // Verify Status is Registered but is_trade_allowed is TRUE
+        let conn = real_conn_manager.get_master(account_id).await.unwrap();
+        assert_eq!(conn.status, ConnectionStatus::Registered);
+        assert!(conn.is_trade_allowed);
+
+        // 2. Send Heartbeat (Identical)
+        let hb = HeartbeatMessage {
+            account_id: account_id.to_string(),
+            message_type: "Heartbeat".to_string(),
+            is_trade_allowed: true, // Same as Register
+            ea_type: "Master".to_string(),
+            platform: "MT5".to_string(),
+            balance: 10000.0,
+            equity: 10000.0,
+            open_positions: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            version: "1.0.0".to_string(),
+            account_number: 12345,
+            broker: "Test Broker".to_string(),
+            account_name: "Test Account".to_string(),
+            server: "Test-Server".to_string(),
+            currency: "USD".to_string(),
+            leverage: 100,
+            symbol_prefix: None,
+            symbol_suffix: None,
+            symbol_map: None,
+        };
+
+        service.handle_heartbeat(hb).await;
+        // If successful (no panic), then mock expectation (times=0) passed partially (mockall validates on drop usually)
     }
 }

@@ -459,7 +459,7 @@ async fn test_delete_trade_group_cascade_deletes_members() {
 }
 
 #[tokio::test]
-async fn test_add_member_creates_trade_group_if_not_exists() {
+async fn test_add_member_fails_if_no_trade_group() {
     let (app, db) = create_test_app().await;
 
     // Verify TradeGroup does NOT exist initially
@@ -507,31 +507,15 @@ async fn test_add_member_creates_trade_group_if_not_exists() {
 
     let response = app.oneshot(request).await.unwrap();
 
-    // Should return 201 Created (TradeGroup should be auto-created)
-    assert_eq!(response.status(), StatusCode::CREATED);
+    // Should return 404 Not Found (Auto validation enabled)
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    // Verify member was created
-    assert_eq!(json["slave_account"], "SLAVE_AUTO");
-    assert_eq!(json["trade_group_id"], "MASTER_AUTO_CREATE");
-
-    // Verify TradeGroup was auto-created
+    // Verify TradeGroup was NOT auto-created
     let trade_group = db.get_trade_group("MASTER_AUTO_CREATE").await.unwrap();
     assert!(
-        trade_group.is_some(),
-        "TradeGroup should have been auto-created"
+        trade_group.is_none(),
+        "TradeGroup should NOT have been auto-created"
     );
-
-    let trade_group = trade_group.unwrap();
-    assert_eq!(trade_group.id, "MASTER_AUTO_CREATE");
-    // Should have default master settings
-    assert_eq!(trade_group.master_settings.config_version, 0);
-    assert_eq!(trade_group.master_settings.symbol_prefix, None);
-    assert_eq!(trade_group.master_settings.symbol_suffix, None);
 }
 
 // =============================================================================

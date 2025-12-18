@@ -6,9 +6,9 @@
 // Migrated from relay-server/tests/e2e_trade_signal_test.rs
 
 use e2e_tests::helpers::{default_test_slave_settings, setup_test_scenario};
-use e2e_tests::types::{OrderType, TradeSignal};
 use e2e_tests::SlaveEaSimulator;
 use e2e_tests::TestSandbox;
+use e2e_tests::{OrderType, TradeSignal};
 use sankey_copier_relay_server::adapters::outbound::persistence::Database;
 use sankey_copier_relay_server::domain::models::{LotCalculationMode, SlaveSettings, SyncMode};
 use tokio::time::{sleep, Duration};

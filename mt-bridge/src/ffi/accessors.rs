@@ -90,10 +90,10 @@ pub(crate) unsafe fn convert_c_position_to_rust(
 /// - config: Pointer to allocated SMasterConfig struct
 #[no_mangle]
 pub unsafe extern "C" fn ea_context_get_master_config(
-    context: *const EaContext,
+    context: *mut EaContext,
     config: *mut SMasterConfig,
 ) -> i32 {
-    let ctx = match context.as_ref() {
+    let ctx = match context.as_mut() {
         Some(c) => c,
         None => return 0,
     };
@@ -101,8 +101,14 @@ pub unsafe extern "C" fn ea_context_get_master_config(
         return 0;
     }
 
-    if let Some(src) = &ctx.last_master_config {
+    // Pop next pending config
+    if let Some(next_config) = ctx.pending_master_configs.pop_front() {
+        // Update cached state
+        ctx.last_master_config = Some(next_config.clone());
+
+        let src = &next_config;
         let dest = &mut *config;
+
         copy_string_to_fixed_array(&src.account_id, &mut dest.account_id);
         dest.status = src.status;
         copy_string_to_fixed_array(
@@ -113,8 +119,8 @@ pub unsafe extern "C" fn ea_context_get_master_config(
             src.symbol_suffix.as_deref().unwrap_or(""),
             &mut dest.symbol_suffix,
         );
-
         dest.config_version = src.config_version;
+
         1
     } else {
         0

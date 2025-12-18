@@ -73,9 +73,15 @@ export interface EaConnection {
   connected_at: string;
   open_positions?: number; // Number of currently open positions
   is_trade_allowed: boolean; // MT terminal's Algorithm Trading button state
-  // Legacy fields for backwards compatibility
   role?: 'master' | 'slave';
   is_online?: boolean;
+  symbol_context?: SymbolContext;
+}
+
+export interface SymbolContext {
+  detected_prefix: string;
+  detected_suffix: string;
+  available_special_symbols: string[];
 }
 
 export interface ApiResponse<T> {
@@ -106,6 +112,18 @@ export interface CreateSettingsRequest {
   max_retries?: number;
   max_signal_delay_ms?: number;
   use_pending_order_for_delayed?: boolean;
+}
+
+export interface AddMemberRequest {
+  slave_account: string;
+  slave_settings: SlaveSettings;
+  enabled?: boolean;
+}
+
+export interface CreateTradeGroupRequest {
+  id: string; // master_account
+  master_settings?: Partial<MasterSettings>;
+  members?: AddMemberRequest[];
 }
 
 // ConnectionsView specific types
@@ -197,6 +215,7 @@ export interface TradeGroup {
   master_warning_codes?: WarningCode[]; // Warning codes from Status Engine
   created_at: string;
   updated_at: string;
+  members?: TradeGroupMember[];
 }
 
 // Full System State Snapshot

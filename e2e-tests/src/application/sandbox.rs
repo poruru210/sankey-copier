@@ -15,8 +15,9 @@
 
 use anyhow::{Context, Result};
 
-use super::relay_server::RelayServerProcess;
-use crate::{MasterEaSimulator, SlaveEaSimulator};
+use crate::adapters::infrastructure::process::RelayServerProcess;
+use crate::application::simulators::master::MasterEaSimulator;
+use crate::application::simulators::slave::SlaveEaSimulator;
 
 /// The TestSandbox represents a complete, isolated testing environment.
 pub struct TestSandbox {
@@ -50,12 +51,10 @@ impl TestSandbox {
         is_trade_allowed: bool,
     ) -> Result<MasterEaSimulator> {
         // Master connects to PULL (for commands) and PUB (for config/sync)
-        let push_address = self.server.zmq_pull_address();
-        let config_address = self.server.zmq_pub_address();
+        let ini_path = self.server.ini_path();
 
-        let master =
-            MasterEaSimulator::new(&push_address, &config_address, account_id, is_trade_allowed)
-                .context("Failed to create Master EA simulator")?;
+        let master = MasterEaSimulator::new(&ini_path, account_id, is_trade_allowed)
+            .context("Failed to create Master EA simulator")?;
 
         // Note: We don't automatically call master.start() here to give the caller
         // a chance to configure it before the loop starts.
@@ -75,22 +74,46 @@ impl TestSandbox {
         master_account_id: &str,
         is_trade_allowed: bool,
     ) -> Result<SlaveEaSimulator> {
-        let push_address = self.server.zmq_pull_address();
-        let config_address = self.server.zmq_pub_address();
-        // Slave also subscribes to trade signals on the same PUB socket (in this architecture)
-        let trade_address = self.server.zmq_pub_address();
+        let ini_path = self.server.ini_path();
 
-        let slave = SlaveEaSimulator::new(
-            &push_address,
-            &config_address,
-            &trade_address,
-            account_id,
-            master_account_id,
-            is_trade_allowed,
-        )
-        .context("Failed to create Slave EA simulator")?;
+        let slave =
+            SlaveEaSimulator::new(&ini_path, account_id, master_account_id, is_trade_allowed)
+                .context("Failed to create Slave EA simulator")?;
 
         Ok(slave)
+    }
+
+    /// Explicitly create a TradeGroup (Master Resource) via API.
+    /// Required because auto-creation is disabled.
+    pub async fn create_trade_group(&self, master_account_id: &str) -> anyhow::Result<()> {
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .context("Failed to build HTTP client")?;
+
+        let url = format!("{}/api/trade-groups", self.server.http_base_url());
+
+        let response = client
+            .post(&url)
+            .json(&serde_json::json!({
+                "id": master_account_id,
+                "master_settings": {
+                    "enabled": true,
+                    "config_version": 1
+                },
+                "members": []
+            }))
+            .send()
+            .await
+            .context("Failed to send create_trade_group request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create TradeGroup (Status: {}): {}", status, text);
+        }
+
+        Ok(())
     }
 
     /// Access the underlying server process if needed (e.g. to inspect DB path)

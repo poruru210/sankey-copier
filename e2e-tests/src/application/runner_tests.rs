@@ -1,10 +1,10 @@
 // e2e-tests/src/platform/tests.rs
 
 use super::runner::PlatformRunner;
-use super::traits::ExpertAdvisor;
-use super::types::{
+use crate::domain::mql_types::{
     MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
+use crate::domain::traits::ExpertAdvisor;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

@@ -110,6 +110,7 @@ pub struct EaContext {
 
     // --- Cached Config ---
     pub last_master_config: Option<crate::types::MasterConfigMessage>,
+    pub pending_master_configs: VecDeque<crate::types::MasterConfigMessage>, // New: Queue for Master Configs
     pub slave_configs: HashMap<String, SlaveConfigMessage>, // Key: Master Account ID
     pub pending_slave_configs: VecDeque<SlaveConfigMessage>, // For UI update command (FIFO queue)
     pub current_slave_config: Option<SlaveConfigMessage>, // Currently being processed by MQL (popped from queue)
@@ -163,6 +164,7 @@ impl EaContext {
             current_equity: 0.0,
             current_open_positions: 0,
             last_master_config: None,
+            pending_master_configs: VecDeque::new(),
             slave_configs: HashMap::new(),
             pending_slave_configs: VecDeque::new(),
             current_slave_config: None,
@@ -357,7 +359,9 @@ impl EaContext {
         if self.ea_type == "Master" {
             if let Ok(config) = rmp_serde::from_slice::<crate::types::MasterConfigMessage>(payload)
             {
-                self.last_master_config = Some(config);
+                self.last_master_config = Some(config.clone());
+                // Also push to pending queue so we can consume it Event-wise
+                self.pending_master_configs.push_back(config);
             }
         } else if self.ea_type == "Slave" {
             if let Ok(config) = rmp_serde::from_slice::<crate::types::SlaveConfigMessage>(payload) {

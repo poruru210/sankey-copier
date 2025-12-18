@@ -77,7 +77,32 @@ impl MessageHandler {
     ) {
         // Transform signal
         // SymbolConverter removes master's prefix/suffix and applies slave's prefix/suffix + mappings
-        let converter = SymbolConverter::from_settings(master_settings, &member.slave_settings);
+        let mut converter = SymbolConverter::from_settings(master_settings, &member.slave_settings);
+
+        // Inject Auto-Mapping Context
+        if let Some(slave_conn) = self
+            .connection_manager
+            .get_slave(&member.slave_account)
+            .await
+        {
+            let (detected_symbols, detected_prefix, detected_suffix) =
+                if let Some(ctx) = &slave_conn.symbol_context {
+                    (
+                        Some(ctx.available_special_symbols.clone()),
+                        Some(ctx.detected_prefix.clone()),
+                        Some(ctx.detected_suffix.clone()),
+                    )
+                } else {
+                    (None, None, None)
+                };
+
+            converter = converter.with_auto_mapping(
+                self.config.symbol_mapping.synonym_groups.clone(),
+                detected_symbols,
+                detected_prefix,
+                detected_suffix,
+            );
+        }
 
         match self
             .copy_engine
@@ -207,7 +232,5 @@ mod tests {
 
         // Process trade signal (should be filtered out, no panic)
         ctx.handle_trade_signal(signal).await;
-
-        ctx.cleanup().await;
     }
 }

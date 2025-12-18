@@ -12,10 +12,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use crate::platform::traits::ExpertAdvisor;
-use crate::platform::types::{
+use crate::domain::mql_types::{
     MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
+use crate::domain::traits::ExpertAdvisor;
 
 /// プラットフォームで発生するイベントの種類
 pub enum PlatformEvent {

@@ -24,7 +24,7 @@ import { BrokerIcon } from '@/components/ui/BrokerIcon';
 import { SlaveSettingsForm, type SlaveSettingsFormData } from '@/components/features/settings/SlaveSettingsForm';
 import { DRAWER_SIZE_SETTINGS } from '@/lib/ui-constants';
 import { DrawerInfoCard } from '@/components/ui/drawer-section';
-import type { CopySettings } from '@/types';
+import type { CopySettings, EaConnection } from '@/types';
 
 interface EditConnectionDrawerProps {
   open: boolean;
@@ -32,6 +32,7 @@ interface EditConnectionDrawerProps {
   onSave: (data: CopySettings) => void;
   onDelete: (data: CopySettings) => void;
   setting: CopySettings;
+  connection?: EaConnection;
 }
 
 export function EditConnectionDrawer({
@@ -39,7 +40,8 @@ export function EditConnectionDrawer({
   onOpenChange,
   onSave,
   onDelete,
-  setting
+  setting,
+  connection
 }: EditConnectionDrawerProps) {
   const content = useIntlayer('settings-dialog');
 
@@ -118,16 +120,16 @@ export function EditConnectionDrawer({
     // Format: "XAUUSD=GOLD,EURUSD=EUR" -> [{source_symbol: "XAUUSD", target_symbol: "GOLD"}, ...]
     const symbolMappingsArray = formData.symbol_mappings
       ? formData.symbol_mappings.split(',').filter(s => s.trim()).map(pair => {
-          const [source, target] = pair.split('=').map(s => s.trim());
-          return { source_symbol: source || '', target_symbol: target || '' };
-        }).filter(m => m.source_symbol && m.target_symbol)
+        const [source, target] = pair.split('=').map(s => s.trim());
+        return { source_symbol: source || '', target_symbol: target || '' };
+      }).filter(m => m.source_symbol && m.target_symbol)
       : [];
 
     // Convert comma-separated magic numbers to array format
     const allowedMagicNumbers = formData.allowed_magic_numbers
       ? formData.allowed_magic_numbers.split(',')
-          .map(s => parseInt(s.trim(), 10))
-          .filter(n => !isNaN(n))
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => !isNaN(n))
       : null;
 
     onSave({
@@ -237,10 +239,10 @@ export function EditConnectionDrawer({
                 </div>
               </DrawerInfoCard>
 
-              {/* Slave Settings Form (shared component) */}
               <SlaveSettingsForm
                 formData={formData}
                 onChange={setFormData}
+                detectedContext={connection?.symbol_context}
               />
             </div>
 

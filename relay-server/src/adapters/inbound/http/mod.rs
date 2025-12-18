@@ -147,7 +147,10 @@ pub fn create_router(state: AppState) -> Router {
             post(mt_installations::install_to_mt),
         )
         // TradeGroups API (Master settings)
-        .route("/api/trade-groups", get(trade_groups::list_trade_groups))
+        .route(
+            "/api/trade-groups",
+            get(trade_groups::list_trade_groups).post(trade_groups::create_trade_group),
+        )
         .route(
             "/api/trade-groups/:id",
             get(trade_groups::get_trade_group)

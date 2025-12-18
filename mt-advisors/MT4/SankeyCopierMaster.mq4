@@ -13,6 +13,7 @@
 #include "../Include/SankeyCopier/MasterContext.mqh"
 // ZMQ.mqh removed
 #include "../Include/SankeyCopier/MasterSignals.mqh"
+#include "../Include/SankeyCopier/SymbolUtils.mqh"
 #include "../Include/SankeyCopier/SlaveConfig.mqh"
 #include "../Include/SankeyCopier/GridPanel.mqh"
 #include "../Include/SankeyCopier/Logging.mqh"
@@ -139,6 +140,29 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // --- Symbol Detection and Registration ---
+   string detected_prefix = "";
+   string detected_suffix = "";
+   string detected_specials = "";
+   
+   DetectSymbolContext(detected_prefix, detected_suffix, detected_specials);
+   
+   LogInfo(CAT_SYSTEM, StringFormat("Detected Context: Prefix='%s', Suffix='%s', Specials='%s'", 
+           detected_prefix, detected_suffix, detected_specials));
+   
+   // Check IsTradeAllowed() for MT4
+   bool is_trade_allowed = IsTradeAllowed();
+   if(g_ea_context.SendRegister(detected_prefix, detected_suffix, detected_specials, is_trade_allowed))
+   {
+       g_register_sent = true;
+       LogInfo(CAT_SYSTEM, "Sent initial Register message");
+   }
+   else
+   {
+       LogError(CAT_SYSTEM, "Failed to send initial Register message");
+       // Not critical failure?
+   }
+
    // Subscribe to messages for this account ID
    if(!g_ea_context.SubscribeConfig(g_config_topic))
    {
@@ -247,7 +271,7 @@ void OnTimer()
    if(!g_initialized) return;
    
    // 1. Run ManagerTick (Handles ZMQ Polling, Heartbeats internally)
-   bool current_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   bool current_trade_allowed = IsTradeAllowed();
    
    // Track trade state change for UI update
    static bool last_trade_allowed = false;

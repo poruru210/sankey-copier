@@ -533,3 +533,105 @@ async fn reevaluate_and_broadcast_slaves(state: &AppState, master_account: &str)
         }
     }
 }
+
+/// Create a new TradeGroup explicitly
+/// POST /api/trade-groups
+pub async fn create_trade_group(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::adapters::inbound::http::dtos::CreateTradeGroupRequest>,
+) -> Result<Json<TradeGroupRuntimeView>, ProblemDetails> {
+    let span = tracing::info_span!("create_trade_group", master_account = %payload.id);
+    let _enter = span.enter();
+
+    // 1. Check if exists
+    if let Ok(Some(_)) = state.db.get_trade_group(&payload.id).await {
+        return Err(ProblemDetails::conflict(format!(
+            "TradeGroup '{}' already exists",
+            payload.id
+        ))
+        .with_instance(format!("/api/trade-groups/{}", payload.id)));
+    }
+
+    // 2. Create TradeGroup
+    let mut tg = match state.db.create_trade_group(&payload.id).await {
+        Ok(tg) => tg,
+        Err(e) => {
+            tracing::error!(master = %payload.id, error = %e, "Failed to create TradeGroup");
+            return Err(ProblemDetails::internal_error(format!(
+                "Failed to create TradeGroup: {}",
+                e
+            )));
+        }
+    };
+
+    // 3. Update Master settings if provided (and not default)
+    // The create_trade_group returns TG with default settings.
+    let mut new_settings = payload.master_settings;
+    new_settings.config_version = 1; // Start versioning
+
+    if let Err(e) = state
+        .db
+        .update_master_settings(&payload.id, new_settings.clone())
+        .await
+    {
+        tracing::error!(master = %payload.id, error = %e, "Failed to set initial master settings");
+        return Err(ProblemDetails::internal_error(format!(
+            "Failed to set initial master settings: {}",
+            e
+        )));
+    }
+    tg.master_settings = new_settings;
+
+    // 4. Add Members (Atomic creation intent)
+    for member_req in payload.members {
+        // Map AddMemberRequest.enabled -> status (true=2, false=0)
+        let status = if member_req.enabled { 2 } else { 0 };
+
+        if let Err(e) = state
+            .db
+            .add_member(
+                &payload.id,
+                &member_req.slave_account,
+                member_req.slave_settings,
+                status,
+            )
+            .await
+        {
+            tracing::error!(
+                master = %payload.id,
+                slave = %member_req.slave_account,
+                error = %e,
+                "Failed to add member during creation (partial failure danger)"
+            );
+            // We return error to signal failure, though TG might have been created partially.
+            // In a real DB with transactions, we would rollback here.
+            // For now, we accept this risk or user can retry/delete.
+            return Err(ProblemDetails::internal_error(format!(
+                "Failed to add member '{}': {}",
+                member_req.slave_account, e
+            )));
+        }
+    }
+
+    tracing::info!(
+        master_account = %payload.id,
+        "Successfully created TradeGroup explicit"
+    );
+
+    // 5. Trigger updates
+    // Master Config
+    send_config_to_master(&state, &payload.id, &tg.master_settings).await;
+
+    // Slaves Config
+    send_config_to_slaves(&state, &payload.id, &tg.master_settings).await;
+
+    // 6. Broadcast Snapshot
+    let broadcaster = state.snapshot_broadcaster.clone();
+    tokio::spawn(async move {
+        broadcaster.broadcast_now().await;
+    });
+
+    // 7. Return View
+    let response = build_trade_group_response(&state, tg).await;
+    Ok(Json(response))
+}

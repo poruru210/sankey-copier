@@ -24,6 +24,7 @@ bool g_received_via_timer = false; // Track if signal was received via OnTimer (
 // MessageParsing.mqh removed
 #include "../Include/SankeyCopier/Logging.mqh"
 #include "../Include/SankeyCopier/GlobalConfig.mqh"
+#include "../Include/SankeyCopier/SymbolUtils.mqh"
 
 //--- Input parameters
 // Note: Most trade settings (Slippage, MaxRetries, AllowNewOrders, etc.) are now
@@ -70,6 +71,8 @@ string         g_sync_topic = "";                // Sync topic for receiving Pos
 //--- Configuration panel
 CGridPanel     g_config_panel;                   // Grid panel for displaying configuration
 int            g_last_config_count = -1;         // Debug: track config count changes
+
+
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -147,6 +150,27 @@ int OnInit()
    {
       LogError(CAT_SYSTEM, "Failed to connect to Relay Server");
       return INIT_FAILED;
+   }
+
+   // Detect symbols locally in MQL (Phase 2 implemented)
+   string detected_prefix = "";
+   string detected_suffix = "";
+   string detected_specials = "";
+   
+   DetectSymbolContext(detected_prefix, detected_suffix, detected_specials);
+   
+   LogInfo(CAT_SYSTEM, StringFormat("Detected Context: Prefix='%s', Suffix='%s', Specials='%s'", 
+           detected_prefix, detected_suffix, detected_specials));
+   
+   bool is_trade_allowed = (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+   if(g_ea_context.SendRegister(detected_prefix, detected_suffix, detected_specials, is_trade_allowed))
+   {
+       g_register_sent = true;
+       LogInfo(CAT_SYSTEM, "Sent initial Register message");
+   }
+   else
+   {
+       LogWarn(CAT_SYSTEM, "Failed to send initial Register message");
    }
    
    // Subscribe to global sync and my config topics

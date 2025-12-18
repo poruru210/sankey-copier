@@ -5,7 +5,7 @@
 // すべてのExpert Advisor (EA) シミュレータが実装すべきトレイト。
 // MQL5のイベントハンドラ関数をモデル化しています。
 
-use crate::platform::types::{
+use crate::domain::mql_types::{
     MqlTradeRequest, MqlTradeResult, MqlTradeTransaction, ENUM_DEINIT_REASON, ENUM_INIT_RETCODE,
 };
 

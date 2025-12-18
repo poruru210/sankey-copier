@@ -16,13 +16,37 @@
 // parallel test execution without resource conflicts.
 
 use anyhow::{Context, Result};
+use rcgen;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use time;
+
+/// Ensures the relay-server binary is built exactly once per test run.
+/// Uses OnceLock to guarantee thread-safe, single initialization.
+static BUILD_ONCE: OnceLock<()> = OnceLock::new();
+
+fn ensure_binary_built(workspace_root: &Path) {
+    BUILD_ONCE.get_or_init(|| {
+        eprintln!("Building relay-server binary (once per test run)...");
+        let status = Command::new("cargo")
+            .args(["build", "--release", "-p", "sankey-copier-relay-server"])
+            .current_dir(workspace_root)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .expect("Failed to run cargo build");
+
+        if !status.success() {
+            panic!("Failed to build relay-server binary");
+        }
+        eprintln!("Binary build complete.");
+    });
+}
 
 /// Runtime configuration for dynamically assigned ports
 /// Mirrors relay-server/src/config.rs RuntimeConfig structure
@@ -126,13 +150,13 @@ impl RelayServerProcess {
             )
         })?;
 
-        // Copy certs directory if it exists (for TLS)
-        let src_certs = relay_server_dir.join("certs");
-        if src_certs.exists() {
-            let dst_certs = working_dir.join("certs");
-            Self::copy_dir_recursive(&src_certs, &dst_certs)
-                .context("Failed to copy certs directory")?;
-        }
+        // Generate fresh self-signed certificates for this test run
+        // This avoids "KeyMismatch" errors caused by stale/inconsistent certs in CI caches
+        // and ensures every test instance has a valid, matching keypair.
+        let dst_certs = working_dir.join("certs");
+        std::fs::create_dir_all(&dst_certs).context("Failed to create certs directory")?;
+
+        Self::generate_test_certs(&dst_certs)?;
 
         let runtime_toml_path = working_dir.join("runtime.toml");
         let db_path = working_dir.join("e2e_test.db");
@@ -141,8 +165,9 @@ impl RelayServerProcess {
             db_path.to_str().unwrap().replace('\\', "/")
         );
 
-        // Build the binary first (from workspace root) if not already built
-        // This ensures we don't wait for compilation during server startup
+        // Ensure the binary is built (once per test run)
+        // This uses OnceLock to guarantee the build happens exactly once,
+        // preventing stale binary issues while avoiding repeated builds.
         let binary_path = workspace_root
             .join("target")
             .join("release")
@@ -152,20 +177,7 @@ impl RelayServerProcess {
                 "sankey-copier-server"
             });
 
-        if !binary_path.exists() {
-            eprintln!("Building relay-server binary (first time only)...");
-            let build_status = Command::new("cargo")
-                .args(["build", "--release", "-p", "sankey-copier-relay-server"])
-                .current_dir(&workspace_root)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .context("Failed to build relay-server")?;
-
-            if !build_status.success() {
-                anyhow::bail!("Failed to build relay-server binary");
-            }
-        }
+        ensure_binary_built(&workspace_root);
 
         // Start the relay-server binary directly
         // CONFIG_DIR points to the temp directory where config files were copied
@@ -264,6 +276,10 @@ impl RelayServerProcess {
         // Wait a bit more for HTTP server to be ready
         std::thread::sleep(Duration::from_millis(500));
 
+        // GENERATE sankey_copier.ini
+        // This simulates the Installer's job, providing the EA with ports and candidates.
+        Self::generate_ea_ini(&working_dir, zmq_pull_port, zmq_pub_port)?;
+
         Ok(Self {
             child: Some(child),
             http_port,
@@ -274,6 +290,59 @@ impl RelayServerProcess {
             shutdown_flag,
             db_path,
         })
+    }
+
+    /// Generate sankey_copier.ini for EAs to read
+    fn generate_ea_ini(working_dir: &std::path::Path, recv_port: u16, pub_port: u16) -> Result<()> {
+        let ini_path = working_dir.join("sankey_copier.ini");
+
+        // 1. Read config.toml to extract Candidates
+        let config_path = working_dir.join("config.toml");
+        let mut candidates = Vec::new();
+
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                        if let Some(mapping) = val.get("symbol_mapping") {
+                            if let Some(groups) = mapping.get("synonym_groups") {
+                                if let Some(arr) = groups.as_array() {
+                                    for group in arr {
+                                        // Each group is array of strings
+                                        if let Some(syms) = group.as_array() {
+                                            for s in syms {
+                                                if let Some(str_val) = s.as_str() {
+                                                    candidates.push(str_val.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("Failed to read config.toml for candidates: {}", e),
+            }
+        }
+
+        // Remove duplicates and join
+        candidates.sort();
+        candidates.dedup();
+        let candidates_str = candidates.join(",");
+
+        let content = format!(
+            "[ZeroMQ]\nReceiverPort={}\nPublisherPort={}\n\n[SymbolSearch]\nCandidates={}\n",
+            recv_port, pub_port, candidates_str
+        );
+
+        std::fs::write(&ini_path, content).context("Failed to write sankey_copier.ini")?;
+        Ok(())
+    }
+
+    /// Get path to the generated sankey_copier.ini
+    pub fn ini_path(&self) -> PathBuf {
+        self.working_dir.join("sankey_copier.ini")
     }
 
     /// Get the ZMQ PULL address (for EA to send messages)
@@ -356,21 +425,32 @@ impl RelayServerProcess {
         anyhow::bail!("Could not find relay-server directory")
     }
 
-    /// Recursively copy a directory
-    fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<()> {
-        std::fs::create_dir_all(dst)?;
+    /// Generate valid self-signed certificates for testing
+    fn generate_test_certs(cert_dir: &Path) -> Result<()> {
+        let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
 
-        for entry in std::fs::read_dir(src)? {
-            let entry = entry?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
+        let mut params = rcgen::CertificateParams::new(subject_alt_names)?;
+        // Ensure validity covers the test duration
+        params.not_before = time::OffsetDateTime::now_utc()
+            .checked_sub(time::Duration::days(1))
+            .unwrap();
+        params.not_after = time::OffsetDateTime::now_utc()
+            .checked_add(time::Duration::days(1))
+            .unwrap();
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "localhost");
 
-            if src_path.is_dir() {
-                Self::copy_dir_recursive(&src_path, &dst_path)?;
-            } else {
-                std::fs::copy(&src_path, &dst_path)?;
-            }
-        }
+        let key_pair = rcgen::KeyPair::generate()?;
+        let cert = params.self_signed(&key_pair)?;
+        let pem_serialized = cert.pem();
+        let key_serialized = key_pair.serialize_pem();
+
+        std::fs::write(cert_dir.join("server.pem"), pem_serialized)
+            .context("Failed to write server.pem")?;
+        std::fs::write(cert_dir.join("server-key.pem"), key_serialized)
+            .context("Failed to write server-key.pem")?;
 
         Ok(())
     }

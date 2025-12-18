@@ -21,7 +21,7 @@ pub unsafe extern "C" fn ea_send_request_config(context: *mut EaContext, version
     }
 }
 
-/// Create and serialize a RegisterMessage using context data (Zero arguments from MQL!)
+/// Create and serialize a RegisterMessage using context data (using Rust-side SymbolMatcher)
 ///
 /// # Safety
 /// - `context` must be a valid pointer returned by `ea_init()`
@@ -31,13 +31,60 @@ pub unsafe extern "C" fn ea_send_register(
     context: *mut crate::EaContext,
     output: *mut u8,
     output_len: i32,
+    detected_prefix: *const u16,
+    detected_suffix: *const u16,
+    detected_specials: *const u16,
+    is_trade_allowed: i32, // Added argument
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if context.is_null() {
             return -1;
         }
 
-        let ctx = &*context;
+        let ctx = &mut *context;
+        let is_trade_allowed_bool = is_trade_allowed != 0;
+
+        // Update context state to avoid redundant ConfigRequest in heartbeat
+        ctx.last_trade_allowed = is_trade_allowed_bool;
+        // Register implies we want config, and we get it automatically.
+        // We can mark it as requested to be safe, though send_heartbeat doesn't check this flag for trade_allowed trigger.
+        ctx.mark_config_requested();
+
+        // Parse Context Info
+        let prefix = if !detected_prefix.is_null() {
+            crate::ffi::helpers::utf16_to_string(detected_prefix).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let suffix = if !detected_suffix.is_null() {
+            crate::ffi::helpers::utf16_to_string(detected_suffix).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let specials = if !detected_specials.is_null() {
+            crate::ffi::helpers::utf16_to_string(detected_specials)
+                .map(|s| {
+                    s.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let symbol_context = if !prefix.is_empty() || !suffix.is_empty() || !specials.is_empty() {
+            Some(crate::types::SymbolContext {
+                detected_prefix: prefix,
+                detected_suffix: suffix,
+                available_special_symbols: specials,
+            })
+        } else {
+            None
+        };
 
         // Build RegisterMessage using cached context data
         let msg = crate::types::RegisterMessage {
@@ -52,6 +99,8 @@ pub unsafe extern "C" fn ea_send_register(
             currency: ctx.currency.clone(),
             leverage: ctx.leverage,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            symbol_context,
+            is_trade_allowed: is_trade_allowed_bool,
         };
 
         unsafe { crate::ffi::helpers::serialize_to_buffer(&msg, output, output_len) }

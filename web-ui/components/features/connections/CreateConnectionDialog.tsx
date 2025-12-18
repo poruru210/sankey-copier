@@ -352,14 +352,9 @@ function CreateConnectionForm({
       // Create the member with user-selected status
       // status: 0 = DISABLED, 2 = CONNECTED (enabled)
       // Calculate initial status based on existing slave connections
-      // Specification: Default Disabled (0). Exception: If any existing connection for this slave is Enabled, use Enabled (2).
-      const slaveSettings = existingSettings.filter(
-        s => s.slave_account === formData.slave_account
-      );
-      const isAnyEnabled = slaveSettings.some(
-        s => (s.enabled_flag ?? (s.status !== 0))
-      );
-      const initialStatus = isAnyEnabled ? 2 : 0;
+      // Specification: Default Disabled (0) for safety.
+      // User requested that new connections should start as OFF.
+      const initialStatus = 0;
 
       await onCreate({
         master_account: formData.master_account,
@@ -489,6 +484,49 @@ function CreateConnectionForm({
                 )}
               </DrawerSection>
 
+              {/* Detected Settings Alert (Master) */}
+              {(() => {
+                const masterConn = connections.find(c => c.account_id === formData.master_account);
+                if (!masterConn?.symbol_context) return null;
+
+                const { detected_prefix, detected_suffix } = masterConn.symbol_context;
+                // Only show if current values are different from detected
+                const diffPrefix = detected_prefix && detected_prefix !== masterSettings.symbol_prefix;
+                const diffSuffix = detected_suffix && detected_suffix !== masterSettings.symbol_suffix;
+
+                if (!diffPrefix && !diffSuffix) return null;
+
+                return (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg">🪄</span>
+                      <div className="flex-1">
+                        <div className="font-medium text-blue-800 dark:text-blue-300 mb-1">
+                          Detected Settings Available
+                        </div>
+                        <ul className="text-blue-700 dark:text-blue-400 list-disc list-inside mb-2 space-y-0.5 text-xs">
+                          {diffPrefix && <li>Prefix: <strong>{detected_prefix}</strong></li>}
+                          {diffSuffix && <li>Suffix: <strong>{detected_suffix}</strong></li>}
+                        </ul>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs border-blue-300 hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-800"
+                          onClick={() => setMasterSettings(prev => ({
+                            ...prev,
+                            symbol_prefix: diffPrefix ? detected_prefix : prev.symbol_prefix,
+                            symbol_suffix: diffSuffix ? detected_suffix : prev.symbol_suffix
+                          }))}
+                        >
+                          Apply Detected Settings
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Symbol Rules Section */}
               <DrawerSection bordered>
                 <DrawerSectionHeader
@@ -558,6 +596,7 @@ function CreateConnectionForm({
                 allowed_magic_numbers: formData.allowed_magic_numbers,
               }}
               onChange={(data) => setFormData({ ...formData, ...data })}
+              detectedContext={connections.find(c => c.account_id === formData.slave_account)?.symbol_context}
             />
 
 

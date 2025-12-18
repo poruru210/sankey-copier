@@ -169,6 +169,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: None,
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         }
     }
 
@@ -467,6 +469,8 @@ mod tests {
             suffix_remove: Some(".m".to_string()),
             prefix_add: Some("fx.".to_string()),
             suffix_add: Some(".micro".to_string()),
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = engine
@@ -488,6 +492,8 @@ mod tests {
             suffix_remove: None,
             prefix_add: Some("fx.".to_string()),
             suffix_add: None,
+            synonym_groups: Vec::new(),
+            detected_symbols: None,
         };
 
         let result = engine

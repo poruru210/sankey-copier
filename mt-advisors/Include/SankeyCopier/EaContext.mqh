@@ -162,12 +162,12 @@ public:
       return ea_send_push(m_context, data, len) == 1;
    }
 
-   bool SendRegister()
+   bool SendRegister(string detected_prefix, string detected_suffix, string detected_specials, bool is_trade_allowed)
    {
       if(!m_initialized) return false;
       
       uchar buffer[1024];
-      int len = ea_send_register(m_context, buffer, 1024);
+      int len = ea_send_register(m_context, buffer, 1024, detected_prefix, detected_suffix, detected_specials, (int)is_trade_allowed);
       
       if(len > 0)
       {
@@ -202,6 +202,20 @@ public:
          return ea_send_push(m_context, buffer, len) == 1;
       }
       return false;
+   }
+
+   // Manual Receive (for specific states where ManagerTick is unwanted)
+   int ReceiveConfig()
+   {
+       if(!m_initialized) return 0;
+       uchar buffer[1]; // Buffer unused by Rust impl (it uses internal buffer and processes immediately), but API requires it? 
+       // ffi/messaging.rs receive_config takes buffer.
+       // Rust implementation: ctx.receive_config(buffer) -> strategy.receive_config(buffer) -> zmq read.
+       // It reads into buffer? No, zmq reads into msg. 
+       // Actually `receive_config` in Rust DOES read into buffer if provided? 
+       // Let's force a decent buffer just in case.
+       uchar read_buf[4096]; 
+       return ea_receive_config(m_context, read_buf, 4096);
    }
    
    bool ShouldRequestConfig(bool current_trade_allowed)

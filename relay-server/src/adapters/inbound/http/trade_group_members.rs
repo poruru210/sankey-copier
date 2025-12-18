@@ -72,38 +72,19 @@ pub async fn add_member(
     );
     let _enter = span.enter();
 
-    // Verify TradeGroup exists, create if it doesn't
+    // Verify TradeGroup exists
     match state.db.get_trade_group(&trade_group_id).await {
         Ok(None) => {
-            // TradeGroup doesn't exist - create it with default Master settings
-            tracing::info!(
+            // TradeGroup doesn't exist - strict lifecycle requires 404
+            tracing::warn!(
                 trade_group_id = %trade_group_id,
-                "TradeGroup not found, creating with default settings"
+                "TradeGroup not found for add_member (auto-creation disabled)"
             );
-
-            match state.db.create_trade_group(&trade_group_id).await {
-                Ok(_) => {
-                    tracing::info!(
-                        trade_group_id = %trade_group_id,
-                        "Successfully created TradeGroup with default settings"
-                    );
-
-                    // Send initial config to Master EA so it can display the TradeGroup
-                    send_initial_config_to_master(&state, &trade_group_id).await;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        trade_group_id = %trade_group_id,
-                        error = %e,
-                        "Failed to create TradeGroup automatically"
-                    );
-                    return Err(ProblemDetails::internal_error(format!(
-                        "Failed to create TradeGroup automatically: {}",
-                        e
-                    ))
-                    .with_instance(format!("/api/trade-groups/{}/members", trade_group_id)));
-                }
-            }
+            return Err(ProblemDetails::not_found(format!(
+                "TradeGroup '{}' not found. Please create it explicitly first.",
+                trade_group_id
+            ))
+            .with_instance(format!("/api/trade_groups/{}/members", trade_group_id)));
         }
         Err(e) => {
             tracing::error!(
@@ -122,6 +103,9 @@ pub async fn add_member(
         }
     }
 
+    // Map enabled flag to status code (0=DISABLED, 2=CONNECTED/enabled)
+    let status = if request.enabled { 2 } else { 0 };
+
     // Add member to database with the requested status
     match state
         .db
@@ -129,7 +113,7 @@ pub async fn add_member(
             &trade_group_id,
             &request.slave_account,
             request.slave_settings.clone(),
-            request.status,
+            status,
         )
         .await
     {
@@ -694,42 +678,6 @@ async fn send_config_to_slave(state: &AppState, master_account: &str, member: &T
             status = slave_status,
             error = %e,
             "Failed to persist Slave runtime status"
-        );
-    }
-}
-
-/// Send initial config to Master EA via ZMQ when TradeGroup is newly created
-/// This allows the Master EA to display the TradeGroup even with default settings
-async fn send_initial_config_to_master(state: &AppState, master_account: &str) {
-    use crate::domain::models::MasterSettings;
-
-    // Get Master connection info (may not exist yet if Master EA is not connected)
-    let _master_conn = state.connection_manager.get_master(master_account).await;
-
-    // Use default settings (enabled=false) for newly created TradeGroup
-    let settings = MasterSettings::default();
-
-    let config = MasterConfigMessage {
-        account_id: master_account.to_string(),
-        status: 0, // DISABLED - Master is created but not yet enabled
-        symbol_prefix: settings.symbol_prefix.clone(),
-        symbol_suffix: settings.symbol_suffix.clone(),
-        config_version: settings.config_version,
-        timestamp: chrono::Utc::now().timestamp_millis(),
-        warning_codes: Vec::new(),
-    };
-
-    if let Err(e) = state.config_sender.send(&config).await {
-        tracing::error!(
-            master_account = %master_account,
-            error = %e,
-            "Failed to send initial MasterConfigMessage via ZMQ"
-        );
-    } else {
-        tracing::info!(
-            master_account = %master_account,
-            status = 0,
-            "Successfully sent initial MasterConfigMessage via ZMQ (TradeGroup created)"
         );
     }
 }
