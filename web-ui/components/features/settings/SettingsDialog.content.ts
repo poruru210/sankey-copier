@@ -24,8 +24,8 @@ const settingsDialogContent = {
       ja: 'トレードをコピーする元の口座',
     }),
     slaveAccount: t({
-      en: 'Receiver Account ID',
-      ja: 'レシーバーアカウントID',
+      en: 'Slave Account ID',
+      ja: 'スレーブアカウントID',
     }),
     slaveAccountLabel: t({
       en: 'Slave Account (Copy To)',
@@ -284,6 +284,10 @@ const settingsDialogContent = {
       en: 'Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)',
       ja: 'シンボル名に追加するプレフィックス（例: EURUSD → pro.EURUSD）',
     }),
+    symbolPrefixPlaceholder: t({
+      en: "e.g. 'pro.' or 'FX.'",
+      ja: "例: 'pro.' または 'FX.'",
+    }),
     symbolSuffix: t({
       en: 'Suffix',
       ja: 'サフィックス',
@@ -291,6 +295,10 @@ const settingsDialogContent = {
     symbolSuffixDescription: t({
       en: 'Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)',
       ja: 'シンボル名に追加するサフィックス（例: EURUSD → EURUSD.m）',
+    }),
+    symbolSuffixPlaceholder: t({
+      en: "e.g. '.m' or '-ECN'",
+      ja: "例: '.m' または '-ECN'",
     }),
     symbolMappings: t({
       en: 'Mappings',
@@ -468,14 +476,6 @@ const settingsDialogContent = {
       en: 'Remove',
       ja: '削除',
     }),
-    symbolPrefixPlaceholder: t({
-      en: "e.g. 'pro.' or 'FX.'",
-      ja: "例: 'pro.' または 'FX.'",
-    }),
-    symbolSuffixPlaceholder: t({
-      en: "e.g. '.m' or '-ECN'",
-      ja: "例: '.m' または '-ECN'",
-    }),
     sourceSymbolPlaceholder: t({
       en: 'e.g. XAUUSD',
       ja: '例: XAUUSD',
@@ -496,6 +496,136 @@ const settingsDialogContent = {
     noConnectedSlaves: t({
       en: 'No slaves connected to this master.',
       ja: 'このマスターに接続しているスレーブはありません。',
+    }),
+    // Create Connection Dialog - Steps
+    stepAccounts: t({
+      en: 'Accounts',
+      ja: 'アカウント',
+    }),
+    stepAccountsDescription: t({
+      en: 'Select Master & Slave',
+      ja: 'マスターとスレーブを選択',
+    }),
+    stepMasterSettings: t({
+      en: 'Master Settings',
+      ja: 'マスター設定',
+    }),
+    stepMasterSettingsDescription: t({
+      en: 'Global configuration',
+      ja: 'グローバル設定',
+    }),
+    stepSlaveSettings: t({
+      en: 'Slave Settings',
+      ja: 'スレーブ設定',
+    }),
+    stepSlaveSettingsDescription: t({
+      en: 'Copy configuration',
+      ja: 'コピー設定',
+    }),
+    // Create Connection Dialog - Warnings/Alerts
+    existingConnectionsWarningTitle: t({
+      en: 'Existing Connections',
+      ja: '既存の接続',
+    }),
+    existingConnectionsWarningDescription: t({
+      en: 'This master has {count} existing slave(s). Changing these settings will affect all slaves connected to this master.',
+      ja: 'このマスターには既に{count}つのスレーブが接続されています。設定を変更すると、接続されているすべてのスレーブに影響します。',
+    }),
+    detectedSettingsTitle: t({
+      en: 'Detected Settings Available',
+      ja: '推奨設定が見つかりました',
+    }),
+    detectedSettingsDescription: t({
+      en: 'The EA detected the following symbol settings:',
+      ja: 'EAが以下のシンボル設定を検出しました:',
+    }),
+    applyDetectedSettings: t({
+      en: 'Apply Detected Settings',
+      ja: '検出された設定を適用',
+    }),
+    applySettings: t({
+      en: 'Apply Settings',
+      ja: '設定を適用',
+    }),
+    // Common Actions
+    next: t({
+      en: 'Next',
+      ja: '次へ',
+    }),
+    back: t({
+      en: 'Back',
+      ja: '戻る',
+    }),
+    loading: t({
+      en: 'Loading...',
+      ja: '読み込み中...',
+    }),
+    // Slave Settings Form - Magic Number Filter
+    magicFilterTitle: t({
+      en: 'Magic Number Filter',
+      ja: 'マジックナンバーフィルター',
+    }),
+    magicFilterDescription: t({
+      en: 'Filter which trades to copy based on magic number. Leave empty to copy all trades.',
+      ja: 'マジックナンバーに基づいてコピートレードをフィルタリングします。空の場合はすべてのトレードをコピーします。',
+    }),
+    allowedMagicNumbers: t({
+      en: 'Allowed Magic Numbers',
+      ja: '許可するマジックナンバー',
+    }),
+    allowedMagicNumbersDescription: t({
+      en: 'Comma-separated list of magic numbers to copy. Only trades with these magic numbers will be copied.',
+      ja: 'コピーするマジックナンバーのカンマ区切りリスト。指定されたマジックナンバーのトレードのみコピーされます。',
+    }),
+    allowedMagicNumbersPlaceholder: t({
+      en: 'e.g. 12345, 67890',
+      ja: '例: 12345, 67890',
+    }),
+    // Slave Settings Form - Trade Execution
+    tradeExecutionTitle: t({
+      en: 'Trade Execution',
+      ja: 'トレード実行',
+    }),
+    tradeExecutionDescription: t({
+      en: 'Configure signal processing and order execution behavior.',
+      ja: 'シグナル処理と注文実行の動作を設定します。',
+    }),
+    maxRetries: t({
+      en: 'Max Retries',
+      ja: '最大再試行回数',
+    }),
+    maxRetriesDescription: t({
+      en: 'Maximum number of order retry attempts on failure.',
+      ja: '注文失敗時の最大再試行回数。',
+    }),
+    maxSignalDelay: t({
+      en: 'Max Signal Delay (ms)',
+      ja: '最大シグナル遅延 (ms)',
+    }),
+    maxSignalDelayDescription: t({
+      en: 'Maximum allowed signal delay in milliseconds. Signals older than this are skipped or handled based on the setting below.',
+      ja: '許容される最大シグナル遅延（ミリ秒）。これより古いシグナルはスキップされるか、以下の設定に基づいて処理されます。',
+    }),
+    usePendingOrderForDelayed: t({
+      en: 'Use Pending Order for Delayed Signals',
+      ja: '遅延シグナルに待機注文を使用',
+    }),
+    usePendingOrderForDelayedDesc: t({
+      en: 'Place limit order at original price instead of skipping',
+      ja: 'スキップする代わりに元の価格で指値注文を出す',
+    }),
+    // Symbol Mapping Input
+    mappingCheck: t({
+      en: 'Mapping: {mapping}',
+      ja: 'マッピング: {mapping}',
+    }),
+    prefix: t({
+      en: 'Prefix',
+      ja: 'プレフィックス',
+    }),
+    suffix: t({
+      en: 'Suffix',
+      ja: 'サフィックス',
     }),
   },
 } satisfies DeclarationContent;

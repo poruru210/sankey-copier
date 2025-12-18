@@ -82,14 +82,14 @@ export function SlaveSettingsForm({
       {/* Copy Settings Section */}
       <DrawerSection>
         <DrawerSectionHeader
-          title={content.copySettingsLabel?.value || "Copy Settings"}
-          description={content.copySettingsDescription?.value || "Configure how trades are copied."}
+          title={content.copySettingsLabel.value}
+          description={content.copySettingsDescription.value}
         />
         <DrawerSectionContent>
           {/* Lot Calculation Mode */}
           <DrawerFormField
-            label={content.lotCalculationMode?.value || "Lot Calculation Mode"}
-            description={content.lotCalculationModeDescription?.value || "How to calculate lot size for copied trades"}
+            label={content.lotCalculationMode.value}
+            description={content.lotCalculationModeDescription.value}
             htmlFor="lot_calculation_mode"
           >
             <RadioGroup
@@ -101,13 +101,13 @@ export function SlaveSettingsForm({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="multiplier" id="mode_multiplier" />
                 <Label htmlFor="mode_multiplier" className="text-sm font-normal cursor-pointer">
-                  {content.lotModeMultiplier?.value || "Fixed Multiplier"} - {content.lotModeMultiplierDesc?.value || "Use fixed multiplier value"}
+                  {content.lotModeMultiplier.value} - {content.lotModeMultiplierDesc.value}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="margin_ratio" id="mode_margin_ratio" />
                 <Label htmlFor="mode_margin_ratio" className="text-sm font-normal cursor-pointer">
-                  {content.lotModeMarginRatio?.value || "Margin Ratio"} - {content.lotModeMarginRatioDesc?.value || "Calculate based on equity ratio (slave/master)"}
+                  {content.lotModeMarginRatio.value} - {content.lotModeMarginRatioDesc.value}
                 </Label>
               </div>
             </RadioGroup>
@@ -116,8 +116,8 @@ export function SlaveSettingsForm({
           {/* Lot Multiplier - only show when mode is multiplier */}
           {formData.lot_calculation_mode === 'multiplier' && (
             <DrawerFormField
-              label={content.lotMultiplier?.value || "Lot Multiplier"}
-              description={content.lotMultiplierDescription?.value || "Multiplier for lot size (e.g. 1.0 = same size, 0.5 = half size)"}
+              label={content.lotMultiplier.value}
+              description={content.lotMultiplierDescription.value}
               htmlFor="lot_multiplier"
             >
               <Input
@@ -143,7 +143,7 @@ export function SlaveSettingsForm({
               disabled={disabled}
             />
             <label htmlFor="reverse_trade" className="text-sm cursor-pointer">
-              {content.reverseTrade?.value || "Reverse Trade"} - {content.reverseDescription?.value || "Copy trades in opposite direction"}
+              {content.reverseTrade.value} - {content.reverseDescription.value}
             </label>
           </div>
         </DrawerSectionContent>
@@ -152,14 +152,14 @@ export function SlaveSettingsForm({
       {/* Lot Filter Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.lotFilterTitle?.value || "Lot Filter"}
-          description={content.lotFilterDescription?.value || "Filter trades by source lot size. Leave empty for no filtering."}
+          title={content.lotFilterTitle.value}
+          description={content.lotFilterDescription.value}
         />
         <DrawerSectionContent>
           {/* Source Lot Min */}
           <DrawerFormField
-            label={content.sourceLotMin?.value || "Minimum Lot"}
-            description={content.sourceLotMinDescription?.value || "Skip trades with lot size smaller than this value"}
+            label={content.sourceLotMin.value}
+            description={content.sourceLotMinDescription.value}
             htmlFor="source_lot_min"
           >
             <Input
@@ -167,7 +167,7 @@ export function SlaveSettingsForm({
               type="number"
               step="0.01"
               min="0"
-              placeholder={content.sourceLotMinPlaceholder?.value || "e.g. 0.01"}
+              placeholder={content.sourceLotMinPlaceholder.value}
               value={formData.source_lot_min ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
@@ -179,8 +179,8 @@ export function SlaveSettingsForm({
 
           {/* Source Lot Max */}
           <DrawerFormField
-            label={content.sourceLotMax?.value || "Maximum Lot"}
-            description={content.sourceLotMaxDescription?.value || "Skip trades with lot size larger than this value"}
+            label={content.sourceLotMax.value}
+            description={content.sourceLotMaxDescription.value}
             htmlFor="source_lot_max"
           >
             <Input
@@ -188,7 +188,7 @@ export function SlaveSettingsForm({
               type="number"
               step="0.01"
               min="0"
-              placeholder={content.sourceLotMaxPlaceholder?.value || "e.g. 10.0"}
+              placeholder={content.sourceLotMaxPlaceholder.value}
               value={formData.source_lot_max ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
@@ -203,13 +203,13 @@ export function SlaveSettingsForm({
       {/* Symbol Rules Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.symbolFiltersTitle?.value || "Symbol Rules"}
-          description={content.symbolFiltersDescription?.value || "Configure symbol name transformations for this connection."}
+          title={content.symbolFiltersTitle.value}
+          description={content.symbolFiltersDescription.value}
         />
         <DrawerSectionContent>
           {/* Symbol Mappings */}
           <DrawerFormField
-            label={content.symbolMappings?.value || "Symbol Mappings"}
+            label={content.symbolMappings.value}
             htmlFor="symbol_mappings"
           >
             <SymbolMappingInput
@@ -221,14 +221,14 @@ export function SlaveSettingsForm({
 
           {/* Symbol Prefix */}
           <DrawerFormField
-            label={content.symbolPrefix?.value || "Symbol Prefix"}
-            description={content.symbolPrefixDescription?.value || "Prefix to add to symbol names (e.g., EURUSD → pro.EURUSD)"}
+            label={content.symbolPrefix.value}
+            description={content.symbolPrefixDescription.value}
             htmlFor="symbol_prefix"
           >
             <Input
               id="symbol_prefix"
               type="text"
-              placeholder={content.symbolPrefixPlaceholder?.value || "e.g. 'pro.' or 'FX.'"}
+              placeholder={content.symbolPrefixPlaceholder.value}
               value={formData.symbol_prefix}
               onChange={(e) => handleChange('symbol_prefix', e.target.value)}
               disabled={disabled}
@@ -237,14 +237,14 @@ export function SlaveSettingsForm({
 
           {/* Symbol Suffix */}
           <DrawerFormField
-            label={content.symbolSuffix?.value || "Symbol Suffix"}
-            description={content.symbolSuffixDescription?.value || "Suffix to add to symbol names (e.g., EURUSD → EURUSD.m)"}
+            label={content.symbolSuffix.value}
+            description={content.symbolSuffixDescription.value}
             htmlFor="symbol_suffix"
           >
             <Input
               id="symbol_suffix"
               type="text"
-              placeholder={content.symbolSuffixPlaceholder?.value || "e.g. '.m' or '-ECN'"}
+              placeholder={content.symbolSuffixPlaceholder.value}
               value={formData.symbol_suffix}
               onChange={(e) => handleChange('symbol_suffix', e.target.value)}
               disabled={disabled}
@@ -256,14 +256,14 @@ export function SlaveSettingsForm({
       {/* Open Sync Policy Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.syncPolicyTitle?.value || "Open Sync Policy"}
-          description={content.syncPolicyDescription?.value || "Configure how existing positions are synchronized when slave connects."}
+          title={content.syncPolicyTitle.value}
+          description={content.syncPolicyDescription.value}
         />
         <DrawerSectionContent>
           {/* Sync Mode */}
           <DrawerFormField
-            label={content.syncMode?.value || "Existing Position Sync"}
-            description={content.syncModeDescription?.value || "How to handle existing master positions when slave connects"}
+            label={content.syncMode.value}
+            description={content.syncModeDescription.value}
             htmlFor="sync_mode"
           >
             <RadioGroup
@@ -275,19 +275,19 @@ export function SlaveSettingsForm({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="skip" id="sync_skip" />
                 <Label htmlFor="sync_skip" className="text-sm font-normal cursor-pointer">
-                  {content.syncModeSkip?.value || "Don't Sync"} - {content.syncModeSkipDesc?.value || "Only copy new trades, ignore existing positions"}
+                  {content.syncModeSkip.value} - {content.syncModeSkipDesc.value}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="limit_order" id="sync_limit" />
                 <Label htmlFor="sync_limit" className="text-sm font-normal cursor-pointer">
-                  {content.syncModeLimitOrder?.value || "Limit Order"} - {content.syncModeLimitOrderDesc?.value || "Sync at Master's open price with time limit"}
+                  {content.syncModeLimitOrder.value} - {content.syncModeLimitOrderDesc.value}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="market_order" id="sync_market" />
                 <Label htmlFor="sync_market" className="text-sm font-normal cursor-pointer">
-                  {content.syncModeMarketOrder?.value || "Market Order"} - {content.syncModeMarketOrderDesc?.value || "Sync immediately if price deviation is within limit"}
+                  {content.syncModeMarketOrder.value} - {content.syncModeMarketOrderDesc.value}
                 </Label>
               </div>
             </RadioGroup>
@@ -296,8 +296,8 @@ export function SlaveSettingsForm({
           {/* Limit Order Expiry - only show when sync_mode is limit_order */}
           {formData.sync_mode === 'limit_order' && (
             <DrawerFormField
-              label={content.limitOrderExpiry?.value || "Limit Order Expiry (minutes)"}
-              description={content.limitOrderExpiryDescription?.value || "Time limit for limit orders. 0 = Good Till Cancelled (GTC)."}
+              label={content.limitOrderExpiry.value}
+              description={content.limitOrderExpiryDescription.value}
               htmlFor="limit_order_expiry_min"
             >
               <Input
@@ -305,7 +305,7 @@ export function SlaveSettingsForm({
                 type="number"
                 step="1"
                 min="0"
-                placeholder={content.limitOrderExpiryPlaceholder?.value || "e.g. 60 (0 = GTC)"}
+                placeholder={content.limitOrderExpiryPlaceholder.value}
                 value={formData.limit_order_expiry_min ?? ''}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -319,8 +319,8 @@ export function SlaveSettingsForm({
           {/* Market Sync Max Pips - only show when sync_mode is market_order */}
           {formData.sync_mode === 'market_order' && (
             <DrawerFormField
-              label={content.marketSyncMaxPips?.value || "Max Price Deviation (pips)"}
-              description={content.marketSyncMaxPipsDescription?.value || "Skip sync if current price differs from open price by more than this value."}
+              label={content.marketSyncMaxPips.value}
+              description={content.marketSyncMaxPipsDescription.value}
               htmlFor="market_sync_max_pips"
             >
               <Input
@@ -328,7 +328,7 @@ export function SlaveSettingsForm({
                 type="number"
                 step="0.1"
                 min="0"
-                placeholder={content.marketSyncMaxPipsPlaceholder?.value || "e.g. 10.0"}
+                placeholder={content.marketSyncMaxPipsPlaceholder.value}
                 value={formData.market_sync_max_pips ?? ''}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -341,8 +341,8 @@ export function SlaveSettingsForm({
 
           {/* Max Slippage */}
           <DrawerFormField
-            label={content.maxSlippage?.value || "Max Slippage (points)"}
-            description={content.maxSlippageDescription?.value || "Maximum allowed slippage when opening positions. Leave empty for default (30 points)."}
+            label={content.maxSlippage.value}
+            description={content.maxSlippageDescription.value}
             htmlFor="max_slippage"
           >
             <Input
@@ -351,7 +351,7 @@ export function SlaveSettingsForm({
               step="1"
               min="0"
               max="1000"
-              placeholder={content.maxSlippagePlaceholder?.value || "e.g. 30"}
+              placeholder={content.maxSlippagePlaceholder.value}
               value={formData.max_slippage ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
@@ -370,7 +370,7 @@ export function SlaveSettingsForm({
               disabled={disabled}
             />
             <label htmlFor="copy_pending_orders" className="text-sm cursor-pointer">
-              {content.copyPendingOrders?.value || "Copy Pending Orders"} - {content.copyPendingOrdersDesc?.value || "Also copy limit and stop orders"}
+              {content.copyPendingOrders.value} - {content.copyPendingOrdersDesc.value}
             </label>
           </div>
         </DrawerSectionContent>
@@ -379,14 +379,14 @@ export function SlaveSettingsForm({
       {/* Trade Execution Settings Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.tradeExecutionTitle?.value || "Trade Execution"}
-          description={content.tradeExecutionDescription?.value || "Configure signal processing and order execution behavior."}
+          title={content.tradeExecutionTitle.value}
+          description={content.tradeExecutionDescription.value}
         />
         <DrawerSectionContent>
           {/* Max Retries */}
           <DrawerFormField
-            label={content.maxRetries?.value || "Max Retries"}
-            description={content.maxRetriesDescription?.value || "Maximum number of order retry attempts on failure."}
+            label={content.maxRetries.value}
+            description={content.maxRetriesDescription.value}
             htmlFor="max_retries"
           >
             <Input
@@ -404,8 +404,8 @@ export function SlaveSettingsForm({
 
           {/* Max Signal Delay */}
           <DrawerFormField
-            label={content.maxSignalDelay?.value || "Max Signal Delay (ms)"}
-            description={content.maxSignalDelayDescription?.value || "Maximum allowed signal delay in milliseconds. Signals older than this are skipped or handled based on the setting below."}
+            label={content.maxSignalDelay.value}
+            description={content.maxSignalDelayDescription.value}
             htmlFor="max_signal_delay_ms"
           >
             <Input
@@ -430,7 +430,7 @@ export function SlaveSettingsForm({
               disabled={disabled}
             />
             <label htmlFor="use_pending_order_for_delayed" className="text-sm cursor-pointer">
-              {content.usePendingOrderForDelayed?.value || "Use Pending Order for Delayed Signals"} - {content.usePendingOrderForDelayedDesc?.value || "Place limit order at original price instead of skipping"}
+              {content.usePendingOrderForDelayed.value} - {content.usePendingOrderForDelayedDesc.value}
             </label>
           </div>
         </DrawerSectionContent>
@@ -439,20 +439,20 @@ export function SlaveSettingsForm({
       {/* Magic Number Filter Section */}
       <DrawerSection bordered>
         <DrawerSectionHeader
-          title={content.magicFilterTitle?.value || "Magic Number Filter"}
-          description={content.magicFilterDescription?.value || "Filter which trades to copy based on magic number. Leave empty to copy all trades."}
+          title={content.magicFilterTitle.value}
+          description={content.magicFilterDescription.value}
         />
         <DrawerSectionContent>
           {/* Allowed Magic Numbers */}
           <DrawerFormField
-            label={content.allowedMagicNumbers?.value || "Allowed Magic Numbers"}
-            description={content.allowedMagicNumbersDescription?.value || "Comma-separated list of magic numbers to copy. Only trades with these magic numbers will be copied."}
+            label={content.allowedMagicNumbers.value}
+            description={content.allowedMagicNumbersDescription.value}
             htmlFor="allowed_magic_numbers"
           >
             <Input
               id="allowed_magic_numbers"
               type="text"
-              placeholder={content.allowedMagicNumbersPlaceholder?.value || "e.g. 12345, 67890"}
+              placeholder={content.allowedMagicNumbersPlaceholder.value}
               value={formData.allowed_magic_numbers}
               onChange={(e) => handleChange('allowed_magic_numbers', e.target.value)}
               disabled={disabled}

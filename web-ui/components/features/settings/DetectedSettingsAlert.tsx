@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { SymbolContext } from "@/types"
 import { SlaveSettingsFormData } from "./SlaveSettingsForm"
 import { Wand2 } from "lucide-react"
+import { useIntlayer } from 'next-intlayer';
 
 interface DetectedSettingsAlertProps {
     detectedContext: SymbolContext;
@@ -15,6 +16,7 @@ export function DetectedSettingsAlert({
     formData,
     onApply,
 }: DetectedSettingsAlertProps) {
+    const content = useIntlayer('settings-dialog');
     const { detected_prefix, detected_suffix, available_special_symbols } = detectedContext;
 
     // 1. Prefix/Suffix Check
@@ -93,19 +95,19 @@ export function DetectedSettingsAlert({
         <Alert className="mb-6 border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
             <Wand2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <AlertTitle className="text-blue-800 dark:text-blue-300">
-                Recommendation Available
+                {content.detectedSettingsTitle.value}
             </AlertTitle>
             <AlertDescription className="text-blue-700 dark:text-blue-400 mt-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                         <p className="text-sm">
-                            The EA detected the following symbol settings:
+                            {content.detectedSettingsDescription.value}
                         </p>
                         <ul className="list-disc list-inside text-sm font-medium ml-2">
-                            {diffPrefix && <li>Prefix: <code>{detected_prefix}</code></li>}
-                            {diffSuffix && <li>Suffix: <code>{detected_suffix}</code></li>}
+                            {diffPrefix && <li>{content.prefix.value}: <code>{detected_prefix}</code></li>}
+                            {diffSuffix && <li>{content.suffix.value}: <code>{detected_suffix}</code></li>}
                             {newMappings.map(m => (
-                                <li key={m}>Mapping: <code>{m}</code></li>
+                                <li key={m}>{content.mappingCheck.value.replace('{mapping}', m)}</li>
                             ))}
                         </ul>
                     </div>
@@ -115,7 +117,7 @@ export function DetectedSettingsAlert({
                         className="border-blue-300 hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-800"
                         onClick={handleApply}
                     >
-                        Apply Settings
+                        {content.applySettings.value}
                     </Button>
                 </div>
             </AlertDescription>

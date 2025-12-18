@@ -20,8 +20,8 @@ const connectionsViewContent = {
       ja: 'マスター',
     }),
     slave: t({
-      en: 'Receiver',
-      ja: 'レシーバー',
+      en: 'Slave',
+      ja: 'スレーブ',
     }),
     online: t({
       en: 'Online',
@@ -68,36 +68,36 @@ const connectionsViewContent = {
       ja: '確認',
     }),
     sourceAccounts: t({
-      en: 'Source Accounts',
-      ja: 'ソース・アカウント',
+      en: 'Master Accounts',
+      ja: 'マスター・アカウント',
     }),
     receiverAccounts: t({
-      en: 'Receiver Accounts',
-      ja: 'レシーバー・アカウント',
+      en: 'Slave Accounts',
+      ja: 'スレーブ・アカウント',
     }),
     addConnection: t({
       en: 'Add Connection',
       ja: '接続の追加',
     }),
     connectedReceivers: t({
-      en: 'Connected Receivers',
-      ja: '接続中のレシーバー',
+      en: 'Connected Slaves',
+      ja: '接続中のスレーブ',
     }),
     connectedSources: t({
-      en: 'Connected Sources',
-      ja: '接続元ソース',
+      en: 'Connected Masters',
+      ja: '接続元マスター',
     }),
     settings: t({
       en: 'Settings',
       ja: '設定',
     }),
     allSourcesInactive: t({
-      en: 'All sources are inactive',
-      ja: 'すべてのソースが非アクティブです',
+      en: 'All masters are inactive',
+      ja: 'すべてのマスターが非アクティブです',
     }),
     someSourcesInactive: t({
-      en: 'Some sources are inactive',
-      ja: '一部のソースが非アクティブです',
+      en: 'Some masters are inactive',
+      ja: '一部のマスターが非アクティブです',
     }),
     status: t({
       en: 'Status',
@@ -160,12 +160,12 @@ const connectionsViewContent = {
       ja: '通貨',
     }),
     receivers: t({
-      en: 'Receivers',
-      ja: 'レシーバー数',
+      en: 'Slaves',
+      ja: 'スレーブ数',
     }),
     sources: t({
-      en: 'Sources',
-      ja: 'ソース数',
+      en: 'Masters',
+      ja: 'マスター数',
     }),
     refresh: t({
       en: 'Refresh',

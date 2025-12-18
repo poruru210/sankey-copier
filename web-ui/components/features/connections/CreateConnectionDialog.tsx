@@ -40,25 +40,6 @@ interface CreateConnectionDialogProps {
   existingSettings: CopySettings[];
 }
 
-// Define steps for the Stepper
-const STEPS: StepType[] = [
-  {
-    id: 'accounts',
-    label: 'Accounts',
-    description: 'Select Master & Slave',
-  },
-  {
-    id: 'master-settings',
-    label: 'Master Settings',
-    description: 'Global configuration',
-  },
-  {
-    id: 'slave-settings',
-    label: 'Slave Settings',
-    description: 'Copy configuration',
-  },
-];
-
 export function CreateConnectionDialog({
   open,
   onOpenChange,
@@ -67,6 +48,25 @@ export function CreateConnectionDialog({
   existingSettings
 }: CreateConnectionDialogProps) {
   const content = useIntlayer('settings-dialog');
+
+  // Define steps for the Stepper using useIntlayer
+  const steps: StepType[] = useMemo(() => [
+    {
+      id: 'accounts',
+      label: content.stepAccounts.value,
+      description: content.stepAccountsDescription.value,
+    },
+    {
+      id: 'master-settings',
+      label: content.stepMasterSettings.value,
+      description: content.stepMasterSettingsDescription.value,
+    },
+    {
+      id: 'slave-settings',
+      label: content.stepSlaveSettings.value,
+      description: content.stepSlaveSettingsDescription.value,
+    },
+  ], [content]);
 
   // Responsive: right drawer for desktop, bottom drawer for mobile
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -94,7 +94,7 @@ export function CreateConnectionDialog({
         <DrawerHeader className={isDesktop ? 'mt-0' : ''}>
           <DrawerTitle>{content.createTitle.value}</DrawerTitle>
         </DrawerHeader>
-        <Stepper key={key} steps={STEPS} allowStepNavigation initialStep={0}>
+        <Stepper key={key} steps={steps} allowStepNavigation initialStep={0}>
           <CreateConnectionForm
             onClose={() => onOpenChange(false)}
             onCreate={onCreate}
@@ -461,8 +461,8 @@ function CreateConnectionForm({
             <div className="space-y-6">
               <DrawerSection>
                 <DrawerSectionHeader
-                  title="Master Settings (Global)"
-                  description="These settings apply to all slaves connected to this master."
+                  title={content.symbolFiltersGlobalTitle.value}
+                  description={content.symbolFiltersGlobalDescription.value}
                 />
 
                 {/* Warning if other slaves exist */}
@@ -472,11 +472,10 @@ function CreateConnectionForm({
                       <AlertTriangle className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
                         <h3 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                          Existing Connections
+                          {content.existingConnectionsWarningTitle.value}
                         </h3>
                         <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
-                          This master has {existingMembers.length} existing slave{existingMembers.length > 1 ? 's' : ''}.
-                          Changing these settings will affect all slaves connected to this master.
+                          {content.existingConnectionsWarningDescription.value.replace('{count}', String(existingMembers.length))}
                         </p>
                       </div>
                     </div>
@@ -502,11 +501,11 @@ function CreateConnectionForm({
                       <span className="text-lg">🪄</span>
                       <div className="flex-1">
                         <div className="font-medium text-blue-800 dark:text-blue-300 mb-1">
-                          Detected Settings Available
+                          {content.detectedSettingsTitle.value}
                         </div>
                         <ul className="text-blue-700 dark:text-blue-400 list-disc list-inside mb-2 space-y-0.5 text-xs">
-                          {diffPrefix && <li>Prefix: <strong>{detected_prefix}</strong></li>}
-                          {diffSuffix && <li>Suffix: <strong>{detected_suffix}</strong></li>}
+                          {diffPrefix && <li>{content.prefix.value}: <strong>{detected_prefix}</strong></li>}
+                          {diffSuffix && <li>{content.suffix.value}: <strong>{detected_suffix}</strong></li>}
                         </ul>
                         <Button
                           type="button"
@@ -519,7 +518,7 @@ function CreateConnectionForm({
                             symbol_suffix: diffSuffix ? detected_suffix : prev.symbol_suffix
                           }))}
                         >
-                          Apply Detected Settings
+                          {content.applyDetectedSettings.value}
                         </Button>
                       </div>
                     </div>
@@ -530,20 +529,20 @@ function CreateConnectionForm({
               {/* Symbol Rules Section */}
               <DrawerSection bordered>
                 <DrawerSectionHeader
-                  title="Symbol Rules"
-                  description="Configure symbol name transformations that the Master EA will apply before broadcasting."
+                  title={content.symbolFiltersTitle.value}
+                  description={content.symbolFiltersDescription.value}
                 />
                 <DrawerSectionContent>
                   {/* Symbol Prefix */}
                   <DrawerFormField
-                    label="Symbol Prefix"
-                    description="Master will remove this prefix when broadcasting symbols (e.g., pro.EURUSD → EURUSD)"
+                    label={content.symbolPrefix.value}
+                    description={content.masterSymbolPrefixDescription.value}
                     htmlFor="master_symbol_prefix"
                   >
                     <Input
                       id="master_symbol_prefix"
                       type="text"
-                      placeholder="e.g. 'pro.' or 'FX.'"
+                      placeholder={content.symbolPrefixPlaceholder.value}
                       value={masterSettings.symbol_prefix}
                       onChange={(e) => setMasterSettings({ ...masterSettings, symbol_prefix: e.target.value })}
                       disabled={loadingMembers}
@@ -552,14 +551,14 @@ function CreateConnectionForm({
 
                   {/* Symbol Suffix */}
                   <DrawerFormField
-                    label="Symbol Suffix"
-                    description="Master will remove this suffix when broadcasting symbols (e.g., EURUSD.m → EURUSD)"
+                    label={content.symbolSuffix.value}
+                    description={content.masterSymbolSuffixDescription.value}
                     htmlFor="master_symbol_suffix"
                   >
                     <Input
                       id="master_symbol_suffix"
                       type="text"
-                      placeholder="e.g. '.m' or '-ECN'"
+                      placeholder={content.symbolSuffixPlaceholder.value}
                       value={masterSettings.symbol_suffix}
                       onChange={(e) => setMasterSettings({ ...masterSettings, symbol_suffix: e.target.value })}
                       disabled={loadingMembers}
@@ -653,7 +652,7 @@ function CreateConnectionForm({
                 variant="outline"
                 onClick={() => setCurrentStep(currentStep - 1)}
               >
-                Back
+                {content.back.value}
               </Button>
             )}
 
@@ -664,7 +663,7 @@ function CreateConnectionForm({
                 onClick={handleNext}
                 disabled={currentStep === 0 && !isStep1Valid}
               >
-                {currentStep === 1 && loadingMembers ? 'Loading...' : 'Next'}
+                {currentStep === 1 && loadingMembers ? content.loading.value : content.next.value}
               </Button>
             )}
 
