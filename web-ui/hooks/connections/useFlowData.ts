@@ -217,6 +217,7 @@ export function useFlowData({
           onToggleEnabled: (enabled: boolean) => toggleReceiverEnabled(account.id, enabled),
           onEditSetting: handleEditSetting,
           onDeleteSetting: handleDeleteSetting,
+          onOpenSettingsDrawer: accountSettings.length > 0 ? () => handleEditSetting(accountSettings[0]) : undefined,
           type: 'receiver' as const,
           isHighlighted,
           hoveredSourceId,
@@ -294,6 +295,7 @@ export function useFlowData({
         data: {
           setting,
           onEditSetting: handleEditSetting,
+          onDeleteSetting: handleDeleteSetting,
         },
       });
     });
