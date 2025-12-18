@@ -23,6 +23,7 @@ interface AccountNodeHeaderProps {
   onToggle: () => void;
   onToggleEnabled?: (enabled: boolean) => void;
   onEditMasterSettings?: () => void;
+  onOpenSettingsDrawer?: () => void;
   isTogglePending?: boolean;
 }
 
@@ -31,6 +32,7 @@ export function AccountNodeHeader({
   onToggle,
   onToggleEnabled,
   onEditMasterSettings,
+  onOpenSettingsDrawer,
   isTogglePending,
 }: AccountNodeHeaderProps) {
   const content = useIntlayer('account-node-header');
@@ -113,8 +115,13 @@ export function AccountNodeHeader({
   const statusBadges = renderStatusBadges();
 
   // Determine which settings button to show
-  const hasSettingsButton = !!onEditMasterSettings;
-  const handleSettingsClick = onEditMasterSettings;
+  const hasSettingsButton = !!onEditMasterSettings || !!onOpenSettingsDrawer;
+  const handleSettingsClick = onEditMasterSettings || onOpenSettingsDrawer;
+
+  const settingsTitle = onEditMasterSettings
+    ? content.masterSettingsTitle
+    : content.connectionSettingsTitle;
+
 
   return (
     <div>
@@ -175,7 +182,7 @@ export function AccountNodeHeader({
               handleSettingsClick?.();
             }}
             className="noDrag p-2 md:p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-            title={content.masterSettingsTitle.value}
+            title={settingsTitle?.value}
           >
             <Settings className="w-4 h-4" />
           </button>

@@ -225,6 +225,7 @@ export function useFlowData({
           isMobile,
           content,
           isTogglePending: pendingAccountIds.has(account.id),
+          onOpenSettingsDrawer: accountSettings.length > 0 ? () => handleEditSetting(accountSettings[0]) : undefined,
         } as AccountNodeData & Record<string, unknown>,
       });
     });
@@ -245,6 +246,8 @@ export function useFlowData({
     isMobile,
     content,
     pendingAccountIds,
+    expandedSourceIds,
+    expandedReceiverIds,
     toggleSourceExpand,
     toggleReceiverExpand,
     toggleSourceEnabled,
