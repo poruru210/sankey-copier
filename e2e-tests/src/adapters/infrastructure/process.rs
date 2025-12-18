@@ -16,6 +16,7 @@
 // parallel test execution without resource conflicts.
 
 use anyhow::{Context, Result};
+use rcgen;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -23,6 +24,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use time;
 
 /// Ensures the relay-server binary is built exactly once per test run.
 /// Uses OnceLock to guarantee thread-safe, single initialization.
@@ -148,13 +150,13 @@ impl RelayServerProcess {
             )
         })?;
 
-        // Copy certs directory if it exists (for TLS)
-        let src_certs = relay_server_dir.join("certs");
-        if src_certs.exists() {
-            let dst_certs = working_dir.join("certs");
-            Self::copy_dir_recursive(&src_certs, &dst_certs)
-                .context("Failed to copy certs directory")?;
-        }
+        // Generate fresh self-signed certificates for this test run
+        // This avoids "KeyMismatch" errors caused by stale/inconsistent certs in CI caches
+        // and ensures every test instance has a valid, matching keypair.
+        let dst_certs = working_dir.join("certs");
+        std::fs::create_dir_all(&dst_certs).context("Failed to create certs directory")?;
+
+        Self::generate_test_certs(&dst_certs)?;
 
         let runtime_toml_path = working_dir.join("runtime.toml");
         let db_path = working_dir.join("e2e_test.db");
@@ -423,21 +425,32 @@ impl RelayServerProcess {
         anyhow::bail!("Could not find relay-server directory")
     }
 
-    /// Recursively copy a directory
-    fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<()> {
-        std::fs::create_dir_all(dst)?;
+    /// Generate valid self-signed certificates for testing
+    fn generate_test_certs(cert_dir: &Path) -> Result<()> {
+        let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
 
-        for entry in std::fs::read_dir(src)? {
-            let entry = entry?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
+        let mut params = rcgen::CertificateParams::new(subject_alt_names)?;
+        // Ensure validity covers the test duration
+        params.not_before = time::OffsetDateTime::now_utc()
+            .checked_sub(time::Duration::days(1))
+            .unwrap();
+        params.not_after = time::OffsetDateTime::now_utc()
+            .checked_add(time::Duration::days(1))
+            .unwrap();
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "localhost");
 
-            if src_path.is_dir() {
-                Self::copy_dir_recursive(&src_path, &dst_path)?;
-            } else {
-                std::fs::copy(&src_path, &dst_path)?;
-            }
-        }
+        let key_pair = rcgen::KeyPair::generate()?;
+        let cert = params.self_signed(&key_pair)?;
+        let pem_serialized = cert.pem();
+        let key_serialized = key_pair.serialize_pem();
+
+        std::fs::write(cert_dir.join("server.pem"), pem_serialized)
+            .context("Failed to write server.pem")?;
+        std::fs::write(cert_dir.join("server-key.pem"), key_serialized)
+            .context("Failed to write server-key.pem")?;
 
         Ok(())
     }

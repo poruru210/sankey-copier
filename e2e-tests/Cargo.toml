@@ -30,6 +30,8 @@ chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
 rust-ini = "0.21"
 tempfile = "3.14"
+rcgen = "0.13"
+time = "0.3"
 
 # For helpers module (DB seeding, async functions)
 sankey-copier-relay-server = { path = "../relay-server" }
