@@ -14,6 +14,7 @@ interface AccountNodeContentProps {
   onEditSetting?: (setting: CopySettings) => void;
   onDeleteSetting?: (setting: CopySettings) => void;
   onEditMasterSettings?: () => void;
+  onOpenSettingsDrawer?: () => void;
   type: 'source' | 'receiver';
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -82,6 +83,7 @@ export const AccountNodeContent = React.memo(
     isMobile,
     isTogglePending,
     content,
+    onOpenSettingsDrawer,
   }: AccountNodeContentProps) => {
     // Determine visibility based on mobile/desktop and selection/hover state
     let visibilityClass = '';
@@ -113,6 +115,7 @@ export const AccountNodeContent = React.memo(
             onToggleEnabled={onToggleEnabled}
             isTogglePending={isTogglePending}
             onEditMasterSettings={type === 'source' ? onEditMasterSettings : undefined}
+            onOpenSettingsDrawer={onOpenSettingsDrawer}
           />
 
           {/* Node Body - Expands on click */}

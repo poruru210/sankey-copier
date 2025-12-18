@@ -151,6 +151,9 @@ export function FlowCanvas({
 
   // Effect 2: Apply layout when expansion or warnings change (preserve dragged positions)
   useEffect(() => {
+    // Clear user dragged positions when expanding/collapsing to allow auto-layout to take precedence
+    userDraggedNodesRef.current.clear();
+
     const { nodes: layoutedNodes } = applyLayout(initialNodes, initialEdges);
 
     setNodes((currentNodes) => {
