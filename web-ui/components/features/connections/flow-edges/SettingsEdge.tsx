@@ -8,7 +8,7 @@ import {
   getBezierPath,
   Edge,
 } from '@xyflow/react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Settings } from 'lucide-react';
 import { useIntlayer } from 'next-intlayer';
 import {
   AlertDialog,
@@ -57,6 +57,7 @@ export const SettingsEdge = memo(({
   });
 
   const setting = data?.setting;
+  const onEditSetting = data?.onEditSetting;
   const onDeleteSetting = data?.onDeleteSetting;
 
   // Build label text with copy settings
@@ -75,6 +76,13 @@ export const SettingsEdge = memo(({
   const isConnected = runtimeStatus === 2;
   const isEnabled = runtimeStatus === 1;
 
+
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (setting && onEditSetting) {
+      onEditSetting(setting);
+    }
+  };
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -106,6 +114,13 @@ export const SettingsEdge = memo(({
           className="nodrag nopan"
         >
           <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 px-2 py-1">
+            <button
+              onClick={handleSettingsClick}
+              className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors text-blue-600 dark:text-blue-400"
+              title={content.connectionSettingsTitle}
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
             {labelText && (
               <span
                 className={`text-xs font-semibold ${isConnected
